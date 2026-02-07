@@ -1,6 +1,6 @@
-# WAV example data (not committed, too large)
-/data/wav_examples/
-*.wav
+# WAV example data - now included for reproducibility
+# (small chunks only, not raw recordings)
+
 
 # Python
 __pycache__/

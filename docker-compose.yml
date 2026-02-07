@@ -25,6 +25,9 @@ services:
     environment:
       DATABASE_URL: postgresql://plantuser:plantpass@postgres:5432/plantdb
       CORS_ORIGINS: "*"
+      WAV_FOLDER: /data/wav
+    volumes:
+      - ./wav:/data/wav:ro
     ports:
       - "8000:8000"
     depends_on:
