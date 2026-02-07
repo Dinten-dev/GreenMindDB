@@ -111,19 +111,29 @@ def delete_species(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a species (requires auth). Only allowed if no target ranges exist."""
+    """Delete a species and all associated data (requires auth)."""
+    from sqlalchemy import text
+    
     species = db.query(Species).filter(Species.id == species_id).first()
     if not species:
         raise HTTPException(status_code=404, detail="Species not found")
     
-    target_count = db.query(TargetRange).filter(TargetRange.species_id == species_id).count()
-    if target_count > 0:
-        raise HTTPException(
-            status_code=409, 
-            detail=f"Cannot delete species with {target_count} existing conditions"
-        )
-    
     before = entity_to_dict(species)
+    
+    # Cascade delete: telemetry measurements -> channels -> target_ranges -> species
+    # First delete measurements for channels belonging to this species
+    db.execute(text("""
+        DELETE FROM telemetry_measurement 
+        WHERE channel_id IN (SELECT id FROM telemetry_channel WHERE species_id = :sid)
+    """), {"sid": species_id})
+    
+    # Delete telemetry channels
+    db.execute(text("DELETE FROM telemetry_channel WHERE species_id = :sid"), {"sid": species_id})
+    
+    # Delete target ranges (conditions)
+    db.query(TargetRange).filter(TargetRange.species_id == species_id).delete()
+    
+    # Delete the species
     db.delete(species)
     db.commit()
     
