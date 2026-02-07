@@ -1,0 +1,36 @@
+# WAV example data (not committed, too large)
+/data/wav_examples/
+*.wav
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+
+# Docker volumes
+db/data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dev import scripts (moved to scripts/)
+import_*.py
+add_test_device.py
+test_*.py
+
+# Logs
+*.log
+
+# Node modules (frontend)
+frontend/node_modules/
+frontend/.next/

@@ -5,4 +5,6 @@ from app.models.target_range import TargetRange
 from app.models.user import User
 from app.models.audit_log import AuditLog
 
-__all__ = ["Species", "Metric", "Source", "TargetRange", "User", "AuditLog"]
+from app.models.telemetry import Device, TelemetryChannel, TelemetryMeasurement
+
+__all__ = ["Species", "Metric", "Source", "TargetRange", "User", "AuditLog", "Device", "TelemetryChannel", "TelemetryMeasurement"]

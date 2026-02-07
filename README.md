@@ -11,8 +11,48 @@ docker compose up -d
 open http://localhost:3000
 
 # API docs
+# API docs
 open http://localhost:8000/docs
 ```
+
+> **Note**: Database now uses TimescaleDB (extension of PostgreSQL) for efficient sensor data storage.
+
+## Live Data & IoT
+
+This project supports live sensor data ingestion and visualization.
+
+### Sensor Setup (Ingest)
+
+Sensors authenticates via **Device API Key** (separate from user users).
+
+1. **Create Device** (Admin UI or API - coming soon, manual DB insert for now).
+2. **Get API Key** (hashed in DB).
+3. **Send Data**:
+
+```bash
+curl -X POST http://localhost:8000/ingest \
+  -H "Authorization: Bearer <DEVICE_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "device_id": "uuid-of-device",
+    "samples": [
+      {
+        "timestamp": "2026-02-06T12:00:00Z",
+        "metric_key": "air_temperature_c",
+        "species_name": "Tomate",
+        "value": 23.4
+      }
+    ]
+  }'
+```
+
+The system automatically creates channels for new (device, species, metric) combinations.
+
+### Front-End Features
+- **Live Data Panel**: Shows latest values for each metric.
+- **Charts**: Historical data (24h default).
+- **Download**: Export sensor data as CSV.
+
 
 ## Features
 

@@ -1,4 +1,5 @@
 """Authentication utilities: password hashing and JWT tokens."""
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -11,11 +12,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
 
-# Password hashing
+# Password hashing (bcrypt for security)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT settings
-SECRET_KEY = "plant-wiki-secret-key-change-in-production"  # TODO: Use env var
+# JWT settings - use environment variable for production security
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "plant-wiki-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -26,6 +27,11 @@ security = HTTPBearer(auto_error=False)
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def verify_device_api_key(plain_api_key: str, hashed_api_key: str) -> bool:
+    """Verify a device API key against its hash."""
+    return pwd_context.verify(plain_api_key, hashed_api_key)
 
 
 def get_password_hash(password: str) -> str:
