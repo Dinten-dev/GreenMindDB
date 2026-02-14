@@ -1,0 +1,124 @@
+services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV}
+      API_HOST: 0.0.0.0
+      API_PORT: ${API_PORT}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      INGEST_TOKEN: ${INGEST_TOKEN}
+      READ_TOKEN_REQUIRED: ${READ_TOKEN_REQUIRED}
+      READ_TOKEN: ${READ_TOKEN}
+      S3_PROVIDER: ${S3_PROVIDER}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_SECURE: ${S3_SECURE}
+      ENABLE_CONTINUOUS_AGGREGATES: ${ENABLE_CONTINUOUS_AGGREGATES}
+      LOG_LEVEL: ${LOG_LEVEL}
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${API_PORT}/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      GREENMIND_DOMAIN: ${GREENMIND_DOMAIN}
+      API_UPSTREAM: api:${API_PORT}
+      CADDY_TLS_MODE: ${CADDY_TLS_MODE}
+    ports:
+      - "${PROXY_HTTP_PORT}:80"
+      - "${PROXY_HTTPS_PORT}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - internal
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: https://${GREENMIND_DOMAIN}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  db_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+  prometheus_data:
+  grafana_data:

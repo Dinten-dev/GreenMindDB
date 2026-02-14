@@ -18,5 +18,5 @@ RUN useradd --create-home --uid 10001 appuser \
 
 USER appuser
 
-# Run migrations and start server
-CMD ["sh", "-c", "alembic upgrade head && python -m app.seed.seed_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Run migrations and start API (production-like worker model)
+CMD ["sh", "-c", "alembic upgrade head && gunicorn app.macmini.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${API_PORT:-8000} --workers ${GUNICORN_WORKERS:-2}"]
