@@ -8,9 +8,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -45,6 +48,21 @@ app = FastAPI(
     title="GreenMindDB Mac mini API",
     version="1.0.0",
     description="Mac-mini local stack API for ingestion, querying and ML export datasets.",
+)
+
+# CORS – allow frontend to reach the API
+_cors_raw = os.environ.get("CORS_ORIGINS", '["http://localhost:3000"]')
+try:
+    _cors_origins = json.loads(_cors_raw) if _cors_raw.startswith("[") else [o.strip() for o in _cors_raw.split(",")]
+except Exception:
+    _cors_origins = ["http://localhost:3000"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.state.limiter = limiter
@@ -842,3 +860,91 @@ def download_export(
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={export_id}.zip"},
     )
+
+
+# ──────────────────────────────────────────────
+# Dashboard endpoints (read-only, no auth)
+# ──────────────────────────────────────────────
+
+@app.get("/v1/dashboard/overview")
+def dashboard_overview(db: Session = Depends(get_db)):
+    """Counts and stats for the dashboard overview cards."""
+    counts = db.execute(
+        text(
+            """
+            SELECT
+                (SELECT count(*) FROM greenhouse) AS greenhouses,
+                (SELECT count(*) FROM device) AS devices,
+                (SELECT count(*) FROM sensor) AS sensors,
+                (SELECT count(*) FROM plant) AS plants,
+                (SELECT count(*) FROM plant_signal_1hz
+                 WHERE time >= now() - INTERVAL '24 hours') AS signal_rows_24h,
+                (SELECT count(*) FROM env_measurement
+                 WHERE time >= now() - INTERVAL '24 hours') AS env_rows_24h,
+                (SELECT count(*) FROM ingest_log
+                 WHERE received_at >= now() - INTERVAL '24 hours') AS ingests_24h
+            """
+        )
+    ).mappings().first()
+    return dict(counts) if counts else {}
+
+
+@app.get("/v1/dashboard/devices")
+def dashboard_devices(db: Session = Depends(get_db)):
+    """List all devices with their sensor count."""
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                d.id, d.serial, d.type, d.fw_version, d.last_seen, d.status,
+                d.greenhouse_id,
+                g.name AS greenhouse_name,
+                (SELECT count(*) FROM sensor s WHERE s.device_id = d.id) AS sensor_count
+            FROM device d
+            LEFT JOIN greenhouse g ON g.id = d.greenhouse_id
+            ORDER BY d.last_seen DESC NULLS LAST
+            """
+        )
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@app.get("/v1/dashboard/ingest-log")
+def dashboard_ingest_log(
+    limit: int = Query(default=50, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Recent ingestion log entries."""
+    rows = db.execute(
+        text(
+            """
+            SELECT request_id, received_at, endpoint, source, status, details
+            FROM ingest_log
+            ORDER BY received_at DESC
+            LIMIT :limit
+            """
+        ),
+        {"limit": limit},
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@app.get("/v1/dashboard/greenhouses")
+def dashboard_greenhouses(db: Session = Depends(get_db)):
+    """List greenhouses with zone, device and plant counts."""
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                gh.id, gh.name, gh.location, gh.timezone,
+                (SELECT count(*) FROM zone z WHERE z.greenhouse_id = gh.id) AS zone_count,
+                (SELECT count(*) FROM device d WHERE d.greenhouse_id = gh.id) AS device_count,
+                (SELECT count(*) FROM plant p
+                 JOIN zone z ON z.id = p.zone_id
+                 WHERE z.greenhouse_id = gh.id) AS plant_count
+            FROM greenhouse gh
+            ORDER BY gh.name
+            """
+        )
+    ).mappings().all()
+    return [dict(r) for r in rows]

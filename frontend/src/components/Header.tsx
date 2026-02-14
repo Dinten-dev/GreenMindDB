@@ -1,54 +1,62 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import AuthModal from './AuthModal';
+import { useState, useEffect } from 'react';
+import { fetchHealth, HealthStatus } from '@/lib/api';
 
 export default function Header() {
-    const { user, loading, logout } = useAuth();
-    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [health, setHealth] = useState<HealthStatus | null>(null);
+
+    useEffect(() => {
+        const poll = async () => {
+            try {
+                setHealth(await fetchHealth());
+            } catch {
+                setHealth(null);
+            }
+        };
+        poll();
+        const id = setInterval(poll, 15_000);
+        return () => clearInterval(id);
+    }, []);
+
+    const isOk = health?.status === 'ok';
 
     return (
-        <>
-            <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 border-b border-gray-200">
-                <nav className="max-w-6xl mx-auto px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <a href="/" className="flex items-center gap-3 hover:no-underline">
-                            <span className="text-2xl">🌱</span>
-                            <span className="text-xl font-semibold text-gray-800">Plant Wiki</span>
+        <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 border-b border-gray-200">
+            <nav className="max-w-7xl mx-auto px-6 py-4">
+                <div className="flex items-center justify-between">
+                    <a href="/" className="flex items-center gap-3 hover:no-underline">
+                        <span className="text-2xl">🌿</span>
+                        <span className="text-xl font-semibold text-gray-800">GreenMindDB</span>
+                        <span className="text-xs text-gray-400 hidden sm:inline">Mac mini Dashboard</span>
+                    </a>
+
+                    <div className="flex items-center gap-4 text-sm">
+                        {health ? (
+                            <div className="flex items-center gap-2">
+                                <span className={`inline-block w-2.5 h-2.5 rounded-full ${isOk ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                                <span className={isOk ? 'text-green-700' : 'text-red-600'}>
+                                    {isOk ? 'All systems ok' : 'Degraded'}
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-300" />
+                                <span className="text-gray-400">Connecting…</span>
+                            </div>
+                        )}
+
+                        <a
+                            href={`${typeof window !== 'undefined' ? window.location.protocol + '//' + window.location.hostname : 'http://localhost'}:8000/docs`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                        >
+                            API Docs ↗
                         </a>
-                        <div className="flex items-center gap-6 text-sm text-gray-500">
-                            <a href="/" className="hover:text-gray-800">Plants</a>
-                            <span className="text-gray-300">|</span>
-                            <span className="text-gray-400">Growing Conditions Database</span>
-                            <span className="text-gray-300">|</span>
-
-                            {loading ? (
-                                <span className="text-gray-400">...</span>
-                            ) : user ? (
-                                <div className="flex items-center gap-3">
-                                    <span className="text-gray-600">{user.email}</span>
-                                    <button
-                                        onClick={logout}
-                                        className="px-3 py-1 text-xs text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                                    >
-                                        Logout
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={() => setShowAuthModal(true)}
-                                    className="px-4 py-1.5 text-sm text-white bg-gray-800 hover:bg-gray-900 rounded-lg transition-colors"
-                                >
-                                    Login
-                                </button>
-                            )}
-                        </div>
                     </div>
-                </nav>
-            </header>
-
-            <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-        </>
+                </div>
+            </nav>
+        </header>
     );
 }
