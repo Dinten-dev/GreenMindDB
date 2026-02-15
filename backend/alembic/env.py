@@ -3,9 +3,10 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Import models to ensure they're registered with Base
+# Import Base only – NOT the models. The migration script handles all DDL
+# explicitly. Importing models would cause SQLAlchemy to register enum types
+# in the metadata and attempt to create them during op.create_table().
 from app.database import Base
-from app.models import Species, Metric, Source, TargetRange
 
 config = context.config
 
@@ -21,7 +22,6 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -34,7 +34,6 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

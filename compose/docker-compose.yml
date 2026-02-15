@@ -8,8 +8,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ../db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -25,6 +26,11 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "mc ready local || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - internal
 
@@ -38,9 +44,12 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: ${API_PORT}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES}
+      JWT_REFRESH_EXPIRE_DAYS: ${JWT_REFRESH_EXPIRE_DAYS}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       INGEST_TOKEN: ${INGEST_TOKEN}
-      READ_TOKEN_REQUIRED: ${READ_TOKEN_REQUIRED}
-      READ_TOKEN: ${READ_TOKEN}
       S3_PROVIDER: ${S3_PROVIDER}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}
@@ -50,16 +59,19 @@ services:
       S3_SECURE: ${S3_SECURE}
       ENABLE_CONTINUOUS_AGGREGATES: ${ENABLE_CONTINUOUS_AGGREGATES}
       LOG_LEVEL: ${LOG_LEVEL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
     depends_on:
       db:
         condition: service_healthy
       minio:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${API_PORT}/health', timeout=3)\""]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${API_PORT}/health', timeout=3)\"" ]
       interval: 15s
       timeout: 5s
       retries: 10
+    ports:
+      - "${API_PORT}:${API_PORT}"
     networks:
       - internal
 
@@ -86,7 +98,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     restart: unless-stopped
-    profiles: ["monitoring"]
+    profiles: [ "monitoring" ]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
     volumes:
@@ -98,7 +110,7 @@ services:
   grafana:
     image: grafana/grafana:12.1.1
     restart: unless-stopped
-    profiles: ["monitoring"]
+    profiles: [ "monitoring" ]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
