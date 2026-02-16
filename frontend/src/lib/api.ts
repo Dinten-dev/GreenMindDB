@@ -73,25 +73,25 @@ export async function fetchHealth(): Promise<HealthStatus> {
 }
 
 export async function fetchOverview(): Promise<DashboardOverview> {
-    const res = await fetch(`${API_URL}/v1/dashboard/overview`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/operator/overview`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch overview');
     return res.json();
 }
 
 export async function fetchDevices(): Promise<Device[]> {
-    const res = await fetch(`${API_URL}/v1/dashboard/devices`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/operator/devices`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch devices');
     return res.json();
 }
 
 export async function fetchIngestLog(limit = 30): Promise<IngestLogEntry[]> {
-    const res = await fetch(`${API_URL}/v1/dashboard/ingest-log?limit=${limit}`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/operator/ingest-log?limit=${limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch ingest log');
     return res.json();
 }
 
 export async function fetchGreenhouses(): Promise<Greenhouse[]> {
-    const res = await fetch(`${API_URL}/v1/dashboard/greenhouses`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/operator/greenhouses`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch greenhouses');
     return res.json();
 }

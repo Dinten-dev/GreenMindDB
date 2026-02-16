@@ -98,7 +98,7 @@ def ingest_plant_signal(
             db.execute(
                 text(
                     "INSERT INTO plant_signal_1hz (time, greenhouse_id, plant_id, sensor_id, value_uv, quality, meta) "
-                    "VALUES (:time, :greenhouse_id, :plant_id, :sensor_id, :value_uv, :quality, :meta::jsonb) "
+                    "VALUES (:time, :greenhouse_id, :plant_id, :sensor_id, :value_uv, :quality, CAST(:meta AS jsonb)) "
                     "ON CONFLICT DO NOTHING"
                 ),
                 rows,
@@ -143,7 +143,7 @@ def ingest_env(
             db.execute(
                 text(
                     "INSERT INTO env_measurement (time, greenhouse_id, sensor_id, value, quality, meta) "
-                    "VALUES (:time, :greenhouse_id, :sensor_id, :value, :quality, :meta::jsonb) "
+                    "VALUES (:time, :greenhouse_id, :sensor_id, :value, :quality, CAST(:meta AS jsonb)) "
                     "ON CONFLICT DO NOTHING"
                 ),
                 rows,
@@ -178,7 +178,7 @@ def ingest_event(
         db.execute(
             text(
                 "INSERT INTO event_log (id, greenhouse_id, time, type, payload, source_device_id, request_id) "
-                "VALUES (gen_random_uuid(), :greenhouse_id, :time, :type, :payload::jsonb, :source_device_id, :request_id) "
+                "VALUES (gen_random_uuid(), :greenhouse_id, :time, :type, CAST(:payload AS jsonb), :source_device_id, :request_id) "
                 "ON CONFLICT DO NOTHING"
             ),
             {

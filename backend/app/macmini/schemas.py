@@ -447,3 +447,16 @@ class AuditLogOut(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+# ═══════════════════════════════════════════════════════════════
+# Ingest Logs
+# ═══════════════════════════════════════════════════════════════
+
+class IngestLogOut(BaseModel):
+    request_id: UUID
+    received_at: datetime
+    endpoint: str
+    source: str | None
+    status: str
+    details: dict[str, Any]
+    model_config = {"from_attributes": True}
