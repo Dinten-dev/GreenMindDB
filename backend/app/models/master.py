@@ -2,7 +2,7 @@
 import uuid
 
 from sqlalchemy import (
-    Column, DateTime, ForeignKey, String, Text,
+    Column, DateTime, ForeignKey, String, Text, Boolean,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -54,10 +54,17 @@ class Device(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     greenhouse_id = Column(UUID(as_uuid=True), ForeignKey("greenhouse.id", ondelete="CASCADE"), nullable=False, index=True)
     serial = Column(String(100), nullable=False, unique=True)
+    name = Column(String(200), nullable=True)
+    description = Column(Text, nullable=True)
     type = Column(String(50), nullable=False)
     fw_version = Column(String(50), nullable=True)
     last_seen = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(20), nullable=False, default="offline")
+    
+    # Security & Management
+    api_key_hash = Column(String(200), nullable=True)  # Nullable for migration/legacy
+    api_key_last_rotated_at = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
 
     greenhouse = relationship("Greenhouse", back_populates="devices")
     sensors = relationship("Sensor", back_populates="device", cascade="all, delete-orphan")

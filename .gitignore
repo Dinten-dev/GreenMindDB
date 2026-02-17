@@ -34,3 +34,5 @@ test_*.py
 # Node modules (frontend)
 frontend/node_modules/
 frontend/.next/
+dev-tools/greenmind_deploy_key
+dev-tools/greenmind_deploy_key.pub

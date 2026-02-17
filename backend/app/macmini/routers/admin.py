@@ -26,6 +26,8 @@ from app.macmini.schemas import (
     UserUpdate,
     ZoneCreate,
     ZoneOut,
+    GreenhouseSummary,
+    DeviceKeyResponse,
 )
 from app.models import (
     Annotation,
@@ -42,6 +44,9 @@ from app.models import (
     User,
     Zone,
 )
+import secrets
+from datetime import datetime, timezone
+from sqlalchemy import func
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -119,6 +124,40 @@ def create_greenhouse(payload: GreenhouseCreate, db: Session = Depends(get_db), 
     return gh
 
 
+@router.get("/greenhouses/{greenhouse_id}", response_model=GreenhouseOut)
+def get_greenhouse(greenhouse_id: UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    gh = db.query(Greenhouse).filter(Greenhouse.id == greenhouse_id).first()
+    if not gh:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+    return gh
+
+
+@router.get("/greenhouses/{greenhouse_id}/summary", response_model=GreenhouseSummary)
+def get_greenhouse_summary(greenhouse_id: UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    gh = db.query(Greenhouse).filter(Greenhouse.id == greenhouse_id).first()
+    if not gh:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+    
+    device_count = db.query(func.count(Device.id)).filter(Device.greenhouse_id == greenhouse_id).scalar()
+    plant_count = db.query(func.count(Plant.id)).join(Zone).filter(Zone.greenhouse_id == greenhouse_id).scalar()
+    
+    active_device_count = db.query(func.count(Device.id)).filter(
+        Device.greenhouse_id == greenhouse_id,
+        Device.status == 'online'
+    ).scalar()
+    
+    last_seen = db.query(func.max(Device.last_seen)).filter(Device.greenhouse_id == greenhouse_id).scalar()
+    
+    return GreenhouseSummary(
+        greenhouse_id=gh.id,
+        name=gh.name,
+        device_count=device_count or 0,
+        plant_count=plant_count or 0,
+        active_device_count=active_device_count or 0,
+        last_seen=last_seen
+    )
+
+
 # ── Zones ─────────────────────────────────────────────────────
 
 @router.get("/zones", response_model=list[ZoneOut])
@@ -173,18 +212,56 @@ def list_devices(greenhouse_id: UUID | None = None, db: Session = Depends(get_db
     return q.all()
 
 
-@router.post("/devices", response_model=DeviceOut, status_code=201)
-def create_device(payload: DeviceCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+@router.post("/devices", response_model=DeviceKeyResponse, status_code=201)
+def create_device(payload: DeviceCreate, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    # Generate API Key
+    plain_key = f"gmd_{secrets.token_urlsafe(24)}"
+    key_hash = hash_password(plain_key)
+
     d = Device(
         greenhouse_id=payload.greenhouse_id,
         serial=payload.serial,
         type=payload.type,
         fw_version=payload.fw_version,
+        api_key_hash=key_hash,
+        api_key_last_rotated_at=datetime.now(timezone.utc),
+        status="offline",
+        is_active=True
     )
     db.add(d)
     db.commit()
     db.refresh(d)
-    return d
+
+    db.add(AuditLog(
+        actor_user_id=admin.id, actor_type="USER", action="create_device",
+        resource_type="device", resource_id=str(d.id),
+        greenhouse_id=d.greenhouse_id,
+        ip=request.client.host if request.client else None,
+    ))
+    db.commit()
+
+    return DeviceKeyResponse(device_id=d.id, api_key=plain_key)
+
+
+@router.post("/devices/{device_id}/rotate-key", response_model=DeviceKeyResponse)
+def rotate_device_key(device_id: UUID, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    plain_key = f"gmd_{secrets.token_urlsafe(24)}"
+    device.api_key_hash = hash_password(plain_key)
+    device.api_key_last_rotated_at = datetime.now(timezone.utc)
+    
+    db.add(AuditLog(
+        actor_user_id=admin.id, actor_type="USER", action="rotate_device_key",
+        resource_type="device", resource_id=str(device.id),
+        greenhouse_id=device.greenhouse_id,
+        ip=request.client.host if request.client else None,
+    ))
+    db.commit()
+    
+    return DeviceKeyResponse(device_id=device.id, api_key=plain_key)
 
 
 # ── Sensors ───────────────────────────────────────────────────

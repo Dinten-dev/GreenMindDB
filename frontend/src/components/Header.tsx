@@ -25,11 +25,17 @@ export default function Header() {
         <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 border-b border-gray-200">
             <nav className="max-w-7xl mx-auto px-6 py-4">
                 <div className="flex items-center justify-between">
-                    <a href="/" className="flex items-center gap-3 hover:no-underline">
-                        <span className="text-2xl">🌿</span>
-                        <span className="text-xl font-semibold text-gray-800">GreenMindDB</span>
-                        <span className="text-xs text-gray-400 hidden sm:inline">Mac mini Dashboard</span>
-                    </a>
+                    <div className="flex items-center gap-8">
+                        <a href="/" className="flex items-center gap-3 hover:no-underline">
+                            <span className="text-2xl">🌿</span>
+                            <span className="text-xl font-semibold text-gray-800">GreenMindDB</span>
+                        </a>
+                        <div className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600">
+                            <a href="/" className="hover:text-green-600 transition-colors">Dashboard</a>
+                            <a href="/operator/greenhouses" className="hover:text-green-600 transition-colors">Greenhouses</a>
+                            <a href="/admin/greenhouses" className="hover:text-green-600 transition-colors">Admin</a>
+                        </div>
+                    </div>
 
                     <div className="flex items-center gap-4 text-sm">
                         {health ? (

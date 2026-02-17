@@ -3,10 +3,9 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Import Base only – NOT the models. The migration script handles all DDL
-# explicitly. Importing models would cause SQLAlchemy to register enum types
-# in the metadata and attempt to create them during op.create_table().
+# Import Base and ALL models so they are registered in metadata
 from app.database import Base
+import app.models  # noqa: F401
 
 config = context.config
 

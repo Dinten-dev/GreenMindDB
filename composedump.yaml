@@ -1,0 +1,186 @@
+name: greenminddb
+services:
+  backend:
+    build:
+      context: /Users/traver/Library/Mobile Documents/com~apple~CloudDocs/FHNW/GreenMindDB/backend
+      dockerfile: Dockerfile
+    cap_drop:
+      - ALL
+    command:
+      - uvicorn
+      - app.macmini.main:app
+      - --reload
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    depends_on:
+      minio:
+        condition: service_healthy
+        required: true
+      postgres:
+        condition: service_healthy
+        required: true
+    environment:
+      CORS_ORIGINS: '*'
+      DATABASE_URL: postgresql+psycopg2://plantuser:change-this-strong-db-password@postgres:5432/plantdb
+      ENVIRONMENT: development
+      HOME: /tmp
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      JWT_SECRET_KEY: replace-this-with-a-long-random-secret-at-least-32-chars
+      POSTGRES_DB: plantdb
+      POSTGRES_PASSWORD: change-this-strong-db-password
+      POSTGRES_USER: plantuser
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_BUCKET: greenmind-exports
+      S3_ENDPOINT: http://minio:9000
+      S3_PROVIDER: minio
+      S3_SECRET_ACCESS_KEY: minioadmin
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8000
+        published: "8000"
+        protocol: tcp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    user: ':'
+    volumes:
+      - type: bind
+        source: /Users/traver/Library/Mobile Documents/com~apple~CloudDocs/FHNW/GreenMindDB/backend
+        target: /app
+        bind:
+          create_host_path: true
+  frontend:
+    build:
+      context: /Users/traver/Library/Mobile Documents/com~apple~CloudDocs/FHNW/GreenMindDB/frontend
+      dockerfile: Dockerfile
+      target: base
+    cap_drop:
+      - ALL
+    command:
+      - sh
+      - -c
+      - rm -f package-lock.json && yarn install && yarn run dev
+    depends_on:
+      backend:
+        condition: service_healthy
+        required: true
+    environment:
+      HOME: /tmp
+      INTERNAL_API_URL: http://backend:8000
+      NODE_ENV: development
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://localhost:3000').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      timeout: 5s
+      interval: 15s
+      retries: 10
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "3000"
+        protocol: tcp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    user: ':'
+    volumes:
+      - type: bind
+        source: /Users/traver/Library/Mobile Documents/com~apple~CloudDocs/FHNW/GreenMindDB/frontend
+        target: /app
+        bind:
+          create_host_path: true
+      - type: volume
+        target: /app/node_modules
+        volume: {}
+  minio:
+    command:
+      - server
+      - /data
+      - --console-address
+      - :9001
+    environment:
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: minioadmin
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mc ready local || exit 1
+      timeout: 5s
+      interval: 5s
+      retries: 5
+    image: minio/minio:latest
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 9000
+        published: "9000"
+        protocol: tcp
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 9001
+        published: "9001"
+        protocol: tcp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: bind
+        source: /Users/traver/LocalData/greenmind/minio
+        target: /data
+        bind:
+          create_host_path: true
+  postgres:
+    environment:
+      POSTGRES_DB: plantdb
+      POSTGRES_PASSWORD: change-this-strong-db-password
+      POSTGRES_USER: plantuser
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U plantuser -d plantdb
+      timeout: 5s
+      interval: 5s
+      retries: 5
+    image: timescale/timescaledb:2.17.2-pg15
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 5432
+        published: "5432"
+        protocol: tcp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: bind
+        source: /Users/traver/LocalData/greenmind/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /Users/traver/Library/Mobile Documents/com~apple~CloudDocs/FHNW/GreenMindDB/db/init.sql
+        target: /docker-entrypoint-initdb.d/init.sql
+        read_only: true
+        bind:
+          create_host_path: true
+networks:
+  default:
+    name: greenminddb_default

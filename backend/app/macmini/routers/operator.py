@@ -4,6 +4,9 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+import csv
+import io
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -146,6 +149,166 @@ def list_greenhouses(
     if not gh_id:
         return []
     return db.query(Greenhouse).filter(Greenhouse.id == gh_id).all()
+
+
+@router.get("/greenhouses/{greenhouse_id}", response_model=GreenhouseOut)
+def get_greenhouse(
+    greenhouse_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_dashboard_user),
+):
+    gh_id = resolve_greenhouse_id(user, greenhouse_id)
+    gh = db.query(Greenhouse).filter(Greenhouse.id == gh_id).first()
+    if not gh:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+    return gh
+
+
+@router.get("/devices/{device_id}/live")
+def get_device_live(
+    device_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_dashboard_user),
+):
+    # Ensure access
+    gh_id = resolve_greenhouse_id(user)
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if gh_id and device.greenhouse_id != gh_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Fetch latest env measurements
+    # We use a lateral join or just separate queries for simplicity if #sensors is low
+    sensors = db.query(Sensor).filter(Sensor.device_id == device_id).all()
+    
+    live_data = {}
+    
+    for s in sensors:
+        # Get last measurement
+        # Check kind to decide table? mostly env for now on device live view?
+        # or signals if it's an ADC sensor?
+        # Let's assume env for 'live panel' usually (temp, humidity, soil etc)
+        # For signals (1hz), we might want the last second? 
+        
+        # Try env first
+        row = db.execute(text(
+            "SELECT value, time, quality FROM env_measurement "
+            "WHERE sensor_id = :sid ORDER BY time DESC LIMIT 1"
+        ), {"sid": str(s.id)}).mappings().first()
+        
+        if row:
+            live_data[str(s.id)] = {
+                "kind": s.kind,
+                "unit": s.unit,
+                "value": row["value"],
+                "time": row["time"],
+                "quality": row["quality"]
+            }
+        else:
+             # Try signal
+            row_sig = db.execute(text(
+                "SELECT value_uv, time, quality FROM plant_signal_1hz "
+                "WHERE sensor_id = :sid ORDER BY time DESC LIMIT 1"
+            ), {"sid": str(s.id)}).mappings().first()
+            if row_sig:
+                live_data[str(s.id)] = {
+                    "kind": s.kind,
+                    "unit": "uV", # signal usually uV
+                    "value": row_sig["value_uv"],
+                    "time": row_sig["time"],
+                    "quality": row_sig["quality"]
+                }
+
+    return {
+        "device_id": device_id,
+        "timestamp": datetime.now(timezone.utc),
+        "sensors": live_data
+    }
+
+
+@router.get("/devices/{device_id}/download")
+def download_device_data(
+    device_id: UUID,
+    metric: str = Query(..., description="'env' or 'signal'"),
+    from_ts: datetime | None = Query(default=None, alias="from"),
+    to_ts: datetime | None = Query(default=None, alias="to"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_dashboard_user),
+):
+    gh_id = resolve_greenhouse_id(user)
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if gh_id and device.greenhouse_id != gh_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    if not from_ts:
+        from_ts = datetime.now(timezone.utc) - timedelta(days=1)
+    if not to_ts:
+        to_ts = datetime.now(timezone.utc)
+        
+    # Get all sensors for this device
+    sensors = db.query(Sensor).filter(Sensor.device_id == device_id).all()
+    sensor_ids = [str(s.id) for s in sensors]
+    
+    if not sensor_ids:
+        return StreamingResponse(io.StringIO("No sensors found\n"), media_type="text/csv")
+
+    def iter_csv():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        if metric == "env":
+            writer.writerow(["time", "sensor_id", "kind", "unit", "value", "quality"])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+            
+            # Query in chunks if needed, but for simplicity:
+            # Join with sensor to get kind/unit?
+            sql = text(
+                "SELECT m.time, m.sensor_id, s.kind, s.unit, m.value, m.quality "
+                "FROM env_measurement m "
+                "JOIN sensor s ON m.sensor_id = s.id "
+                "WHERE m.sensor_id = ANY(:sids) AND m.time >= :f AND m.time < :t "
+                "ORDER BY m.time ASC"
+            )
+            result = db.execute(sql, {"sids": sensor_ids, "f": from_ts, "t": to_ts})
+            
+            for row in result:
+                writer.writerow([row.time, row.sensor_id, row.kind, row.unit, row.value, row.quality])
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+                
+        elif metric == "signal":
+             writer.writerow(["time", "sensor_id", "kind", "value_uV", "quality"])
+             yield output.getvalue()
+             output.seek(0)
+             output.truncate(0)
+             
+             sql = text(
+                "SELECT m.time, m.sensor_id, s.kind, m.value_uv, m.quality "
+                "FROM plant_signal_1hz m "
+                "JOIN sensor s ON m.sensor_id = s.id "
+                "WHERE m.sensor_id = ANY(:sids) AND m.time >= :f AND m.time < :t "
+                "ORDER BY m.time ASC"
+            )
+             result = db.execute(sql, {"sids": sensor_ids, "f": from_ts, "t": to_ts})
+             
+             for row in result:
+                writer.writerow([row.time, row.sensor_id, row.kind, row.value_uv, row.quality])
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+
+    filename = f"device_{device.serial}_{metric}_{from_ts.strftime('%Y%m%d')}.csv"
+    return StreamingResponse(
+        iter_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 # ── Devices ───────────────────────────────────────────────────

@@ -128,6 +128,20 @@ class DeviceOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DeviceKeyResponse(BaseModel):
+    device_id: UUID
+    api_key: str
+
+
+class GreenhouseSummary(BaseModel):
+    greenhouse_id: UUID
+    name: str
+    device_count: int
+    plant_count: int
+    active_device_count: int
+    last_seen: datetime | None
+
+
 class SensorCreate(BaseModel):
     device_id: UUID
     plant_id: UUID | None = None
@@ -145,7 +159,14 @@ class SensorOut(BaseModel):
     kind: str
     unit: str
     calibration: dict[str, Any]
+    calibration: dict[str, Any]
     model_config = {"from_attributes": True}
+
+
+class DeviceLiveData(BaseModel):
+    device_id: UUID
+    timestamp: datetime
+    sensors: dict[str, dict[str, Any]]  # sensor_id -> {value, time, kind, quality}
 
 
 # ═══════════════════════════════════════════════════════════════

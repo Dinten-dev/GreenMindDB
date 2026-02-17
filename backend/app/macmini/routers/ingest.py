@@ -43,12 +43,29 @@ def _claim_request_id(
     return True
 
 
+
 def _update_ingest_log(db: Session, request_id: UUID, status_val: str, details: dict[str, Any]) -> None:
     log = db.query(IngestLog).filter(IngestLog.request_id == request_id).first()
     if log:
         log.status = status_val
         log.details = details
         db.commit()
+
+
+def _update_device_last_seen(db: Session, device_id: str | None) -> None:
+    if not device_id:
+        return
+    try:
+        # We use a raw update for speed/simplicity to avoid fetching the whole object
+        db.execute(
+            text("UPDATE device SET last_seen = :now, status = 'online' WHERE id = :did"),
+            {"now": datetime.now(timezone.utc), "did": device_id}
+        )
+        db.commit()
+    except Exception:
+        # Don't fail ingestion if stats update fails
+        logger.warning(f"Failed to update last_seen for device {device_id}")
+
 
 
 def _utc(dt: datetime) -> datetime:
@@ -107,6 +124,7 @@ def ingest_plant_signal(
 
         inserted = len(rows)
         _update_ingest_log(db, payload.request_id, "ingested", {"inserted_rows": inserted})
+        _update_device_last_seen(db, source_device)
         return IngestResponse(request_id=payload.request_id, status="ingested", inserted_rows=inserted)
 
     except Exception as e:
@@ -152,6 +170,7 @@ def ingest_env(
 
         inserted = len(rows)
         _update_ingest_log(db, payload.request_id, "ingested", {"inserted_rows": inserted})
+        _update_device_last_seen(db, source_device)
         return IngestResponse(request_id=payload.request_id, status="ingested", inserted_rows=inserted)
 
     except Exception as e:
@@ -192,6 +211,7 @@ def ingest_event(
         )
         db.commit()
         _update_ingest_log(db, payload.request_id, "ingested", {"inserted_rows": 1})
+        _update_device_last_seen(db, source_device)
         return IngestResponse(request_id=payload.request_id, status="ingested", inserted_rows=1)
 
     except Exception as e:
