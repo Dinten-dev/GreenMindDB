@@ -11,7 +11,18 @@ module.exports = {
                 sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', 'Arial', 'sans-serif'],
             },
             colors: {
-                // Apple-inspired color palette
+                'gm-green': {
+                    50: '#f0fdf4',
+                    100: '#dcfce7',
+                    200: '#bbf7d0',
+                    300: '#86efac',
+                    400: '#4ade80',
+                    500: '#34c759',
+                    600: '#248a3d',
+                    700: '#15803d',
+                    800: '#166534',
+                    900: '#14532d',
+                },
                 'apple-gray': {
                     50: '#fafafa',
                     100: '#f5f5f7',
@@ -24,25 +35,31 @@ module.exports = {
                     800: '#1d1d1f',
                     900: '#111111',
                 },
-                'apple-blue': {
-                    DEFAULT: '#0071e3',
-                    hover: '#0077ed',
-                    light: '#147ce5',
-                },
-                'apple-green': {
-                    DEFAULT: '#34c759',
-                    light: '#30d158',
-                },
             },
             boxShadow: {
-                'apple': '0 4px 16px rgba(0, 0, 0, 0.08)',
-                'apple-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
+                'apple': '0 4px 16px rgba(0, 0, 0, 0.06)',
+                'apple-lg': '0 8px 32px rgba(0, 0, 0, 0.08)',
                 'apple-card': '0 2px 8px rgba(0, 0, 0, 0.04)',
+                'apple-hover': '0 4px 20px rgba(0, 0, 0, 0.1)',
             },
             borderRadius: {
                 'apple': '12px',
-                'apple-lg': '18px',
-                'apple-xl': '24px',
+                'apple-lg': '16px',
+                'apple-xl': '20px',
+            },
+            animation: {
+                'fade-in': 'fadeIn 0.5s ease forwards',
+                'slide-up': 'slideUp 0.5s ease forwards',
+            },
+            keyframes: {
+                fadeIn: {
+                    '0%': { opacity: '0' },
+                    '100%': { opacity: '1' },
+                },
+                slideUp: {
+                    '0%': { opacity: '0', transform: 'translateY(20px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
             },
         },
     },

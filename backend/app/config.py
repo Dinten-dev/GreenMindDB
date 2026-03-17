@@ -13,10 +13,19 @@ class Settings(BaseSettings):
     )
 
     environment: str = "development"
-    database_url: str = "postgresql://plantuser:plantpass@localhost:5432/plantdb"
-    cors_origins: List[str] = ["http://localhost:3000"]
+    database_url: str = "postgresql+psycopg2://plantuser:plantpass@localhost:5432/plantdb"
+    cors_origins: str | List[str] = ["http://localhost:3000"]
     jwt_secret_key: str = "dev-only-change-me-please-dev-only-change-me"
     jwt_access_token_expire_minutes: int = 60 * 24 * 7
+    cookie_domain: str = ""
+    cookie_secure: bool = False
+
+    # SMTP / Email
+    smtp_host: str = "smtp-mail.outlook.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    email_receiver: str = "traver.dinten@outlook.com"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

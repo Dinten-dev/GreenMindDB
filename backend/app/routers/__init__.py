@@ -1,7 +1,17 @@
-from app.routers.species import router as species_router
-from app.routers.metrics import router as metrics_router
-from app.routers.sources import router as sources_router
-from app.routers.target_ranges import router as target_ranges_router
 from app.routers.auth import router as auth_router
+from app.routers.organizations import router as organizations_router
+from app.routers.greenhouses import router as greenhouses_router
+from app.routers.devices import router as devices_router
+from app.routers.sensors import router as sensors_router
+from app.routers.ingest import router as ingest_router
+from app.routers.contact import router as contact_router
 
-__all__ = ["species_router", "metrics_router", "sources_router", "target_ranges_router", "auth_router"]
+__all__ = [
+    "auth_router",
+    "organizations_router",
+    "greenhouses_router",
+    "devices_router",
+    "sensors_router",
+    "ingest_router",
+    "contact_router",
+]

@@ -3,40 +3,295 @@
 @tailwind utilities;
 
 :root {
-  --text-primary: #1d1d1f;
-  --text-secondary: #86868b;
-  --bg-primary: #f9fafb;
-  --bg-card: #ffffff;
-  --border: #e5e7eb;
+  /* Apple HIG-inspired design tokens */
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f5f5f7;
+  --color-bg-tertiary: #fbfbfd;
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #6e6e73;
+  --color-text-tertiary: #86868b;
+  --color-border: #d2d2d7;
+  --color-border-light: #e8e8ed;
+
+  --color-green: #34c759;
+  --color-green-dark: #248a3d;
+  --color-green-light: #30d158;
+  --color-green-bg: #f0fdf4;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.04);
+
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
 }
 
-html {
-  scroll-behavior: smooth;
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--color-green);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* ── Global Organic Background ──────────────── */
+.global-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--color-bg);
+  transition: background-color 1s ease;
+}
+
+.global-bg-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.85) 40%, #ffffff 100%);
+  z-index: 10;
+}
+
+/* Organic Blobs */
+.blob-first,
+.blob-second,
+.blob-third {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  will-change: transform, background;
+  transition: background 1.5s ease;
+}
+
+/* Base Blob Sizes & Positions */
+.blob-first {
+  width: 600px;
+  height: 600px;
+  top: -15%;
+  left: -10%;
+  animation: drift-a 18s ease-in-out infinite alternate;
+}
+.blob-second {
+  width: 500px;
+  height: 500px;
+  bottom: 0%;
+  right: -5%;
+  animation: drift-b 22s ease-in-out infinite alternate;
+}
+.blob-third {
+  width: 450px;
+  height: 450px;
+  top: 30%;
+  left: 40%;
+  animation: drift-c 25s ease-in-out infinite alternate;
+}
+
+/* ── Tone Variations ──────────────── */
+
+/* HOME: Brighter emeralds */
+.tone-home .blob-first { background: radial-gradient(circle, rgba(52,199,89,0.35) 0%, rgba(22,101,52,0.35) 50%, transparent 70%); }
+.tone-home .blob-second { background: radial-gradient(circle, rgba(187,247,208,0.35) 0%, rgba(36,138,61,0.35) 40%, transparent 70%); }
+.tone-home .blob-third { background: radial-gradient(circle, rgba(220,252,231,0.25) 0%, rgba(21,128,61,0.25) 45%, transparent 70%); }
+.tone-home .neural-overlay { color: rgba(34,197,94,0.3); }
+
+/* TECHNOLOGY: Deep botanical */
+.tone-technology .blob-first { background: radial-gradient(circle, rgba(21,128,61,0.4) 0%, rgba(6,78,59,0.4) 50%, transparent 70%); }
+.tone-technology .blob-second { background: radial-gradient(circle, rgba(34,197,94,0.3) 0%, rgba(2,44,34,0.4) 40%, transparent 70%); }
+.tone-technology .blob-third { background: radial-gradient(circle, rgba(5,150,105,0.3) 0%, rgba(2,44,34,0.3) 45%, transparent 70%); }
+.tone-technology .neural-overlay { color: rgba(16,185,129,0.5); }
+
+/* PRODUCT: Clear & structured */
+.tone-product .blob-first { background: radial-gradient(circle, rgba(74,222,128,0.3) 0%, rgba(22,163,74,0.3) 50%, transparent 70%); }
+.tone-product .blob-second { background: radial-gradient(circle, rgba(134,239,172,0.25) 0%, rgba(21,128,61,0.3) 40%, transparent 70%); }
+.tone-product .blob-third { background: radial-gradient(circle, rgba(167,243,208,0.2) 0%, rgba(4,120,87,0.2) 45%, transparent 70%); }
+.tone-product .neural-overlay { color: rgba(52,211,153,0.4); }
+
+/* ABOUT: Soft sage */
+.tone-about .blob-first { background: radial-gradient(circle, rgba(167,243,208,0.4) 0%, rgba(5,150,105,0.2) 50%, transparent 70%); }
+.tone-about .blob-second { background: radial-gradient(circle, rgba(209,250,229,0.4) 0%, rgba(16,185,129,0.2) 40%, transparent 70%); }
+.tone-about .blob-third { background: radial-gradient(circle, rgba(236,253,245,0.4) 0%, rgba(52,211,153,0.15) 45%, transparent 70%); }
+.tone-about .neural-overlay { color: rgba(167,243,208,0.6); }
+
+/* CONTACT: Darker calm */
+.tone-contact .blob-first { background: radial-gradient(circle, rgba(4,120,87,0.2) 0%, rgba(2,44,34,0.25) 50%, transparent 70%); }
+.tone-contact .blob-second { background: radial-gradient(circle, rgba(6,95,70,0.2) 0%, rgba(2,44,34,0.25) 40%, transparent 70%); }
+.tone-contact .blob-third { background: radial-gradient(circle, rgba(21,128,61,0.15) 0%, rgba(2,44,34,0.2) 45%, transparent 70%); }
+.tone-contact .neural-overlay { color: rgba(6,95,70,0.4); }
+
+/* ── Deep-Tech Neural Signal Lines ──────────────── */
+.neural-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+.neural-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: neural-flow 20s linear infinite;
+  opacity: 0.6;
+}
+.neural-path-2 { animation-duration: 25s; animation-direction: reverse; }
+.neural-path-3 { animation-duration: 18s; animation-delay: -5s; }
+.neural-path-4 { animation-duration: 22s; animation-direction: reverse; animation-delay: -2s; }
+
+.neural-node {
+  animation: node-pulse 4s ease-in-out infinite alternate;
+}
+.node-2 { animation-delay: -1s; }
+.node-3 { animation-delay: -2s; }
+.node-4 { animation-delay: -3s; }
+
+@keyframes neural-flow {
+  0% { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: -100; }
+}
+
+@keyframes node-pulse {
+  0% { opacity: 0.2; transform: scale(0.8); }
+  100% { opacity: 0.8; transform: scale(1.2); }
+}
+
+/* ── Keyframes (Drift) ──────────────── */
+@keyframes drift-a {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(60px, 40px) scale(1.08); }
+  100% { transform: translate(-30px, 70px) scale(0.95); }
+}
+
+@keyframes drift-b {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-50px, -30px) scale(1.05); }
+  100% { transform: translate(40px, -60px) scale(0.92); }
+}
+
+@keyframes drift-c {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(30px, -50px) scale(1.1); }
+  100% { transform: translate(-40px, 30px) scale(0.97); }
+}
+
+/* ── Mobile Swipe Utilities ──────────────── */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+/* ── Premium Card Micro-Interactions ──────────── */
+.card-hover {
+  transition: transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+}
+
+/* Icon containers */
+.icon-container {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-green-bg);
+  transition: transform 300ms ease, background 300ms ease;
+}
+.card-hover:hover .icon-container {
+  transform: scale(1.08);
+  background: rgba(52, 199, 89, 0.15);
+}
+
+/* ── Timeline Connector ──────────────── */
+.timeline-step {
+  position: relative;
+}
+.timeline-step::after {
+  content: '';
+  position: absolute;
+  top: 28px;
+  left: calc(100% + 8px);
+  width: calc(100% - 16px);
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-green) 0%, var(--color-border-light) 100%);
+  opacity: 0.3;
+}
+.timeline-step:last-child::after {
+  display: none;
+}
+
+/* ── Premium Button Glow ──────────────── */
+.btn-glow {
+  position: relative;
+  overflow: hidden;
+}
+.btn-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  box-shadow: 0 0 24px rgba(52, 199, 89, 0.4);
+}
+.btn-glow:hover::after {
+  opacity: 1;
+}
+
+/* ── Gradient Text ──────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #34c759 0%, #30d158 50%, #248a3d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Stat Counter Style ──────────────── */
+.stat-value {
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
-}
-
-/* Disable global transition on table rows for snappy hovers */
-table * {
-  transition: none !important;
-}
-
-a {
-  color: #0071e3;
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
 }

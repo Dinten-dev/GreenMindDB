@@ -1,54 +1,46 @@
-"""Authentication utilities: password hashing and JWT tokens."""
-from datetime import datetime, timedelta
-from typing import Optional
+"""Authentication utilities: password hashing, JWT tokens, cookie helpers."""
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User
+from app.models.user import User, Role
 from app.config import settings
 
-# Password hashing (bcrypt for security)
+# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
 SECRET_KEY = settings.jwt_secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.jwt_access_token_expire_minutes
+COOKIE_NAME = "access_token"
 
-# Security scheme
+# Security scheme (optional – we also read from cookie)
 security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def verify_device_api_key(plain_api_key: str, hashed_api_key: str) -> bool:
-    """Verify a device API key against its hash."""
-    return pwd_context.verify(plain_api_key, hashed_api_key)
-
-
 def get_password_hash(password: str) -> str:
-    """Hash a password using bcrypt."""
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> Optional[dict]:
-    """Decode and validate a JWT token."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -56,67 +48,79 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-async def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
-) -> Optional[User]:
-    """Get current user if token provided, otherwise None."""
-    if not credentials:
-        return None
-    
-    payload = decode_token(credentials.credentials)
-    if not payload:
-        return None
-    
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-    
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user or not user.is_active:
-        return None
-    
-    return user
+def set_auth_cookie(response: Response, token: str) -> None:
+    """Set httpOnly JWT cookie on the response."""
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+        domain=settings.cookie_domain or None,
+    )
+
+
+def delete_auth_cookie(response: Response) -> None:
+    """Clear the JWT cookie."""
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+        domain=settings.cookie_domain or None,
+    )
+
+
+def _extract_token(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials],
+) -> Optional[str]:
+    """Extract JWT from Authorization header or httpOnly cookie."""
+    if credentials:
+        return credentials.credentials
+    return request.cookies.get(COOKIE_NAME)
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> User:
-    """Get current user, raise 401 if not authenticated."""
-    if not credentials:
+    """Get current user from token (header or cookie). Raises 401 if missing/invalid."""
+    token = _extract_token(request, credentials)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    payload = decode_token(credentials.credentials)
+
+    payload = decode_token(token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Invalid or expired token",
         )
-    
+
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-    
-    user = db.query(User).filter(User.id == int(user_id)).first()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account disabled",
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+
     return user
+
+
+def require_role(allowed_roles: List[Role]):
+    """Dependency that checks the user has one of the allowed roles."""
+    async def _check(current_user: User = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current_user
+    return _check

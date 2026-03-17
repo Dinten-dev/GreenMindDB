@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import ClientLayout from './ClientLayout'
+import GlobalBackground from '@/components/GlobalBackground'
+import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
-    title: 'GreenMindDB – Mac mini Dashboard',
-    description: 'Monitoring dashboard for the GreenMindDB plant sensor data pipeline. Shows ESP32 devices, ingestion status, and data flows.',
+    title: 'GreenMind – Predictive Yield Optimization',
+    description: 'Plant bioelectrical sensing system for predictive yield optimization in greenhouse agriculture.',
 }
 
 export default function RootLayout({
@@ -14,8 +15,10 @@ export default function RootLayout({
 }) {
     return (
         <html lang="en">
-            <body className="min-h-screen bg-gray-50">
-                <ClientLayout>{children}</ClientLayout>
+            <body className="min-h-screen bg-apple-gray-50 text-apple-gray-800">
+                <GlobalBackground />
+                <Navbar />
+                {children}
             </body>
         </html>
     )

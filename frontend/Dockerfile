@@ -18,7 +18,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV INTERNAL_API_URL http://backend:8000
 
-RUN npm run build -- --webpack
+RUN npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner

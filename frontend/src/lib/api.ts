@@ -1,194 +1,191 @@
-// GreenMindDB Mac mini Dashboard API
+const API_BASE = typeof window === 'undefined'
+    ? (process.env.INTERNAL_API_URL || 'http://localhost:8000')
+    : '/api';
 
-const isServer = typeof window === 'undefined';
+interface FetchOptions extends RequestInit {
+    params?: Record<string, string>;
+}
 
-function getApiUrl(): string {
-    if (isServer) {
-        return process.env.INTERNAL_API_URL || 'http://backend:8000';
+async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+    const { params, ...fetchOpts } = options;
+
+    let url = `${API_BASE}${path}`;
+    if (params) {
+        const searchParams = new URLSearchParams(params);
+        url += `?${searchParams.toString()}`;
     }
-    const explicitClientUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (explicitClientUrl) return explicitClientUrl;
-    const protocol = window.location.protocol;
-    const host = window.location.hostname;
-    return `${protocol}//${host}:8000`;
+
+    const res = await fetch(url, {
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            ...fetchOpts.headers,
+        },
+        ...fetchOpts,
+    });
+
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail || `API error ${res.status}`);
+    }
+
+    if (res.status === 204) return {} as T;
+    return res.json();
 }
 
-const API_URL = getApiUrl();
-
-// ── Types ────────────────────────────────────
-
-export interface HealthStatus {
-    status: 'ok' | 'degraded';
-    db: 'ok' | 'error';
-    minio: 'ok' | 'error';
-}
-
-export interface DashboardOverview {
-    greenhouses: number;
-    devices: number;
-    sensors: number;
-    plants: number;
-    signal_rows_24h: number;
-    env_rows_24h: number;
-    ingests_24h: number;
-}
-
-export interface Device {
+// ── Auth ─────────────────────────────────────
+export interface AuthUser {
     id: string;
-    serial: string;
-    type: string;
-    fw_version: string | null;
-    last_seen: string | null;
-    status: string;
-    greenhouse_id: string | null;
-    greenhouse_name: string | null;
-    sensor_count: number;
+    email: string;
+    name: string | null;
+    role: string;
+    organization_id: string | null;
+    organization_name: string | null;
+    is_active: boolean;
 }
 
-export interface IngestLogEntry {
-    request_id: string;
-    received_at: string;
-    endpoint: string;
-    source: string | null;
-    status: string;
-    details: Record<string, unknown>;
+interface TokenResponse {
+    access_token: string;
+    token_type: string;
+    user: AuthUser;
 }
 
+export async function apiSignup(email: string, password: string, name: string): Promise<TokenResponse> {
+    return apiFetch<TokenResponse>('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, name }),
+    });
+}
+
+export async function apiLogin(email: string, password: string): Promise<TokenResponse> {
+    return apiFetch<TokenResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+    });
+}
+
+export async function apiLogout(): Promise<void> {
+    await apiFetch('/auth/logout', { method: 'POST' });
+}
+
+export async function apiGetMe(): Promise<AuthUser> {
+    return apiFetch<AuthUser>('/auth/me');
+}
+
+// ── Organizations ────────────────────────────
+export interface Org {
+    id: string;
+    name: string;
+    created_at: string;
+}
+
+export async function apiGetOrg(): Promise<Org | null> {
+    return apiFetch<Org | null>('/organizations');
+}
+
+export async function apiCreateOrg(name: string): Promise<Org> {
+    return apiFetch<Org>('/organizations', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+    });
+}
+
+// ── Greenhouses ──────────────────────────────
 export interface Greenhouse {
     id: string;
     name: string;
     location: string | null;
-    timezone: string;
-    zone_count: number;
+    created_at: string;
     device_count: number;
-    plant_count: number;
+    sensor_count: number;
 }
 
-// ── API Functions ────────────────────────────
-
-export async function fetchHealth(): Promise<HealthStatus> {
-    const res = await fetch(`${API_URL}/health`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Health check failed');
-    return res.json();
-}
-
-export async function fetchOverview(): Promise<DashboardOverview> {
-    const res = await fetch(`${API_URL}/operator/overview`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch overview');
-    return res.json();
-}
-
-export async function fetchDevices(): Promise<Device[]> {
-    const res = await fetch(`${API_URL}/operator/devices`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch devices');
-    return res.json();
-}
-
-export async function fetchIngestLog(limit = 30): Promise<IngestLogEntry[]> {
-    const res = await fetch(`${API_URL}/operator/ingest-log?limit=${limit}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch ingest log');
-    return res.json();
-}
-
-export async function fetchGreenhouses(): Promise<Greenhouse[]> {
-    const res = await fetch(`${API_URL}/operator/greenhouses`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch greenhouses');
-    return res.json();
-}
-
-export async function fetchGreenhouse(id: string): Promise<Greenhouse> {
-    const res = await fetch(`${API_URL}/operator/greenhouses/${id}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch greenhouse');
-    return res.json();
-}
-
-// ── Admin API ────────────────────────────────
-
-export interface GreenhouseCreate {
+export interface GreenhouseOverview {
+    id: string;
     name: string;
-    location?: string;
-    timezone?: string;
+    total_devices: number;
+    online_devices: number;
+    total_sensors: number;
+    readings_24h: number;
 }
 
-export interface DeviceCreate {
-    greenhouse_id: string;
+export async function apiListGreenhouses(): Promise<Greenhouse[]> {
+    return apiFetch<Greenhouse[]>('/greenhouses');
+}
+
+export async function apiCreateGreenhouse(name: string, location?: string): Promise<Greenhouse> {
+    return apiFetch<Greenhouse>('/greenhouses', {
+        method: 'POST',
+        body: JSON.stringify({ name, location }),
+    });
+}
+
+export async function apiGetGreenhouseOverview(id: string): Promise<GreenhouseOverview> {
+    return apiFetch<GreenhouseOverview>(`/greenhouses/${id}/overview`);
+}
+
+// ── Devices ──────────────────────────────────
+export interface DeviceInfo {
+    id: string;
     serial: string;
-    type: string; // 'gateway', 'sensor_node', 'cam'
-    fw_version?: string;
-}
-
-export interface DeviceKeyResponse {
-    device_id: string;
-    api_key: string;
-    warning: string;
-}
-
-export interface GreenhouseSummary {
-    greenhouse_id: string;
-    name: string;
-    device_count: number;
-    plant_count: number;
-    active_device_count: number;
+    name: string | null;
+    type: string;
+    fw_version: string | null;
+    status: string;
     last_seen: string | null;
+    greenhouse_id: string | null;
+    greenhouse_name: string | null;
+    sensor_count: number;
+    paired_at: string | null;
 }
 
-export async function createGreenhouse(data: GreenhouseCreate): Promise<Greenhouse> {
-    const res = await fetch(`${API_URL}/admin/greenhouses`, {
+export interface PairingCode {
+    code: string;
+    expires_at: string;
+    greenhouse_id: string;
+}
+
+export async function apiListDevices(): Promise<DeviceInfo[]> {
+    return apiFetch<DeviceInfo[]>('/devices');
+}
+
+export async function apiGeneratePairingCode(greenhouse_id: string): Promise<PairingCode> {
+    return apiFetch<PairingCode>('/devices/pairing-code', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ greenhouse_id }),
     });
-    if (!res.ok) throw new Error('Failed to create greenhouse');
-    return res.json();
 }
 
-export async function createDevice(data: DeviceCreate): Promise<DeviceKeyResponse> {
-    const res = await fetch(`${API_URL}/admin/devices`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create device');
-    return res.json();
-}
-
-export async function rotateDeviceKey(deviceId: string): Promise<DeviceKeyResponse> {
-    const res = await fetch(`${API_URL}/admin/devices/${deviceId}/rotate-key`, {
-        method: 'POST',
-    });
-    if (!res.ok) throw new Error('Failed to rotate device key');
-    return res.json();
-}
-
-export async function fetchGreenhouseSummary(id: string): Promise<GreenhouseSummary> {
-    const res = await fetch(`${API_URL}/admin/greenhouses/${id}/summary`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch greenhouse summary');
-    return res.json();
-}
-
-// ── Live Data & Monitoring ───────────────────
-
-export interface DeviceLiveData {
+// ── Sensors ──────────────────────────────────
+export interface SensorInfo {
+    id: string;
     device_id: string;
+    kind: string;
+    unit: string;
+    label: string | null;
+    device_serial: string | null;
+    device_name: string | null;
+    device_status: string | null;
+}
+
+export interface DataPoint {
     timestamp: string;
-    sensors: Record<string, {
-        kind: string;
-        unit: string;
-        value: number;
-        time: string;
-        quality: number;
-    }>;
+    value: number;
 }
 
-export async function fetchDeviceLive(deviceId: string): Promise<DeviceLiveData> {
-    const res = await fetch(`${API_URL}/operator/devices/${deviceId}/live`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch live data');
-    return res.json();
+export interface SensorData {
+    sensor_id: string;
+    kind: string;
+    unit: string;
+    label: string | null;
+    data: DataPoint[];
 }
 
-export function getDeviceDownloadUrl(deviceId: string, metric: 'env' | 'signal', from?: Date, to?: Date): string {
-    const params = new URLSearchParams({ metric });
-    if (from) params.append('from', from.toISOString());
-    if (to) params.append('to', to.toISOString());
-    return `${API_URL}/operator/devices/${deviceId}/download?${params.toString()}`;
+export async function apiListSensors(greenhouse_id?: string): Promise<SensorInfo[]> {
+    const params = greenhouse_id ? { greenhouse_id } : undefined;
+    return apiFetch<SensorInfo[]>('/sensors', { params });
+}
+
+export async function apiGetSensorData(sensor_id: string, range: string = '24h'): Promise<SensorData> {
+    return apiFetch<SensorData>(`/sensors/${sensor_id}/data`, { params: { range } });
 }
