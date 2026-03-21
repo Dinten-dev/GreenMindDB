@@ -19,8 +19,12 @@ export default function LoginPage() {
         try {
             await apiLogin(email, password);
             router.push('/app/dashboard');
-        } catch (err: any) {
-            setError(err.message || 'Anmeldung fehlgeschlagen');
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message || 'Anmeldung fehlgeschlagen');
+            } else {
+                setError('Anmeldung fehlgeschlagen');
+            }
         } finally {
             setLoading(false);
         }

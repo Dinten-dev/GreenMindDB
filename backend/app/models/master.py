@@ -1,8 +1,14 @@
 """Master-data models: Greenhouse, Device, Sensor."""
+
 import uuid
 
 from sqlalchemy import (
-    Column, DateTime, Float, ForeignKey, String, Text, Boolean,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,7 +21,12 @@ class Greenhouse(Base):
     __tablename__ = "greenhouse"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name = Column(String(200), nullable=False)
     location = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
@@ -28,7 +39,12 @@ class Device(Base):
     __tablename__ = "device"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    greenhouse_id = Column(UUID(as_uuid=True), ForeignKey("greenhouse.id", ondelete="CASCADE"), nullable=True, index=True)
+    greenhouse_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("greenhouse.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     serial = Column(String(100), nullable=False, unique=True)
     name = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
@@ -48,7 +64,9 @@ class Sensor(Base):
     __tablename__ = "sensor"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    device_id = Column(UUID(as_uuid=True), ForeignKey("device.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(
+        UUID(as_uuid=True), ForeignKey("device.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     kind = Column(String(100), nullable=False)
     unit = Column(String(20), nullable=False)
     label = Column(String(200), nullable=True)

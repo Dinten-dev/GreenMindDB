@@ -1,43 +1,19 @@
 """Greenhouse management endpoints."""
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
-from pydantic import BaseModel
 
-from app.database import get_db
-from app.models.user import User
-from app.models.master import Greenhouse, Device, Sensor
-from app.models.timeseries import SensorReading
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.auth import get_current_user
+from app.database import get_db
+from app.models.master import Device, Greenhouse, Sensor
+from app.models.timeseries import SensorReading
+from app.models.user import User
+from app.schemas.greenhouse import GreenhouseCreate, GreenhouseOverview, GreenhouseResponse
 
 router = APIRouter(prefix="/api/greenhouses", tags=["greenhouses"])
-
-
-class GreenhouseCreate(BaseModel):
-    name: str
-    location: Optional[str] = None
-
-
-class GreenhouseResponse(BaseModel):
-    id: str
-    name: str
-    location: Optional[str] = None
-    created_at: str
-    device_count: int = 0
-    sensor_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-
-class GreenhouseOverview(BaseModel):
-    id: str
-    name: str
-    total_devices: int
-    online_devices: int
-    total_sensors: int
-    readings_24h: int
 
 
 def _require_org(user: User):
@@ -46,35 +22,35 @@ def _require_org(user: User):
     return user.organization_id
 
 
-@router.get("", response_model=List[GreenhouseResponse])
+@router.get("", response_model=list[GreenhouseResponse])
 async def list_greenhouses(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List all greenhouses in user's organization."""
     org_id = _require_org(current_user)
-    greenhouses = (
-        db.query(Greenhouse)
-        .filter(Greenhouse.organization_id == org_id)
-        .all()
-    )
+    greenhouses = db.query(Greenhouse).filter(Greenhouse.organization_id == org_id).all()
     results = []
     for gh in greenhouses:
-        device_count = db.query(func.count(Device.id)).filter(Device.greenhouse_id == gh.id).scalar()
+        device_count = (
+            db.query(func.count(Device.id)).filter(Device.greenhouse_id == gh.id).scalar()
+        )
         sensor_count = (
             db.query(func.count(Sensor.id))
             .join(Device, Device.id == Sensor.device_id)
             .filter(Device.greenhouse_id == gh.id)
             .scalar()
         )
-        results.append(GreenhouseResponse(
-            id=str(gh.id),
-            name=gh.name,
-            location=gh.location,
-            created_at=gh.created_at.isoformat(),
-            device_count=device_count,
-            sensor_count=sensor_count,
-        ))
+        results.append(
+            GreenhouseResponse(
+                id=str(gh.id),
+                name=gh.name,
+                location=gh.location,
+                created_at=gh.created_at.isoformat(),
+                device_count=device_count,
+                sensor_count=sensor_count,
+            )
+        )
     return results
 
 
@@ -162,8 +138,7 @@ async def get_greenhouse_overview(
 
     readings_24h = 0
     if sensor_ids:
-        from datetime import datetime, timedelta, timezone
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff = datetime.now(UTC) - timedelta(hours=24)
         readings_24h = (
             db.query(func.count())
             .select_from(SensorReading)

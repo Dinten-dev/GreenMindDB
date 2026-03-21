@@ -1,41 +1,24 @@
 """IoT data ingestion endpoint – devices push sensor readings here."""
-from datetime import datetime, timezone
-from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
+from app.auth import verify_password
 from app.database import get_db
 from app.models.master import Device, Sensor
 from app.models.timeseries import SensorReading
-from app.auth import verify_password
+from app.schemas.ingest import IngestRequest, IngestResponse
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
-
-
-class ReadingPayload(BaseModel):
-    sensor_kind: str
-    value: float
-    unit: str
-    timestamp: Optional[str] = None
-
-
-class IngestRequest(BaseModel):
-    device_serial: str
-    readings: List[ReadingPayload]
-
-
-class IngestResponse(BaseModel):
-    ingested: int
-    device_id: str
 
 
 @router.post("", response_model=IngestResponse, status_code=201)
 async def ingest_data(
     data: IngestRequest,
     db: Session = Depends(get_db),
-    x_api_key: Optional[str] = Header(None),
+    x_api_key: str | None = Header(None),
 ):
     """
     Ingest sensor readings from a device.
@@ -57,7 +40,7 @@ async def ingest_data(
     if not verify_password(x_api_key, device.api_key_hash):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ingested = 0
 
     for reading in data.readings:

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import ScrollReveal from '@/components/ScrollReveal';
 
 export default function ContactPage() {
@@ -23,8 +22,8 @@ export default function ContactPage() {
                             <div className="flex flex-col md:flex-row gap-12">
                                 <div className="flex-1">
                                     <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">E-Mail</h3>
-                                    <a 
-                                        href="mailto:traver.dinten@outlook.com" 
+                                    <a
+                                        href="mailto:traver.dinten@outlook.com"
                                         className="text-2xl font-medium text-gm-green-600 hover:text-gm-green-500 transition-colors duration-200"
                                     >
                                         traver.dinten@outlook.com
@@ -33,9 +32,9 @@ export default function ContactPage() {
                                         Schreiben Sie uns eine E-Mail mit Ihren Projektdetails und wir melden uns so schnell wie möglich bei Ihnen.
                                     </p>
                                 </div>
-                                
+
                                 <div className="w-px bg-apple-gray-200 hidden md:block"></div>
-                                
+
                                 <div className="flex-1">
                                     <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">Standort</h3>
                                     <p className="text-lg text-apple-gray-800 leading-relaxed">

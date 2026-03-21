@@ -24,14 +24,14 @@ def main():
     parser.add_argument("--serial", required=True, help="Device serial number")
     parser.add_argument("--type", required=True, help="Device type (gateway, esp32_station, etc.)")
     parser.add_argument("--greenhouse", help="Greenhouse name (optional, will use first available if not set)")
-    
+
     args = parser.parse_args()
-    
+
     settings = get_settings()
     engine = create_engine(settings.database_url)
     Session = sessionmaker(bind=engine)
     session = Session()
-    
+
     try:
         # Find or create greenhouse
         greenhouse = None
@@ -48,7 +48,7 @@ def main():
                 greenhouse = Greenhouse(name="Main Greenhouse", location="Local")
                 session.add(greenhouse)
                 session.commit()
-        
+
         # Check if device exists
         existing = session.query(Device).filter(Device.serial == args.serial).first()
         if existing:
@@ -63,7 +63,7 @@ def main():
         # Format: gmd_<32_random_chars>
         api_key_plain = f"gmd_{secrets.token_urlsafe(24)}"
         api_key_hash = pwd_context.hash(api_key_plain)
-        
+
         device = Device(
             name=args.name,
             serial=args.serial,
@@ -74,10 +74,10 @@ def main():
             api_key_last_rotated_at=datetime.utcnow(),
             is_active=True
         )
-        
+
         session.add(device)
         session.commit()
-        
+
         print(f"\n✅ Device Created Successfully!")
         print(f"--------------------------------")
         print(f"Name:       {device.name}")
@@ -88,7 +88,7 @@ def main():
         print(f"🔑 API KEY: {api_key_plain}")
         print(f"--------------------------------")
         print(f"⚠️  SAVE THIS KEY NOW. IT CANNOT BE SHOWN AGAIN.")
-        
+
     except Exception as e:
         print(f"Error: {e}")
         session.rollback()

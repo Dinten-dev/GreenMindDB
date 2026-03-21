@@ -6,7 +6,7 @@
     tls {$CADDY_TLS_MODE}
     encode zstd gzip
 
-    @grafana path /grafana* 
+    @grafana path /grafana*
     handle @grafana {
         reverse_proxy grafana:3000
     }

@@ -1,43 +1,19 @@
 """Sensor data query endpoints."""
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from pydantic import BaseModel
 
-from app.database import get_db
-from app.models.user import User
-from app.models.master import Greenhouse, Device, Sensor
-from app.models.timeseries import SensorReading
 from app.auth import get_current_user
+from app.database import get_db
+from app.models.master import Device, Greenhouse, Sensor
+from app.models.timeseries import SensorReading
+from app.models.user import User
+from app.schemas.sensor import DataPoint, SensorDataResponse, SensorResponse
 
 router = APIRouter(prefix="/api/sensors", tags=["sensors"])
-
-
-class SensorResponse(BaseModel):
-    id: str
-    device_id: str
-    kind: str
-    unit: str
-    label: Optional[str] = None
-    device_serial: Optional[str] = None
-    device_name: Optional[str] = None
-    device_status: Optional[str] = None
-
-
-class DataPoint(BaseModel):
-    timestamp: str
-    value: float
-
-
-class SensorDataResponse(BaseModel):
-    sensor_id: str
-    kind: str
-    unit: str
-    label: Optional[str] = None
-    data: List[DataPoint]
 
 
 RANGE_MAP = {
@@ -47,9 +23,9 @@ RANGE_MAP = {
 }
 
 
-@router.get("", response_model=List[SensorResponse])
+@router.get("", response_model=list[SensorResponse])
 async def list_sensors(
-    greenhouse_id: Optional[str] = Query(None),
+    greenhouse_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -68,16 +44,18 @@ async def list_sensors(
 
     results = []
     for sensor, device in query.all():
-        results.append(SensorResponse(
-            id=str(sensor.id),
-            device_id=str(sensor.device_id),
-            kind=sensor.kind,
-            unit=sensor.unit,
-            label=sensor.label,
-            device_serial=device.serial,
-            device_name=device.name,
-            device_status=device.status,
-        ))
+        results.append(
+            SensorResponse(
+                id=str(sensor.id),
+                device_id=str(sensor.device_id),
+                kind=sensor.kind,
+                unit=sensor.unit,
+                label=sensor.label,
+                device_serial=device.serial,
+                device_name=device.name,
+                device_status=device.status,
+            )
+        )
     return results
 
 
@@ -108,7 +86,7 @@ async def get_sensor_data(
 
     sensor, device = result
     td = RANGE_MAP[range]
-    cutoff = datetime.now(timezone.utc) - td
+    cutoff = datetime.now(UTC) - td
 
     # Determine appropriate bucketing
     if range == "24h":
@@ -120,23 +98,29 @@ async def get_sensor_data(
             .limit(1440)
             .all()
         )
-        data = [DataPoint(timestamp=r.timestamp.isoformat(), value=round(r.value, 2)) for r in readings]
+        data = [
+            DataPoint(timestamp=r.timestamp.isoformat(), value=round(r.value, 2)) for r in readings
+        ]
     else:
         # Use time_bucket for 7d and 30d
         bucket_size = "15 minutes" if range == "7d" else "1 hour"
-        from sqlalchemy import text
         rows = db.execute(
-            text(f"""
+            text(
+                f"""
                 SELECT time_bucket('{bucket_size}', timestamp) AS bucket,
                        AVG(value) AS avg_value
                 FROM sensor_reading
                 WHERE sensor_id = :sid AND timestamp >= :cutoff
                 GROUP BY bucket
                 ORDER BY bucket ASC
-            """),
+            """
+            ),
             {"sid": sensor_id, "cutoff": cutoff},
         ).fetchall()
-        data = [DataPoint(timestamp=row.bucket.isoformat(), value=round(row.avg_value, 2)) for row in rows]
+        data = [
+            DataPoint(timestamp=row.bucket.isoformat(), value=round(row.avg_value, 2))
+            for row in rows
+        ]
 
     return SensorDataResponse(
         sensor_id=str(sensor.id),

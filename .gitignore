@@ -1,38 +1,67 @@
-# WAV example data (not committed, too large)
-/data/wav_examples/
-*.wav
-
-# Python
+# ─── Python ──────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
 .venv/
 venv/
+env/
+.Python
+*.egg-info/
+*.egg
+pip-log.txt
+
+# ─── Node.js / Frontend ─────────────────────────────────────────────
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# ─── Environment & Secrets ──────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+!.env.example
 
-# Docker volumes
-db/data/
+# ─── Docker ──────────────────────────────────────────────────────────
+postgres_data/
+minio_data/
 
-# OS
-.DS_Store
-Thumbs.db
+# ─── Testing & Coverage ─────────────────────────────────────────────
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.nyc_output/
+lcov.info
 
-# IDE
+# ─── IDE & Editors ──────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
-# Dev import scripts (moved to scripts/)
-import_*.py
-add_test_device.py
-test_*.py
+# ─── OS Files ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
 
-# Logs
+# ─── Logs ────────────────────────────────────────────────────────────
 *.log
+logs/
 
-# Node modules (frontend)
-frontend/node_modules/
-frontend/.next/
+# ─── Build Artifacts ────────────────────────────────────────────────
+*.tar.gz
+*.zip
+
+# ─── Data (large files, not committed) ──────────────────────────────
+/data/wav_examples/
+*.wav
+
+# ─── Deploy keys (NEVER commit private keys) ────────────────────────
 dev-tools/greenmind_deploy_key
 dev-tools/greenmind_deploy_key.pub

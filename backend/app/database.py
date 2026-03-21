@@ -1,4 +1,5 @@
 """Shared SQLAlchemy engine, session, and Base – imported by all models and Alembic."""
+
 import os
 
 from sqlalchemy import create_engine

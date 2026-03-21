@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import ScrollReveal from '@/components/ScrollReveal';
 
 export default function EarlyAccessPage() {
@@ -15,19 +14,19 @@ export default function EarlyAccessPage() {
                         </svg>
                     </div>
                 </ScrollReveal>
-                
+
                 <ScrollReveal delay={150}>
                     <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">Early Access anfragen</h1>
                 </ScrollReveal>
                 <ScrollReveal delay={300}>
                     <p className="text-xl text-apple-gray-400 mb-12 leading-relaxed">
-                        Gehören Sie zu den ersten Anbauern, die die Zukunft der Gewächshaus-Intelligenz erleben. 
+                        Gehören Sie zu den ersten Anbauern, die die Zukunft der Gewächshaus-Intelligenz erleben.
                         Senden Sie uns eine E-Mail mit Details zu Ihrem Betrieb und wir melden uns in Kürze bei Ihnen.
                     </p>
                 </ScrollReveal>
 
                 <ScrollReveal delay={450}>
-                    <a 
+                    <a
                         href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
                         className="btn-glow inline-block px-8 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-600 transition-all duration-300 shadow-lg shadow-gm-green-500/20 hover:shadow-xl hover:shadow-gm-green-500/30"
                     >

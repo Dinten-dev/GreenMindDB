@@ -1,9 +1,15 @@
 """User & Organization models with RBAC roles."""
+
 import enum
 import uuid
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Enum, ForeignKey, String,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -26,7 +32,9 @@ class Organization(Base):
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
-    greenhouses = relationship("Greenhouse", back_populates="organization", cascade="all, delete-orphan")
+    greenhouses = relationship(
+        "Greenhouse", back_populates="organization", cascade="all, delete-orphan"
+    )
 
 
 class User(Base):

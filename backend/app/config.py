@@ -1,4 +1,3 @@
-from typing import List
 from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,8 +12,9 @@ class Settings(BaseSettings):
     )
 
     environment: str = "development"
+    log_level: str = "INFO"
     database_url: str = "postgresql+psycopg2://plantuser:plantpass@localhost:5432/plantdb"
-    cors_origins: str | List[str] = ["http://localhost:3000"]
+    cors_origins: str | list[str] = ["http://localhost:3000"]
     jwt_secret_key: str = "dev-only-change-me-please-dev-only-change-me"
     jwt_access_token_expire_minutes: int = 60 * 24 * 7
     cookie_domain: str = ""
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    email_receiver: str = "traver.dinten@outlook.com"
+    email_receiver: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod

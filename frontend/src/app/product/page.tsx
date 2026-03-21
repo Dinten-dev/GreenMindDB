@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import ScrollReveal from '@/components/ScrollReveal';
 
 /* ── Professional SVG Icons ──────────────── */

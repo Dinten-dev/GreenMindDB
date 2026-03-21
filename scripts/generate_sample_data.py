@@ -66,7 +66,7 @@ def generate_value(t_hours: float, profile: dict, metric_key: str) -> float:
     base = profile["base"]
     amplitude = profile["amplitude"]
     noise = profile["noise"]
-    
+
     # Different patterns based on metric type
     if metric_key == "light_ppfd_umol_m2_s":
         # Light follows sun pattern: peaks at noon, zero at night
@@ -79,21 +79,21 @@ def generate_value(t_hours: float, profile: dict, metric_key: str) -> float:
         else:
             value = random.gauss(0, noise / 5)  # Very low at night
         return max(0, value)
-    
+
     elif metric_key == "air_temperature_c":
         # Temperature: warmer during day, cooler at night
         hour_of_day = (6 + t_hours) % 24
         day_offset = math.sin((hour_of_day - 6) * math.pi / 12) * amplitude
         value = base + day_offset + random.gauss(0, noise)
         return value
-    
+
     elif metric_key == "rel_humidity_pct":
         # Humidity: inverse of temperature (higher at night)
         hour_of_day = (6 + t_hours) % 24
         day_offset = -math.sin((hour_of_day - 6) * math.pi / 12) * amplitude
         value = base + day_offset + random.gauss(0, noise)
         return max(30, min(95, value))
-    
+
     elif metric_key == "soil_moisture_vwc_pct":
         # Soil moisture: gradual decrease with occasional watering
         base_decay = -t_hours * 0.3  # Slow decrease
@@ -102,22 +102,22 @@ def generate_value(t_hours: float, profile: dict, metric_key: str) -> float:
             base_decay = 0
         value = base + base_decay + random.gauss(0, noise)
         return max(20, min(80, value))
-    
+
     elif metric_key == "soil_ph":
         # pH: relatively stable with slight daily variation
         daily_var = math.sin(t_hours * math.pi / 12) * amplitude
         value = base + daily_var + random.gauss(0, noise)
         return max(5.0, min(8.0, value))
-    
+
     elif metric_key == "bioelectric_voltage_mv":
         # Bioelectric: complex oscillating pattern (plant activity)
         # Multiple frequencies for organic look
         v1 = math.sin(t_hours * 2 * math.pi / 0.5) * amplitude * 0.5  # Fast oscillation
-        v2 = math.sin(t_hours * 2 * math.pi / 2) * amplitude * 0.3    # Medium oscillation  
+        v2 = math.sin(t_hours * 2 * math.pi / 2) * amplitude * 0.3    # Medium oscillation
         v3 = math.sin(t_hours * 2 * math.pi / 6) * amplitude * 0.2    # Slow oscillation
         value = base + v1 + v2 + v3 + random.gauss(0, noise)
         return value
-    
+
     return base + random.gauss(0, noise)
 
 
@@ -125,11 +125,11 @@ def ingest_samples(samples_payload: list, headers: dict) -> int:
     """Ingest samples in batches."""
     batch_size = 500
     total = 0
-    
+
     for i in range(0, len(samples_payload), batch_size):
         batch = samples_payload[i:i+batch_size]
         payload = {"device_id": DEVICE_ID, "samples": batch}
-        
+
         try:
             res = requests.post(f"{API_URL}/ingest", headers=headers, json=payload)
             if res.status_code == 201:
@@ -138,7 +138,7 @@ def ingest_samples(samples_payload: list, headers: dict) -> int:
                 print(f"  Error: {res.status_code}")
         except Exception as e:
             print(f"  Connection error: {e}")
-    
+
     return total
 
 
@@ -146,42 +146,42 @@ def main():
     print("=" * 60)
     print("Sample Data Generator for All Plants & Metrics")
     print("=" * 60)
-    
+
     headers = {
         "Authorization": f"Bearer {DEVICE_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     now = datetime.now(timezone.utc)
     hours = 24  # 24 hours of data
     samples_per_hour = 60  # 1 sample per minute
-    
+
     total_samples = 0
-    
+
     for species_name in SPECIES:
         print(f"\n{species_name}:")
         profile = METRIC_PROFILES[species_name]
-        
+
         all_samples = []
-        
+
         for metric_key, metric_profile in profile.items():
             for i in range(hours * samples_per_hour):
                 t_hours = i / samples_per_hour
                 ts = now - timedelta(hours=hours) + timedelta(hours=t_hours)
                 value = generate_value(t_hours, metric_profile, metric_key)
-                
+
                 all_samples.append({
                     "species_name": species_name,
                     "metric_key": metric_key,
                     "value": round(value, 2),
                     "timestamp": ts.isoformat()
                 })
-        
+
         # Ingest all samples for this species
         count = ingest_samples(all_samples, headers)
         total_samples += count
         print(f"  Ingested {count} samples ({len(profile)} metrics × {hours * samples_per_hour} points)")
-    
+
     print(f"\n{'=' * 60}")
     print(f"SUCCESS: Generated {total_samples:,} total samples")
     print("=" * 60)

@@ -20,8 +20,12 @@ export default function SignupPage() {
         try {
             await apiSignup(email, password, name);
             router.push('/app/dashboard');
-        } catch (err: any) {
-            setError(err.message || 'Registrierung fehlgeschlagen');
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message || 'Registrierung fehlgeschlagen');
+            } else {
+                setError('Registrierung fehlgeschlagen');
+            }
         } finally {
             setLoading(false);
         }

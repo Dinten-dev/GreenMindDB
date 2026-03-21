@@ -1,19 +1,25 @@
 """Device management & pairing endpoints."""
+
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
-from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models.user import User
-from app.models.master import Greenhouse, Device, Sensor
-from app.models.pairing import PairingCode
 from app.auth import get_current_user, get_password_hash
+from app.database import get_db
+from app.models.master import Device, Greenhouse, Sensor
+from app.models.pairing import PairingCode
+from app.models.user import User
+from app.schemas.device import (
+    DeviceResponse,
+    PairDeviceRequest,
+    PairDeviceResponse,
+    PairingCodeRequest,
+    PairingCodeResponse,
+)
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -21,52 +27,10 @@ PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
 
 
-# ── Schemas ──────────────────────────────────────
-
-class DeviceResponse(BaseModel):
-    id: str
-    serial: str
-    name: Optional[str] = None
-    type: str
-    fw_version: Optional[str] = None
-    status: str
-    last_seen: Optional[str] = None
-    greenhouse_id: Optional[str] = None
-    greenhouse_name: Optional[str] = None
-    sensor_count: int = 0
-    paired_at: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class PairingCodeRequest(BaseModel):
-    greenhouse_id: str
-
-
-class PairingCodeResponse(BaseModel):
-    code: str
-    expires_at: str
-    greenhouse_id: str
-
-
-class PairDeviceRequest(BaseModel):
-    code: str
-    serial: str
-    type: str = "esp32"
-    name: Optional[str] = None
-    fw_version: Optional[str] = None
-
-
-class PairDeviceResponse(BaseModel):
-    device_id: str
-    api_key: str
-    greenhouse_id: str
-
-
 # ── Endpoints ────────────────────────────────────
 
-@router.get("", response_model=List[DeviceResponse])
+
+@router.get("", response_model=list[DeviceResponse])
 async def list_devices(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -76,8 +40,10 @@ async def list_devices(
         return []
 
     gh_ids = [
-        g.id for g in
-        db.query(Greenhouse.id).filter(Greenhouse.organization_id == current_user.organization_id).all()
+        g.id
+        for g in db.query(Greenhouse.id)
+        .filter(Greenhouse.organization_id == current_user.organization_id)
+        .all()
     ]
     if not gh_ids:
         return []
@@ -87,19 +53,21 @@ async def list_devices(
     for dev in devices:
         sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.device_id == dev.id).scalar()
         gh = db.query(Greenhouse).filter(Greenhouse.id == dev.greenhouse_id).first()
-        results.append(DeviceResponse(
-            id=str(dev.id),
-            serial=dev.serial,
-            name=dev.name,
-            type=dev.type,
-            fw_version=dev.fw_version,
-            status=dev.status,
-            last_seen=dev.last_seen.isoformat() if dev.last_seen else None,
-            greenhouse_id=str(dev.greenhouse_id) if dev.greenhouse_id else None,
-            greenhouse_name=gh.name if gh else None,
-            sensor_count=sensor_count,
-            paired_at=dev.paired_at.isoformat() if dev.paired_at else None,
-        ))
+        results.append(
+            DeviceResponse(
+                id=str(dev.id),
+                serial=dev.serial,
+                name=dev.name,
+                type=dev.type,
+                fw_version=dev.fw_version,
+                status=dev.status,
+                last_seen=dev.last_seen.isoformat() if dev.last_seen else None,
+                greenhouse_id=str(dev.greenhouse_id) if dev.greenhouse_id else None,
+                greenhouse_name=gh.name if gh else None,
+                sensor_count=sensor_count,
+                paired_at=dev.paired_at.isoformat() if dev.paired_at else None,
+            )
+        )
     return results
 
 
@@ -129,13 +97,17 @@ async def generate_pairing_code(
     chars = string.ascii_uppercase + string.digits
     for _ in range(10):
         code = "".join(secrets.choice(chars) for _ in range(PAIRING_CODE_LENGTH))
-        existing = db.query(PairingCode).filter(PairingCode.code == code, PairingCode.used_at.is_(None)).first()
+        existing = (
+            db.query(PairingCode)
+            .filter(PairingCode.code == code, PairingCode.used_at.is_(None))
+            .first()
+        )
         if not existing:
             break
     else:
         raise HTTPException(status_code=500, detail="Could not generate unique code")
 
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES)
+    expires_at = datetime.now(UTC) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES)
     pc = PairingCode(
         code=code,
         greenhouse_id=gh.id,
@@ -158,7 +130,7 @@ async def pair_device(
     db: Session = Depends(get_db),
 ):
     """Device submits pairing code to register itself. Returns an API key for future data ingest."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     pc = (
         db.query(PairingCode)

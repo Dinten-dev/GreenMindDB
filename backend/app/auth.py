@@ -1,16 +1,16 @@
 """Authentication utilities: password hashing, JWT tokens, cookie helpers."""
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
 
-from passlib.context import CryptContext
-from jose import JWTError, jwt
+from datetime import UTC, datetime, timedelta
+
 from fastapi import Depends, HTTPException, Request, Response, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models.user import User, Role
 from app.config import settings
+from app.database import get_db
+from app.models.user import Role, User
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -33,14 +33,14 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -73,8 +73,8 @@ def delete_auth_cookie(response: Response) -> None:
 
 def _extract_token(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials],
-) -> Optional[str]:
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
     """Extract JWT from Authorization header or httpOnly cookie."""
     if credentials:
         return credentials.credentials
@@ -83,7 +83,7 @@ def _extract_token(
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
     """Get current user from token (header or cookie). Raises 401 if missing/invalid."""
@@ -103,7 +103,9 @@ async def get_current_user(
 
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
+        )
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -114,8 +116,9 @@ async def get_current_user(
     return user
 
 
-def require_role(allowed_roles: List[Role]):
+def require_role(allowed_roles: list[Role]):
     """Dependency that checks the user has one of the allowed roles."""
+
     async def _check(current_user: User = Depends(get_current_user)):
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -123,4 +126,5 @@ def require_role(allowed_roles: List[Role]):
                 detail="Insufficient permissions",
             )
         return current_user
+
     return _check

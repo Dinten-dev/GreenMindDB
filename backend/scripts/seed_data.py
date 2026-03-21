@@ -1,9 +1,10 @@
 """Seed demo data: org, greenhouse, device, sensors, and 30 days of fake readings."""
-import os
-import sys
-import random
+
 import math
-from datetime import datetime, timedelta, timezone
+import os
+import random
+import sys
+from datetime import UTC, datetime, timedelta
 
 # Add parent dir to path so we can import app modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,11 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models.user import Organization, User, Role
-from app.models.master import Greenhouse, Device, Sensor
-from app.models.timeseries import SensorReading
 from app.auth import get_password_hash
-from app.database import Base
+from app.models.master import Device, Greenhouse, Sensor
+from app.models.timeseries import SensorReading
+from app.models.user import Organization, Role, User
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
@@ -63,8 +63,8 @@ def seed():
             fw_version="2.1.0",
             status="online",
             api_key_hash=get_password_hash("demo-api-key"),
-            paired_at=datetime.now(timezone.utc),
-            last_seen=datetime.now(timezone.utc),
+            paired_at=datetime.now(UTC),
+            last_seen=datetime.now(UTC),
         )
         db.add(device)
         db.flush()
@@ -90,7 +90,7 @@ def seed():
             sensors.append((s, kind))
 
         # ── Timeseries Data (30 days, 15-min intervals) ──
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=30)
         interval = timedelta(minutes=15)
         current = start
@@ -134,12 +134,14 @@ def seed():
                 else:
                     value = random.uniform(0, 100)
 
-                readings.append(SensorReading(
-                    timestamp=current,
-                    sensor_id=sensor.id,
-                    value=round(value, 2),
-                    unit=sensor.unit,
-                ))
+                readings.append(
+                    SensorReading(
+                        timestamp=current,
+                        sensor_id=sensor.id,
+                        value=round(value, 2),
+                        unit=sensor.unit,
+                    )
+                )
                 count += 1
 
             # Batch insert every 5000 readings
@@ -154,7 +156,9 @@ def seed():
             db.bulk_save_objects(readings)
 
         db.commit()
-        print(f"✅ Seed complete: 1 org, 1 user (demo@greenmind.io / Demo1234), 1 greenhouse, 1 device, {len(sensor_configs)} sensors, {count} readings")
+        print(
+            f"✅ Seed complete: 1 org, 1 user (demo@greenmind.io / Demo1234), 1 greenhouse, 1 device, {len(sensor_configs)} sensors, {count} readings"
+        )
 
     except Exception as e:
         db.rollback()

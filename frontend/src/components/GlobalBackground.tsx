@@ -86,7 +86,7 @@ export default function GlobalBackground() {
                     <circle cx="70" cy="80" r="0.5" className="neural-node node-4" fill="currentColor" />
                 </svg>
             </div>
-            
+
             {/* Soft Gradient Mask to ensure content readability */}
             <div className="global-bg-mask" />
         </div>

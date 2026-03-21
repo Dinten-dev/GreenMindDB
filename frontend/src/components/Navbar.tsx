@@ -48,9 +48,9 @@ export default function Navbar() {
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center gap-8 text-sm text-apple-gray-500">
                         {navLinks.map((link) => (
-                            <Link 
-                                key={link.href} 
-                                href={link.href} 
+                            <Link
+                                key={link.href}
+                                href={link.href}
                                 className={`transition-colors duration-200 ${pathname === link.href ? 'text-apple-gray-800 font-medium' : 'hover:text-apple-gray-800'}`}
                             >
                                 {link.name}
@@ -72,7 +72,7 @@ export default function Navbar() {
                     </div>
 
                     {/* Mobile Hamburger Button */}
-                    <button 
+                    <button
                         className="md:hidden p-2 -mr-2 relative z-[110] text-apple-gray-800"
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         aria-label="Menü umschalten"
@@ -87,13 +87,13 @@ export default function Navbar() {
             </nav>
 
             {/* ── Mobile Menu Overlay ─────────────── */}
-            <div 
+            <div
                 className={`fixed inset-0 bg-white z-[90] flex flex-col pt-24 px-6 pb-8 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] md:hidden ${isMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
             >
                 <div className="flex flex-col gap-6 text-2xl font-semibold tracking-tight text-apple-gray-800">
                     {navLinks.map((link) => (
-                        <Link 
-                            key={link.href} 
+                        <Link
+                            key={link.href}
                             href={link.href}
                             className={`pb-4 border-b border-apple-gray-100 ${pathname === link.href ? 'text-gm-green-600' : ''}`}
                         >
@@ -101,10 +101,10 @@ export default function Navbar() {
                         </Link>
                     ))}
                 </div>
-                
+
                 <div className="mt-auto flex flex-col gap-4">
                     <Link
-                        href="/login" 
+                        href="/login"
                         className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
                     >
                         Anmelden

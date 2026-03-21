@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
     apiListGreenhouses, apiListDevices, apiListSensors,
-    apiGetSensorData, apiCreateOrg,
+    apiGetSensorData,
     Greenhouse, DeviceInfo, SensorInfo, SensorData
 } from '@/lib/api';
 import {

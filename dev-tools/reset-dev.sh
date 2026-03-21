@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# The prompt specified ~/gm_dev. 
-# WARNING: This script deletes the directory. 
+# The prompt specified ~/gm_dev.
+# WARNING: This script deletes the directory.
 # We must be extremely careful not to delete the wrong thing.
 
 DEV_DIR="$HOME/gm_dev"
@@ -42,7 +42,7 @@ sudo rm -rf "$DEV_DIR"
 # Recreate the directory
 mkdir -p "$DEV_DIR"
 
-# Fix permissions on the new empty directory (it should be user-owned anyway if mkdir was run by user, 
+# Fix permissions on the new empty directory (it should be user-owned anyway if mkdir was run by user,
 # but if sudo was involved in parent... well mkdir is run as user here).
 # Just to be sure, per prompt requirements:
 sudo chown -R $(id -u):$(id -g) "$DEV_DIR"

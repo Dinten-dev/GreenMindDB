@@ -1,30 +1,17 @@
 """Organization management endpoints."""
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
-from app.database import get_db
-from app.models.user import User, Organization
 from app.auth import get_current_user
+from app.database import get_db
+from app.models.user import Organization, User
+from app.schemas.organization import OrgCreate, OrgResponse
 
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
 
-class OrgCreate(BaseModel):
-    name: str
-
-
-class OrgResponse(BaseModel):
-    id: str
-    name: str
-    created_at: str
-
-    class Config:
-        from_attributes = True
-
-
-@router.get("", response_model=Optional[OrgResponse])
+@router.get("", response_model=OrgResponse | None)
 async def get_organization(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
