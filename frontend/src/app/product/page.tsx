@@ -66,12 +66,12 @@ function IconShield() {
 }
 
 const features: { title: string; desc: string; icon: React.ReactNode }[] = [
-    { title: 'Real-Time Dashboard', desc: 'Monitor all greenhouse conditions at a glance with clean data visualizations, live status indicators, and configurable alerts.', icon: <IconDashboard /> },
-    { title: 'Hardware Fleet Management', desc: 'Deploy, monitor, and manage all connected diagnostic units from one place. Track uptime, health, and connectivity remotely.', icon: <IconFleet /> },
-    { title: 'Environmental & Crop Intelligence', desc: 'Explore plant vitals and climate metrics across custom time ranges. Identify trends, anomalies, and early warning signs instantly.', icon: <IconVitals /> },
-    { title: 'Multi-Greenhouse Operations', desc: 'Oversee multiple commercial sites from a single unified interface — each with independent monitoring, teams, and configurations.', icon: <IconGreenhouses /> },
-    { title: 'Team Collaboration', desc: 'Invite your cultivation team with role-based access. Owners, managers, and staff — each with the right level of visibility and control.', icon: <IconTeam /> },
-    { title: 'Enterprise-Grade Security', desc: 'End-to-end data protection, organizational access controls, and secure authentication are built in by default — not bolted on.', icon: <IconShield /> },
+    { title: 'Echtzeit-Dashboard', desc: 'Überwachen Sie alle Gewächshausbedingungen auf einen Blick mit übersichtlichen Datenvisualisierungen, Live-Statusindikatoren und konfigurierbaren Warnmeldungen.', icon: <IconDashboard /> },
+    { title: 'Hardware-Flottenmanagement', desc: 'Verwalten, überwachen und steuern Sie alle verbundenen Diagnosegeräte von einem Ort aus. Verfolgen Sie Betriebszeit, Zustand und Konnektivität aus der Ferne.', icon: <IconFleet /> },
+    { title: 'Umwelt- & Ernteanalyse', desc: 'Erkunden Sie Pflanzenvitalwerte und Klimametriken über benutzerdefinierte Zeiträume. Erkennen Sie Trends, Anomalien und Frühwarnsignale sofort.', icon: <IconVitals /> },
+    { title: 'Multi-Gewächshaus-Betrieb', desc: 'Überwachen Sie mehrere kommerzielle Standorte über eine einzige, einheitliche Oberfläche — jeder mit unabhängigem Monitoring, Teams und Konfigurationen.', icon: <IconGreenhouses /> },
+    { title: 'Teamzusammenarbeit', desc: 'Laden Sie Ihr Anbauteam mit rollenbasiertem Zugang ein. Eigentümer, Manager und Mitarbeiter — jeder mit der richtigen Sichtbarkeits- und Kontrollstufe.', icon: <IconTeam /> },
+    { title: 'Enterprise-Sicherheit', desc: 'End-to-End-Datenschutz, organisatorische Zugriffskontrollen und sichere Authentifizierung sind standardmässig integriert — nicht nachträglich aufgesetzt.', icon: <IconShield /> },
 ];
 
 export default function ProductPage() {
@@ -79,15 +79,15 @@ export default function ProductPage() {
         <div className="min-h-screen">
             <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
                 <ScrollReveal>
-                    <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Platform</p>
+                    <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Plattform</p>
                     <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-                        One Platform.<br />Complete Greenhouse Intelligence.
+                        Eine Plattform.<br />Vollständige Gewächshaus-Intelligenz.
                     </h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
                     <p className="text-xl text-apple-gray-400 max-w-2xl mb-20 leading-relaxed">
-                        Everything you need to monitor plant health, optimize growing conditions, and make
-                        faster, more precise cultivation decisions — in one unified interface.
+                        Alles, was Sie brauchen, um die Pflanzengesundheit zu überwachen, Anbaubedingungen zu optimieren und
+                        schnellere, präzisere Anbauentscheidungen zu treffen — in einer einheitlichen Oberfläche.
                     </p>
                 </ScrollReveal>
 

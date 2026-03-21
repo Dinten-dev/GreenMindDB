@@ -35,45 +35,45 @@ export default function LandingPage() {
     return (
         <div className="min-h-screen">
             {/* ═══════════════════════════════════════════
-                 HERO — Vision + Emotional Hook
-                 1 message: What is the vision?
+                 HERO — Vision + Emotionaler Aufhänger
+                 1 Botschaft: Was ist die Vision?
             ═══════════════════════════════════════════ */}
             <section className="relative pt-36 pb-32 px-6 overflow-hidden">
                 <div className="relative z-10 max-w-[1280px] mx-auto text-center">
                     <ScrollReveal variant="fade-in" delay={100}>
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gm-green-50/80 backdrop-blur-sm text-gm-green-600 text-sm font-medium mb-8 border border-gm-green-200/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-gm-green-500 animate-pulse" />
-                            Now in Beta
+                            Jetzt in der Beta
                         </div>
                     </ScrollReveal>
 
                     <ScrollReveal variant="fade-up" delay={200}>
                         <h1 className="text-5xl md:text-8xl font-bold text-apple-gray-800 tracking-tight leading-[1.05] mb-8 mt-12 md:mt-0">
-                            Giving plants<br />
-                            <span className="gradient-text">a voice.</span>
+                            Pflanzen eine<br />
+                            <span className="gradient-text">Stimme geben.</span>
                         </h1>
                     </ScrollReveal>
 
                     <ScrollReveal variant="fade-up" delay={400}>
                         <p className="text-lg md:text-2xl text-apple-gray-400 max-w-2xl mx-auto leading-relaxed mb-14 px-2 md:px-0">
-                            Emerging research in plant electrophysiology suggests we can detect
-                            stress before visible symptoms appear. GreenMind makes this science accessible.
+                            Aktuelle Forschung in der Pflanzenelektrophysiologie zeigt, dass wir Stress erkennen können,
+                            bevor sichtbare Symptome auftreten. GreenMind macht diese Wissenschaft zugänglich.
                         </p>
                     </ScrollReveal>
 
                     <ScrollReveal variant="fade-up" delay={550}>
                         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
                             <Link
-                                href="mailto:traver.dinten@outlook.com?subject=Early Access Request - GreenMind&body=Name:%0D%0ACompany:%0D%0A%0D%0ATell us about your greenhouse operation:"
+                                href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
                                 className="btn-glow w-full md:w-auto px-8 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-600 transition-all duration-300 shadow-lg shadow-gm-green-500/20"
                             >
-                                Start monitoring plant signals
+                                Pflanzensignale überwachen
                             </Link>
                             <Link
                                 href="/product"
                                 className="w-full md:w-auto px-8 py-4 text-apple-gray-600 rounded-full text-lg font-medium hover:bg-apple-gray-100 transition-all duration-300"
                             >
-                                Explore the Platform →
+                                Plattform entdecken →
                             </Link>
                         </div>
                     </ScrollReveal>
@@ -81,48 +81,48 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 PROBLEM — The Blind Spot
-                 1 message: What problem exists?
+                 PROBLEM — Der blinde Fleck
+                 1 Botschaft: Welches Problem gibt es?
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6">
                 <div className="max-w-[960px] mx-auto text-center">
                     <ScrollReveal>
                         <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                            The Challenge
+                            Die Herausforderung
                         </p>
                     </ScrollReveal>
                     <ScrollReveal delay={150}>
                         <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 tracking-tight leading-tight mb-6">
-                            Most crop damage is detected<br className="hidden md:block" />
-                            <span className="text-apple-gray-300">after it&apos;s already happened.</span>
+                            Die meisten Ernteschäden werden erkannt,<br className="hidden md:block" />
+                            <span className="text-apple-gray-300">wenn es bereits zu spät ist.</span>
                         </h2>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
                         <p className="text-lg text-apple-gray-400 max-w-2xl mx-auto leading-relaxed">
-                            Traditional greenhouse monitoring tracks temperature, humidity, and soil —
-                            but not the plant itself. By the time stress becomes visible, yield is already compromised.
-                            Current research suggests that biological signals may hold the key to earlier detection.
+                            Herkömmliche Gewächshausüberwachung erfasst Temperatur, Luftfeuchtigkeit und Boden —
+                            aber nicht die Pflanze selbst. Wenn Stress sichtbar wird, ist der Ertrag bereits beeinträchtigt.
+                            Aktuelle Forschung deutet darauf hin, dass biologische Signale der Schlüssel zur Früherkennung sein könnten.
                         </p>
                     </ScrollReveal>
                 </div>
             </section>
 
             {/* ═══════════════════════════════════════════
-                 SOLUTION — Feature Cards
-                 1 message: How does GreenMind solve it?
+                 LÖSUNG — Feature-Karten
+                 1 Botschaft: Wie löst GreenMind das Problem?
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6 bg-apple-gray-100">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                The Solution
+                                Die Lösung
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                The science of smarter cultivation.
+                                Die Wissenschaft des intelligenteren Anbaus.
                             </h2>
                             <p className="text-lg text-apple-gray-400 max-w-xl mx-auto">
-                                Every plant tells a story. GreenMind helps you read it — and act on it.
+                                Jede Pflanze erzählt eine Geschichte. GreenMind hilft Ihnen, sie zu lesen — und danach zu handeln.
                             </p>
                         </div>
                     </ScrollReveal>
@@ -130,22 +130,22 @@ export default function LandingPage() {
                         <ScrollReveal delay={100}>
                             <FeatureCard
                                 icon={<IconSignal />}
-                                title="Early Stress Detection"
-                                description="Early signals from ongoing research suggest that biological indicators may reveal water deficit, nutrient imbalance, and pathogen pressure before visible symptoms appear."
+                                title="Frühe Stresserkennung"
+                                description="Erste Signale aus der laufenden Forschung deuten darauf hin, dass biologische Indikatoren Wasserdefizit, Nährstoffungleichgewicht und Krankheitsdruck erkennen können, bevor sichtbare Symptome auftreten."
                             />
                         </ScrollReveal>
                         <ScrollReveal delay={250}>
                             <FeatureCard
                                 icon={<IconChart />}
-                                title="Predictive Yield Intelligence"
-                                description="Combine environmental and biological trend data to build yield models — an emerging approach designed to support smarter resource allocation and harvest planning."
+                                title="Prädiktive Ertragsintelligenz"
+                                description="Kombinieren Sie Umwelt- und biologische Trenddaten, um Ertragsmodelle zu erstellen — ein aufkommender Ansatz für intelligentere Ressourcenplanung und Erntevorbereitung."
                             />
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
                             <FeatureCard
                                 icon={<IconLeaf />}
-                                title="Precision Resource Management"
-                                description="Use continuous data to inform water, nutrient, and energy decisions. Our goal: reduce waste and support more sustainable cultivation practices."
+                                title="Präzises Ressourcenmanagement"
+                                description="Nutzen Sie kontinuierliche Daten für Wasser-, Nährstoff- und Energieentscheidungen. Unser Ziel: Verschwendung reduzieren und nachhaltigere Anbaumethoden unterstützen."
                             />
                         </ScrollReveal>
                     </div>
@@ -153,31 +153,31 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 HOW IT WORKS — Visual Timeline
-                 1 message: How does the process work?
+                 SO FUNKTIONIERT ES — Visuelle Timeline
+                 1 Botschaft: Wie funktioniert der Prozess?
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-20">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                How It Works
+                                So funktioniert es
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                From signal to strategy.
+                                Vom Signal zur Strategie.
                             </h2>
                             <p className="text-lg text-apple-gray-400 max-w-2xl mx-auto">
-                                Plants respond to their environment continuously. These responses carry
-                                measurable information. GreenMind makes it actionable.
+                                Pflanzen reagieren kontinuierlich auf ihre Umgebung. Diese Reaktionen tragen
+                                messbare Informationen. GreenMind macht sie nutzbar.
                             </p>
                         </div>
                     </ScrollReveal>
                     <div className="grid md:grid-cols-4 gap-8">
                         {[
-                            { step: '01', title: 'Plants React', desc: 'Research shows that plants continuously generate measurable biological responses to environmental changes — signals that may carry diagnostic value.' },
-                            { step: '02', title: 'Signals Captured', desc: 'Non-invasive sensing records plant vitals alongside climate data — building a synchronized, high-resolution dataset for analysis.' },
-                            { step: '03', title: 'Intelligence Emerges', desc: 'Analytics identify patterns, anomalies, and emerging correlations — an ongoing scientific investigation into predictive cultivation.' },
-                            { step: '04', title: 'Growers Benefit', desc: 'Data-driven insights aim to help growers adjust earlier and more precisely — supporting better yield outcomes and sustainability.' },
+                            { step: '01', title: 'Pflanzen reagieren', desc: 'Forschung zeigt, dass Pflanzen kontinuierlich messbare biologische Reaktionen auf Umweltveränderungen erzeugen — Signale, die diagnostischen Wert haben können.' },
+                            { step: '02', title: 'Signale erfasst', desc: 'Nicht-invasive Sensorik zeichnet Pflanzenvitalwerte zusammen mit Klimadaten auf — und erstellt einen synchronisierten, hochauflösenden Datensatz für die Analyse.' },
+                            { step: '03', title: 'Intelligenz entsteht', desc: 'Analysen identifizieren Muster, Anomalien und aufkommende Korrelationen — eine fortlaufende wissenschaftliche Untersuchung für prädiktiven Anbau.' },
+                            { step: '04', title: 'Anbauer profitieren', desc: 'Datengestützte Erkenntnisse helfen Anbauern, früher und präziser zu reagieren — für bessere Ertragsergebnisse und mehr Nachhaltigkeit.' },
                         ].map((item, i) => (
                             <ScrollReveal key={item.step} delay={i * 150}>
                                 <div className="timeline-step text-center">
@@ -194,22 +194,22 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 TRUST — Social Proof & Authority
-                 1 message: Why should you trust us?
+                 VERTRAUEN — Social Proof & Autorität
+                 1 Botschaft: Warum sollten Sie uns vertrauen?
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6 bg-apple-gray-100">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                Built on Science
+                                Wissenschaftlich fundiert
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                Rooted in research. Tested in the field.
+                                Verwurzelt in Forschung. Erprobt im Feld.
                             </h2>
                             <p className="text-lg text-apple-gray-400 max-w-2xl mx-auto">
-                                Developed in collaboration with applied agricultural research at FHNW —
-                                currently being tested and validated in real greenhouse environments.
+                                Entwickelt in Zusammenarbeit mit angewandter Agrarforschung an der FHNW —
+                                derzeit in realen Gewächshausumgebungen getestet und validiert.
                             </p>
                         </div>
                     </ScrollReveal>
@@ -218,19 +218,19 @@ export default function LandingPage() {
                         <ScrollReveal delay={100}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">FHNW</div>
-                                <p className="text-sm text-apple-gray-400">University of Applied Sciences<br />Northwestern Switzerland</p>
+                                <p className="text-sm text-apple-gray-400">Fachhochschule<br />Nordwestschweiz</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={250}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">24/7</div>
-                                <p className="text-sm text-apple-gray-400">Continuous biological<br />signal monitoring</p>
+                                <p className="text-sm text-apple-gray-400">Kontinuierliche biologische<br />Signalüberwachung</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Basel</div>
-                                <p className="text-sm text-apple-gray-400">Swiss precision engineering<br />from the innovation hub</p>
+                                <p className="text-sm text-apple-gray-400">Schweizer Präzisionstechnik<br />aus dem Innovationszentrum</p>
                             </div>
                         </ScrollReveal>
                     </div>
@@ -238,29 +238,29 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 BENEFITS — Why Growers Choose Us
-                 1 message: What are the outcomes?
+                 VORTEILE — Warum Anbauer uns wählen
+                 1 Botschaft: Was sind die Ergebnisse?
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                Benefits
+                                Vorteile
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                Why growers choose GreenMind.
+                                Warum Anbauer GreenMind wählen.
                             </h2>
                         </div>
                     </ScrollReveal>
                     <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-3 md:gap-6 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
                         {[
-                            { title: 'Healthier Plants', desc: 'Gain deeper insight into plant condition — early signals may help you intervene before stress becomes visible damage.' },
-                            { title: 'Higher Yield Predictability', desc: 'Build yield models using biological and environmental trend data — an emerging approach to more confident harvest planning.' },
-                            { title: 'Precision Resource Use', desc: 'Inform water and nutrient decisions with continuous data — designed to reduce waste through more precise resource management.' },
-                            { title: 'Faster Risk Response', desc: 'Early indicators may flag disease pressure, heat stress, or irrigation issues — enabling faster response times.' },
-                            { title: 'Sustainable Operations', desc: 'Work toward a lower ecological footprint through data-informed energy, water, and input optimization.' },
-                            { title: 'Smarter Decisions', desc: 'Move from guesswork toward continuous, science-based intelligence across your cultivation operation.' },
+                            { title: 'Gesündere Pflanzen', desc: 'Gewinnen Sie tiefere Einblicke in den Pflanzenzustand — Frühsignale können helfen, einzugreifen, bevor sich Stress in sichtbare Schäden verwandelt.' },
+                            { title: 'Höhere Ertragsvorhersagbarkeit', desc: 'Erstellen Sie Ertragsmodelle mithilfe biologischer und umweltbezogener Trenddaten — ein aufkommender Ansatz für eine zuverlässigere Ernteplanung.' },
+                            { title: 'Präziser Ressourceneinsatz', desc: 'Treffen Sie Wasser- und Nährstoffentscheidungen auf Basis kontinuierlicher Daten — konzipiert, um Verschwendung durch präziseres Ressourcenmanagement zu reduzieren.' },
+                            { title: 'Schnellere Risikoreaktion', desc: 'Frühindikatoren können Krankheitsdruck, Hitzestress oder Bewässerungsprobleme signalisieren — für schnellere Reaktionszeiten.' },
+                            { title: 'Nachhaltiger Betrieb', desc: 'Arbeiten Sie auf einen geringeren ökologischen Fussabdruck durch datengestützte Energie-, Wasser- und Inputoptimierung hin.' },
+                            { title: 'Klügere Entscheidungen', desc: 'Wechseln Sie von Vermutungen zu kontinuierlicher, wissenschaftsbasierter Intelligenz in Ihrem gesamten Anbaubetrieb.' },
                         ].map((b, i) => (
                             <ScrollReveal key={b.title} delay={i * 80} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
                                 <div className="card-hover bg-white rounded-apple-lg p-6 shadow-apple-card h-full flex flex-col justify-between">
@@ -276,34 +276,34 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 CTA — Final Conversion
-                 1 message: Take the next step.
+                 CTA — Finale Conversion
+                 1 Botschaft: Machen Sie den nächsten Schritt.
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6 bg-apple-gray-800">
                 <div className="max-w-[1280px] mx-auto text-center">
                     <ScrollReveal>
                         <p className="text-sm font-semibold text-gm-green-400 uppercase tracking-widest mb-4">
-                            Get Started
+                            Jetzt starten
                         </p>
                     </ScrollReveal>
                     <ScrollReveal delay={150}>
                         <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 tracking-tight leading-tight">
-                            The future of cultivation<br className="hidden md:block" />
-                            is listening.
+                            Die Zukunft des Anbaus<br className="hidden md:block" />
+                            hört zu.
                         </h2>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
                         <p className="text-lg text-apple-gray-300 mb-10 max-w-xl mx-auto leading-relaxed">
-                            Join forward-thinking growers building more sustainable,
-                            productive, and intelligent cultivation operations.
+                            Werden Sie Teil der vorausschauenden Anbauer, die nachhaltigere,
+                            produktivere und intelligentere Anbaubetriebe aufbauen.
                         </p>
                     </ScrollReveal>
                     <ScrollReveal delay={450}>
                         <Link
-                            href="mailto:traver.dinten@outlook.com?subject=Early Access Request - GreenMind&body=Name:%0D%0ACompany:%0D%0A%0D%0ATell us about your greenhouse operation:"
+                            href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
                             className="btn-glow inline-flex px-10 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-400 transition-colors duration-300"
                         >
-                            Start monitoring plant signals
+                            Pflanzensignale überwachen
                         </Link>
                     </ScrollReveal>
                 </div>
@@ -323,16 +323,16 @@ export default function LandingPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-apple-gray-400">
-                            <Link href="/product" className="hover:text-apple-gray-800 transition-colors duration-200">Product</Link>
-                            <Link href="/technology" className="hover:text-apple-gray-800 transition-colors duration-200">Technology</Link>
-                            <Link href="/about" className="hover:text-apple-gray-800 transition-colors duration-200">About</Link>
-                            <Link href="/contact" className="hover:text-apple-gray-800 transition-colors duration-200">Contact</Link>
+                            <Link href="/product" className="hover:text-apple-gray-800 transition-colors duration-200">Produkt</Link>
+                            <Link href="/technology" className="hover:text-apple-gray-800 transition-colors duration-200">Technologie</Link>
+                            <Link href="/about" className="hover:text-apple-gray-800 transition-colors duration-200">Über uns</Link>
+                            <Link href="/contact" className="hover:text-apple-gray-800 transition-colors duration-200">Kontakt</Link>
                         </div>
                     </div>
 
                     <div className="mt-8 pt-8 border-t border-apple-gray-200/50 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <p className="text-sm text-apple-gray-400">© 2026 GreenMind. All rights reserved.</p>
-                        <p className="text-sm text-apple-gray-300">FHNW Campus Muttenz · Basel, Switzerland</p>
+                        <p className="text-sm text-apple-gray-400">© 2026 GreenMind. Alle Rechte vorbehalten.</p>
+                        <p className="text-sm text-apple-gray-300">FHNW Campus Muttenz · Basel, Schweiz</p>
                     </div>
                 </div>
             </footer>

@@ -8,63 +8,63 @@ export default function AboutPage() {
         <div className="min-h-screen">
             <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
                 <ScrollReveal>
-                    <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">About</p>
-                    <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">About GreenMind.</h1>
+                    <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Über uns</p>
+                    <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">Über GreenMind.</h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
                     <p className="text-xl text-apple-gray-400 max-w-2xl mb-20 leading-relaxed">
-                        Building the intelligence layer for modern greenhouse agriculture.
+                        Die Intelligenzschicht für modernen Gewächshausanbau aufbauen.
                     </p>
                 </ScrollReveal>
 
                 <div className="max-w-3xl space-y-16">
                     <ScrollReveal>
                         <section>
-                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Our Mission</h2>
+                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Unsere Mission</h2>
                             <p className="text-apple-gray-400 leading-relaxed">
-                                Agriculture feeds the world — but it operates with surprisingly little real-time
-                                insight into the organisms it cultivates. GreenMind exists to change that.
-                                We believe that understanding plant condition at a biological level has the potential to
-                                fundamentally improve how greenhouses operate — enabling earlier intervention, more precise
-                                resource use, and ultimately, healthier crops and higher yields.
+                                Die Landwirtschaft ernährt die Welt — doch sie arbeitet mit überraschend wenig Echtzeit-Einblick
+                                in die Organismen, die sie anbaut. GreenMind will das ändern.
+                                Wir glauben, dass das Verständnis des Pflanzenzustands auf biologischer Ebene das Potenzial hat,
+                                den Gewächshausbetrieb grundlegend zu verbessern — durch frühere Interventionen, präziseren
+                                Ressourceneinsatz und letztlich gesündere Pflanzen und höhere Erträge.
                             </p>
                         </section>
                     </ScrollReveal>
 
                     <ScrollReveal>
                         <section>
-                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Why It Matters</h2>
+                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Warum es wichtig ist</h2>
                             <p className="text-apple-gray-400 leading-relaxed">
-                                Global food demand is rising. Water and arable land are under pressure. Climate
-                                volatility makes traditional cultivation methods less predictable. Greenhouse growers
-                                need new tools — not just to monitor environmental conditions, but to begin understanding
-                                how their crops are responding. GreenMind is working toward that understanding, exploring
-                                how biological signals can be turned into actionable intelligence for more sustainable,
-                                more productive, and more resilient agriculture.
+                                Der weltweite Nahrungsmittelbedarf steigt. Wasser und Ackerflächen stehen unter Druck. Klimatische
+                                Schwankungen machen traditionelle Anbaumethoden weniger vorhersehbar. Gewächshausanbauer
+                                brauchen neue Werkzeuge — nicht nur zur Überwachung der Umgebungsbedingungen, sondern um zu verstehen,
+                                wie ihre Kulturen reagieren. GreenMind arbeitet an diesem Verständnis und erforscht,
+                                wie biologische Signale in handlungsrelevante Intelligenz für eine nachhaltigere,
+                                produktivere und widerstandsfähigere Landwirtschaft umgewandelt werden können.
                             </p>
                         </section>
                     </ScrollReveal>
 
                     <ScrollReveal>
                         <section>
-                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">The Team</h2>
+                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Das Team</h2>
                             <p className="text-apple-gray-400 leading-relaxed">
-                                We are a multidisciplinary team of plant scientists, engineers, and product designers based
-                                in Basel, Switzerland. Our work is grounded in applied research from FHNW
-                                (University of Applied Sciences Northwestern Switzerland) and driven by a deep conviction
-                                that precision agriculture can be made more accessible, more intelligent, and more impactful.
+                                Wir sind ein multidisziplinäres Team aus Pflanzenwissenschaftlern, Ingenieuren und Produktdesignern
+                                mit Sitz in Basel, Schweiz. Unsere Arbeit basiert auf angewandter Forschung der FHNW
+                                (Fachhochschule Nordwestschweiz) und ist getrieben von der tiefen Überzeugung,
+                                dass Präzisionslandwirtschaft zugänglicher, intelligenter und wirkungsvoller gestaltet werden kann.
                             </p>
                         </section>
                     </ScrollReveal>
 
                     <ScrollReveal>
                         <section>
-                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Sustainable Innovation</h2>
+                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Nachhaltige Innovation</h2>
                             <p className="text-apple-gray-400 leading-relaxed">
-                                We actively collaborate with academic research institutions and commercial growers to ensure
-                                our platform addresses real challenges. Every feature we build is tested in real greenhouse
-                                environments. Our goal is not technology for its own sake — it is working toward measurable
-                                improvement in sustainability, productivity, and crop health.
+                                Wir arbeiten aktiv mit akademischen Forschungseinrichtungen und kommerziellen Anbauern zusammen,
+                                um sicherzustellen, dass unsere Plattform echte Herausforderungen adressiert. Jede Funktion, die wir
+                                entwickeln, wird in realen Gewächshausumgebungen getestet. Unser Ziel ist nicht Technologie um ihrer
+                                selbst willen — sondern messbare Verbesserungen in Nachhaltigkeit, Produktivität und Pflanzengesundheit.
                             </p>
                         </section>
                     </ScrollReveal>

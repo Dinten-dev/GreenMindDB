@@ -4,8 +4,8 @@ import GlobalBackground from '@/components/GlobalBackground'
 import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
-    title: 'GreenMind – Predictive Yield Optimization',
-    description: 'Plant bioelectrical sensing system for predictive yield optimization in greenhouse agriculture.',
+    title: 'GreenMind – Prädiktive Ertragsoptimierung',
+    description: 'Bioelektrisches Pflanzensensorsystem für prädiktive Ertragsoptimierung im Gewächshausanbau.',
 }
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
     children: React.ReactNode
 }) {
     return (
-        <html lang="en">
+        <html lang="de">
             <body className="min-h-screen bg-apple-gray-50 text-apple-gray-800">
                 <GlobalBackground />
                 <Navbar />

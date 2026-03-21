@@ -26,10 +26,10 @@ export default function Navbar() {
     }, [isMenuOpen]);
 
     const navLinks = [
-        { name: 'Product', href: '/product' },
-        { name: 'Technology', href: '/technology' },
-        { name: 'About', href: '/about' },
-        { name: 'Contact', href: '/contact' }
+        { name: 'Produkt', href: '/product' },
+        { name: 'Technologie', href: '/technology' },
+        { name: 'Über uns', href: '/about' },
+        { name: 'Kontakt', href: '/contact' }
     ];
 
     return (
@@ -61,13 +61,13 @@ export default function Navbar() {
                     {/* Desktop CTAs */}
                     <div className="hidden md:flex items-center gap-3 relative z-[110]">
                         <Link href="/login" className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200">
-                            Sign in
+                            Anmelden
                         </Link>
                         <Link
-                            href="mailto:traver.dinten@outlook.com?subject=Early Access Request - GreenMind&body=Name:%0D%0ACompany:%0D%0A%0D%0ATell us about your greenhouse operation:"
+                            href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
                             className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
                         >
-                            Get Started
+                            Loslegen
                         </Link>
                     </div>
 
@@ -75,7 +75,7 @@ export default function Navbar() {
                     <button 
                         className="md:hidden p-2 -mr-2 relative z-[110] text-apple-gray-800"
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        aria-label="Toggle menu"
+                        aria-label="Menü umschalten"
                     >
                         <div className="w-6 h-5 flex flex-col justify-between items-end">
                             <span className={`h-[2px] w-full bg-current rounded-full transition-all duration-300 ${isMenuOpen ? 'rotate-45 translate-y-[9px]' : ''}`} />
@@ -107,13 +107,13 @@ export default function Navbar() {
                         href="/login" 
                         className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
                     >
-                        Sign In
+                        Anmelden
                     </Link>
                     <Link
-                        href="mailto:traver.dinten@outlook.com?subject=Early Access Request - GreenMind&body=Name:%0D%0ACompany:%0D%0A%0D%0ATell us about your greenhouse operation:"
+                        href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
                         className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
                     >
-                        Get Started
+                        Loslegen
                     </Link>
                 </div>
             </div>

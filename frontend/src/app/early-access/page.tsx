@@ -17,21 +17,21 @@ export default function EarlyAccessPage() {
                 </ScrollReveal>
                 
                 <ScrollReveal delay={150}>
-                    <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">Request Early Access</h1>
+                    <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">Early Access anfragen</h1>
                 </ScrollReveal>
                 <ScrollReveal delay={300}>
                     <p className="text-xl text-apple-gray-400 mb-12 leading-relaxed">
-                        Be among the first growers to experience the future of greenhouse intelligence. 
-                        Send us an email with details about your operation, and we will get back to you shortly.
+                        Gehören Sie zu den ersten Anbauern, die die Zukunft der Gewächshaus-Intelligenz erleben. 
+                        Senden Sie uns eine E-Mail mit Details zu Ihrem Betrieb und wir melden uns in Kürze bei Ihnen.
                     </p>
                 </ScrollReveal>
 
                 <ScrollReveal delay={450}>
                     <a 
-                        href="mailto:traver.dinten@outlook.com?subject=Early Access Request - GreenMind&body=Name:%0D%0ACompany:%0D%0A%0D%0ATell us about your greenhouse operation:"
+                        href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
                         className="btn-glow inline-block px-8 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-600 transition-all duration-300 shadow-lg shadow-gm-green-500/20 hover:shadow-xl hover:shadow-gm-green-500/30"
                     >
-                        Email traver.dinten@outlook.com
+                        E-Mail an traver.dinten@outlook.com
                     </a>
                 </ScrollReveal>
             </div>

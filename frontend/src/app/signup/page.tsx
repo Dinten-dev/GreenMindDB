@@ -21,7 +21,7 @@ export default function SignupPage() {
             await apiSignup(email, password, name);
             router.push('/app/dashboard');
         } catch (err: any) {
-            setError(err.message || 'Signup failed');
+            setError(err.message || 'Registrierung fehlgeschlagen');
         } finally {
             setLoading(false);
         }
@@ -36,8 +36,8 @@ export default function SignupPage() {
                             <span className="text-white text-xl font-bold">G</span>
                         </div>
                     </Link>
-                    <h1 className="text-2xl font-bold text-apple-gray-800">Create your account</h1>
-                    <p className="text-sm text-apple-gray-400 mt-2">Start monitoring your greenhouse today.</p>
+                    <h1 className="text-2xl font-bold text-apple-gray-800">Konto erstellen</h1>
+                    <p className="text-sm text-apple-gray-400 mt-2">Beginnen Sie noch heute mit der Überwachung Ihres Gewächshauses.</p>
                 </div>
 
                 <div className="bg-white rounded-apple-lg shadow-apple p-8">
@@ -55,29 +55,29 @@ export default function SignupPage() {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                                placeholder="Your name"
+                                placeholder="Ihr Name"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">Email</label>
+                            <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">E-Mail</label>
                             <input
                                 type="email"
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                                placeholder="you@example.com"
+                                placeholder="sie@beispiel.com"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">Password</label>
+                            <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">Passwort</label>
                             <input
                                 type="password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                                placeholder="Min 8 chars, upper + lower + number"
+                                placeholder="Mind. 8 Zeichen, Gross- + Kleinbuchstaben + Zahl"
                             />
                         </div>
                         <button
@@ -85,15 +85,15 @@ export default function SignupPage() {
                             disabled={loading}
                             className="w-full py-2.5 bg-gm-green-500 text-white rounded-apple font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                         >
-                            {loading ? 'Creating account…' : 'Create Account'}
+                            {loading ? 'Konto wird erstellt…' : 'Konto erstellen'}
                         </button>
                     </form>
                 </div>
 
                 <p className="text-center text-sm text-apple-gray-400 mt-6">
-                    Already have an account?{' '}
+                    Bereits ein Konto?{' '}
                     <Link href="/login" className="text-gm-green-500 font-medium hover:text-gm-green-600 transition-colors">
-                        Sign in
+                        Anmelden
                     </Link>
                 </p>
             </div>
