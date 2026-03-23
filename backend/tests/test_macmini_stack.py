@@ -42,6 +42,7 @@ class TestAuth:
 class TestIngestion:
     def test_ingest_requires_api_key(self, base_url):
         payload = {
+            "measurement_id": "123e4567-e89b-12d3-a456-426614174000",
             "device_serial": "MACMINI-DEV-001",
             "readings": [{"sensor_kind": "air_temp", "value": 22.5, "unit": "C"}],
         }

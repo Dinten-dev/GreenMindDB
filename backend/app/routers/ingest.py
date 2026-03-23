@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import verify_password
 from app.database import get_db
-from app.models.master import Device, Sensor
-from app.models.timeseries import SensorReading
+from app.models.master import Device
 from app.routers.ws import manager
 from app.schemas.ingest import IngestRequest, IngestResponse
+from app.services.ingest_service import DuplicateIngestionError, process_ingestion
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -41,49 +41,19 @@ async def ingest_data(
     if not verify_password(x_api_key, device.api_key_hash):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    now = datetime.now(UTC)
-    ingested = 0
-
-    for reading in data.readings:
-        # Find or create sensor
-        sensor = (
-            db.query(Sensor)
-            .filter(Sensor.device_id == device.id, Sensor.kind == reading.sensor_kind)
-            .first()
+    try:
+        ingested = process_ingestion(data, device, db)
+    except DuplicateIngestionError:
+        return IngestResponse(
+            status="duplicate",
+            ingested=0,
+            device_id=str(device.id),
+            measurement_id=data.measurement_id,
         )
-        if not sensor:
-            sensor = Sensor(
-                device_id=device.id,
-                kind=reading.sensor_kind,
-                unit=reading.unit,
-                label=f"{device.name} – {reading.sensor_kind}",
-            )
-            db.add(sensor)
-            db.flush()
-
-        ts = now
-        if reading.timestamp:
-            try:
-                ts = datetime.fromisoformat(reading.timestamp.replace("Z", "+00:00"))
-            except ValueError:
-                ts = now
-
-        sr = SensorReading(
-            timestamp=ts,
-            sensor_id=sensor.id,
-            value=reading.value,
-            unit=reading.unit,
-        )
-        db.add(sr)
-        ingested += 1
-
-    # Update device last_seen and status
-    device.last_seen = now
-    device.status = "online"
-    db.commit()
 
     # Broadcast real-time update if assigned to greenhouse
     if device.greenhouse_id:
+        now = datetime.now(UTC)
         readings_out = [
             {
                 "sensor_kind": r.sensor_kind,
@@ -94,8 +64,18 @@ async def ingest_data(
             for r in data.readings
         ]
         await manager.broadcast_to_greenhouse(
-            {"event": "new_readings", "device_id": str(device.id), "readings": readings_out},
+            {
+                "event": "new_readings",
+                "device_id": str(device.id),
+                "measurement_id": data.measurement_id,
+                "readings": readings_out,
+            },
             str(device.greenhouse_id),
         )
 
-    return IngestResponse(ingested=ingested, device_id=str(device.id))
+    return IngestResponse(
+        status="success",
+        ingested=ingested,
+        device_id=str(device.id),
+        measurement_id=data.measurement_id,
+    )
