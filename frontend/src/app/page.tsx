@@ -64,7 +64,7 @@ export default function LandingPage() {
                     <ScrollReveal variant="fade-up" delay={550}>
                         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
                             <Link
-                                href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
+                                href="/early-access"
                                 className="btn-glow w-full md:w-auto px-8 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-600 transition-all duration-300 shadow-lg shadow-gm-green-500/20"
                             >
                                 Pflanzensignale überwachen
@@ -300,7 +300,7 @@ export default function LandingPage() {
                     </ScrollReveal>
                     <ScrollReveal delay={450}>
                         <Link
-                            href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
+                            href="/early-access"
                             className="btn-glow inline-flex px-10 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-400 transition-colors duration-300"
                         >
                             Pflanzensignale überwachen

@@ -1,158 +1,56 @@
 """Greenhouse management endpoints."""
 
-from datetime import UTC, datetime, timedelta
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models.master import Device, Greenhouse, Sensor
-from app.models.timeseries import SensorReading
 from app.models.user import User
 from app.schemas.greenhouse import GreenhouseCreate, GreenhouseOverview, GreenhouseResponse
+from app.services.greenhouse_service import (
+    create_greenhouse,
+    get_greenhouse,
+    get_greenhouse_overview,
+    list_greenhouses,
+)
 
-router = APIRouter(prefix="/api/greenhouses", tags=["greenhouses"])
-
-
-def _require_org(user: User):
-    if not user.organization_id:
-        raise HTTPException(status_code=400, detail="User must belong to an organization")
-    return user.organization_id
+router = APIRouter(prefix="/greenhouses", tags=["greenhouses"])
 
 
 @router.get("", response_model=list[GreenhouseResponse])
-async def list_greenhouses(
+async def handle_list_greenhouses(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List all greenhouses in user's organization."""
-    org_id = _require_org(current_user)
-    greenhouses = db.query(Greenhouse).filter(Greenhouse.organization_id == org_id).all()
-    results = []
-    for gh in greenhouses:
-        device_count = (
-            db.query(func.count(Device.id)).filter(Device.greenhouse_id == gh.id).scalar()
-        )
-        sensor_count = (
-            db.query(func.count(Sensor.id))
-            .join(Device, Device.id == Sensor.device_id)
-            .filter(Device.greenhouse_id == gh.id)
-            .scalar()
-        )
-        results.append(
-            GreenhouseResponse(
-                id=str(gh.id),
-                name=gh.name,
-                location=gh.location,
-                created_at=gh.created_at.isoformat(),
-                device_count=device_count,
-                sensor_count=sensor_count,
-            )
-        )
-    return results
+    return list_greenhouses(db, current_user)
 
 
 @router.post("", response_model=GreenhouseResponse, status_code=201)
-async def create_greenhouse(
+async def handle_create_greenhouse(
     data: GreenhouseCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Create a new greenhouse in the user's organization."""
-    org_id = _require_org(current_user)
-    gh = Greenhouse(
-        organization_id=org_id,
-        name=data.name,
-        location=data.location,
-    )
-    db.add(gh)
-    db.commit()
-    db.refresh(gh)
-    return GreenhouseResponse(
-        id=str(gh.id),
-        name=gh.name,
-        location=gh.location,
-        created_at=gh.created_at.isoformat(),
-    )
+    return create_greenhouse(db, current_user, data)
 
 
 @router.get("/{greenhouse_id}", response_model=GreenhouseResponse)
-async def get_greenhouse(
+async def handle_get_greenhouse(
     greenhouse_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get a single greenhouse."""
-    org_id = _require_org(current_user)
-    gh = (
-        db.query(Greenhouse)
-        .filter(Greenhouse.id == greenhouse_id, Greenhouse.organization_id == org_id)
-        .first()
-    )
-    if not gh:
-        raise HTTPException(status_code=404, detail="Greenhouse not found")
-    device_count = db.query(func.count(Device.id)).filter(Device.greenhouse_id == gh.id).scalar()
-    sensor_count = (
-        db.query(func.count(Sensor.id))
-        .join(Device, Device.id == Sensor.device_id)
-        .filter(Device.greenhouse_id == gh.id)
-        .scalar()
-    )
-    return GreenhouseResponse(
-        id=str(gh.id),
-        name=gh.name,
-        location=gh.location,
-        created_at=gh.created_at.isoformat(),
-        device_count=device_count,
-        sensor_count=sensor_count,
-    )
+    return get_greenhouse(db, current_user, greenhouse_id)
 
 
 @router.get("/{greenhouse_id}/overview", response_model=GreenhouseOverview)
-async def get_greenhouse_overview(
+async def handle_get_greenhouse_overview(
     greenhouse_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get overview stats for a greenhouse."""
-    org_id = _require_org(current_user)
-    gh = (
-        db.query(Greenhouse)
-        .filter(Greenhouse.id == greenhouse_id, Greenhouse.organization_id == org_id)
-        .first()
-    )
-    if not gh:
-        raise HTTPException(status_code=404, detail="Greenhouse not found")
-
-    devices = db.query(Device).filter(Device.greenhouse_id == gh.id).all()
-    device_ids = [d.id for d in devices]
-
-    total_sensors = 0
-    sensor_ids = []
-    if device_ids:
-        sensors = db.query(Sensor).filter(Sensor.device_id.in_(device_ids)).all()
-        total_sensors = len(sensors)
-        sensor_ids = [s.id for s in sensors]
-
-    readings_24h = 0
-    if sensor_ids:
-        cutoff = datetime.now(UTC) - timedelta(hours=24)
-        readings_24h = (
-            db.query(func.count())
-            .select_from(SensorReading)
-            .filter(SensorReading.sensor_id.in_(sensor_ids), SensorReading.timestamp >= cutoff)
-            .scalar()
-        )
-
-    online_count = sum(1 for d in devices if d.status == "online")
-
-    return GreenhouseOverview(
-        id=str(gh.id),
-        name=gh.name,
-        total_devices=len(devices),
-        online_devices=online_count,
-        total_sensors=total_sensors,
-        readings_24h=readings_24h,
-    )
+    return get_greenhouse_overview(db, current_user, greenhouse_id)

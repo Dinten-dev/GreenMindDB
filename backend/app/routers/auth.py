@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models.user import Role, User
 from app.schemas.auth import LoginRequest, SignupRequest, TokenResponse, UserResponse
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # ── Endpoints ────────────────────────────────────

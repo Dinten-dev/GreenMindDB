@@ -9,9 +9,10 @@ from app.auth import verify_password
 from app.database import get_db
 from app.models.master import Device, Sensor
 from app.models.timeseries import SensorReading
+from app.routers.ws import manager
 from app.schemas.ingest import IngestRequest, IngestResponse
 
-router = APIRouter(prefix="/api/ingest", tags=["ingest"])
+router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 
 @router.post("", response_model=IngestResponse, status_code=201)
@@ -80,5 +81,21 @@ async def ingest_data(
     device.last_seen = now
     device.status = "online"
     db.commit()
+
+    # Broadcast real-time update if assigned to greenhouse
+    if device.greenhouse_id:
+        readings_out = [
+            {
+                "sensor_kind": r.sensor_kind,
+                "value": r.value,
+                "unit": r.unit,
+                "timestamp": r.timestamp or now.isoformat(),
+            }
+            for r in data.readings
+        ]
+        await manager.broadcast_to_greenhouse(
+            {"event": "new_readings", "device_id": str(device.id), "readings": readings_out},
+            str(device.greenhouse_id),
+        )
 
     return IngestResponse(ingested=ingested, device_id=str(device.id))

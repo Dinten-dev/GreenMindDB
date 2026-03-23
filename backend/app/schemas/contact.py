@@ -9,7 +9,7 @@ class ContactRequest(BaseModel):
     company: str = Field(default="", max_length=200)
     message: str = Field(..., min_length=1, max_length=5000)
     # Honeypot: must be empty
-    website: str = Field(default="", max_length=0)
+    website: str | None = Field(default="")
 
 
 class EarlyAccessRequest(BaseModel):

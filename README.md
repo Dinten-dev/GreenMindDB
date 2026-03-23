@@ -45,7 +45,7 @@ GreenMind is a full-stack platform for processing, storing, and analyzing **bioe
 ```mermaid
 graph TD;
     Sensors[ESP32 Sensors] -->|USB / Serial| Pi[Raspberry Pi Gateway]
-    Pi -->|POST /api/ingest| API[FastAPI Backend :8000]
+    Pi -->|POST /api/v1/ingest| API[FastAPI Backend :8000]
     API -->|SQLAlchemy| DB[(TimescaleDB :5432)]
     UI[Next.js Frontend :3000] -->|REST API| API
     API -->|SMTP| Email[Email Notifications]
@@ -214,12 +214,19 @@ make seed      # Seed demo data
 
 ### Backend Tests
 
+The most robust way to run the entire backend test suite (unit + integration) is inside a dedicated Docker container. This ensures testing matches production dependencies without relying on local Python setups:
+
+```bash
+./scripts/run_docker_tests.sh
+```
+
+Alternatively, to run tests locally (requires Python 3.11+ and PostgreSQL libraries):
 ```bash
 make test
 # or: cd backend && python -m pytest tests/ -v
 ```
 
-Backend tests use **pytest**. Integration tests that require Docker can be skipped with:
+Integration tests that require Docker can be bypassed locally with:
 ```bash
 SKIP_DOCKER_TESTS=1 pytest tests/ -v
 ```
@@ -302,11 +309,12 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Token validity in minutes                   | `10080` (7 days)              |
 | `LOCAL_DATA_ROOT`                 | Local data storage root (macOS iCloud fix)  | `./data`                      |
 | `PGDATA_DIR`                      | PostgreSQL data directory                   | `./postgres_data`             |
-| `SMTP_HOST`                       | SMTP server for notifications               | `smtp-mail.outlook.com`       |
+| `SMTP_HOST`                       | SMTP server for notifications               | `smtp.gmail.com`              |
 | `SMTP_PORT`                       | SMTP port                                   | `587`                         |
 | `SMTP_USER`                       | SMTP username                               | *(optional)*                  |
 | `SMTP_PASSWORD`                   | SMTP password                               | *(optional)*                  |
-| `EMAIL_RECEIVER`                  | Contact form recipient email                | *(optional)*                  |
+| `SMTP_FROM`                       | Outgoing sender email address               | *(optional)*                  |
+| `CONTACT_FORM_TO`                 | Contact form recipient email                | *(optional)*                  |
 
 > **🔒 Never commit `.env` files with real credentials.** Use `.env.example` as a template.
 
@@ -488,39 +496,60 @@ docker compose up -d
 ### Authentication
 | Method | Endpoint                | Description                       |
 |--------|-------------------------|-----------------------------------|
-| POST   | `/api/auth/signup`      | Create new account                |
-| POST   | `/api/auth/login`       | Login (sets httpOnly cookie)      |
-| POST   | `/api/auth/logout`      | Logout user                       |
-| GET    | `/api/auth/me`          | Get current user                  |
+| POST   | `/api/v1/auth/signup`      | Create new account                |
+| POST   | `/api/v1/auth/login`       | Login (sets httpOnly cookie)      |
+| POST   | `/api/v1/auth/logout`      | Logout user                       |
+| GET    | `/api/v1/auth/me`          | Get current user                  |
 
 ### Core Resources
 | Method | Endpoint                           | Description                     |
 |--------|------------------------------------|---------------------------------|
-| GET    | `/api/organizations`               | List organizations              |
-| POST   | `/api/organizations`               | Create organization             |
-| GET    | `/api/greenhouses`                 | List greenhouses                |
-| POST   | `/api/greenhouses`                 | Create greenhouse               |
-| GET    | `/api/greenhouses/{id}/overview`   | Greenhouse dashboard overview   |
-| GET    | `/api/devices`                     | List devices                    |
-| POST   | `/api/devices/pairing-code`        | Generate pairing code           |
-| POST   | `/api/devices/pair`                | Pair a device                   |
-| GET    | `/api/sensors`                     | List sensors                    |
-| GET    | `/api/sensors/{id}/data`           | Get sensor timeseries data      |
+| GET    | `/api/v1/organizations`               | List organizations              |
+| POST   | `/api/v1/organizations`               | Create organization             |
+| GET    | `/api/v1/greenhouses`                 | List greenhouses                |
+| POST   | `/api/v1/greenhouses`                 | Create greenhouse               |
+| GET    | `/api/v1/greenhouses/{id}/overview`   | Greenhouse dashboard overview   |
+| GET    | `/api/v1/devices`                     | List devices                    |
+| POST   | `/api/v1/devices/pairing-code`        | Generate pairing code           |
+| POST   | `/api/v1/devices/pair`                | Pair a device                   |
+| GET    | `/api/v1/sensors`                     | List sensors                    |
+| GET    | `/api/v1/sensors/{id}/data`           | Get sensor timeseries data      |
 
 ### Ingestion (IoT)
 | Method | Endpoint          | Description                                    |
 |--------|-------------------|------------------------------------------------|
-| POST   | `/api/ingest`     | Push sensor readings (`X-Api-Key` auth)        |
+| POST   | `/api/v1/ingest`     | Push sensor readings (`X-Api-Key` auth)        |
+
+### Live Data (WebSocket)
+| Method | Endpoint          | Description                                    |
+|--------|-------------------|------------------------------------------------|
+| WS     | `/api/v1/ws/greenhouse/{id}` | Stream live sensor readings             |
 
 ### Device Pairing Flow
 1. User generates a 10-minute pairing code via the dashboard
-2. Raspberry Pi gateway sends `POST /api/devices/pair` with code + hardware serial
+2. Raspberry Pi gateway sends `POST /api/v1/devices/pair` with code + hardware serial
 3. Backend validates, registers the device, returns an `X-Api-Key`
-4. Gateway streams readings via `POST /api/ingest` using the API key
+4. Gateway streams readings via `POST /api/v1/ingest` using the API key
 5. Live data appears on the dashboard
+
+## Database Backup & Restore
+
+Automated bash scripts are provided to cleanly run `pg_dump` and `pg_restore` through the active TimescaleDB container.
+
+### Backup Database
+```bash
+./scripts/backup_db.sh
+```
+This generates a timestamped `.sql` file in the `./backups` directory.
+
+### Restore Database
+```bash
+./scripts/restore_db.sh ./backups/backup_YYYYMMDD_HHMMSS.sql
+```
+*Note: Restoration will apply the SQL dump to the current database.*
 
 ---
 
 ## License
 
-*Not yet specified. Add a `LICENSE` file when ready.*
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

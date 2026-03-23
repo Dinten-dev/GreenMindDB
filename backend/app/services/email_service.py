@@ -33,14 +33,14 @@ def send_notification_email(subject: str, body: str) -> None:
         logger.info("Would have sent email:\nSubject: %s\n%s", subject, body)
         return
 
-    if not settings.email_receiver:
-        logger.warning("No email receiver configured – skipping email")
+    if not settings.contact_form_to:
+        logger.warning("No contact form receiver configured – skipping email")
         return
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = settings.smtp_user
-    msg["To"] = settings.email_receiver
+    msg["From"] = settings.smtp_from or settings.smtp_user
+    msg["To"] = settings.contact_form_to
     msg.set_content(body)
 
     try:

@@ -24,6 +24,7 @@ cp compose/.env.example compose/.env
 #    - JWT_SECRET_KEY (≥32 chars)
 #    - ADMIN_PASSWORD
 #    - MINIO_ROOT_PASSWORD / S3_SECRET_ACCESS_KEY
+#    - SMTP_PASSWORD (if using contact forms)
 nano compose/.env
 
 # 4. Start the stack

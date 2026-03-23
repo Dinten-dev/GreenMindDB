@@ -2,8 +2,9 @@
 
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -15,6 +16,8 @@ setup_logging(settings.log_level)
 logger = get_logger(__name__)
 
 # ── Router imports ───────────────────────────────────────────────────
+
+
 from app.routers import (  # noqa: E402
     auth_router,
     contact_router,
@@ -23,6 +26,7 @@ from app.routers import (  # noqa: E402
     ingest_router,
     organizations_router,
     sensors_router,
+    ws_router,
 )
 from app.routers.contact import limiter  # noqa: E402
 
@@ -42,6 +46,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Api-Key"],
 )
 
+
+# ── Monitoring ───────────────────────────────────────────────────────
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # ── Middleware ───────────────────────────────────────────────────────
 
@@ -79,13 +86,18 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Routers ──────────────────────────────────────────────────────────
-app.include_router(auth_router)
-app.include_router(organizations_router)
-app.include_router(greenhouses_router)
-app.include_router(devices_router)
-app.include_router(sensors_router)
-app.include_router(ingest_router)
-app.include_router(contact_router)
+api_v1_router = APIRouter(prefix="/api/v1")
+
+api_v1_router.include_router(auth_router)
+api_v1_router.include_router(organizations_router)
+api_v1_router.include_router(greenhouses_router)
+api_v1_router.include_router(devices_router)
+api_v1_router.include_router(sensors_router)
+api_v1_router.include_router(ingest_router)
+api_v1_router.include_router(contact_router)
+api_v1_router.include_router(ws_router)
+
+app.include_router(api_v1_router)
 
 
 # ── Health & Root ────────────────────────────────────────────────────

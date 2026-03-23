@@ -127,18 +127,21 @@ Two comprehensive hardening passes were performed on the GreenMindDB repository 
 
 ---
 
-## 6. Open Points
+## 6. Phase 2 Hardening (Completed)
 
-### High Priority
-1. **Rotate SMTP password** – previously committed in `.env`
-2. **Remove pre-existing ESLint warnings** – clean up unused imports in frontend pages
-3. **Run full test suite** in Docker to validate integration tests
+### Security & Architecture
+- **Email Security**: Removed leaked Outlook credentials from `.env` and hardcoded `mailto:` links from the frontend. Implemented secure backend SMTP processing (`SMTP_*` env vars) to protect receiver addresses and allow easy credential rotation.
+- **Frontend Upgrade**: Replaced native `mailto:` links with premium React forms (`/contact`, `/early-access`) matching the Apple-inspired design aesthetic, complete with loading states and error handling.
+- **Spam Protection**: Added silent honeypot fields (`website`) to the public contact endpoints.
+- **ESLint & Docker**: Fixed preexisting ESLint warnings across frontend pages and verified non-root least-privilege execution in Dockerfiles.
+- **Licensing**: Added standard MIT `LICENSE` file.
+
+## 7. Open Points
 
 ### Medium Priority
-4. **Expand service layer** – extract more business logic from routers (greenhouses, devices)
-5. **Add frontend tests** – Vitest + React Testing Library
-6. **Docker security** – ensure production containers run as non-root
-7. **Add `LICENSE` file**
+1. **Expand service layer** – extract more business logic from routers (greenhouses, devices)
+2. **Run full test suite** in Docker to validate integration tests
+3. **Add frontend tests** – Vitest + React Testing Library
 
 ### Low Priority
 8. **Monitoring** – Prometheus metrics endpoint

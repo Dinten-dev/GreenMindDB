@@ -64,7 +64,7 @@ export default function Navbar() {
                             Anmelden
                         </Link>
                         <Link
-                            href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
+                            href="/early-access"
                             className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
                         >
                             Loslegen
@@ -110,7 +110,7 @@ export default function Navbar() {
                         Anmelden
                     </Link>
                     <Link
-                        href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:"
+                        href="/early-access"
                         className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
                     >
                         Loslegen

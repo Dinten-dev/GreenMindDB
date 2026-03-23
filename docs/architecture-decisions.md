@@ -116,3 +116,19 @@
 - Devices authenticate subsequent requests via `X-Api-Key` header
 
 **Status:** Accepted
+
+---
+
+## ADR-008: Server-Side Email Processing via SMTP
+
+**Context:** Initial prototypes used frontend `mailto:` links which exposed personal email addresses to scrapers, offered no input validation, and provided a poor user experience. Previously committed SMTP credentials in `.env` also posed a security risk.
+
+**Decision:** Migrate all mail processing to the backend using generic SMTP environment variables (e.g., Gmail App Passwords) with strict Pydantic validation (including hidden honeypot fields) on dedicated API endpoints.
+
+**Rationale:**
+- Prevents spam via backend validation and honeypot fields
+- Protects actual receiving email addresses from scraping
+- Allows easy, secure rotation of SMTP credentials via environment variables without touching code
+- Provides a premium, seamless frontend User Experience native to the web app
+
+**Status:** Implemented

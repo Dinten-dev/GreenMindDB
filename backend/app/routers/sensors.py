@@ -13,7 +13,7 @@ from app.models.timeseries import SensorReading
 from app.models.user import User
 from app.schemas.sensor import DataPoint, SensorDataResponse, SensorResponse
 
-router = APIRouter(prefix="/api/sensors", tags=["sensors"])
+router = APIRouter(prefix="/sensors", tags=["sensors"])
 
 
 RANGE_MAP = {

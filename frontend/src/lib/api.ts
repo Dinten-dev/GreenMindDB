@@ -1,6 +1,6 @@
 const API_BASE = typeof window === 'undefined'
-    ? (process.env.INTERNAL_API_URL || 'http://localhost:8000')
-    : '/api';
+    ? `${process.env.INTERNAL_API_URL || 'http://localhost:8000'}/api/v1`
+    : '/api/v1';
 
 interface FetchOptions extends RequestInit {
     params?: Record<string, string>;
@@ -188,4 +188,36 @@ export async function apiListSensors(greenhouse_id?: string): Promise<SensorInfo
 
 export async function apiGetSensorData(sensor_id: string, range: string = '24h'): Promise<SensorData> {
     return apiFetch<SensorData>(`/sensors/${sensor_id}/data`, { params: { range } });
+}
+
+// ── Contact & Early Access ───────────────────
+export interface ContactPayload {
+    name: string;
+    email: string;
+    company?: string;
+    message: string;
+    website?: string;
+}
+
+export async function apiSubmitContact(payload: ContactPayload): Promise<{status: string}> {
+    return apiFetch<{status: string}>('/contact', {
+        method: 'POST',
+        body: JSON.stringify({ company: '', website: '', ...payload }),
+    });
+}
+
+export interface EarlyAccessPayload {
+    name: string;
+    company: string;
+    email: string;
+    country: string;
+    message?: string;
+    website?: string;
+}
+
+export async function apiSubmitEarlyAccess(payload: EarlyAccessPayload): Promise<{status: string}> {
+    return apiFetch<{status: string}>('/early-access', {
+        method: 'POST',
+        body: JSON.stringify({ message: '', website: '', ...payload }),
+    });
 }

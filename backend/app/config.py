@@ -21,11 +21,12 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
 
     # SMTP / Email
-    smtp_host: str = "smtp-mail.outlook.com"
+    smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    email_receiver: str = ""
+    smtp_from: str = ""
+    contact_form_to: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod

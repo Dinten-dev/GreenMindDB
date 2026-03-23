@@ -6,9 +6,12 @@ import os
 import subprocess
 import time
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
+
+from app.auth import get_password_hash
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = ROOT_DIR / "compose" / "docker-compose.yml"
@@ -52,6 +55,18 @@ def _wait_for_health(base_url: str, timeout_seconds: int = 180) -> None:
 
 
 def _run_sql(stack_env: dict[str, str], sql: str) -> None:
+    if os.getenv("IN_DOCKER_TEST") == "1":
+        from sqlalchemy import create_engine, text
+
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            db_url = f"postgresql+psycopg2://{stack_env['POSTGRES_USER']}:{stack_env['POSTGRES_PASSWORD']}@postgres:5432/{stack_env['POSTGRES_DB']}"
+
+        engine = create_engine(db_url)
+        with engine.begin() as conn:
+            conn.execute(text(sql))
+        return
+
     cmd = _compose_cmd(ENV_FILE) + [
         "exec",
         "-T",
@@ -74,7 +89,13 @@ def docker_stack() -> dict[str, str]:
     if os.getenv("SKIP_DOCKER_TESTS") == "1":
         pytest.skip("Docker-based integration tests disabled via SKIP_DOCKER_TESTS=1")
 
+    if os.getenv("IN_DOCKER_TEST") == "1":
+        _wait_for_health("http://backend:8000")
+        yield dict(os.environ)
+        return
+
     stack_env = _read_env_file(ENV_FILE)
+
     compose_base = _compose_cmd(ENV_FILE)
 
     subprocess.run(compose_base + ["down", "-v"], check=False)
@@ -91,21 +112,27 @@ def docker_stack() -> dict[str, str]:
 @pytest.fixture(scope="session")
 def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     """Seed master data: greenhouse, zone, plant, device, sensor."""
-    sql = """
-    INSERT INTO greenhouse (id, name, location, timezone)
-    VALUES ('11111111-1111-1111-1111-111111111111', 'Test Greenhouse', 'Mac mini Lab', 'Europe/Zurich')
-    ON CONFLICT (id) DO NOTHING;
+    admin_pwd = get_password_hash(docker_stack["ADMIN_PASSWORD"])
+    admin_id = str(uuid4())
+    admin_email = docker_stack["ADMIN_EMAIL"]
+    org_id = str(uuid4())
 
-    INSERT INTO zone (id, greenhouse_id, name)
-    VALUES ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Zone A')
-    ON CONFLICT (id) DO NOTHING;
+    sql = f"""
+    -- Clean up first
+    DELETE FROM sensor_reading;
+    DELETE FROM sensor;
+    DELETE FROM device;
+    DELETE FROM users;
+    DELETE FROM greenhouse;
+    DELETE FROM organization;
 
-    INSERT INTO plant (id, zone_id, species, cultivar, planted_at, tags)
-    VALUES (
-      '33333333-3333-3333-3333-333333333333',
-      '22222222-2222-2222-2222-222222222222',
-      'Solanum lycopersicum', 'Moneymaker', now(), '{"batch":"A1"}'::jsonb
-    )
+    -- Insert organization
+    INSERT INTO organization (id, name)
+    VALUES ('{org_id}', 'Test Org')
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO greenhouse (id, organization_id, name, location)
+    VALUES ('11111111-1111-1111-1111-111111111111', '{org_id}', 'Test Greenhouse', 'Mac mini Lab')
     ON CONFLICT (id) DO NOTHING;
 
     INSERT INTO device (id, greenhouse_id, serial, type, fw_version, last_seen, status)
@@ -116,24 +143,25 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     )
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO sensor (id, device_id, plant_id, zone_id, kind, unit, calibration)
+    INSERT INTO sensor (id, device_id, kind, unit, label)
     VALUES (
       '55555555-5555-5555-5555-555555555555',
       '44444444-4444-4444-4444-444444444444',
-      '33333333-3333-3333-3333-333333333333',
-      '22222222-2222-2222-2222-222222222222',
-      'leaf_voltage', 'uV', '{}'::jsonb
+      'leaf_voltage', 'uV', 'Leaf Sensor 1'
     )
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO sensor (id, device_id, plant_id, zone_id, kind, unit, calibration)
+    INSERT INTO sensor (id, device_id, kind, unit, label)
     VALUES (
       '66666666-6666-6666-6666-666666666666',
       '44444444-4444-4444-4444-444444444444',
-      NULL, '22222222-2222-2222-2222-222222222222',
-      'air_temp', 'C', '{}'::jsonb
+      'air_temp', 'C', 'Env Sensor 1'
     )
     ON CONFLICT (id) DO NOTHING;
+
+    INSERT INTO users (id, organization_id, email, password_hash, role, name, is_active, created_at)
+    VALUES ('{admin_id}', '{org_id}', '{admin_email}', '{admin_pwd}', 'admin', 'System Admin', true, NOW())
+    ON CONFLICT DO NOTHING;
     """
     _run_sql(docker_stack, sql)
     return docker_stack
@@ -141,6 +169,8 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
 
 @pytest.fixture(scope="session")
 def base_url(seeded_stack: dict[str, str]) -> str:
+    if os.getenv("IN_DOCKER_TEST") == "1":
+        return "http://backend:8000"
     return f"https://localhost:{seeded_stack['PROXY_HTTPS_PORT']}"
 
 

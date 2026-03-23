@@ -9,7 +9,7 @@ from slowapi.util import get_remote_address
 from app.schemas.contact import ContactRequest, EarlyAccessRequest
 from app.services.email_service import send_notification_email
 
-router = APIRouter(prefix="/api", tags=["contact"])
+router = APIRouter(tags=["contact"])
 
 limiter = Limiter(key_func=get_remote_address)
 

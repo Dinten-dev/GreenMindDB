@@ -31,11 +31,12 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
       COOKIE_SECURE: "false"
-      SMTP_HOST: ${SMTP_HOST:-smtp-mail.outlook.com}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      EMAIL_RECEIVER: ${EMAIL_RECEIVER:-traver.dinten@outlook.com}
+      SMTP_FROM: ${SMTP_FROM:-}
+      CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -72,3 +73,20 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    restart: unless-stopped
+    volumes:
+      - ./compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  prometheus_data:

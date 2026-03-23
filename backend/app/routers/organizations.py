@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.user import Organization, User
 from app.schemas.organization import OrgCreate, OrgResponse
 
-router = APIRouter(prefix="/api/organizations", tags=["organizations"])
+router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
 @router.get("", response_model=OrgResponse | None)

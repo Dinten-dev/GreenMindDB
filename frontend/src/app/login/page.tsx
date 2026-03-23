@@ -84,7 +84,7 @@ export default function LoginPage() {
 
                 <p className="text-center text-sm text-apple-gray-400 mt-6">
                     Noch kein Konto?{' '}
-                    <Link href="mailto:traver.dinten@outlook.com?subject=Early Access Anfrage - GreenMind&body=Name:%0D%0AUnternehmen:%0D%0A%0D%0AErzählen Sie uns von Ihrem Gewächshausbetrieb:" className="text-gm-green-500 font-medium hover:text-gm-green-600 transition-colors">
+                    <Link href="/early-access" className="text-gm-green-500 font-medium hover:text-gm-green-600 transition-colors">
                         Konto erstellen
                     </Link>
                 </p>
