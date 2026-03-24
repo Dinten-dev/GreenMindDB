@@ -17,9 +17,9 @@ from app.auth import (
 from app.database import get_db
 from app.models.user import EmailVerification, Role, User
 from app.schemas.auth import (
+    AuthResponse,
     LoginRequest,
     SignupRequest,
-    TokenResponse,
     UserResponse,
     VerifyEmailRequest,
 )
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # ── Endpoints ────────────────────────────────────
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=201)
+@router.post("/signup", response_model=AuthResponse, status_code=201)
 async def signup(
     request: Request, data: SignupRequest, response: Response, db: Session = Depends(get_db)
 ):
@@ -67,10 +67,7 @@ async def signup(
     token = create_access_token(data={"sub": str(user.id)})
     set_auth_cookie(response, token)
 
-    return TokenResponse(
-        access_token=token,
-        user=_user_response(user),
-    )
+    return AuthResponse(user=_user_response(user))
 
 
 @router.post("/verify-email", status_code=200)
@@ -96,7 +93,7 @@ async def verify_email(data: VerifyEmailRequest, db: Session = Depends(get_db)):
     return {"detail": "Email successfully verified"}
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=AuthResponse)
 async def login(
     request: Request, data: LoginRequest, response: Response, db: Session = Depends(get_db)
 ):
@@ -114,10 +111,7 @@ async def login(
     token = create_access_token(data={"sub": str(user.id)})
     set_auth_cookie(response, token)
 
-    return TokenResponse(
-        access_token=token,
-        user=_user_response(user),
-    )
+    return AuthResponse(user=_user_response(user))
 
 
 @router.post("/logout")

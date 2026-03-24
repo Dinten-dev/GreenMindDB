@@ -5,9 +5,9 @@ ORM models and router logic for cleaner architecture.
 """
 
 from app.schemas.auth import (
+    AuthResponse,
     LoginRequest,
     SignupRequest,
-    TokenResponse,
     UserResponse,
 )
 from app.schemas.contact import ContactRequest, EarlyAccessRequest
@@ -31,7 +31,7 @@ __all__ = [
     "SignupRequest",
     "LoginRequest",
     "UserResponse",
-    "TokenResponse",
+    "AuthResponse",
     "OrgCreate",
     "OrgResponse",
     "GreenhouseCreate",

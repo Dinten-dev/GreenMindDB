@@ -44,7 +44,6 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+class AuthResponse(BaseModel):
+    detail: str = "ok"
     user: UserResponse

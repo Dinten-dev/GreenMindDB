@@ -41,6 +41,7 @@ def seed():
             password_hash=get_password_hash("Demo1234"),
             role=Role.OWNER,
             organization_id=org.id,
+            is_verified=True,
         )
         db.add(user)
         db.flush()

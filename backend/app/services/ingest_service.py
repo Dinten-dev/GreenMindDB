@@ -54,13 +54,8 @@ def process_ingestion(data: IngestRequest, device: Device, db: Session) -> int:
             db.add(sensor)
             db.flush()  # We need the sensor.id
 
-        # Process timestamp
-        ts = now
-        if reading.timestamp:
-            try:
-                ts = datetime.fromisoformat(reading.timestamp.replace("Z", "+00:00"))
-            except ValueError:
-                ts = now
+        # Use pre-validated timestamp from schema or fall back to now
+        ts = reading.timestamp or now
 
         # Create timeseries row
         sr = SensorReading(

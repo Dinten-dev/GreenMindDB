@@ -52,3 +52,29 @@ class EmailService:
 
         except Exception as e:
             logger.error(f"Failed to send Resend email to {to_email}: {e}")
+
+
+def send_notification_email(subject: str, body: str):
+    """Send an internal notification email (e.g. contact form submissions)."""
+    recipient = settings.contact_form_to
+    if not recipient:
+        logger.warning("CONTACT_FORM_TO not configured. Skipping notification email.")
+        return
+
+    if not settings.resend_api_key:
+        logger.info(f"!!! DEV-MODE: Notification email skipped. Subject: {subject} !!!")
+        return
+
+    try:
+        resend.api_key = settings.resend_api_key
+        resend.Emails.send(
+            {
+                "from": settings.email_from,
+                "to": recipient,
+                "subject": subject,
+                "text": body,
+            }
+        )
+        logger.info(f"Notification email sent: {subject}")
+    except Exception as e:
+        logger.error(f"Failed to send notification email: {e}")

@@ -17,7 +17,7 @@ class TestHealth:
 
 
 class TestAuth:
-    def test_admin_login_returns_tokens(self, base_url, seeded_stack):
+    def test_admin_login_returns_user_and_cookie(self, base_url, seeded_stack):
         resp = httpx.post(
             f"{base_url}/api/v1/auth/login",
             json={"email": seeded_stack["ADMIN_EMAIL"], "password": seeded_stack["ADMIN_PASSWORD"]},
@@ -26,8 +26,11 @@ class TestAuth:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "access_token" in data
+        # Token must NOT be in JSON body (security: httpOnly cookie only)
+        assert "access_token" not in data
         assert data["user"]["role"] == "admin"
+        # Auth cookie must be set
+        assert "access_token" in resp.cookies
 
     def test_invalid_credentials_returns_401(self, base_url):
         resp = httpx.post(

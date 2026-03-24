@@ -1,16 +1,22 @@
 """Ingestion request/response schemas."""
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
 
 
 class ReadingPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     sensor_kind: str
     value: float
     unit: str
-    timestamp: str | None = None
+    timestamp: datetime | None = None
 
 
 class IngestRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     measurement_id: str
     device_serial: str
     aggregation_window: str | None = None

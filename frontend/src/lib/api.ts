@@ -44,21 +44,20 @@ export interface AuthUser {
     is_active: boolean;
 }
 
-interface TokenResponse {
-    access_token: string;
-    token_type: string;
+interface AuthResponse {
+    detail: string;
     user: AuthUser;
 }
 
-export async function apiSignup(email: string, password: string, name: string): Promise<TokenResponse> {
-    return apiFetch<TokenResponse>('/auth/signup', {
+export async function apiSignup(email: string, password: string, name: string): Promise<AuthResponse> {
+    return apiFetch<AuthResponse>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ email, password, name }),
     });
 }
 
-export async function apiLogin(email: string, password: string): Promise<TokenResponse> {
-    return apiFetch<TokenResponse>('/auth/login', {
+export async function apiLogin(email: string, password: string): Promise<AuthResponse> {
+    return apiFetch<AuthResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
     });
