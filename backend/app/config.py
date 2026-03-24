@@ -20,18 +20,11 @@ class Settings(BaseSettings):
     cookie_domain: str = ""
     cookie_secure: bool = False
 
-    # SMTP / Email
-    smtp_host: str = ""
-    smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
-    smtp_from: str = ""
-    contact_form_to: str = ""
-
-    # Resend Application Variables
+    # Resend / Email
     resend_api_key: str = ""
     email_from: str = "onboarding@biolingo.org"
     frontend_url: str = "https://biolingo.org"
+    contact_form_to: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod
