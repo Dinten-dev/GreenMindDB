@@ -48,7 +48,7 @@ graph TD;
     Pi -->|POST /api/v1/ingest| API[FastAPI Backend :8000]
     API -->|SQLAlchemy| DB[(TimescaleDB :5432)]
     UI[Next.js Frontend :3000] -->|REST API| API
-    API -->|SMTP| Email[Email Notifications]
+    API -->|Resend API| Email[Email Notifications]
 ```
 
 ### Data Flow
@@ -68,6 +68,7 @@ graph TD;
 | **Backend**    | FastAPI, SQLAlchemy, Alembic, Pydantic            |
 | **Database**   | PostgreSQL 15 + TimescaleDB                       |
 | **Auth**       | JWT (httpOnly cookies), bcrypt                    |
+| **Email**      | Resend (transactional email API)                  |
 | **Deployment** | Docker Compose                                    |
 | **CI/CD**      | GitHub Actions                                    |
 | **Linting**    | ruff, black (Python) · ESLint, Prettier (TS)      |
@@ -86,7 +87,8 @@ GreenMindDB/
 │   │   ├── auth.py           # JWT, password hashing, auth deps
 │   │   ├── logging_config.py # Structured logging setup
 │   │   ├── models/           # SQLAlchemy ORM models
-│   │   └── routers/          # API route handlers
+│   │   ├── routers/          # API route handlers
+│   │   └── services/         # Business logic (email, etc.)
 │   ├── alembic/              # Database migrations
 │   ├── scripts/              # Utility scripts (seeding, import)
 │   ├── tests/                # pytest test suite
@@ -281,14 +283,23 @@ make build     # Build all Docker images
 # or: docker compose build
 ```
 
-### Production Deployment
+### Production Deployment (Hetzner)
 
-For production deployments, use the production compose file:
+Deploy to the Hetzner production server with the automated script:
 ```bash
-docker compose -f compose/docker-compose.yml --env-file compose/.env up -d
+./scripts/deploy_production.sh
 ```
 
-See `compose/` for production-specific configuration (Caddy reverse proxy, Prometheus monitoring).
+This will:
+1. Sync code via `rsync` (excludes `node_modules`, `.env`, etc.)
+2. **Skip** overwriting the production `.env` (protects secrets)
+3. Build Docker images on the server
+4. Run Alembic migrations automatically
+5. Restart all containers
+
+> **⚠️ Important:** The `.env` on the server is never overwritten by deploy.
+> To change production environment variables, SSH into the server and edit `~/GreenMindDB/.env` directly,
+> then restart with `docker compose -f docker-compose.prod.yml restart backend`.
 
 ---
 
@@ -307,14 +318,13 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `CORS_ORIGINS`                    | Allowed CORS origins (comma-separated)      | `http://localhost:3000`       |
 | `JWT_SECRET_KEY`                  | JWT signing key (min 32 chars)              | *(required)*                  |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Token validity in minutes                   | `10080` (7 days)              |
+| `COOKIE_SECURE`                   | Set `true` in production (HTTPS)            | `false`                       |
 | `LOCAL_DATA_ROOT`                 | Local data storage root (macOS iCloud fix)  | `./data`                      |
 | `PGDATA_DIR`                      | PostgreSQL data directory                   | `./postgres_data`             |
-| `SMTP_HOST`                       | SMTP server for notifications               | `smtp.gmail.com`              |
-| `SMTP_PORT`                       | SMTP port                                   | `587`                         |
-| `SMTP_USER`                       | SMTP username                               | *(optional)*                  |
-| `SMTP_PASSWORD`                   | SMTP password                               | *(optional)*                  |
-| `SMTP_FROM`                       | Outgoing sender email address               | *(optional)*                  |
-| `CONTACT_FORM_TO`                 | Contact form recipient email                | *(optional)*                  |
+| `RESEND_API_KEY`                  | Resend API key for transactional email      | *(optional)*                  |
+| `EMAIL_FROM`                      | Sender address for outgoing email           | `onboarding@biolingo.org`     |
+| `FRONTEND_URL`                    | Frontend URL (used in email links)          | `https://biolingo.org`        |
+| `CONTACT_FORM_TO`                 | Recipient for contact/early-access emails   | *(optional)*                  |
 
 > **🔒 Never commit `.env` files with real credentials.** Use `.env.example` as a template.
 
@@ -524,6 +534,17 @@ docker compose up -d
 | Method | Endpoint          | Description                                    |
 |--------|-------------------|------------------------------------------------|
 | WS     | `/api/v1/ws/greenhouse/{id}` | Stream live sensor readings             |
+
+### Contact & Early Access
+| Method | Endpoint               | Description                                    |
+|--------|------------------------|------------------------------------------------|
+| POST   | `/api/v1/contact`       | Submit contact form (public, rate-limited)      |
+| POST   | `/api/v1/early-access`  | Submit early-access request (public)            |
+| GET    | `/api/v1/submissions`   | List all form submissions (admin only)          |
+
+> All submissions are persisted to the database as a durable backup.
+> Email notifications via Resend are sent as best-effort.
+> Filter by type: `GET /api/v1/submissions?form_type=early_access`
 
 ### Device Pairing Flow
 1. User generates a 10-minute pairing code via the dashboard
