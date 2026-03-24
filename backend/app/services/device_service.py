@@ -23,7 +23,9 @@ PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
 
 
-def list_devices(db: Session, user: User) -> list[DeviceResponse]:
+def list_devices(
+    db: Session, user: User, *, greenhouse_id: str | None = None
+) -> list[DeviceResponse]:
     if not user.organization_id:
         return []
 
@@ -36,7 +38,10 @@ def list_devices(db: Session, user: User) -> list[DeviceResponse]:
     if not gh_ids:
         return []
 
-    devices = db.query(Device).filter(Device.greenhouse_id.in_(gh_ids)).all()
+    query = db.query(Device).filter(Device.greenhouse_id.in_(gh_ids))
+    if greenhouse_id:
+        query = query.filter(Device.greenhouse_id == greenhouse_id)
+    devices = query.all()
     results = []
     for dev in devices:
         sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.device_id == dev.id).scalar()

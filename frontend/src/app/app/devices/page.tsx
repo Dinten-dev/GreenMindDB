@@ -61,7 +61,7 @@ export default function DevicesPage() {
                 <button
                     onClick={() => { setShowPairing(true); setPairingCode(null); }}
                     disabled={greenhouses.length === 0}
-                    className="px-4 py-2 bg-gm-green-500 text-white rounded-full text-sm font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-gm-green-500 text-white rounded-full text-sm font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                     + Pair Device
                 </button>

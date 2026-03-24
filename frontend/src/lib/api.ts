@@ -144,8 +144,9 @@ export interface PairingCode {
     greenhouse_id: string;
 }
 
-export async function apiListDevices(): Promise<DeviceInfo[]> {
-    return apiFetch<DeviceInfo[]>('/devices');
+export async function apiListDevices(greenhouse_id?: string): Promise<DeviceInfo[]> {
+    const params = greenhouse_id ? { greenhouse_id } : undefined;
+    return apiFetch<DeviceInfo[]>('/devices', { params });
 }
 
 export async function apiGeneratePairingCode(greenhouse_id: string): Promise<PairingCode> {

@@ -22,11 +22,12 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 @router.get("", response_model=list[DeviceResponse])
 async def handle_list_devices(
+    greenhouse_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List all devices in user's org greenhouses."""
-    return list_devices(db, current_user)
+    """List devices. Optionally filter by greenhouse_id."""
+    return list_devices(db, current_user, greenhouse_id=greenhouse_id)
 
 
 class HeartbeatRequest(BaseModel):
