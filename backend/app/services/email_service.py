@@ -1,59 +1,54 @@
-"""Email service – encapsulates SMTP logic for contact and notification emails.
+import logging
 
-Extracted from the contact router to follow the service layer pattern.
-This makes email sending testable, reusable, and keeps routers thin.
-"""
-
-import smtplib
-from email.message import EmailMessage
-
-from fastapi import HTTPException
+import resend
 
 from app.config import settings
-from app.logging_config import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
-def send_notification_email(subject: str, body: str) -> None:
-    """Send a plain-text email via SMTP.
+class EmailService:
+    """Handles transactional email deliveries (like verification and alerts)."""
 
-    Args:
-        subject: Email subject line.
-        body: Plain-text email body.
+    @staticmethod
+    def send_verification_email(to_email: str, token: str):
+        if not settings.resend_api_key:
+            # Fallback for local development if the API key is not set
+            logger.info(f"!!! DEV-MODE: Verification Token for {to_email}: {token} !!!")
+            return
 
-    Raises:
-        HTTPException: If email delivery fails (502).
-    """
-    if not settings.smtp_user or not settings.smtp_password:
-        logger.warning(
-            "SMTP credentials not configured – email not sent",
-            extra={"subject": subject},
-        )
-        logger.info("Would have sent email:\nSubject: %s\n%s", subject, body)
-        return
+        try:
+            resend.api_key = settings.resend_api_key
 
-    if not settings.contact_form_to:
-        logger.warning("No contact form receiver configured – skipping email")
-        return
+            # The URL pointing to the Next.js frontend verify page
+            verification_link = f"{settings.frontend_url}/verify?token={token}"
 
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.smtp_from or settings.smtp_user
-    msg["To"] = settings.contact_form_to
-    msg.set_content(body)
+            html_content = f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #1d1d1f;">Willkommen bei GreenMind</h2>
+                <p style="color: #515154; font-size: 16px; line-height: 1.5;">
+                    Vielen Dank für deine Registrierung auf der Plattform.
+                </p>
+                <p style="color: #515154; font-size: 16px; line-height: 1.5;">
+                    Bitte verifiziere deine E-Mail-Adresse, um unsere Edge Gateways provisionieren zu können:
+                </p>
+                <div style="margin: 30px 0;">
+                    <a href="{verification_link}" style="background-color: #0071e3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">Account aktivieren</a>
+                </div>
+                <p style="color: #86868b; font-size: 12px;">Wenn du diesen Account nicht angefordert hast, kannst du diese E-Mail ignorieren.</p>
+            </div>
+            """
 
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.smtp_user, settings.smtp_password)
-            server.send_message(msg)
-        logger.info("Email sent successfully", extra={"subject": subject})
-    except Exception as exc:
-        logger.error("Failed to send email: %s", exc, extra={"subject": subject})
-        raise HTTPException(
-            status_code=502,
-            detail="Email delivery failed. Please try again later.",
-        ) from exc
+            resend.Emails.send(
+                {
+                    "from": settings.email_from,
+                    "to": to_email,
+                    "subject": "Bestätige deine GreenMind Anmeldung",
+                    "html": html_content,
+                }
+            )
+
+            logger.info(f"Verification email successfully dispatched via Resend to {to_email}")
+
+        except Exception as e:
+            logger.error(f"Failed to send Resend email to {to_email}: {e}")

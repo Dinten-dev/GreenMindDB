@@ -23,6 +23,7 @@ from app.schemas.auth import (
     UserResponse,
     VerifyEmailRequest,
 )
+from app.services.email_service import EmailService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -60,7 +61,9 @@ async def signup(
     db.commit()
     db.refresh(user)
 
-    # Note: In a real app we would send the email here
+    # Dispatch Verification Email
+    EmailService.send_verification_email(to_email=user.email, token=token_str)
+
     token = create_access_token(data={"sub": str(user.id)})
     set_auth_cookie(response, token)
 

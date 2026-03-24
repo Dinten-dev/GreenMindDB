@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     contact_form_to: str = ""
 
+    # Resend Application Variables
+    resend_api_key: str = ""
+    email_from: str = "onboarding@biolingo.org"
+    frontend_url: str = "https://biolingo.org"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value):

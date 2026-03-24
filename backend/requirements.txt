@@ -14,3 +14,4 @@ bcrypt==4.0.1
 python-jose[cryptography]==3.3.0
 slowapi==0.1.9
 prometheus-fastapi-instrumentator==7.0.0
+resend==2.1.0
