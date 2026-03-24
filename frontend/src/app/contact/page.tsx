@@ -25,9 +25,9 @@ export default function ContactPage() {
             await apiSubmitContact(formData);
             setStatus('success');
             setFormData({ name: '', email: '', company: '', message: '', website: '' });
-        } catch (err: any) {
+        } catch (err: unknown) {
             setStatus('error');
-            setErrorMessage(err.message || 'Ein unerwarteter Fehler ist aufgetreten.');
+            setErrorMessage(err instanceof Error ? err.message : 'Ein unerwarteter Fehler ist aufgetreten.');
         }
     };
 
