@@ -45,10 +45,15 @@ rsync -avz --delete \
     "${LOCAL_DIR}/" \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 
-# 3. .env prüfen/kopieren
+# 3. .env prüfen – nur kopieren wenn auf dem Server noch keine existiert
 echo "📄 Checking .env on remote..."
-ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "if [ ! -f ${REMOTE_DIR}/.env ]; then echo '⚠️ No .env found on remote. Copying local .env...'; fi"
-scp ${SSH_OPTS} "${LOCAL_DIR}/.env" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/.env"
+if ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "test -f ${REMOTE_DIR}/.env"; then
+    echo "✅ .env already exists on remote – skipping (will NOT overwrite production secrets)."
+else
+    echo "⚠️ No .env found on remote. Copying local .env as initial template..."
+    scp ${SSH_OPTS} "${LOCAL_DIR}/.env" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/.env"
+    echo "⚠️ IMPORTANT: Please SSH into the server and update ${REMOTE_DIR}/.env with production values!"
+fi
 
 # 4. Deploy with Docker Compose auf dem Server
 echo "🐳 Building and starting Docker containers on remote server..."
