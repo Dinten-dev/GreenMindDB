@@ -56,13 +56,11 @@ services:
       S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_BUCKET: greenmind-exports
       S3_PROVIDER: minio
-      # SMTP
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_FROM: ${SMTP_FROM}
-      CONTACT_FORM_TO: ${CONTACT_FORM_TO}
+      # Resend / Email
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-onboarding@biolingo.org}
+      FRONTEND_URL: ${FRONTEND_URL:-https://biolingo.org}
+      CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
       # Gunicorn/Uvicorn settings
       API_PORT: 8000
       GUNICORN_WORKERS: 4
