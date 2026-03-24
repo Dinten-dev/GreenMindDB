@@ -1,5 +1,6 @@
 """All SQLAlchemy models – re-exported for Alembic and app use."""
 
+from app.models.form_submission import FormSubmission
 from app.models.ingest_log import IngestLog
 from app.models.master import Device, Greenhouse, Sensor
 from app.models.pairing import PairingCode
@@ -17,4 +18,5 @@ __all__ = [
     "PairingCode",
     "IngestLog",
     "EmailVerification",
+    "FormSubmission",
 ]
