@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models.user import User
+from app.schemas.device import PairingCodeResponse
 from app.schemas.greenhouse import GreenhouseCreate, GreenhouseOverview, GreenhouseResponse
+from app.services.device_service import generate_pairing_code
 from app.services.greenhouse_service import (
     create_greenhouse,
     get_greenhouse,
@@ -54,3 +56,13 @@ async def handle_get_greenhouse_overview(
 ):
     """Get overview stats for a greenhouse."""
     return get_greenhouse_overview(db, current_user, greenhouse_id)
+
+
+@router.post("/{greenhouse_id}/pairing-codes", response_model=PairingCodeResponse, status_code=201)
+async def handle_generate_pairing_code(
+    greenhouse_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate a short-lived pairing code for a greenhouse."""
+    return generate_pairing_code(db, current_user, greenhouse_id)

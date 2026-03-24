@@ -22,3 +22,6 @@ class PairingCode(Base):
     device_id = Column(
         UUID(as_uuid=True), ForeignKey("device.id", ondelete="SET NULL"), nullable=True
     )
+    created_by_user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )

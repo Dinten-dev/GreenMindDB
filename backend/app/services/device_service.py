@@ -16,7 +16,6 @@ from app.schemas.device import (
     DeviceResponse,
     PairDeviceRequest,
     PairDeviceResponse,
-    PairingCodeRequest,
     PairingCodeResponse,
 )
 
@@ -60,7 +59,7 @@ def list_devices(db: Session, user: User) -> list[DeviceResponse]:
     return results
 
 
-def generate_pairing_code(db: Session, user: User, data: PairingCodeRequest) -> PairingCodeResponse:
+def generate_pairing_code(db: Session, user: User, greenhouse_id: str) -> PairingCodeResponse:
     if not user.organization_id:
         raise HTTPException(status_code=400, detail="User must belong to an organization")
 
@@ -68,7 +67,7 @@ def generate_pairing_code(db: Session, user: User, data: PairingCodeRequest) -> 
     gh = (
         db.query(Greenhouse)
         .filter(
-            Greenhouse.id == data.greenhouse_id,
+            Greenhouse.id == greenhouse_id,
             Greenhouse.organization_id == user.organization_id,
         )
         .first()
@@ -92,9 +91,7 @@ def generate_pairing_code(db: Session, user: User, data: PairingCodeRequest) -> 
 
     expires_at = datetime.now(UTC) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES)
     pc = PairingCode(
-        code=code,
-        greenhouse_id=gh.id,
-        expires_at=expires_at,
+        code=code, greenhouse_id=gh.id, expires_at=expires_at, created_by_user_id=user.id
     )
     db.add(pc)
     db.commit()

@@ -159,8 +159,8 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     )
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO users (id, organization_id, email, password_hash, role, name, is_active, created_at)
-    VALUES ('{admin_id}', '{org_id}', '{admin_email}', '{admin_pwd}', 'admin', 'System Admin', true, NOW())
+    INSERT INTO users (id, organization_id, email, password_hash, role, name, is_active, is_verified, created_at)
+    VALUES ('{admin_id}', '{org_id}', '{admin_email}', '{admin_pwd}', 'admin', 'System Admin', true, true, NOW())
     ON CONFLICT DO NOTHING;
     """
     _run_sql(docker_stack, sql)
@@ -207,6 +207,9 @@ def operator_user_and_token(
     )
     assert create_resp.status_code == 201, f"Operator creation failed: {create_resp.text}"
     user_id = create_resp.json()["id"]
+
+    # Manually verify the operator for the test using the stack env
+    _run_sql(seeded_stack, f"UPDATE users SET is_verified = true WHERE id = '{user_id}';")
 
     # Login as operator
     login_resp = httpx.post(

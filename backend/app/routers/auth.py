@@ -1,5 +1,8 @@
 """Authentication API endpoints: signup, login, logout, me."""
 
+import secrets
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -12,8 +15,14 @@ from app.auth import (
     verify_password,
 )
 from app.database import get_db
-from app.models.user import Role, User
-from app.schemas.auth import LoginRequest, SignupRequest, TokenResponse, UserResponse
+from app.models.user import EmailVerification, Role, User
+from app.schemas.auth import (
+    LoginRequest,
+    SignupRequest,
+    TokenResponse,
+    UserResponse,
+    VerifyEmailRequest,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,11 +46,21 @@ async def signup(
         name=data.name or data.email.split("@")[0],
         password_hash=get_password_hash(data.password),
         role=Role.OWNER,
+        is_verified=False,
     )
     db.add(user)
+    db.flush()  # get user.id
+
+    # Create email verification token
+    token_str = secrets.token_hex(16)
+    verification = EmailVerification(
+        user_id=user.id, token=token_str, expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.add(verification)
     db.commit()
     db.refresh(user)
 
+    # Note: In a real app we would send the email here
     token = create_access_token(data={"sub": str(user.id)})
     set_auth_cookie(response, token)
 
@@ -49,6 +68,29 @@ async def signup(
         access_token=token,
         user=_user_response(user),
     )
+
+
+@router.post("/verify-email", status_code=200)
+async def verify_email(data: VerifyEmailRequest, db: Session = Depends(get_db)):
+    """Verify a user's email using the token."""
+    verification = (
+        db.query(EmailVerification)
+        .filter(EmailVerification.token == data.token, EmailVerification.used_at.is_(None))
+        .first()
+    )
+
+    if not verification or verification.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
+        )
+
+    verification.used_at = datetime.utcnow()
+    user = db.query(User).filter(User.id == verification.user_id).first()
+    if user:
+        user.is_verified = True
+
+    db.commit()
+    return {"detail": "Email successfully verified"}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -63,6 +105,8 @@ async def login(
         )
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    if not user.is_verified:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
 
     token = create_access_token(data={"sub": str(user.id)})
     set_auth_cookie(response, token)
