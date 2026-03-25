@@ -225,3 +225,32 @@ export async function apiSubmitEarlyAccess(payload: EarlyAccessPayload): Promise
         body: JSON.stringify({ message: '', website: '', ...payload }),
     });
 }
+
+// ── Sensor Data Export ───────────────────────────
+export async function apiExportSensorData(sensorId: string, range: string = '24h'): Promise<void> {
+    const url = `${API_BASE}/sensors/${sensorId}/export?range=${range}`;
+    const res = await fetch(url, {
+        credentials: 'include',
+    });
+
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail || `Export failed: ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : `sensor_export_${range}.zip`;
+
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
+}

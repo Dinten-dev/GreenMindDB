@@ -295,3 +295,201 @@ html {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
+
+/* ══════════════════════════════════════════════════════
+   DASHBOARD – Light Liquid Glassmorphism Design System
+   ══════════════════════════════════════════════════════ */
+
+/* ── Dashboard Variables ──────────────── */
+:root {
+  --dash-bg: #F5F5F7;
+  --dash-surface: rgba(255, 255, 255, 0.72);
+  --dash-surface-hover: rgba(255, 255, 255, 0.85);
+  --dash-border: rgba(0, 0, 0, 0.06);
+  --dash-border-accent: rgba(16, 185, 129, 0.2);
+  --dash-text: #1d1d1f;
+  --dash-text-muted: #6e6e73;
+  --dash-text-dim: #86868b;
+  --dash-accent: #10b981;
+  --dash-accent-light: #34d399;
+  --dash-accent-glow: rgba(16, 185, 129, 0.15);
+  --dash-glass-blur: 16px;
+  --dash-glass-border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ── Glass Card ──────────────── */
+.glass-card {
+  background: var(--dash-surface);
+  backdrop-filter: blur(var(--dash-glass-blur));
+  -webkit-backdrop-filter: blur(var(--dash-glass-blur));
+  border: 1px solid var(--dash-border);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 24px rgba(0, 0, 0, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.glass-card:hover {
+  background: var(--dash-surface-hover);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transform: translateY(-2px);
+}
+
+/* ── Glass Sidebar ──────────────── */
+.glass-sidebar {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.02);
+}
+
+/* ── Glass Table ──────────────── */
+.glass-table {
+  background: var(--dash-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--dash-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+}
+
+/* ── Accent Glow ──────────────── */
+.accent-glow {
+  position: relative;
+}
+.accent-glow::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(52, 211, 153, 0.05));
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.accent-glow:hover::after {
+  opacity: 1;
+}
+
+/* ── Liquid Background ──────────────── */
+.liquid-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--dash-bg);
+}
+
+.liquid-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  will-change: transform;
+}
+
+.liquid-blob-1 {
+  width: 600px;
+  height: 600px;
+  top: -10%;
+  left: -5%;
+  background: radial-gradient(circle, rgba(167, 243, 208, 0.5) 0%, rgba(52, 211, 153, 0.2) 50%, transparent 70%);
+  animation: liquid-drift-a 20s ease-in-out infinite alternate;
+}
+
+.liquid-blob-2 {
+  width: 500px;
+  height: 500px;
+  bottom: -5%;
+  right: -5%;
+  background: radial-gradient(circle, rgba(110, 231, 183, 0.4) 0%, rgba(16, 185, 129, 0.15) 50%, transparent 70%);
+  animation: liquid-drift-b 25s ease-in-out infinite alternate;
+}
+
+.liquid-blob-3 {
+  width: 450px;
+  height: 450px;
+  top: 40%;
+  left: 50%;
+  background: radial-gradient(circle, rgba(209, 250, 229, 0.5) 0%, rgba(5, 150, 105, 0.1) 50%, transparent 70%);
+  animation: liquid-drift-c 22s ease-in-out infinite alternate;
+}
+
+@keyframes liquid-drift-a {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(40px, 30px) scale(1.06); }
+  100% { transform: translate(-20px, 50px) scale(0.96); }
+}
+
+@keyframes liquid-drift-b {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-40px, -25px) scale(1.04); }
+  100% { transform: translate(30px, -40px) scale(0.94); }
+}
+
+@keyframes liquid-drift-c {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(25px, -35px) scale(1.08); }
+  100% { transform: translate(-30px, 20px) scale(0.95); }
+}
+
+/* ── Nav Active Indicator ──────────────── */
+.nav-active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(52, 211, 153, 0.08));
+  color: #059669;
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.15);
+}
+
+/* ── Export Progress Bar ──────────────── */
+.export-progress {
+  height: 3px;
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.export-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  border-radius: 2px;
+  transition: width 200ms ease;
+}
+
+/* ── Mobile Drawer Overlay ──────────────── */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+.drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 50;
+  transform: translateX(-100%);
+  transition: transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.drawer-panel.open {
+  transform: translateX(0);
+}
