@@ -16,6 +16,7 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models.user import EmailVerification, Role, User
+from app.rate_limit import limiter
 from app.schemas.auth import (
     AuthResponse,
     LoginRequest,
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/signup", response_model=AuthResponse, status_code=201)
+@limiter.limit("5/minute")
 async def signup(
     request: Request, data: SignupRequest, response: Response, db: Session = Depends(get_db)
 ):
@@ -71,7 +73,8 @@ async def signup(
 
 
 @router.post("/verify-email", status_code=200)
-async def verify_email(data: VerifyEmailRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+async def verify_email(request: Request, data: VerifyEmailRequest, db: Session = Depends(get_db)):
     """Verify a user's email using the token."""
     verification = (
         db.query(EmailVerification)
@@ -94,6 +97,7 @@ async def verify_email(data: VerifyEmailRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
+@limiter.limit("5/minute")
 async def login(
     request: Request, data: LoginRequest, response: Response, db: Session = Depends(get_db)
 ):

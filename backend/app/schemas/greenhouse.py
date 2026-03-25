@@ -13,7 +13,7 @@ class GreenhouseResponse(BaseModel):
     name: str
     location: str | None = None
     created_at: str
-    device_count: int = 0
+    gateway_count: int = 0
     sensor_count: int = 0
 
     class Config:
@@ -23,7 +23,7 @@ class GreenhouseResponse(BaseModel):
 class GreenhouseOverview(BaseModel):
     id: str
     name: str
-    total_devices: int
-    online_devices: int
+    total_gateways: int
+    online_gateways: int
     total_sensors: int
     readings_24h: int

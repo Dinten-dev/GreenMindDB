@@ -3,10 +3,19 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { apiGetMe, AuthUser } from '@/lib/api';
 
 export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const pathname = usePathname();
+
+    // Check if user is logged in
+    useEffect(() => {
+        apiGetMe()
+            .then(setUser)
+            .catch(() => setUser(null));
+    }, [pathname]);
 
     // Close menu when route changes
     useEffect(() => {
@@ -60,15 +69,29 @@ export default function Navbar() {
 
                     {/* Desktop CTAs */}
                     <div className="hidden md:flex items-center gap-3 relative z-[110]">
-                        <Link href="/login" className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200">
-                            Anmelden
-                        </Link>
-                        <Link
-                            href="/early-access"
-                            className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
-                        >
-                            Loslegen
-                        </Link>
+                        {user ? (
+                            <Link
+                                href="/app/dashboard"
+                                className="flex items-center gap-2 text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
+                            >
+                                <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
+                                    {(user.name || user.email)[0].toUpperCase()}
+                                </span>
+                                {user.name || user.email.split('@')[0]}
+                            </Link>
+                        ) : (
+                            <>
+                                <Link href="/login" className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200">
+                                    Anmelden
+                                </Link>
+                                <Link
+                                    href="/early-access"
+                                    className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
+                                >
+                                    Loslegen
+                                </Link>
+                            </>
+                        )}
                     </div>
 
                     {/* Mobile Hamburger Button */}
@@ -103,18 +126,29 @@ export default function Navbar() {
                 </div>
 
                 <div className="mt-auto flex flex-col gap-4">
-                    <Link
-                        href="/login"
-                        className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
-                    >
-                        Anmelden
-                    </Link>
-                    <Link
-                        href="/early-access"
-                        className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
-                    >
-                        Loslegen
-                    </Link>
+                    {user ? (
+                        <Link
+                            href="/app/dashboard"
+                            className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
+                        >
+                            Dashboard · {user.name || user.email.split('@')[0]}
+                        </Link>
+                    ) : (
+                        <>
+                            <Link
+                                href="/login"
+                                className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
+                            >
+                                Anmelden
+                            </Link>
+                            <Link
+                                href="/early-access"
+                                className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
+                            >
+                                Loslegen
+                            </Link>
+                        </>
+                    )}
                 </div>
             </div>
         </>

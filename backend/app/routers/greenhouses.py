@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models.user import User
-from app.schemas.device import PairingCodeResponse
+from app.schemas.gateway import PairingCodeResponse
 from app.schemas.greenhouse import GreenhouseCreate, GreenhouseOverview, GreenhouseResponse
-from app.services.device_service import generate_pairing_code
+from app.services.gateway_service import generate_pairing_code
 from app.services.greenhouse_service import (
     create_greenhouse,
     get_greenhouse,

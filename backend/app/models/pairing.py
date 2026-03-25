@@ -1,4 +1,4 @@
-"""Device pairing code model."""
+"""Gateway pairing code model."""
 
 import uuid
 
@@ -19,8 +19,8 @@ class PairingCode(Base):
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
-    device_id = Column(
-        UUID(as_uuid=True), ForeignKey("device.id", ondelete="SET NULL"), nullable=True
+    gateway_id = Column(
+        UUID(as_uuid=True), ForeignKey("gateway.id", ondelete="SET NULL"), nullable=True
     )
     created_by_user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False

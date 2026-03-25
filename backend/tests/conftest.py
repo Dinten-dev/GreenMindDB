@@ -111,7 +111,7 @@ def docker_stack() -> dict[str, str]:
 
 @pytest.fixture(scope="session")
 def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
-    """Seed master data: greenhouse, zone, plant, device, sensor."""
+    """Seed master data: greenhouse, gateway, sensor."""
     admin_pwd = get_password_hash(docker_stack["ADMIN_PASSWORD"])
     admin_id = str(uuid4())
     admin_email = docker_stack["ADMIN_EMAIL"]
@@ -121,7 +121,7 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     -- Clean up first
     DELETE FROM sensor_reading;
     DELETE FROM sensor;
-    DELETE FROM device;
+    DELETE FROM gateway;
     DELETE FROM users;
     DELETE FROM greenhouse;
     DELETE FROM organization;
@@ -135,27 +135,27 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     VALUES ('11111111-1111-1111-1111-111111111111', '{org_id}', 'Test Greenhouse', 'Mac mini Lab')
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO device (id, greenhouse_id, serial, type, fw_version, last_seen, status)
+    INSERT INTO gateway (id, greenhouse_id, hardware_id, name, fw_version, last_seen, status)
     VALUES (
       '44444444-4444-4444-4444-444444444444',
       '11111111-1111-1111-1111-111111111111',
-      'MACMINI-DEV-001', 'gateway', '1.0.0', now(), 'online'
+      'RPi-TEST-001', 'Test Gateway', '1.0.0', now(), 'online'
     )
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO sensor (id, device_id, kind, unit, label)
+    INSERT INTO sensor (id, gateway_id, mac_address, name, sensor_type, last_seen, status)
     VALUES (
       '55555555-5555-5555-5555-555555555555',
       '44444444-4444-4444-4444-444444444444',
-      'leaf_voltage', 'uV', 'Leaf Sensor 1'
+      'AA:BB:CC:DD:EE:01', 'Leaf Sensor 1', 'leaf_voltage', now(), 'online'
     )
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO sensor (id, device_id, kind, unit, label)
+    INSERT INTO sensor (id, gateway_id, mac_address, name, sensor_type, last_seen, status)
     VALUES (
       '66666666-6666-6666-6666-666666666666',
       '44444444-4444-4444-4444-444444444444',
-      'air_temp', 'C', 'Env Sensor 1'
+      'AA:BB:CC:DD:EE:02', 'Env Sensor 1', 'air_temp', now(), 'online'
     )
     ON CONFLICT (id) DO NOTHING;
 

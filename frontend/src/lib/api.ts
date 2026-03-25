@@ -95,15 +95,15 @@ export interface Greenhouse {
     name: string;
     location: string | null;
     created_at: string;
-    device_count: number;
+    gateway_count: number;
     sensor_count: number;
 }
 
 export interface GreenhouseOverview {
     id: string;
     name: string;
-    total_devices: number;
-    online_devices: number;
+    total_gateways: number;
+    online_gateways: number;
     total_sensors: number;
     readings_24h: number;
 }
@@ -123,19 +123,20 @@ export async function apiGetGreenhouseOverview(id: string): Promise<GreenhouseOv
     return apiFetch<GreenhouseOverview>(`/greenhouses/${id}/overview`);
 }
 
-// ── Devices ──────────────────────────────────
-export interface DeviceInfo {
+// ── Gateways ─────────────────────────────────
+export interface GatewayInfo {
     id: string;
-    serial: string;
+    greenhouse_id: string;
+    greenhouse_name: string | null;
+    hardware_id: string;
     name: string | null;
-    type: string;
+    local_ip: string | null;
     fw_version: string | null;
     status: string;
+    is_active: boolean;
     last_seen: string | null;
-    greenhouse_id: string | null;
-    greenhouse_name: string | null;
-    sensor_count: number;
     paired_at: string | null;
+    sensor_count: number;
 }
 
 export interface PairingCode {
@@ -144,28 +145,37 @@ export interface PairingCode {
     greenhouse_id: string;
 }
 
-export async function apiListDevices(greenhouse_id?: string): Promise<DeviceInfo[]> {
+export async function apiListGateways(greenhouse_id?: string): Promise<GatewayInfo[]> {
     const params = greenhouse_id ? { greenhouse_id } : undefined;
-    return apiFetch<DeviceInfo[]>('/devices', { params });
+    return apiFetch<GatewayInfo[]>('/gateways', { params });
 }
 
 export async function apiGeneratePairingCode(greenhouse_id: string): Promise<PairingCode> {
-    return apiFetch<PairingCode>('/devices/pairing-code', {
+    return apiFetch<PairingCode>('/gateways/pairing-code', {
         method: 'POST',
         body: JSON.stringify({ greenhouse_id }),
     });
 }
 
-// ── Sensors ──────────────────────────────────
+// ── Sensors (ESP32) ──────────────────────────
 export interface SensorInfo {
     id: string;
-    device_id: string;
-    kind: string;
-    unit: string;
-    label: string | null;
-    device_serial: string | null;
-    device_name: string | null;
-    device_status: string | null;
+    gateway_id: string;
+    mac_address: string;
+    name: string | null;
+    sensor_type: string;
+    status: string;
+    last_seen: string | null;
+    claimed_at: string | null;
+    gateway_name: string | null;
+    gateway_hardware_id: string | null;
+}
+
+export async function apiListSensors(greenhouse_id?: string, gateway_id?: string): Promise<SensorInfo[]> {
+    const params: Record<string, string> = {};
+    if (greenhouse_id) params.greenhouse_id = greenhouse_id;
+    if (gateway_id) params.gateway_id = gateway_id;
+    return apiFetch<SensorInfo[]>('/sensors', { params: Object.keys(params).length ? params : undefined });
 }
 
 export interface DataPoint {
@@ -173,21 +183,15 @@ export interface DataPoint {
     value: number;
 }
 
-export interface SensorData {
+export interface SensorDataResponse {
     sensor_id: string;
     kind: string;
     unit: string;
-    label: string | null;
     data: DataPoint[];
 }
 
-export async function apiListSensors(greenhouse_id?: string): Promise<SensorInfo[]> {
-    const params = greenhouse_id ? { greenhouse_id } : undefined;
-    return apiFetch<SensorInfo[]>('/sensors', { params });
-}
-
-export async function apiGetSensorData(sensor_id: string, range: string = '24h'): Promise<SensorData> {
-    return apiFetch<SensorData>(`/sensors/${sensor_id}/data`, { params: { range } });
+export async function apiGetSensorData(sensorId: string, range: string = '24h'): Promise<SensorDataResponse[]> {
+    return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params: { range } });
 }
 
 // ── Contact & Early Access ───────────────────

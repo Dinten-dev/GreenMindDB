@@ -18,23 +18,29 @@ logger = get_logger(__name__)
 # ── Router imports ───────────────────────────────────────────────────
 
 
+from app.rate_limit import limiter  # noqa: E402
 from app.routers import (  # noqa: E402
     auth_router,
     contact_router,
-    devices_router,
+    gateways_router,
     greenhouses_router,
     ingest_router,
     organizations_router,
     sensors_router,
     ws_router,
 )
-from app.routers.contact import limiter  # noqa: E402
 
 # ── App initialization ───────────────────────────────────────────────
+
+_is_production = settings.environment.lower() in {"prod", "production"}
+
 app = FastAPI(
     title="GreenMind API",
     description="Plant bioelectrical sensing platform for predictive yield optimization",
     version="3.0.0",
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────
@@ -42,7 +48,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Api-Key"],
 )
 
@@ -60,6 +66,18 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if _is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
 
 
@@ -91,7 +109,7 @@ api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(organizations_router)
 api_v1_router.include_router(greenhouses_router)
-api_v1_router.include_router(devices_router)
+api_v1_router.include_router(gateways_router)
 api_v1_router.include_router(sensors_router)
 api_v1_router.include_router(ingest_router)
 api_v1_router.include_router(contact_router)
@@ -115,7 +133,7 @@ def root():
     return {
         "name": "GreenMind API",
         "version": "3.0.0",
-        "docs": "/docs",
+        "docs": "/docs" if not _is_production else None,
     }
 
 

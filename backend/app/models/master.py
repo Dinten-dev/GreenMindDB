@@ -1,4 +1,4 @@
-"""Master-data models: Greenhouse, Device, Sensor."""
+"""Master-data models: Greenhouse, Gateway, Sensor."""
 
 import uuid
 
@@ -32,43 +32,54 @@ class Greenhouse(Base):
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
     organization = relationship("Organization", back_populates="greenhouses")
-    devices = relationship("Device", back_populates="greenhouse", cascade="all, delete-orphan")
+    gateways = relationship("Gateway", back_populates="greenhouse", cascade="all, delete-orphan")
 
 
-class Device(Base):
-    __tablename__ = "device"
+class Gateway(Base):
+    """Raspberry Pi gateway that bridges ESP32 sensors to the cloud."""
+
+    __tablename__ = "gateway"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     greenhouse_id = Column(
         UUID(as_uuid=True),
         ForeignKey("greenhouse.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
-    serial = Column(String(100), nullable=False, unique=True)
+    hardware_id = Column(String(100), nullable=False, unique=True)
     name = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
-    type = Column(String(50), nullable=False, default="esp32")
+    local_ip = Column(String(45), nullable=True)
     fw_version = Column(String(50), nullable=True)
-    last_seen = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(20), nullable=False, default="offline")
     api_key_hash = Column(String(200), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+    last_seen = Column(DateTime(timezone=True), nullable=True)
     paired_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
-    greenhouse = relationship("Greenhouse", back_populates="devices")
-    sensors = relationship("Sensor", back_populates="device", cascade="all, delete-orphan")
+    greenhouse = relationship("Greenhouse", back_populates="gateways")
+    sensors = relationship("Sensor", back_populates="gateway", cascade="all, delete-orphan")
 
 
 class Sensor(Base):
+    """Physical ESP32 sensor module claimed by a gateway."""
+
     __tablename__ = "sensor"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    device_id = Column(
-        UUID(as_uuid=True), ForeignKey("device.id", ondelete="CASCADE"), nullable=False, index=True
+    gateway_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("gateway.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    kind = Column(String(100), nullable=False)
-    unit = Column(String(20), nullable=False)
-    label = Column(String(200), nullable=True)
+    mac_address = Column(String(17), nullable=False, unique=True)
+    name = Column(String(200), nullable=True)
+    sensor_type = Column(String(50), nullable=False, default="generic")
+    status = Column(String(20), nullable=False, default="offline")
+    last_seen = Column(DateTime(timezone=True), nullable=True)
+    claimed_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
-    device = relationship("Device", back_populates="sensors")
+    gateway = relationship("Gateway", back_populates="sensors")

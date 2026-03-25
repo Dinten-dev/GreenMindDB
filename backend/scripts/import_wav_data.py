@@ -3,6 +3,7 @@
 Import WAV files from /data/wav into the database.
 Used by Docker entrypoint for automatic data loading.
 """
+
 import glob
 import os
 import struct

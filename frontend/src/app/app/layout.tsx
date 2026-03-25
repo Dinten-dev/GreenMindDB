@@ -13,7 +13,7 @@ function AppSidebar() {
     const links = [
         { href: '/app/dashboard', label: 'Dashboard', icon: '◉' },
         { href: '/app/greenhouses', label: 'Greenhouses', icon: '⌂' },
-        { href: '/app/devices', label: 'Devices', icon: '◎' },
+        { href: '/app/gateways', label: 'Gateways', icon: '◎' },
         { href: '/app/sensors', label: 'Sensors', icon: '◈' },
         { href: '/app/account', label: 'Account', icon: '○' },
     ];
@@ -24,7 +24,7 @@ function AppSidebar() {
     };
 
     return (
-        <aside className="w-60 h-screen bg-apple-gray-100/50 border-r border-apple-gray-200 flex flex-col fixed left-0 top-0">
+        <aside className="w-60 h-screen bg-apple-gray-100/50 border-r border-apple-gray-200 flex flex-col fixed left-0 top-0 z-50">
             {/* Logo */}
             <div className="px-5 h-14 flex items-center border-b border-apple-gray-200/50">
                 <Link href="/" className="flex items-center gap-2">
@@ -95,7 +95,7 @@ function AppGuard({ children }: { children: React.ReactNode }) {
     return (
         <div className="flex min-h-screen bg-apple-gray-100">
             <AppSidebar />
-            <main className="flex-1 ml-60">
+            <main className="flex-1 ml-60 pt-16">
                 <div className="max-w-[1280px] mx-auto px-8 py-8">
                     {children}
                 </div>

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class ReadingPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    sensor_mac: str
     sensor_kind: str
     value: float
     unit: str
@@ -18,7 +19,7 @@ class IngestRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     measurement_id: str
-    device_serial: str
+    gateway_serial: str
     aggregation_window: str | None = None
     sampling_rate_hz: float | None = None
     checksum: str | None = None
@@ -29,5 +30,5 @@ class IngestRequest(BaseModel):
 class IngestResponse(BaseModel):
     status: str
     ingested: int
-    device_id: str
+    gateway_id: str
     measurement_id: str

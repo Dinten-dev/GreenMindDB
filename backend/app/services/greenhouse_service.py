@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.master import Device, Greenhouse, Sensor
+from app.models.master import Gateway, Greenhouse, Sensor
 from app.models.timeseries import SensorReading
 from app.models.user import User
 from app.schemas.greenhouse import GreenhouseCreate, GreenhouseOverview, GreenhouseResponse
@@ -23,13 +23,13 @@ def list_greenhouses(db: Session, user: User) -> list[GreenhouseResponse]:
     greenhouses = db.query(Greenhouse).filter(Greenhouse.organization_id == org_id).all()
     results = []
     for gh in greenhouses:
-        device_count = (
-            db.query(func.count(Device.id)).filter(Device.greenhouse_id == gh.id).scalar()
+        gateway_count = (
+            db.query(func.count(Gateway.id)).filter(Gateway.greenhouse_id == gh.id).scalar()
         )
         sensor_count = (
             db.query(func.count(Sensor.id))
-            .join(Device, Device.id == Sensor.device_id)
-            .filter(Device.greenhouse_id == gh.id)
+            .join(Gateway, Gateway.id == Sensor.gateway_id)
+            .filter(Gateway.greenhouse_id == gh.id)
             .scalar()
         )
         results.append(
@@ -38,7 +38,7 @@ def list_greenhouses(db: Session, user: User) -> list[GreenhouseResponse]:
                 name=gh.name,
                 location=gh.location,
                 created_at=gh.created_at.isoformat(),
-                device_count=device_count,
+                gateway_count=gateway_count,
                 sensor_count=sensor_count,
             )
         )
@@ -72,11 +72,11 @@ def get_greenhouse(db: Session, user: User, greenhouse_id: str) -> GreenhouseRes
     )
     if not gh:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
-    device_count = db.query(func.count(Device.id)).filter(Device.greenhouse_id == gh.id).scalar()
+    gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.greenhouse_id == gh.id).scalar()
     sensor_count = (
         db.query(func.count(Sensor.id))
-        .join(Device, Device.id == Sensor.device_id)
-        .filter(Device.greenhouse_id == gh.id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .filter(Gateway.greenhouse_id == gh.id)
         .scalar()
     )
     return GreenhouseResponse(
@@ -84,7 +84,7 @@ def get_greenhouse(db: Session, user: User, greenhouse_id: str) -> GreenhouseRes
         name=gh.name,
         location=gh.location,
         created_at=gh.created_at.isoformat(),
-        device_count=device_count,
+        gateway_count=gateway_count,
         sensor_count=sensor_count,
     )
 
@@ -99,13 +99,13 @@ def get_greenhouse_overview(db: Session, user: User, greenhouse_id: str) -> Gree
     if not gh:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
 
-    devices = db.query(Device).filter(Device.greenhouse_id == gh.id).all()
-    device_ids = [d.id for d in devices]
+    gateways = db.query(Gateway).filter(Gateway.greenhouse_id == gh.id).all()
+    gateway_ids = [g.id for g in gateways]
 
     total_sensors = 0
     sensor_ids = []
-    if device_ids:
-        sensors = db.query(Sensor).filter(Sensor.device_id.in_(device_ids)).all()
+    if gateway_ids:
+        sensors = db.query(Sensor).filter(Sensor.gateway_id.in_(gateway_ids)).all()
         total_sensors = len(sensors)
         sensor_ids = [s.id for s in sensors]
 
@@ -119,13 +119,13 @@ def get_greenhouse_overview(db: Session, user: User, greenhouse_id: str) -> Gree
             .scalar()
         )
 
-    online_count = sum(1 for d in devices if d.status == "online")
+    online_count = sum(1 for g in gateways if g.status == "online")
 
     return GreenhouseOverview(
         id=str(gh.id),
         name=gh.name,
-        total_devices=len(devices),
-        online_devices=online_count,
+        total_gateways=len(gateways),
+        online_gateways=online_count,
         total_sensors=total_sensors,
         readings_24h=readings_24h,
     )

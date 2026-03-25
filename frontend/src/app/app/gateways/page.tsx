@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiListDevices, apiListGreenhouses, apiGeneratePairingCode, DeviceInfo, Greenhouse, PairingCode } from '@/lib/api';
+import { apiListGateways, apiListGreenhouses, apiGeneratePairingCode, GatewayInfo, Greenhouse, PairingCode } from '@/lib/api';
 
-export default function DevicesPage() {
-    const [devices, setDevices] = useState<DeviceInfo[]>([]);
+export default function GatewaysPage() {
+    const [gateways, setGateways] = useState<GatewayInfo[]>([]);
     const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Pairing
     const [showPairing, setShowPairing] = useState(false);
-    const [selectedGh, setSelectedGh] = useState('');
+    const [selectedGreenhouse, setSelectedGreenhouse] = useState('');
     const [pairingCode, setPairingCode] = useState<PairingCode | null>(null);
     const [generating, setGenerating] = useState(false);
 
@@ -18,10 +20,12 @@ export default function DevicesPage() {
 
     const loadData = async () => {
         try {
-            const [dev, gh] = await Promise.all([apiListDevices(), apiListGreenhouses()]);
-            setDevices(dev);
-            setGreenhouses(gh);
-            if (gh.length > 0) setSelectedGh(gh[0].id);
+            const [gws, ghs] = await Promise.all([
+                apiListGateways(),
+                apiListGreenhouses(),
+            ]);
+            setGateways(gws);
+            setGreenhouses(ghs);
         } catch (err) {
             console.error(err);
         } finally {
@@ -30,10 +34,10 @@ export default function DevicesPage() {
     };
 
     const handleGenerateCode = async () => {
-        if (!selectedGh) return;
+        if (!selectedGreenhouse) return;
         setGenerating(true);
         try {
-            const code = await apiGeneratePairingCode(selectedGh);
+            const code = await apiGeneratePairingCode(selectedGreenhouse);
             setPairingCode(code);
         } catch (err) {
             console.error(err);
@@ -45,8 +49,8 @@ export default function DevicesPage() {
     if (loading) {
         return (
             <div className="animate-pulse space-y-4">
-                <div className="h-8 w-32 bg-apple-gray-200 rounded-lg" />
-                <div className="h-48 bg-apple-gray-200 rounded-apple-lg" />
+                <div className="h-8 w-40 bg-apple-gray-200 rounded-lg" />
+                <div className="h-32 bg-apple-gray-200 rounded-apple-lg" />
             </div>
         );
     }
@@ -55,15 +59,15 @@ export default function DevicesPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-apple-gray-800">Devices</h1>
-                    <p className="text-sm text-apple-gray-400 mt-1">Manage and pair your sensor nodes</p>
+                    <h1 className="text-2xl font-bold text-apple-gray-800">Gateways</h1>
+                    <p className="text-sm text-apple-gray-400 mt-1">Raspberry Pi Gateways verwalten</p>
                 </div>
                 <button
                     onClick={() => { setShowPairing(true); setPairingCode(null); }}
                     disabled={greenhouses.length === 0}
                     className="px-4 py-2 bg-gm-green-500 text-white rounded-full text-sm font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                    + Pair Device
+                    + Gateway pairen
                 </button>
             </div>
 
@@ -71,17 +75,18 @@ export default function DevicesPage() {
             {showPairing && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
                     <div className="bg-white rounded-apple-xl shadow-apple-lg p-8 w-full max-w-md mx-4">
-                        <h2 className="text-xl font-semibold text-apple-gray-800 mb-6">Pair a Device</h2>
+                        <h2 className="text-xl font-semibold text-apple-gray-800 mb-6">Gateway pairen</h2>
 
                         {!pairingCode ? (
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">Greenhouse</label>
+                                    <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">Gewächshaus</label>
                                     <select
-                                        value={selectedGh}
-                                        onChange={(e) => setSelectedGh(e.target.value)}
+                                        value={selectedGreenhouse}
+                                        onChange={(e) => setSelectedGreenhouse(e.target.value)}
                                         className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-sm text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500"
                                     >
+                                        <option value="">Gewächshaus wählen…</option>
                                         {greenhouses.map(gh => (
                                             <option key={gh.id} value={gh.id}>{gh.name}</option>
                                         ))}
@@ -89,36 +94,37 @@ export default function DevicesPage() {
                                 </div>
                                 <div className="flex gap-3 pt-2">
                                     <button
+                                        type="button"
                                         onClick={() => setShowPairing(false)}
                                         className="flex-1 py-2.5 bg-apple-gray-100 text-apple-gray-600 rounded-apple text-sm font-medium hover:bg-apple-gray-200 transition-colors"
                                     >
-                                        Cancel
+                                        Abbrechen
                                     </button>
                                     <button
                                         onClick={handleGenerateCode}
-                                        disabled={generating}
+                                        disabled={!selectedGreenhouse || generating}
                                         className="flex-1 py-2.5 bg-gm-green-500 text-white rounded-apple text-sm font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50"
                                     >
-                                        {generating ? 'Generating…' : 'Generate Code'}
+                                        {generating ? 'Generiere…' : 'Code erzeugen'}
                                     </button>
                                 </div>
                             </div>
                         ) : (
                             <div className="text-center space-y-4">
-                                <p className="text-sm text-apple-gray-400">Enter this code on your device:</p>
+                                <p className="text-sm text-apple-gray-400">Gib diesen Code auf dem Raspberry Pi ein:</p>
                                 <div className="bg-apple-gray-100 rounded-apple-lg py-6 px-4">
-                                    <p className="text-4xl font-mono font-bold tracking-[0.3em] text-apple-gray-800">
+                                    <p className="text-4xl font-mono font-bold text-apple-gray-800 tracking-[0.3em]">
                                         {pairingCode.code}
                                     </p>
                                 </div>
                                 <p className="text-xs text-apple-gray-400">
-                                    Expires at {new Date(pairingCode.expires_at).toLocaleTimeString()}
+                                    Gültig bis {new Date(pairingCode.expires_at).toLocaleTimeString('de-CH')} (10 Minuten)
                                 </p>
                                 <button
                                     onClick={() => { setShowPairing(false); loadData(); }}
                                     className="w-full py-2.5 bg-apple-gray-100 text-apple-gray-600 rounded-apple text-sm font-medium hover:bg-apple-gray-200 transition-colors"
                                 >
-                                    Done
+                                    Schliessen
                                 </button>
                             </div>
                         )}
@@ -126,52 +132,54 @@ export default function DevicesPage() {
                 </div>
             )}
 
-            {/* Device List */}
-            {devices.length === 0 ? (
+            {/* Gateway List */}
+            {gateways.length === 0 ? (
                 <div className="bg-white rounded-apple-lg shadow-apple-card p-12 text-center">
-                    <div className="text-4xl mb-4">📡</div>
-                    <h3 className="text-lg font-semibold text-apple-gray-800 mb-2">No devices paired</h3>
+                    <div className="text-4xl mb-4">🖥</div>
+                    <h3 className="text-lg font-semibold text-apple-gray-800 mb-2">Keine Gateways</h3>
                     <p className="text-sm text-apple-gray-400 mb-4">
-                        {greenhouses.length === 0
-                            ? 'Create a greenhouse first, then pair your sensor nodes.'
-                            : 'Generate a pairing code and enter it on your ESP32 device.'}
+                        Verbinde dein erstes Raspberry Pi Gateway mit einem Gewächshaus.
                     </p>
                 </div>
             ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {devices.map(dev => (
-                        <div key={dev.id} className="bg-white rounded-apple-lg shadow-apple-card p-5 hover:shadow-apple transition-shadow duration-300">
+                    {gateways.map(gw => (
+                        <div key={gw.id} className="bg-white rounded-apple-lg shadow-apple-card p-6 hover:shadow-apple transition-shadow duration-300">
                             <div className="flex items-start justify-between mb-3">
                                 <div>
-                                    <p className="font-semibold text-apple-gray-800">{dev.name || dev.serial}</p>
-                                    <p className="text-xs text-apple-gray-400 font-mono">{dev.serial}</p>
+                                    <h3 className="text-base font-semibold text-apple-gray-800">{gw.name || gw.hardware_id}</h3>
+                                    <p className="text-xs text-apple-gray-400 font-mono mt-0.5">{gw.hardware_id}</p>
                                 </div>
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${dev.status === 'online'
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    gw.status === 'online'
                                         ? 'bg-gm-green-50 text-gm-green-600'
                                         : 'bg-apple-gray-100 text-apple-gray-400'
-                                    }`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${dev.status === 'online' ? 'bg-gm-green-500' : 'bg-apple-gray-300'}`} />
-                                    {dev.status}
+                                }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${gw.status === 'online' ? 'bg-gm-green-500' : 'bg-apple-gray-300'}`} />
+                                    {gw.status}
                                 </span>
                             </div>
-                            <div className="grid grid-cols-2 gap-y-2 text-sm">
-                                <span className="text-apple-gray-400">Type</span>
-                                <span className="text-apple-gray-700">{dev.type}</span>
-                                <span className="text-apple-gray-400">Sensors</span>
-                                <span className="text-apple-gray-700">{dev.sensor_count}</span>
-                                {dev.greenhouse_name && (
-                                    <>
-                                        <span className="text-apple-gray-400">Greenhouse</span>
-                                        <span className="text-apple-gray-700">{dev.greenhouse_name}</span>
-                                    </>
-                                )}
-                                {dev.fw_version && (
-                                    <>
-                                        <span className="text-apple-gray-400">Firmware</span>
-                                        <span className="text-apple-gray-700 font-mono text-xs">{dev.fw_version}</span>
-                                    </>
-                                )}
+
+                            <div className="grid grid-cols-3 gap-2 text-sm">
+                                <div className="bg-apple-gray-100/50 rounded-apple px-2.5 py-1.5">
+                                    <p className="text-apple-gray-400 text-xs">Sensoren</p>
+                                    <p className="font-semibold text-apple-gray-800">{gw.sensor_count}</p>
+                                </div>
+                                <div className="bg-apple-gray-100/50 rounded-apple px-2.5 py-1.5">
+                                    <p className="text-apple-gray-400 text-xs">IP</p>
+                                    <p className="font-semibold text-apple-gray-800 text-xs font-mono truncate">{gw.local_ip || '–'}</p>
+                                </div>
+                                <div className="bg-apple-gray-100/50 rounded-apple px-2.5 py-1.5">
+                                    <p className="text-apple-gray-400 text-xs">Gewächshaus</p>
+                                    <p className="font-semibold text-apple-gray-800 text-xs truncate">{gw.greenhouse_name || '–'}</p>
+                                </div>
                             </div>
+
+                            {gw.last_seen && (
+                                <p className="text-xs text-apple-gray-400 mt-3">
+                                    Zuletzt gesehen: {new Date(gw.last_seen).toLocaleString('de-CH')}
+                                </p>
+                            )}
                         </div>
                     ))}
                 </div>

@@ -13,6 +13,7 @@ class SensorReading(Base):
 
     timestamp = Column(TIMESTAMP(timezone=True), primary_key=True, nullable=False)
     sensor_id = Column(UUID(as_uuid=True), primary_key=True, nullable=False, index=True)
+    kind = Column(String(100), primary_key=True, nullable=False)
     value = Column(Float, nullable=False)
     unit = Column(String(20), nullable=False)
     measurement_id = Column(UUID(as_uuid=True), nullable=True, index=True)

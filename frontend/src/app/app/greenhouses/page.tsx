@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiListGreenhouses, apiCreateGreenhouse, apiListDevices, apiListSensors, Greenhouse, DeviceInfo, SensorInfo } from '@/lib/api';
+import { apiListGreenhouses, apiCreateGreenhouse, apiListGateways, apiListSensors, Greenhouse, GatewayInfo, SensorInfo } from '@/lib/api';
 
 export default function GreenhousesPage() {
     const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
@@ -13,7 +13,7 @@ export default function GreenhousesPage() {
 
     // Detail view state
     const [selectedGh, setSelectedGh] = useState<string | null>(null);
-    const [ghDevices, setGhDevices] = useState<DeviceInfo[]>([]);
+    const [ghGateways, setGhGateways] = useState<GatewayInfo[]>([]);
     const [ghSensors, setGhSensors] = useState<SensorInfo[]>([]);
     const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -57,11 +57,11 @@ export default function GreenhousesPage() {
         setSelectedGh(ghId);
         setLoadingDetail(true);
         try {
-            const [devices, sensors] = await Promise.all([
-                apiListDevices(ghId),
+            const [gateways, sensors] = await Promise.all([
+                apiListGateways(ghId),
                 apiListSensors(ghId),
             ]);
-            setGhDevices(devices);
+            setGhGateways(gateways);
             setGhSensors(sensors);
         } catch (err) {
             console.error(err);
@@ -70,9 +70,9 @@ export default function GreenhousesPage() {
         }
     };
 
-    // Group sensors by device_id for the detail view
-    const sensorsByDevice = ghSensors.reduce<Record<string, SensorInfo[]>>((acc, s) => {
-        const key = s.device_id;
+    // Group sensors by gateway_id
+    const sensorsByGateway = ghSensors.reduce<Record<string, SensorInfo[]>>((acc, s) => {
+        const key = s.gateway_id;
         if (!acc[key]) acc[key] = [];
         acc[key].push(s);
         return acc;
@@ -91,14 +91,14 @@ export default function GreenhousesPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-apple-gray-800">Greenhouses</h1>
-                    <p className="text-sm text-apple-gray-400 mt-1">Manage your growing facilities</p>
+                    <h1 className="text-2xl font-bold text-apple-gray-800">Gewächshäuser</h1>
+                    <p className="text-sm text-apple-gray-400 mt-1">Verwalte deine Anbauanlagen</p>
                 </div>
                 <button
                     onClick={() => setShowCreate(true)}
                     className="px-4 py-2 bg-gm-green-500 text-white rounded-full text-sm font-medium hover:bg-gm-green-600 transition-colors whitespace-nowrap"
                 >
-                    + New Greenhouse
+                    + Neues Gewächshaus
                 </button>
             </div>
 
@@ -156,7 +156,7 @@ export default function GreenhousesPage() {
                     <div className="text-4xl mb-4">🏠</div>
                     <h3 className="text-lg font-semibold text-apple-gray-800 mb-2">Noch keine Gewächshäuser</h3>
                     <p className="text-sm text-apple-gray-400 mb-4">
-                        Erstelle dein erstes Gewächshaus, um Geräte hinzuzufügen.
+                        Erstelle dein erstes Gewächshaus, um Gateways und Sensoren hinzuzufügen.
                     </p>
                     <button
                         onClick={() => setShowCreate(true)}
@@ -170,7 +170,7 @@ export default function GreenhousesPage() {
                     {greenhouses.map(gh => {
                         const isSelected = selectedGh === gh.id;
                         return (
-                            <div key={gh.id} className="space-y-0">
+                            <div key={gh.id}>
                                 {/* Greenhouse Card */}
                                 <button
                                     onClick={() => handleSelectGreenhouse(gh.id)}
@@ -189,8 +189,8 @@ export default function GreenhousesPage() {
                                     </div>
                                     <div className="grid grid-cols-2 gap-3 text-sm mt-4">
                                         <div className="bg-apple-gray-100/50 rounded-apple px-3 py-2">
-                                            <p className="text-apple-gray-400 text-xs">Geräte</p>
-                                            <p className="font-semibold text-apple-gray-800">{gh.device_count}</p>
+                                            <p className="text-apple-gray-400 text-xs">Gateways</p>
+                                            <p className="font-semibold text-apple-gray-800">{gh.gateway_count}</p>
                                         </div>
                                         <div className="bg-apple-gray-100/50 rounded-apple px-3 py-2">
                                             <p className="text-apple-gray-400 text-xs">Sensoren</p>
@@ -199,7 +199,7 @@ export default function GreenhousesPage() {
                                     </div>
                                 </button>
 
-                                {/* Detail Panel (Devices + Sensors) */}
+                                {/* Detail Panel */}
                                 {isSelected && (
                                     <div className="mt-3 ml-4 border-l-2 border-gm-green-200 pl-5 space-y-3 pb-2">
                                         {loadingDetail ? (
@@ -207,62 +207,74 @@ export default function GreenhousesPage() {
                                                 <div className="h-20 bg-apple-gray-100 rounded-apple-lg" />
                                                 <div className="h-20 bg-apple-gray-100 rounded-apple-lg" />
                                             </div>
-                                        ) : ghDevices.length === 0 ? (
+                                        ) : ghGateways.length === 0 ? (
                                             <div className="bg-apple-gray-50 rounded-apple-lg p-6 text-center">
                                                 <p className="text-sm text-apple-gray-400">
-                                                    Keine Geräte zugeordnet. Gehe zu <span className="font-medium text-apple-gray-600">Devices</span>, um ein Gerät zu pairen.
+                                                    Keine Gateways zugeordnet. Gehe zu <span className="font-medium text-apple-gray-600">Gateways</span>, um ein Gateway zu pairen.
                                                 </p>
                                             </div>
                                         ) : (
-                                            ghDevices.map(dev => {
-                                                const devSensors = sensorsByDevice[dev.id] || [];
+                                            ghGateways.map(gw => {
+                                                const gwSensors = sensorsByGateway[gw.id] || [];
                                                 return (
-                                                    <div key={dev.id} className="bg-white rounded-apple-lg shadow-apple-card overflow-hidden">
-                                                        {/* Device Header */}
+                                                    <div key={gw.id} className="bg-white rounded-apple-lg shadow-apple-card overflow-hidden">
+                                                        {/* Gateway Header */}
                                                         <div className="px-5 py-4 flex items-center justify-between border-b border-apple-gray-100">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-8 h-8 rounded-lg bg-apple-gray-100 flex items-center justify-center text-sm">
-                                                                    {dev.type === 'gateway' ? '🖥' : '📡'}
+                                                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-sm">
+                                                                    🖥
                                                                 </div>
                                                                 <div>
-                                                                    <p className="font-semibold text-apple-gray-800 text-sm">{dev.name || dev.serial}</p>
-                                                                    <p className="text-xs text-apple-gray-400 font-mono">{dev.serial}</p>
+                                                                    <p className="font-semibold text-apple-gray-800 text-sm">{gw.name || gw.hardware_id}</p>
+                                                                    <p className="text-xs text-apple-gray-400 font-mono">{gw.hardware_id}</p>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-3">
-                                                                <span className="text-xs text-apple-gray-400 bg-apple-gray-100 px-2 py-0.5 rounded">{dev.type}</span>
+                                                                {gw.local_ip && (
+                                                                    <span className="text-xs text-apple-gray-400 bg-apple-gray-100 px-2 py-0.5 rounded font-mono">
+                                                                        {gw.local_ip}
+                                                                    </span>
+                                                                )}
                                                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                                                                    dev.status === 'online'
+                                                                    gw.status === 'online'
                                                                         ? 'bg-gm-green-50 text-gm-green-600'
                                                                         : 'bg-apple-gray-100 text-apple-gray-400'
                                                                 }`}>
-                                                                    <span className={`w-1.5 h-1.5 rounded-full ${dev.status === 'online' ? 'bg-gm-green-500' : 'bg-apple-gray-300'}`} />
-                                                                    {dev.status}
+                                                                    <span className={`w-1.5 h-1.5 rounded-full ${gw.status === 'online' ? 'bg-gm-green-500' : 'bg-apple-gray-300'}`} />
+                                                                    {gw.status}
                                                                 </span>
                                                             </div>
                                                         </div>
 
                                                         {/* Sensor List */}
-                                                        {devSensors.length > 0 ? (
+                                                        {gwSensors.length > 0 ? (
                                                             <div className="divide-y divide-apple-gray-50">
-                                                                {devSensors.map(sensor => (
+                                                                {gwSensors.map(sensor => (
                                                                     <div key={sensor.id} className="px-5 py-3 flex items-center justify-between">
                                                                         <div className="flex items-center gap-2.5">
                                                                             <span className="w-1.5 h-1.5 rounded-full bg-gm-green-400" />
                                                                             <span className="text-sm text-apple-gray-700">
-                                                                                {sensor.label || sensor.kind}
+                                                                                {sensor.name || sensor.mac_address}
                                                                             </span>
                                                                         </div>
                                                                         <div className="flex items-center gap-3 text-xs text-apple-gray-400">
-                                                                            <span className="bg-apple-gray-100 px-2 py-0.5 rounded">{sensor.kind}</span>
-                                                                            <span>{sensor.unit}</span>
+                                                                            <span className="bg-apple-gray-100 px-2 py-0.5 rounded">{sensor.sensor_type}</span>
+                                                                            <span className="font-mono">{sensor.mac_address}</span>
+                                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                                                                                sensor.status === 'online'
+                                                                                    ? 'bg-gm-green-50 text-gm-green-600'
+                                                                                    : 'bg-apple-gray-100 text-apple-gray-400'
+                                                                            }`}>
+                                                                                <span className={`w-1 h-1 rounded-full ${sensor.status === 'online' ? 'bg-gm-green-500' : 'bg-apple-gray-300'}`} />
+                                                                                {sensor.status}
+                                                                            </span>
                                                                         </div>
                                                                     </div>
                                                                 ))}
                                                             </div>
                                                         ) : (
                                                             <div className="px-5 py-3 text-xs text-apple-gray-400">
-                                                                Keine Sensoren registriert
+                                                                Keine Sensoren – das Gateway entdeckt ESP32-Module automatisch via mDNS
                                                             </div>
                                                         )}
                                                     </div>

@@ -11,12 +11,13 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.schemas.contact import ContactRequest, EarlyAccessRequest
-from app.schemas.device import (
-    DeviceResponse,
-    PairDeviceRequest,
-    PairDeviceResponse,
+from app.schemas.gateway import (
+    GatewayResponse,
+    HeartbeatRequest,
     PairingCodeRequest,
     PairingCodeResponse,
+    RegisterGatewayRequest,
+    RegisterGatewayResponse,
 )
 from app.schemas.greenhouse import (
     GreenhouseCreate,
@@ -25,7 +26,14 @@ from app.schemas.greenhouse import (
 )
 from app.schemas.ingest import IngestRequest, IngestResponse, ReadingPayload
 from app.schemas.organization import OrgCreate, OrgResponse
-from app.schemas.sensor import DataPoint, SensorDataResponse, SensorResponse
+from app.schemas.sensor import (
+    ClaimSensorRequest,
+    ClaimSensorResponse,
+    DataPoint,
+    MoveSensorRequest,
+    SensorDataResponse,
+    SensorResponse,
+)
 
 __all__ = [
     "SignupRequest",
@@ -37,12 +45,16 @@ __all__ = [
     "GreenhouseCreate",
     "GreenhouseResponse",
     "GreenhouseOverview",
-    "DeviceResponse",
+    "GatewayResponse",
     "PairingCodeRequest",
     "PairingCodeResponse",
-    "PairDeviceRequest",
-    "PairDeviceResponse",
+    "RegisterGatewayRequest",
+    "RegisterGatewayResponse",
+    "HeartbeatRequest",
     "SensorResponse",
+    "ClaimSensorRequest",
+    "ClaimSensorResponse",
+    "MoveSensorRequest",
     "DataPoint",
     "SensorDataResponse",
     "ReadingPayload",

@@ -1,4 +1,4 @@
-"""Business logic for devices and pairing."""
+"""Business logic for gateways and pairing."""
 
 import secrets
 import string
@@ -9,78 +9,76 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_password_hash
-from app.models.master import Device, Greenhouse, Sensor
+from app.models.master import Gateway, Greenhouse, Sensor
 from app.models.pairing import PairingCode
 from app.models.user import User
-from app.schemas.device import (
-    DeviceResponse,
-    PairDeviceRequest,
-    PairDeviceResponse,
+from app.schemas.gateway import (
+    GatewayResponse,
     PairingCodeResponse,
+    RegisterGatewayRequest,
+    RegisterGatewayResponse,
 )
 
 PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
 
 
-def list_devices(
-    db: Session, user: User, *, greenhouse_id: str | None = None
-) -> list[DeviceResponse]:
+def _require_org(user: User):
     if not user.organization_id:
-        return []
+        raise HTTPException(status_code=400, detail="User must belong to an organization")
+    return user.organization_id
+
+
+def list_gateways(
+    db: Session, user: User, *, greenhouse_id: str | None = None
+) -> list[GatewayResponse]:
+    org_id = _require_org(user)
 
     gh_ids = [
-        g.id
-        for g in db.query(Greenhouse.id)
-        .filter(Greenhouse.organization_id == user.organization_id)
-        .all()
+        g.id for g in db.query(Greenhouse.id).filter(Greenhouse.organization_id == org_id).all()
     ]
     if not gh_ids:
         return []
 
-    query = db.query(Device).filter(Device.greenhouse_id.in_(gh_ids))
+    query = db.query(Gateway).filter(Gateway.greenhouse_id.in_(gh_ids))
     if greenhouse_id:
-        query = query.filter(Device.greenhouse_id == greenhouse_id)
-    devices = query.all()
+        query = query.filter(Gateway.greenhouse_id == greenhouse_id)
+
+    gateways = query.all()
     results = []
-    for dev in devices:
-        sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.device_id == dev.id).scalar()
-        gh = db.query(Greenhouse).filter(Greenhouse.id == dev.greenhouse_id).first()
+    for gw in gateways:
+        sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.gateway_id == gw.id).scalar()
+        gh = db.query(Greenhouse).filter(Greenhouse.id == gw.greenhouse_id).first()
         results.append(
-            DeviceResponse(
-                id=str(dev.id),
-                serial=dev.serial,
-                name=dev.name,
-                type=dev.type,
-                fw_version=dev.fw_version,
-                status=dev.status,
-                last_seen=dev.last_seen.isoformat() if dev.last_seen else None,
-                greenhouse_id=str(dev.greenhouse_id) if dev.greenhouse_id else None,
+            GatewayResponse(
+                id=str(gw.id),
+                greenhouse_id=str(gw.greenhouse_id),
                 greenhouse_name=gh.name if gh else None,
+                hardware_id=gw.hardware_id,
+                name=gw.name,
+                local_ip=gw.local_ip,
+                fw_version=gw.fw_version,
+                status=gw.status,
+                is_active=gw.is_active,
+                last_seen=gw.last_seen.isoformat() if gw.last_seen else None,
+                paired_at=gw.paired_at.isoformat() if gw.paired_at else None,
                 sensor_count=sensor_count,
-                paired_at=dev.paired_at.isoformat() if dev.paired_at else None,
             )
         )
     return results
 
 
 def generate_pairing_code(db: Session, user: User, greenhouse_id: str) -> PairingCodeResponse:
-    if not user.organization_id:
-        raise HTTPException(status_code=400, detail="User must belong to an organization")
+    org_id = _require_org(user)
 
-    # Verify greenhouse belongs to user's org
     gh = (
         db.query(Greenhouse)
-        .filter(
-            Greenhouse.id == greenhouse_id,
-            Greenhouse.organization_id == user.organization_id,
-        )
+        .filter(Greenhouse.id == greenhouse_id, Greenhouse.organization_id == org_id)
         .first()
     )
     if not gh:
         raise HTTPException(status_code=404, detail="Greenhouse not found")
 
-    # Generate unique code
     chars = string.ascii_uppercase + string.digits
     for _ in range(10):
         code = "".join(secrets.choice(chars) for _ in range(PAIRING_CODE_LENGTH))
@@ -109,7 +107,7 @@ def generate_pairing_code(db: Session, user: User, greenhouse_id: str) -> Pairin
     )
 
 
-def pair_device(db: Session, data: PairDeviceRequest) -> PairDeviceResponse:
+def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatewayResponse:
     now = datetime.now(UTC)
 
     pc = (
@@ -124,35 +122,33 @@ def pair_device(db: Session, data: PairDeviceRequest) -> PairDeviceResponse:
     if not pc:
         raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
 
-    # Check if serial already registered
-    existing = db.query(Device).filter(Device.serial == data.serial).first()
+    existing = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Device serial already registered")
+        raise HTTPException(status_code=409, detail="Gateway hardware_id already registered")
 
-    # Generate API key for the device
     api_key = secrets.token_urlsafe(32)
 
-    device = Device(
+    gateway = Gateway(
         greenhouse_id=pc.greenhouse_id,
-        serial=data.serial,
-        name=data.name or data.serial,
-        type=data.type,
+        hardware_id=data.hardware_id,
+        name=data.name or data.hardware_id,
         fw_version=data.fw_version,
+        local_ip=data.local_ip,
         status="online",
         api_key_hash=get_password_hash(api_key),
         paired_at=now,
         last_seen=now,
     )
-    db.add(device)
+    db.add(gateway)
     db.flush()
 
     pc.used_at = now
-    pc.device_id = device.id
+    pc.gateway_id = gateway.id
     db.commit()
-    db.refresh(device)
+    db.refresh(gateway)
 
-    return PairDeviceResponse(
-        device_id=str(device.id),
+    return RegisterGatewayResponse(
+        gateway_id=str(gateway.id),
         api_key=api_key,
-        greenhouse_id=str(device.greenhouse_id),
+        greenhouse_id=str(gateway.greenhouse_id),
     )

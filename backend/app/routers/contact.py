@@ -4,22 +4,19 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.auth import require_role
 from app.database import get_db
 from app.models.form_submission import FormSubmission
 from app.models.user import Role, User
+from app.rate_limit import limiter
 from app.schemas.contact import ContactRequest, EarlyAccessRequest
 from app.services.email_service import send_notification_email
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["contact"])
-
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Helpers ──────────────────────────────────────────

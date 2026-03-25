@@ -1,20 +1,21 @@
-"""Device management request/response schemas."""
+"""Gateway management request/response schemas."""
 
 from pydantic import BaseModel
 
 
-class DeviceResponse(BaseModel):
+class GatewayResponse(BaseModel):
     id: str
-    serial: str
+    greenhouse_id: str
+    greenhouse_name: str | None = None
+    hardware_id: str
     name: str | None = None
-    type: str
+    local_ip: str | None = None
     fw_version: str | None = None
     status: str
+    is_active: bool = True
     last_seen: str | None = None
-    greenhouse_id: str | None = None
-    greenhouse_name: str | None = None
-    sensor_count: int = 0
     paired_at: str | None = None
+    sensor_count: int = 0
 
     class Config:
         from_attributes = True
@@ -30,15 +31,20 @@ class PairingCodeResponse(BaseModel):
     greenhouse_id: str
 
 
-class PairDeviceRequest(BaseModel):
+class RegisterGatewayRequest(BaseModel):
     code: str
-    serial: str
-    type: str = "esp32"
+    hardware_id: str
     name: str | None = None
     fw_version: str | None = None
+    local_ip: str | None = None
 
 
-class PairDeviceResponse(BaseModel):
-    device_id: str
+class RegisterGatewayResponse(BaseModel):
+    gateway_id: str
     api_key: str
     greenhouse_id: str
+
+
+class HeartbeatRequest(BaseModel):
+    hardware_id: str
+    local_ip: str | None = None

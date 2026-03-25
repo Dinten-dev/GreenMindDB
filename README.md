@@ -472,32 +472,52 @@ docker compose up -d
 
 ## Security
 
-### Credentials
+### Authentication & Access Control
+
+- **Password hashing**: bcrypt via `passlib` with auto-configured work factor
+- **Password complexity**: Backend enforces ≥8 chars, uppercase, lowercase, digit
+- **JWT storage**: httpOnly + SameSite=Lax cookies only — **never** in localStorage
+- **Token expiration**: Configurable via `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`
+- **RBAC**: All API endpoints enforce `organization_id` ownership checks (prevents IDOR)
+- **Rate limiting**: Login, signup, verify-email (5/min), pairing-code, register (5/min)
+
+### IoT / Gateway Security
+
+- **API keys**: Each gateway receives a unique `secrets.token_urlsafe(32)` key, stored as bcrypt hash
+- **Pairing codes**: 6-char, 10 min TTL, single-use, `hardware_id` uniqueness enforced
+- **Sensor-gateway affinity**: Ingest rejects readings from gateways that don't own the sensor MAC
+- **Idempotency**: `measurement_id` prevents duplicate data ingestion
+
+### HTTP Security Headers
+
+| Header | Value |
+|---|---|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Content-Security-Policy` | `default-src 'self'; frame-ancestors 'none'` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+| `Strict-Transport-Security` | `max-age=63072000` (production only) |
+
+### Network & API
+
+- **CORS**: Explicit origins only (no wildcards), `credentials: true`
+- **Swagger/Docs**: Disabled in production (`ENVIRONMENT=production`)
+- **Input validation**: Pydantic schemas on all endpoints, `EmailStr` for emails
+- **Honeypot**: Contact/Early Access forms check `website` field against bots
+
+### Container & Infrastructure
+
+- All containers run as **non-root** users (`appuser`, `nextjs`)
+- `no-new-privileges: true` and `cap_drop: ALL` on all services
+- TimescaleDB bound to `127.0.0.1` only (not reachable from internet)
+
+### Secrets Management
 
 - **Never commit** `.env` files with real credentials
-- Use `.env.example` as the version-controlled template
-- Rotate secrets immediately if accidentally committed
-- Use strong, randomly generated passwords (≥ 32 chars for JWT)
-
-### Container Security
-
-- All containers run with `no-new-privileges` and dropped capabilities
-- Backend container runs as non-root
-- Database port is bound to `127.0.0.1` (not exposed externally)
-
-### API Security
-
-- JWT tokens stored in **httpOnly cookies** (not localStorage)
-- CORS restricted to configured origins only
-- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`
-- Rate limiting on contact/public endpoints
-
-### Recommendations
-
-- Use **HTTPS** in production (see `compose/Caddyfile` for TLS setup)
-- Enable `COOKIE_SECURE=true` in production
-- Keep dependencies updated (`make update-deps`)
-- Review `CODEOWNERS` when team grows
+- All secrets loaded from environment variables
+- JWT secret validator rejects defaults in production
+- `COOKIE_SECURE` configurable via env (set `true` when HTTPS is enabled)
 
 ---
 
