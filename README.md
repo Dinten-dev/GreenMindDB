@@ -539,9 +539,10 @@ docker compose up -d
 | GET    | `/api/v1/greenhouses`                 | List greenhouses                |
 | POST   | `/api/v1/greenhouses`                 | Create greenhouse               |
 | GET    | `/api/v1/greenhouses/{id}/overview`   | Greenhouse dashboard overview   |
-| GET    | `/api/v1/devices`                     | List devices                    |
-| POST   | `/api/v1/devices/pairing-code`        | Generate pairing code           |
-| POST   | `/api/v1/devices/pair`                | Pair a device                   |
+| GET    | `/api/v1/gateways`                    | List gateways                   |
+| POST   | `/api/v1/gateways/pairing-code`       | Generate pairing code           |
+| POST   | `/api/v1/gateways/register`           | Register a gateway              |
+| POST   | `/api/v1/gateways/heartbeat`          | Gateway heartbeat (X-Api-Key)   |
 | GET    | `/api/v1/sensors`                     | List sensors                    |
 | GET    | `/api/v1/sensors/{id}/data`           | Get sensor timeseries data      |
 
@@ -566,12 +567,13 @@ docker compose up -d
 > Email notifications via Resend are sent as best-effort.
 > Filter by type: `GET /api/v1/submissions?form_type=early_access`
 
-### Device Pairing Flow
+### Gateway Pairing Flow
 1. User generates a 10-minute pairing code via the dashboard
-2. Raspberry Pi gateway sends `POST /api/v1/devices/pair` with code + hardware serial
-3. Backend validates, registers the device, returns an `X-Api-Key`
-4. Gateway streams readings via `POST /api/v1/ingest` using the API key
-5. Live data appears on the dashboard
+2. Raspberry Pi gateway sends `POST /api/v1/gateways/register` with code + hardware serial
+3. Backend validates, registers the gateway, returns an `X-Api-Key`
+4. Gateway sends heartbeats via `POST /api/v1/gateways/heartbeat`
+5. Gateway streams readings via `POST /api/v1/ingest` using the API key
+6. Live data appears on the dashboard via WebSocket
 
 ## Database Backup & Restore
 

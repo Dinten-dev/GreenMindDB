@@ -1,67 +1,51 @@
-# ─── Python ──────────────────────────────────────────────────────────
+# ── Python ────────────────────────────────────
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.venv/
-venv/
-env/
-.Python
+*.pyo
 *.egg-info/
 *.egg
-pip-log.txt
+dist/
+build/
+*.whl
 
-# ─── Node.js / Frontend ─────────────────────────────────────────────
+# ── Virtual environments ─────────────────────
+venv/
+.venv/
+
+# ── Environment / Secrets ────────────────────
+.env
+!.env.example
+
+# ── IDE ──────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS files ─────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Docker / Data ────────────────────────────
+postgres_data/
+backups/
+*.sql.gz
+
+# ── Node / Frontend ──────────────────────────
 node_modules/
 .next/
 out/
-dist/
-.turbo/
-*.tsbuildinfo
+frontend/.next/
+frontend/node_modules/
 
-# ─── Environment & Secrets ──────────────────────────────────────────
-.env
-.env.local
-.env.*.local
-!.env.example
+# ── Logs ─────────────────────────────────────
+*.log
 
-# ─── Docker ──────────────────────────────────────────────────────────
-postgres_data/
-minio_data/
-
-# ─── Testing & Coverage ─────────────────────────────────────────────
+# ── Coverage / Testing ───────────────────────
 .coverage
-coverage/
 htmlcov/
 .pytest_cache/
-.nyc_output/
-lcov.info
 
-# ─── IDE & Editors ──────────────────────────────────────────────────
-.idea/
-.vscode/
-*.swp
-*.swo
-*.sublime-project
-*.sublime-workspace
-
-# ─── OS Files ────────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# ─── Logs ────────────────────────────────────────────────────────────
-*.log
-logs/
-
-# ─── Build Artifacts ────────────────────────────────────────────────
-*.tar.gz
-*.zip
-
-# ─── Data (large files, not committed) ──────────────────────────────
-/data/wav_examples/
-*.wav
-
-# ─── Deploy keys (NEVER commit private keys) ────────────────────────
-dev-tools/greenmind_deploy_key
-dev-tools/greenmind_deploy_key.pub
+# ── Ruff cache ───────────────────────────────
+.ruff_cache/
