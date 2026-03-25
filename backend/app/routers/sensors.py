@@ -1,8 +1,11 @@
 """Sensor (ESP32) management and data query endpoints."""
 
+import io
+import zipfile
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -273,6 +276,108 @@ async def get_sensor_data(
         )
 
     return responses
+
+
+# ── Sensor Data Export (ZIP) ────────────────────────
+
+
+EXPORT_RANGE_MAP = {
+    "1h": timedelta(hours=1),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+    "all": timedelta(days=365 * 10),
+}
+
+BATCH_SIZE = 10_000
+
+
+@router.get("/{sensor_id}/export")
+async def export_sensor_data(
+    sensor_id: str,
+    range: str = Query("24h", regex="^(1h|24h|7d|30d|all)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export sensor data as a ZIP archive containing one CSV per measurement kind."""
+    if not current_user.organization_id:
+        raise HTTPException(status_code=403, detail="No organization")
+
+    # Verify sensor ownership
+    result = (
+        db.query(Sensor, Gateway)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
+        .filter(
+            Sensor.id == sensor_id,
+            Greenhouse.organization_id == current_user.organization_id,
+        )
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    sensor, gw = result
+    td = EXPORT_RANGE_MAP[range]
+    cutoff = datetime.now(UTC) - td
+
+    # Get distinct kinds
+    kinds = (
+        db.query(SensorReading.kind)
+        .filter(SensorReading.sensor_id == sensor_id, SensorReading.timestamp >= cutoff)
+        .distinct()
+        .all()
+    )
+
+    if not kinds:
+        raise HTTPException(status_code=404, detail="No data available for export")
+
+    # Build ZIP in memory using streaming writes per kind
+    zip_buffer = io.BytesIO()
+    sensor_label = sensor.name or sensor.mac_address
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for (kind,) in kinds:
+            csv_buffer = io.StringIO()
+            csv_buffer.write("timestamp,value,unit\n")
+
+            offset = 0
+            while True:
+                batch = (
+                    db.query(SensorReading)
+                    .filter(
+                        SensorReading.sensor_id == sensor_id,
+                        SensorReading.kind == kind,
+                        SensorReading.timestamp >= cutoff,
+                    )
+                    .order_by(SensorReading.timestamp.asc())
+                    .offset(offset)
+                    .limit(BATCH_SIZE)
+                    .all()
+                )
+
+                for reading in batch:
+                    csv_buffer.write(
+                        f"{reading.timestamp.isoformat()},"
+                        f"{round(reading.value, 4)},"
+                        f"{reading.unit}\n"
+                    )
+
+                if len(batch) < BATCH_SIZE:
+                    break
+                offset += BATCH_SIZE
+
+            zf.writestr(f"{kind}.csv", csv_buffer.getvalue())
+            csv_buffer.close()
+
+    zip_buffer.seek(0)
+    filename = f"greenmind_{sensor_label}_{range}_{datetime.now(UTC).strftime('%Y%m%d')}.zip"
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Helpers ─────────────────────────────────────────
