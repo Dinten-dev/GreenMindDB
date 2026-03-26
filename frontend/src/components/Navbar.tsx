@@ -41,6 +41,9 @@ export default function Navbar() {
         { name: 'Kontakt', href: '/contact' }
     ];
 
+    // Hide public navbar on dashboard routes (dashboard has its own sidebar)
+    if (pathname.startsWith('/app')) return null;
+
     return (
         <>
             {/* ── Navbar ──────────────────────────── */}

@@ -21,6 +21,7 @@ from app.schemas.gateway import (
 
 PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
+LIVENESS_THRESHOLD = timedelta(minutes=5)
 
 
 def _require_org(user: User):
@@ -45,10 +46,12 @@ def list_gateways(
         query = query.filter(Gateway.greenhouse_id == greenhouse_id)
 
     gateways = query.all()
+    now = datetime.now(UTC)
     results = []
     for gw in gateways:
         sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.gateway_id == gw.id).scalar()
         gh = db.query(Greenhouse).filter(Greenhouse.id == gw.greenhouse_id).first()
+        is_online = bool(gw.last_seen and (now - gw.last_seen) < LIVENESS_THRESHOLD)
         results.append(
             GatewayResponse(
                 id=str(gw.id),
@@ -58,7 +61,7 @@ def list_gateways(
                 name=gw.name,
                 local_ip=gw.local_ip,
                 fw_version=gw.fw_version,
-                status=gw.status,
+                status="online" if is_online else "offline",
                 is_active=gw.is_active,
                 last_seen=gw.last_seen.isoformat() if gw.last_seen else None,
                 paired_at=gw.paired_at.isoformat() if gw.paired_at else None,
