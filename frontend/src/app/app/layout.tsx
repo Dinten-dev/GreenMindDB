@@ -37,7 +37,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-0.5">
                 {NAV_LINKS.map((link) => {
-                    const isActive = pathname === link.href;
+                    const isActive = pathname === link.href || (link.href !== '/app/dashboard' && pathname.startsWith(link.href));
                     return (
                         <Link
                             key={link.href}

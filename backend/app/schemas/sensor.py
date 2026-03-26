@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class SensorResponse(BaseModel):
     id: str
     gateway_id: str
+    greenhouse_id: str | None = None
     mac_address: str
     name: str | None = None
     sensor_type: str

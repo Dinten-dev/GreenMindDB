@@ -165,6 +165,7 @@ export async function apiGeneratePairingCode(greenhouse_id: string): Promise<Pai
 export interface SensorInfo {
     id: string;
     gateway_id: string;
+    greenhouse_id: string | null;
     mac_address: string;
     name: string | null;
     sensor_type: string;
@@ -196,6 +197,17 @@ export interface SensorDataResponse {
 
 export async function apiGetSensorData(sensorId: string, range: string = '24h'): Promise<SensorDataResponse[]> {
     return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params: { range } });
+}
+
+export async function apiGetSensorDataAdvanced(
+    sensorId: string,
+    opts: { range?: string; resolution?: string; date?: string }
+): Promise<SensorDataResponse[]> {
+    const params: Record<string, string> = {};
+    if (opts.range) params.range = opts.range;
+    if (opts.resolution) params.resolution = opts.resolution;
+    if (opts.date) params.date = opts.date;
+    return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params });
 }
 
 // ── Contact & Early Access ───────────────────

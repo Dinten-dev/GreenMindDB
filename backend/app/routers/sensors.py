@@ -32,6 +32,8 @@ RANGE_MAP = {
     "30d": timedelta(days=30),
 }
 
+LIVENESS_THRESHOLD = timedelta(minutes=5)
+
 
 # ── List Sensors ────────────────────────────────────
 
@@ -58,16 +60,19 @@ async def list_sensors(
     if gateway_id:
         query = query.filter(Sensor.gateway_id == gateway_id)
 
+    now = datetime.now(UTC)
     results = []
     for sensor, gw in query.all():
+        is_online = bool(sensor.last_seen and (now - sensor.last_seen) < LIVENESS_THRESHOLD)
         results.append(
             SensorResponse(
                 id=str(sensor.id),
                 gateway_id=str(sensor.gateway_id),
+                greenhouse_id=str(gw.greenhouse_id),
                 mac_address=sensor.mac_address,
                 name=sensor.name,
                 sensor_type=sensor.sensor_type,
-                status=sensor.status,
+                status="online" if is_online else "offline",
                 last_seen=sensor.last_seen.isoformat() if sensor.last_seen else None,
                 claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
                 gateway_name=gw.name,
@@ -182,19 +187,33 @@ async def move_sensor(
 
 # ── Sensor Data ─────────────────────────────────────
 
+RESOLUTION_BUCKET_MAP = {
+    "1m": "1 minute",
+    "5m": "5 minutes",
+    "1h": "1 hour",
+    "1d": "1 day",
+}
+
 
 @router.get("/{sensor_id}/data", response_model=list[SensorDataResponse])
 async def get_sensor_data(
     sensor_id: str,
     range: str = Query("24h", regex="^(1h|24h|7d|30d)$"),
+    resolution: str | None = Query(None, regex="^(raw|1m|5m|1h|1d)$"),
+    date: str | None = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get timeseries data for a sensor, grouped by kind, with range filter."""
+    """Get timeseries data for a sensor, grouped by kind.
+
+    Supports:
+    - range: relative window (1h, 24h, 7d, 30d)
+    - date: specific day (YYYY-MM-DD), overrides range
+    - resolution: aggregation bucket (raw, 1m, 5m, 1h, 1d)
+    """
     if not current_user.organization_id:
         raise HTTPException(status_code=403, detail="No organization")
 
-    # Verify sensor belongs to user's org
     result = (
         db.query(Sensor, Gateway)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
@@ -208,29 +227,59 @@ async def get_sensor_data(
     if not result:
         raise HTTPException(status_code=404, detail="Sensor not found")
 
-    td = RANGE_MAP[range]
-    cutoff = datetime.now(UTC) - td
+    # Determine time window
+    if date:
+        from datetime import date as date_type
+        try:
+            day = date_type.fromisoformat(date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format")
+        start = datetime(day.year, day.month, day.day, tzinfo=UTC)
+        end = start + timedelta(days=1)
+    else:
+        td = RANGE_MAP[range]
+        end = datetime.now(UTC)
+        start = end - td
 
-    # Get distinct kinds for this sensor
+    # Auto-pick resolution if not specified
+    if resolution is None:
+        span = end - start
+        if span <= timedelta(hours=1):
+            resolution = "raw"
+        elif span <= timedelta(hours=24):
+            resolution = "1m"
+        elif span <= timedelta(days=7):
+            resolution = "5m"
+        elif span <= timedelta(days=30):
+            resolution = "1h"
+        else:
+            resolution = "1d"
+
+    # Get distinct kinds
     kinds = (
         db.query(SensorReading.kind)
-        .filter(SensorReading.sensor_id == sensor_id, SensorReading.timestamp >= cutoff)
+        .filter(
+            SensorReading.sensor_id == sensor_id,
+            SensorReading.timestamp >= start,
+            SensorReading.timestamp < end,
+        )
         .distinct()
         .all()
     )
 
     responses = []
     for (kind,) in kinds:
-        if range == "24h":
+        if resolution == "raw":
             readings = (
                 db.query(SensorReading)
                 .filter(
                     SensorReading.sensor_id == sensor_id,
                     SensorReading.kind == kind,
-                    SensorReading.timestamp >= cutoff,
+                    SensorReading.timestamp >= start,
+                    SensorReading.timestamp < end,
                 )
                 .order_by(SensorReading.timestamp.asc())
-                .limit(1440)
+                .limit(5000)
                 .all()
             )
             data = [
@@ -238,19 +287,20 @@ async def get_sensor_data(
                 for r in readings
             ]
         else:
-            bucket_size = "15 minutes" if range == "7d" else "1 hour"
+            bucket_size = RESOLUTION_BUCKET_MAP[resolution]
             rows = db.execute(
                 text(
                     f"""
                     SELECT time_bucket('{bucket_size}', timestamp) AS bucket,
                            AVG(value) AS avg_value
                     FROM sensor_reading
-                    WHERE sensor_id = :sid AND kind = :kind AND timestamp >= :cutoff
+                    WHERE sensor_id = :sid AND kind = :kind
+                      AND timestamp >= :start AND timestamp < :end_ts
                     GROUP BY bucket
                     ORDER BY bucket ASC
                 """
                 ),
-                {"sid": sensor_id, "kind": kind, "cutoff": cutoff},
+                {"sid": sensor_id, "kind": kind, "start": start, "end_ts": end},
             ).fetchall()
             data = [
                 DataPoint(timestamp=row.bucket.isoformat(), value=round(row.avg_value, 2))
