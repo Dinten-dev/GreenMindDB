@@ -22,6 +22,7 @@ from app.services.gateway_service import (
     generate_pairing_code,
     list_gateways,
     register_gateway,
+    delete_gateway,
 )
 
 router = APIRouter(prefix="/gateways", tags=["gateways"])
@@ -72,7 +73,10 @@ async def handle_heartbeat(
 
     gateway = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
     if not gateway:
-        raise HTTPException(status_code=404, detail="Gateway not found")
+        raise HTTPException(
+            status_code=410,
+            detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
+        )
     if not gateway.is_active:
         raise HTTPException(status_code=403, detail="Gateway deactivated")
     if not gateway.api_key_hash or not verify_password(x_api_key, gateway.api_key_hash):
@@ -85,3 +89,13 @@ async def handle_heartbeat(
     db.commit()
 
     return {"status": "ok"}
+
+
+@router.delete("/{gateway_id}", status_code=204)
+async def handle_delete_gateway(
+    gateway_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a gateway and invalidate its API key."""
+    delete_gateway(db, current_user, gateway_id)

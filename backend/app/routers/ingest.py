@@ -28,10 +28,12 @@ async def ingest_data(
     if not x_api_key:
         raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
 
-    # Find gateway by hardware serial
     gateway = db.query(Gateway).filter(Gateway.hardware_id == data.gateway_serial).first()
     if not gateway:
-        raise HTTPException(status_code=404, detail="Gateway not found")
+        raise HTTPException(
+            status_code=410, 
+            detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
+        )
     if not gateway.is_active:
         raise HTTPException(status_code=403, detail="Gateway is deactivated")
     if not gateway.api_key_hash:

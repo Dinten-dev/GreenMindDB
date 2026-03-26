@@ -152,3 +152,19 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
         api_key=api_key,
         greenhouse_id=str(gateway.greenhouse_id),
     )
+
+
+def delete_gateway(db: Session, user: User, gateway_id: str) -> None:
+    org_id = _require_org(user)
+
+    gateway = (
+        db.query(Gateway)
+        .join(Greenhouse)
+        .filter(Gateway.id == gateway_id, Greenhouse.organization_id == org_id)
+        .first()
+    )
+    if not gateway:
+        raise HTTPException(status_code=404, detail="Gateway not found")
+
+    db.delete(gateway)
+    db.commit()
