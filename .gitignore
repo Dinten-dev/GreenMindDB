@@ -15,6 +15,7 @@ venv/
 # ── Environment / Secrets ────────────────────
 .env
 !.env.example
+dev-tools/greenmind_deploy_key*
 
 # ── IDE ──────────────────────────────────────
 .vscode/
