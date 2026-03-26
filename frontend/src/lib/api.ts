@@ -199,6 +199,10 @@ export async function apiGetSensorData(sensorId: string, range: string = '24h'):
     return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params: { range } });
 }
 
+export async function apiDeleteSensor(sensorId: string): Promise<void> {
+    return apiFetch<void>(`/sensors/${sensorId}`, { method: 'DELETE' });
+}
+
 export async function apiGetSensorDataAdvanced(
     sensorId: string,
     opts: { range?: string; resolution?: string; date?: string }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiListSensors, apiGetSensorData, apiExportSensorData, SensorInfo, SensorDataResponse } from '@/lib/api';
+import { apiListSensors, apiGetSensorData, apiExportSensorData, apiDeleteSensor, SensorInfo, SensorDataResponse } from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -25,6 +25,8 @@ export default function SensorsPage() {
     const [loadingData, setLoadingData] = useState(false);
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
+    const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         apiListSensors()
@@ -88,6 +90,24 @@ export default function SensorsPage() {
         return () => clearInterval(interval);
     }, [selectedSensor, timeRange, loadSensorData]);
 
+    const confirmDeleteSensor = async () => {
+        if (!deletingSensorId) return;
+        setIsDeleting(true);
+        try {
+            await apiDeleteSensor(deletingSensorId);
+            setSensors(prev => prev.filter(s => s.id !== deletingSensorId));
+            if (selectedSensor === deletingSensorId) {
+                setSelectedSensor(null);
+                setSensorData([]);
+            }
+            setDeletingSensorId(null);
+        } catch (err) {
+            console.error('Failed to delete sensor:', err);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="animate-pulse space-y-4">
@@ -126,6 +146,7 @@ export default function SensorsPage() {
                                     <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Gateway</th>
                                     <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Status</th>
                                     <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Zuletzt</th>
+                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-12"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-black/[0.03]">
@@ -159,6 +180,17 @@ export default function SensorsPage() {
                                         </td>
                                         <td className="px-5 py-3.5 text-xs text-gray-400">
                                             {s.last_seen ? new Date(s.last_seen).toLocaleString('de-CH') : '–'}
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setDeletingSensorId(s.id); }}
+                                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                title="Sensor entfernen"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -375,6 +407,39 @@ export default function SensorsPage() {
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Delete Sensor Confirmation Modal */}
+            {deletingSensorId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDeletingSensorId(null)} />
+                    <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">Sensor entfernen?</h3>
+                        <p className="text-sm text-center text-gray-500 mb-6">
+                            Alle Messdaten dieses Sensors werden unwiderruflich gelöscht.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingSensorId(null)}
+                                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={confirmDeleteSensor}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Lösche…' : 'Löschen'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
