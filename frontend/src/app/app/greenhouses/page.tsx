@@ -110,7 +110,7 @@ export default function GreenhousesPage() {
                                     value={location}
                                     onChange={(e) => setLocation(e.target.value)}
                                     className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 backdrop-blur-sm"
-                                    placeholder="z.B. Basel, Schweiz"
+                                    placeholder="z.B. Brugg, Schweiz"
                                 />
                             </div>
                             <div className="flex gap-3 pt-2">

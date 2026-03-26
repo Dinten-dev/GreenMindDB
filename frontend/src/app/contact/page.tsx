@@ -54,8 +54,8 @@ export default function ContactPage() {
                             <div className="bg-apple-gray-100 rounded-apple-lg p-10 border border-apple-gray-200/50">
                                 <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">Standort</h3>
                                 <p className="text-lg text-apple-gray-800 leading-relaxed">
-                                    FHNW Campus Muttenz<br />
-                                    Basel, Schweiz
+                                    FHNW Campus Brugg-Windisch<br />
+                                    Brugg, Schweiz
                                 </p>
                             </div>
                         </ScrollReveal>

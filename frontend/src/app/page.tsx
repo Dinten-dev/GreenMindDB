@@ -229,7 +229,7 @@ export default function LandingPage() {
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
                             <div className="text-center p-8">
-                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Basel</div>
+                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Brugg</div>
                                 <p className="text-sm text-apple-gray-400">Schweizer Präzisionstechnik<br />aus dem Innovationszentrum</p>
                             </div>
                         </ScrollReveal>
@@ -332,7 +332,7 @@ export default function LandingPage() {
 
                     <div className="mt-8 pt-8 border-t border-apple-gray-200/50 flex flex-col md:flex-row items-center justify-between gap-4">
                         <p className="text-sm text-apple-gray-400">© 2026 GreenMind. Alle Rechte vorbehalten.</p>
-                        <p className="text-sm text-apple-gray-300">FHNW Campus Muttenz · Basel, Schweiz</p>
+                        <p className="text-sm text-apple-gray-300">FHNW Campus Brugg-Windisch · Brugg, Schweiz</p>
                     </div>
                 </div>
             </footer>
