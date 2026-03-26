@@ -185,6 +185,43 @@ async def move_sensor(
     )
 
 
+# ── Delete Sensor ───────────────────────────────────
+
+
+@router.delete("/{sensor_id}", status_code=204)
+async def delete_sensor(
+    sensor_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a sensor and all its readings."""
+    if not current_user.organization_id:
+        raise HTTPException(status_code=403, detail="No organization")
+
+    result = (
+        db.query(Sensor, Gateway)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
+        .filter(
+            Sensor.id == sensor_id,
+            Greenhouse.organization_id == current_user.organization_id,
+        )
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    sensor, _ = result
+
+    # Delete readings first (no FK cascade on hypertable)
+    db.execute(
+        text("DELETE FROM sensor_reading WHERE sensor_id = :sid"),
+        {"sid": str(sensor.id)},
+    )
+    db.delete(sensor)
+    db.commit()
+
+
 # ── Sensor Data ─────────────────────────────────────
 
 RESOLUTION_BUCKET_MAP = {
