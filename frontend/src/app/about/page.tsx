@@ -49,7 +49,7 @@ export default function AboutPage() {
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Das Team</h2>
                             <p className="text-apple-gray-400 leading-relaxed">
                                 Wir sind ein multidisziplinäres Team aus Pflanzenwissenschaftlern, Ingenieuren und Produktdesignern
-                                mit Sitz in Basel, Schweiz. Unsere Arbeit basiert auf angewandter Forschung der FHNW
+                                mit Sitz am Campus Brugg-Windisch, Schweiz. Unsere Arbeit basiert auf angewandter Forschung der FHNW
                                 (Fachhochschule Nordwestschweiz) und ist getrieben von der tiefen Überzeugung,
                                 dass Präzisionslandwirtschaft zugänglicher, intelligenter und wirkungsvoller gestaltet werden kann.
                             </p>
