@@ -150,6 +150,10 @@ export async function apiListGateways(greenhouse_id?: string): Promise<GatewayIn
     return apiFetch<GatewayInfo[]>('/gateways', { params });
 }
 
+export async function apiDeleteGateway(gatewayId: string): Promise<void> {
+    return apiFetch<void>(`/gateways/${gatewayId}`, { method: 'DELETE' });
+}
+
 export async function apiGeneratePairingCode(greenhouse_id: string): Promise<PairingCode> {
     return apiFetch<PairingCode>('/gateways/pairing-code', {
         method: 'POST',

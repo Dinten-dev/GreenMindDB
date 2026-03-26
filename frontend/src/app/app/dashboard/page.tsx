@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-    apiListGreenhouses, apiListGateways, apiListSensors,
+    apiListGreenhouses, apiListGateways, apiListSensors, apiDeleteGateway,
     Greenhouse, GatewayInfo, SensorInfo,
 } from '@/lib/api';
 
@@ -15,6 +15,10 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const [orgName, setOrgName] = useState('');
     const [creatingOrg, setCreatingOrg] = useState(false);
+    
+    // Deletion states
+    const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
@@ -48,6 +52,23 @@ export default function DashboardPage() {
             console.error(err);
         } finally {
             setCreatingOrg(false);
+        }
+    };
+
+    const confirmDelete = async () => {
+        if (!deletingGatewayId) return;
+        setIsDeleting(true);
+        try {
+            await apiDeleteGateway(deletingGatewayId);
+            setGateways(prev => prev.filter(g => g.id !== deletingGatewayId));
+            // Reload sensors to reflect cascade delete
+            const sen = await apiListSensors();
+            setSensors(sen);
+            setDeletingGatewayId(null);
+        } catch (err) {
+            console.error('Failed to delete gateway:', err);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -118,15 +139,24 @@ export default function DashboardPage() {
                     <h2 className="text-lg font-semibold text-gray-800 mb-4">Gateways</h2>
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {gateways.map(gw => (
-                            <div key={gw.id} className="flex items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border border-black/[0.03] transition-colors hover:bg-white/60">
+                            <div key={gw.id} className="group flex items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border border-black/[0.03] transition-colors hover:bg-white/60 relative">
                                 <span className={`w-2.5 h-2.5 rounded-full ${gw.status === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 pr-8">
                                     <p className="text-sm font-medium text-gray-800 truncate">{gw.name || gw.hardware_id}</p>
                                     <p className="text-xs text-gray-400">{gw.sensor_count} Sensoren · {gw.greenhouse_name}</p>
                                 </div>
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-gray-400 shrink-0">
                                     {gw.last_seen ? timeAgo(gw.last_seen) : 'nie'}
                                 </span>
+                                <button
+                                    onClick={() => setDeletingGatewayId(gw.id)}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                    title="Gateway entfernen"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -138,6 +168,39 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-400">
                         Erstelle ein Gewächshaus und paire ein Raspberry Pi Gateway, um Sensordaten zu empfangen.
                     </p>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deletingGatewayId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDeletingGatewayId(null)} />
+                    <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">Gateway entfernen?</h3>
+                        <p className="text-sm text-center text-gray-500 mb-6">
+                            Bist du sicher, dass du dieses Gateway löschen möchtest? Alle zugehörigen Sensoren und Daten werden ebenfalls entfernt. Dies kann nicht rückgängig gemacht werden.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingGatewayId(null)}
+                                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Lösche...' : 'Löschen'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
