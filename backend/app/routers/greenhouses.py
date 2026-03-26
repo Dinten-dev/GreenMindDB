@@ -11,6 +11,7 @@ from app.schemas.greenhouse import GreenhouseCreate, GreenhouseOverview, Greenho
 from app.services.gateway_service import generate_pairing_code
 from app.services.greenhouse_service import (
     create_greenhouse,
+    delete_greenhouse,
     get_greenhouse,
     get_greenhouse_overview,
     list_greenhouses,
@@ -46,6 +47,16 @@ async def handle_get_greenhouse(
 ):
     """Get a single greenhouse."""
     return get_greenhouse(db, current_user, greenhouse_id)
+
+
+@router.delete("/{greenhouse_id}", status_code=204)
+async def handle_delete_greenhouse(
+    greenhouse_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a greenhouse and cascade delete all its resources."""
+    return delete_greenhouse(db, current_user, greenhouse_id)
 
 
 @router.get("/{greenhouse_id}/overview", response_model=GreenhouseOverview)

@@ -119,6 +119,10 @@ export async function apiCreateGreenhouse(name: string, location?: string): Prom
     });
 }
 
+export async function apiDeleteGreenhouse(id: string): Promise<void> {
+    return apiFetch<void>(`/greenhouses/${id}`, { method: 'DELETE' });
+}
+
 export async function apiGetGreenhouseOverview(id: string): Promise<GreenhouseOverview> {
     return apiFetch<GreenhouseOverview>(`/greenhouses/${id}/overview`);
 }
