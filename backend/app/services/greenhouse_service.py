@@ -129,3 +129,30 @@ def get_greenhouse_overview(db: Session, user: User, greenhouse_id: str) -> Gree
         total_sensors=total_sensors,
         readings_24h=readings_24h,
     )
+
+
+def delete_greenhouse(db: Session, user: User, greenhouse_id: str) -> None:
+    org_id = _require_org(user)
+    gh = (
+        db.query(Greenhouse)
+        .filter(Greenhouse.id == greenhouse_id, Greenhouse.organization_id == org_id)
+        .first()
+    )
+    if not gh:
+        raise HTTPException(status_code=404, detail="Greenhouse not found")
+
+    # Find all sensors in this greenhouse to delete their readings first (no FK cascade)
+    gateways = db.query(Gateway.id).filter(Gateway.greenhouse_id == gh.id).all()
+    if gateways:
+        gw_ids = [g[0] for g in gateways]
+        sensors = db.query(Sensor.id).filter(Sensor.gateway_id.in_(gw_ids)).all()
+        if sensors:
+            sensor_ids_str = [str(s[0]) for s in sensors]
+            from sqlalchemy import text
+            db.execute(
+                text("DELETE FROM sensor_reading WHERE sensor_id = ANY(:sids)"),
+                {"sids": sensor_ids_str},
+            )
+
+    db.delete(gh)
+    db.commit()

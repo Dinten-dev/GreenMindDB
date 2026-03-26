@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiListGateways, apiListGreenhouses, apiGeneratePairingCode, GatewayInfo, Greenhouse, PairingCode } from '@/lib/api';
+import { apiListGateways, apiListGreenhouses, apiGeneratePairingCode, apiDeleteGateway, GatewayInfo, Greenhouse, PairingCode } from '@/lib/api';
 
 export default function GatewaysPage() {
     const [gateways, setGateways] = useState<GatewayInfo[]>([]);
@@ -13,6 +13,10 @@ export default function GatewaysPage() {
     const [selectedGreenhouse, setSelectedGreenhouse] = useState('');
     const [pairingCode, setPairingCode] = useState<PairingCode | null>(null);
     const [generating, setGenerating] = useState(false);
+
+    // Deletion
+    const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -43,6 +47,20 @@ export default function GatewaysPage() {
             console.error(err);
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const confirmDeleteGateway = async () => {
+        if (!deletingGatewayId) return;
+        setIsDeleting(true);
+        try {
+            await apiDeleteGateway(deletingGatewayId);
+            setGateways(prev => prev.filter(g => g.id !== deletingGatewayId));
+            setDeletingGatewayId(null);
+        } catch (err) {
+            console.error('Failed to delete gateway:', err);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -158,6 +176,15 @@ export default function GatewaysPage() {
                                     <span className={`w-1.5 h-1.5 rounded-full ${gw.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
                                     {gw.status}
                                 </span>
+                                <button
+                                    onClick={(e) => { e.preventDefault(); setDeletingGatewayId(gw.id); }}
+                                    className="ml-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
+                                    title="Gateway entfernen"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
                             </div>
 
                             <div className="grid grid-cols-3 gap-2 text-sm">
@@ -182,6 +209,39 @@ export default function GatewaysPage() {
                             )}
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Delete Gateway Confirmation Modal */}
+            {deletingGatewayId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDeletingGatewayId(null)} />
+                    <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">Gateway entfernen?</h3>
+                        <p className="text-sm text-center text-gray-500 mb-6">
+                            Damit wird auch die Verbindung aller zugehörigen Sensoren getrennt. Die Sensordaten werden ebenfalls gelöscht.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingGatewayId(null)}
+                                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={confirmDeleteGateway}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Lösche…' : 'Löschen'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

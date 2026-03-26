@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { apiListGreenhouses, apiCreateGreenhouse, Greenhouse } from '@/lib/api';
+import { apiListGreenhouses, apiCreateGreenhouse, apiDeleteGreenhouse, Greenhouse } from '@/lib/api';
 
 export default function GreenhousesPage() {
     const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
@@ -11,6 +11,10 @@ export default function GreenhousesPage() {
     const [name, setName] = useState('');
     const [location, setLocation] = useState('');
     const [creating, setCreating] = useState(false);
+
+    // Deletion
+    const [deletingGreenhouseId, setDeletingGreenhouseId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         loadGreenhouses();
@@ -41,6 +45,20 @@ export default function GreenhousesPage() {
             console.error(err);
         } finally {
             setCreating(false);
+        }
+    };
+
+    const confirmDeleteGreenhouse = async () => {
+        if (!deletingGreenhouseId) return;
+        setIsDeleting(true);
+        try {
+            await apiDeleteGreenhouse(deletingGreenhouseId);
+            setGreenhouses(prev => prev.filter(gh => gh.id !== deletingGreenhouseId));
+            setDeletingGreenhouseId(null);
+        } catch (err) {
+            console.error('Failed to delete greenhouse:', err);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -144,7 +162,18 @@ export default function GreenhousesPage() {
                                     <h3 className="text-lg font-semibold text-gray-800 mb-1">{gh.name}</h3>
                                     {gh.location && <p className="text-sm text-gray-400">{gh.location}</p>}
                                 </div>
-                                <span className="text-gray-400 text-lg">›</span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={(e) => { e.preventDefault(); setDeletingGreenhouseId(gh.id); }}
+                                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
+                                        title="Gewächshaus löschen"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                    <span className="text-gray-400 text-lg">›</span>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 text-sm mt-4">
                                 <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
@@ -158,6 +187,39 @@ export default function GreenhousesPage() {
                             </div>
                         </Link>
                     ))}
+                </div>
+            )}
+
+            {/* Delete Greenhouse Confirmation Modal */}
+            {deletingGreenhouseId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDeletingGreenhouseId(null)} />
+                    <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">Gewächshaus löschen?</h3>
+                        <p className="text-sm text-center text-gray-500 mb-6">
+                            Alle zugehörigen Gateways, Sensoren und Messdaten werden <strong className="font-semibold text-gray-700">unwiderruflich</strong> gelöscht.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingGreenhouseId(null)}
+                                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={confirmDeleteGreenhouse}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Lösche…' : 'Löschen'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
