@@ -52,10 +52,24 @@ export const RESEARCH_PAPERS: ResearchPaper[] = [
         greenmindLink: 'Peter Gloor misst Veränderungen der Aktionspotenziale einer Basilikum-Pflanze, um menschlichen Stress vorherzusagen — mit über 90 % Genauigkeit. Dies zeigt, dass bioelektrische Pflanzensignale ein hochsensitives Messinstrument für Umgebungsveränderungen sind.',
         abstract: 'Laborexperiment mit 30 Teilnehmenden: Ein Plant SpikerBox erfasst die Aktionspotenziale einer Basilikum-Pflanze, ML-Modelle sagen Prüfungsnoten mit >90 % Genauigkeit voraus.',
     },
+    {
+        id: 'gloor-human-movement-2025',
+        title: 'Machine Learning Distinguishes Plant Bioelectric Recordings with and Without Nearby Human Movement',
+        authors: 'Gloor PA, Weinbeer M',
+        year: 2025,
+        journal: 'Biosensors (MDPI)',
+        url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12649949/',
+        doi: '10.3390/bios15120744',
+        category: 'fundamentals',
+        categoryLabel: 'Grundlagen',
+        greenmindLink: 'Peter Gloor weist nach, dass Pflanzen messbare bioelektrische Unterschiede zeigen, wenn sich ein Mensch in der Nähe bewegt. Random-Forest-Klassifikatoren erreichen 62,7 % Genauigkeit bei 2978 Proben über drei Pflanzenarten — ein weiterer Beleg, dass bioelektrische Pflanzensignale auf Umgebungsveränderungen reagieren.',
+        abstract: 'Bioelektrische Aufzeichnungen von 2978 Pflanzenproben (Basilikum, Salat, Tomate) werden mit Random Forest und CNN klassifiziert, um statistisch signifikante Unterschiede zwischen Aufnahmen mit und ohne menschliche Bewegung in der Nähe zu detektieren.',
+    },
 ];
 
 export const CATEGORY_OPTIONS = [
     { value: 'all', label: 'Alle Kategorien' },
+    { value: 'fundamentals', label: 'Grundlagen' },
     { value: 'stress-detection', label: 'Stress-Detektion' },
     { value: 'hardware', label: 'Hardware & Sensorik' },
     { value: 'predictive-analytics', label: 'Prädiktive Analytik' },
