@@ -37,6 +37,7 @@ export default function Navbar() {
     const navLinks = [
         { name: 'Produkt', href: '/product' },
         { name: 'Technologie', href: '/technology' },
+        { name: 'Science', href: '/science' },
         { name: 'Über uns', href: '/about' },
         { name: 'Kontakt', href: '/contact' }
     ];
