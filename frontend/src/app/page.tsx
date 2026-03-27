@@ -325,6 +325,7 @@ export default function LandingPage() {
                         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-apple-gray-400">
                             <Link href="/product" className="hover:text-apple-gray-800 transition-colors duration-200">Produkt</Link>
                             <Link href="/technology" className="hover:text-apple-gray-800 transition-colors duration-200">Technologie</Link>
+                            <Link href="/science" className="hover:text-apple-gray-800 transition-colors duration-200">Science</Link>
                             <Link href="/about" className="hover:text-apple-gray-800 transition-colors duration-200">Über uns</Link>
                             <Link href="/contact" className="hover:text-apple-gray-800 transition-colors duration-200">Kontakt</Link>
                         </div>
