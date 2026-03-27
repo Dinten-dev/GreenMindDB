@@ -65,6 +65,19 @@ export const RESEARCH_PAPERS: ResearchPaper[] = [
         greenmindLink: 'Peter Gloor weist nach, dass Pflanzen messbare bioelektrische Unterschiede zeigen, wenn sich ein Mensch in der Nähe bewegt. Random-Forest-Klassifikatoren erreichen 62,7 % Genauigkeit bei 2978 Proben über drei Pflanzenarten — ein weiterer Beleg, dass bioelektrische Pflanzensignale auf Umgebungsveränderungen reagieren.',
         abstract: 'Bioelektrische Aufzeichnungen von 2978 Pflanzenproben (Basilikum, Salat, Tomate) werden mit Random Forest und CNN klassifiziert, um statistisch signifikante Unterschiede zwischen Aufnahmen mit und ohne menschliche Bewegung in der Nähe zu detektieren.',
     },
+    {
+        id: 'garlando-impedance-2022',
+        title: 'Ask the Plants Directly: Understanding Plant Needs Using Electrical Impedance Measurements',
+        authors: 'Garlando U, Calvo S, Barezzi M, Sanginario A, Motto Ros P, Demarchi D',
+        year: 2022,
+        journal: 'Computers and Electronics in Agriculture',
+        url: 'https://doi.org/10.1016/j.compag.2022.106707',
+        doi: '10.1016/j.compag.2022.106707',
+        category: 'stress-detection',
+        categoryLabel: 'Stress-Detektion',
+        greenmindLink: 'Elektrische Impedanzmessungen am Pflanzenstamm erkennen Wasserstress mit bis zu 95 % Korrelation zur Bodenfeuchtigkeit — eine kostengünstige Methode, die Pflanzenbedürfnisse direkt zu erfassen, genau wie GreenMinds Sensor-Ansatz es vorsieht.',
+        abstract: 'In-vivo Impedanzmessungen am Pflanzenstamm zeigen eine signifikante Korrelation mit Umweltparametern. Die Methode ermöglicht eine direkte, kostengünstige Echtzeit-Überwachung des Pflanzenzustands ohne visuelle Inspektion.',
+    },
 ];
 
 export const CATEGORY_OPTIONS = [
