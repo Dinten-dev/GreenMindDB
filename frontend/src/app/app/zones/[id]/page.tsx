@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { apiListGateways, apiListSensors, apiListGreenhouses, GatewayInfo, SensorInfo, Greenhouse } from '@/lib/api';
+import { apiListGateways, apiListSensors, apiListZones, GatewayInfo, SensorInfo, Zone, ZONE_TYPES } from '@/lib/api';
 
-export default function GreenhouseDetailPage() {
+export default function ZoneDetailPage() {
     const { id } = useParams<{ id: string }>();
-    const [greenhouse, setGreenhouse] = useState<Greenhouse | null>(null);
+    const [zone, setZone] = useState<Zone | null>(null);
     const [gateways, setGateways] = useState<GatewayInfo[]>([]);
     const [sensors, setSensors] = useState<SensorInfo[]>([]);
     const [loading, setLoading] = useState(true);
@@ -15,12 +15,12 @@ export default function GreenhouseDetailPage() {
     useEffect(() => {
         (async () => {
             try {
-                const [ghs, gws, sens] = await Promise.all([
-                    apiListGreenhouses(),
+                const [zs, gws, sens] = await Promise.all([
+                    apiListZones(),
                     apiListGateways(id),
                     apiListSensors(id),
                 ]);
-                setGreenhouse(ghs.find(g => g.id === id) || null);
+                setZone(zs.find(z => z.id === id) || null);
                 setGateways(gws);
                 setSensors(sens);
             } catch (err) {
@@ -38,6 +38,9 @@ export default function GreenhouseDetailPage() {
         return acc;
     }, {});
 
+    const getZoneIcon = (type: string) => ZONE_TYPES.find(t => t.value === type)?.icon || '🌱';
+    const getZoneLabel = (type: string) => ZONE_TYPES.find(t => t.value === type)?.label || type;
+
     if (loading) {
         return (
             <div className="animate-pulse space-y-4">
@@ -51,14 +54,25 @@ export default function GreenhouseDetailPage() {
         <div className="space-y-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-gray-400">
-                <Link href="/app/greenhouses" className="hover:text-gray-600 transition-colors">Gewächshäuser</Link>
+                <Link href="/app/zones" className="hover:text-gray-600 transition-colors">Zonen</Link>
                 <span>›</span>
-                <span className="text-gray-700 font-medium">{greenhouse?.name || 'Detail'}</span>
+                <span className="text-gray-700 font-medium">{zone?.name || 'Detail'}</span>
             </div>
 
-            <div>
-                <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{greenhouse?.name}</h1>
-                {greenhouse?.location && <p className="text-sm text-gray-400 mt-1">{greenhouse.location}</p>}
+            <div className="flex items-center gap-3">
+                <span className="text-3xl">{getZoneIcon(zone?.zone_type || 'GREENHOUSE')}</span>
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{zone?.name}</h1>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200/50">
+                            {getZoneLabel(zone?.zone_type || 'GREENHOUSE')}
+                        </span>
+                        {zone?.location && <span className="text-sm text-gray-400">{zone.location}</span>}
+                        {zone?.latitude != null && zone?.longitude != null && (
+                            <span className="text-xs text-gray-400 font-mono">📍 {zone.latitude.toFixed(4)}, {zone.longitude.toFixed(4)}</span>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Stats */}
@@ -118,7 +132,7 @@ export default function GreenhouseDetailPage() {
                                         {gwSensors.map(sensor => (
                                             <Link
                                                 key={sensor.id}
-                                                href={`/app/greenhouses/${id}/sensor/${sensor.id}`}
+                                                href={`/app/zones/${id}/sensor/${sensor.id}`}
                                                 className="px-5 py-3 flex items-center justify-between hover:bg-white/40 transition-colors group"
                                             >
                                                 <div className="flex items-center gap-2.5">

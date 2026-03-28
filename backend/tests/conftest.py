@@ -123,7 +123,7 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     DELETE FROM sensor;
     DELETE FROM gateway;
     DELETE FROM users;
-    DELETE FROM greenhouse;
+    DELETE FROM zone;
     DELETE FROM organization;
 
     -- Insert organization
@@ -131,11 +131,11 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     VALUES ('{org_id}', 'Test Org')
     ON CONFLICT DO NOTHING;
 
-    INSERT INTO greenhouse (id, organization_id, name, location)
-    VALUES ('11111111-1111-1111-1111-111111111111', '{org_id}', 'Test Greenhouse', 'Mac mini Lab')
+    INSERT INTO zone (id, organization_id, name, location, zone_type)
+    VALUES ('11111111-1111-1111-1111-111111111111', '{org_id}', 'Test Zone', 'Mac mini Lab', 'GREENHOUSE')
     ON CONFLICT (id) DO NOTHING;
 
-    INSERT INTO gateway (id, greenhouse_id, hardware_id, name, fw_version, last_seen, status)
+    INSERT INTO gateway (id, zone_id, hardware_id, name, fw_version, last_seen, status)
     VALUES (
       '44444444-4444-4444-4444-444444444444',
       '11111111-1111-1111-1111-111111111111',

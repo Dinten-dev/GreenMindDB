@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
 const NAV_LINKS = [
     { href: '/app/dashboard', label: 'Dashboard', icon: '◉' },
-    { href: '/app/greenhouses', label: 'Gewächshäuser', icon: '⌂' },
+    { href: '/app/zones', label: 'Zonen', icon: '⌂' },
     { href: '/app/gateways', label: 'Gateways', icon: '◎' },
     { href: '/app/sensors', label: 'Sensoren', icon: '◈' },
     { href: '/app/account', label: 'Account', icon: '○' },

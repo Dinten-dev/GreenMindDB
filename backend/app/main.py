@@ -23,7 +23,7 @@ from app.routers import (  # noqa: E402
     auth_router,
     contact_router,
     gateways_router,
-    greenhouses_router,
+    zones_router,
     ingest_router,
     organizations_router,
     sensors_router,
@@ -108,7 +108,7 @@ api_v1_router = APIRouter(prefix="/api/v1")
 
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(organizations_router)
-api_v1_router.include_router(greenhouses_router)
+api_v1_router.include_router(zones_router)
 api_v1_router.include_router(gateways_router)
 api_v1_router.include_router(sensors_router)
 api_v1_router.include_router(ingest_router)

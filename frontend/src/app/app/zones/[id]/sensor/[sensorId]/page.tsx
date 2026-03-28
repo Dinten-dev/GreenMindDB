@@ -32,7 +32,7 @@ function friendlyDate(iso: string): string {
 type ExportStatus = 'idle' | 'loading' | 'done' | 'error';
 
 export default function SensorDetailPage() {
-    const { id: greenhouseId, sensorId } = useParams<{ id: string; sensorId: string }>();
+    const { id: zoneId, sensorId } = useParams<{ id: string; sensorId: string }>();
 
     const [sensor, setSensor] = useState<SensorInfo | null>(null);
     const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
@@ -45,14 +45,14 @@ export default function SensorDetailPage() {
 
     // Load sensor info
     useEffect(() => {
-        apiListSensors(greenhouseId)
+        apiListSensors(zoneId)
             .then(sensors => {
                 const found = sensors.find(s => s.id === sensorId);
                 setSensor(found || null);
             })
             .catch(console.error)
             .finally(() => setLoading(false));
-    }, [greenhouseId, sensorId]);
+    }, [zoneId, sensorId]);
 
     // Load sensor data
     const loadData = useCallback(async () => {
@@ -116,9 +116,9 @@ export default function SensorDetailPage() {
         <div className="space-y-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
-                <Link href="/app/greenhouses" className="hover:text-gray-600 transition-colors">Gewächshäuser</Link>
+                <Link href="/app/zones" className="hover:text-gray-600 transition-colors">Zonen</Link>
                 <span>›</span>
-                <Link href={`/app/greenhouses/${greenhouseId}`} className="hover:text-gray-600 transition-colors">Detail</Link>
+                <Link href={`/app/zones/${zoneId}`} className="hover:text-gray-600 transition-colors">Detail</Link>
                 <span>›</span>
                 <span className="text-gray-700 font-medium">{sensor.name || sensor.mac_address}</span>
             </div>

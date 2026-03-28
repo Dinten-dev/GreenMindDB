@@ -19,10 +19,10 @@ from app.schemas.gateway import (
     RegisterGatewayRequest,
     RegisterGatewayResponse,
 )
-from app.schemas.greenhouse import (
-    GreenhouseCreate,
-    GreenhouseOverview,
-    GreenhouseResponse,
+from app.schemas.zone import (
+    ZoneCreate,
+    ZoneOverview,
+    ZoneResponse,
 )
 from app.schemas.ingest import IngestRequest, IngestResponse, ReadingPayload
 from app.schemas.organization import OrgCreate, OrgResponse
@@ -42,9 +42,9 @@ __all__ = [
     "AuthResponse",
     "OrgCreate",
     "OrgResponse",
-    "GreenhouseCreate",
-    "GreenhouseResponse",
-    "GreenhouseOverview",
+    "ZoneCreate",
+    "ZoneResponse",
+    "ZoneOverview",
     "GatewayResponse",
     "PairingCodeRequest",
     "PairingCodeResponse",

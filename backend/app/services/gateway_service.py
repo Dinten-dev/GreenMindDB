@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_password_hash
-from app.models.master import Gateway, Greenhouse, Sensor
+from app.models.master import Gateway, Sensor, Zone
 from app.models.pairing import PairingCode
 from app.models.user import User
 from app.schemas.gateway import (
@@ -31,32 +31,32 @@ def _require_org(user: User):
 
 
 def list_gateways(
-    db: Session, user: User, *, greenhouse_id: str | None = None
+    db: Session, user: User, *, zone_id: str | None = None
 ) -> list[GatewayResponse]:
     org_id = _require_org(user)
 
-    gh_ids = [
-        g.id for g in db.query(Greenhouse.id).filter(Greenhouse.organization_id == org_id).all()
+    z_ids = [
+        z.id for z in db.query(Zone.id).filter(Zone.organization_id == org_id).all()
     ]
-    if not gh_ids:
+    if not z_ids:
         return []
 
-    query = db.query(Gateway).filter(Gateway.greenhouse_id.in_(gh_ids))
-    if greenhouse_id:
-        query = query.filter(Gateway.greenhouse_id == greenhouse_id)
+    query = db.query(Gateway).filter(Gateway.zone_id.in_(z_ids))
+    if zone_id:
+        query = query.filter(Gateway.zone_id == zone_id)
 
     gateways = query.all()
     now = datetime.now(UTC)
     results = []
     for gw in gateways:
         sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.gateway_id == gw.id).scalar()
-        gh = db.query(Greenhouse).filter(Greenhouse.id == gw.greenhouse_id).first()
+        z = db.query(Zone).filter(Zone.id == gw.zone_id).first()
         is_online = bool(gw.last_seen and (now - gw.last_seen) < LIVENESS_THRESHOLD)
         results.append(
             GatewayResponse(
                 id=str(gw.id),
-                greenhouse_id=str(gw.greenhouse_id),
-                greenhouse_name=gh.name if gh else None,
+                zone_id=str(gw.zone_id),
+                zone_name=z.name if z else None,
                 hardware_id=gw.hardware_id,
                 name=gw.name,
                 local_ip=gw.local_ip,
@@ -71,16 +71,16 @@ def list_gateways(
     return results
 
 
-def generate_pairing_code(db: Session, user: User, greenhouse_id: str) -> PairingCodeResponse:
+def generate_pairing_code(db: Session, user: User, zone_id: str) -> PairingCodeResponse:
     org_id = _require_org(user)
 
-    gh = (
-        db.query(Greenhouse)
-        .filter(Greenhouse.id == greenhouse_id, Greenhouse.organization_id == org_id)
+    z = (
+        db.query(Zone)
+        .filter(Zone.id == zone_id, Zone.organization_id == org_id)
         .first()
     )
-    if not gh:
-        raise HTTPException(status_code=404, detail="Greenhouse not found")
+    if not z:
+        raise HTTPException(status_code=404, detail="Zone not found")
 
     chars = string.ascii_uppercase + string.digits
     for _ in range(10):
@@ -97,7 +97,7 @@ def generate_pairing_code(db: Session, user: User, greenhouse_id: str) -> Pairin
 
     expires_at = datetime.now(UTC) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES)
     pc = PairingCode(
-        code=code, greenhouse_id=gh.id, expires_at=expires_at, created_by_user_id=user.id
+        code=code, zone_id=z.id, expires_at=expires_at, created_by_user_id=user.id
     )
     db.add(pc)
     db.commit()
@@ -106,7 +106,7 @@ def generate_pairing_code(db: Session, user: User, greenhouse_id: str) -> Pairin
     return PairingCodeResponse(
         code=pc.code,
         expires_at=pc.expires_at.isoformat(),
-        greenhouse_id=str(pc.greenhouse_id),
+        zone_id=str(pc.zone_id),
     )
 
 
@@ -132,7 +132,7 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
     api_key = secrets.token_urlsafe(32)
 
     gateway = Gateway(
-        greenhouse_id=pc.greenhouse_id,
+        zone_id=pc.zone_id,
         hardware_id=data.hardware_id,
         name=data.name or data.hardware_id,
         fw_version=data.fw_version,
@@ -153,7 +153,7 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
     return RegisterGatewayResponse(
         gateway_id=str(gateway.id),
         api_key=api_key,
-        greenhouse_id=str(gateway.greenhouse_id),
+        zone_id=str(gateway.zone_id),
     )
 
 
@@ -162,8 +162,8 @@ def delete_gateway(db: Session, user: User, gateway_id: str) -> None:
 
     gateway = (
         db.query(Gateway)
-        .join(Greenhouse)
-        .filter(Gateway.id == gateway_id, Greenhouse.organization_id == org_id)
+        .join(Zone)
+        .filter(Gateway.id == gateway_id, Zone.organization_id == org_id)
         .first()
     )
     if not gateway:

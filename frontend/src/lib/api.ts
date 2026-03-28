@@ -89,49 +89,66 @@ export async function apiCreateOrg(name: string): Promise<Org> {
     });
 }
 
-// ── Greenhouses ──────────────────────────────
-export interface Greenhouse {
+// ── Zones (Agriculture Areas) ────────────────
+export interface Zone {
     id: string;
     name: string;
     location: string | null;
+    zone_type: string;
+    latitude: number | null;
+    longitude: number | null;
     created_at: string;
     gateway_count: number;
     sensor_count: number;
 }
 
-export interface GreenhouseOverview {
+export interface ZoneOverview {
     id: string;
     name: string;
+    zone_type: string;
     total_gateways: number;
     online_gateways: number;
     total_sensors: number;
     readings_24h: number;
 }
 
-export async function apiListGreenhouses(): Promise<Greenhouse[]> {
-    return apiFetch<Greenhouse[]>('/greenhouses');
+export const ZONE_TYPES = [
+    { value: 'GREENHOUSE', label: 'Gewächshaus', icon: '🏠' },
+    { value: 'OPEN_FIELD', label: 'Freiland', icon: '🌾' },
+    { value: 'VERTICAL_FARM', label: 'Vertical Farm', icon: '🏢' },
+    { value: 'ORCHARD', label: 'Obstgarten', icon: '🍎' },
+] as const;
+
+export async function apiListZones(): Promise<Zone[]> {
+    return apiFetch<Zone[]>('/zones');
 }
 
-export async function apiCreateGreenhouse(name: string, location?: string): Promise<Greenhouse> {
-    return apiFetch<Greenhouse>('/greenhouses', {
+export async function apiCreateZone(
+    name: string,
+    zone_type: string = 'GREENHOUSE',
+    location?: string,
+    latitude?: number,
+    longitude?: number,
+): Promise<Zone> {
+    return apiFetch<Zone>('/zones', {
         method: 'POST',
-        body: JSON.stringify({ name, location }),
+        body: JSON.stringify({ name, zone_type, location, latitude, longitude }),
     });
 }
 
-export async function apiDeleteGreenhouse(id: string): Promise<void> {
-    return apiFetch<void>(`/greenhouses/${id}`, { method: 'DELETE' });
+export async function apiDeleteZone(id: string): Promise<void> {
+    return apiFetch<void>(`/zones/${id}`, { method: 'DELETE' });
 }
 
-export async function apiGetGreenhouseOverview(id: string): Promise<GreenhouseOverview> {
-    return apiFetch<GreenhouseOverview>(`/greenhouses/${id}/overview`);
+export async function apiGetZoneOverview(id: string): Promise<ZoneOverview> {
+    return apiFetch<ZoneOverview>(`/zones/${id}/overview`);
 }
 
 // ── Gateways ─────────────────────────────────
 export interface GatewayInfo {
     id: string;
-    greenhouse_id: string;
-    greenhouse_name: string | null;
+    zone_id: string;
+    zone_name: string | null;
     hardware_id: string;
     name: string | null;
     local_ip: string | null;
@@ -146,11 +163,11 @@ export interface GatewayInfo {
 export interface PairingCode {
     code: string;
     expires_at: string;
-    greenhouse_id: string;
+    zone_id: string;
 }
 
-export async function apiListGateways(greenhouse_id?: string): Promise<GatewayInfo[]> {
-    const params = greenhouse_id ? { greenhouse_id } : undefined;
+export async function apiListGateways(zone_id?: string): Promise<GatewayInfo[]> {
+    const params = zone_id ? { zone_id } : undefined;
     return apiFetch<GatewayInfo[]>('/gateways', { params });
 }
 
@@ -158,10 +175,10 @@ export async function apiDeleteGateway(gatewayId: string): Promise<void> {
     return apiFetch<void>(`/gateways/${gatewayId}`, { method: 'DELETE' });
 }
 
-export async function apiGeneratePairingCode(greenhouse_id: string): Promise<PairingCode> {
+export async function apiGeneratePairingCode(zone_id: string): Promise<PairingCode> {
     return apiFetch<PairingCode>('/gateways/pairing-code', {
         method: 'POST',
-        body: JSON.stringify({ greenhouse_id }),
+        body: JSON.stringify({ zone_id }),
     });
 }
 
@@ -169,7 +186,7 @@ export async function apiGeneratePairingCode(greenhouse_id: string): Promise<Pai
 export interface SensorInfo {
     id: string;
     gateway_id: string;
-    greenhouse_id: string | null;
+    zone_id: string | null;
     mac_address: string;
     name: string | null;
     sensor_type: string;
@@ -180,9 +197,9 @@ export interface SensorInfo {
     gateway_hardware_id: string | null;
 }
 
-export async function apiListSensors(greenhouse_id?: string, gateway_id?: string): Promise<SensorInfo[]> {
+export async function apiListSensors(zone_id?: string, gateway_id?: string): Promise<SensorInfo[]> {
     const params: Record<string, string> = {};
-    if (greenhouse_id) params.greenhouse_id = greenhouse_id;
+    if (zone_id) params.zone_id = zone_id;
     if (gateway_id) params.gateway_id = gateway_id;
     return apiFetch<SensorInfo[]>('/sensors', { params: Object.keys(params).length ? params : undefined });
 }
