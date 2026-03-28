@@ -30,12 +30,12 @@ router = APIRouter(prefix="/gateways", tags=["gateways"])
 
 @router.get("", response_model=list[GatewayResponse])
 async def handle_list_gateways(
-    greenhouse_id: str | None = None,
+    zone_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List gateways. Optionally filter by greenhouse_id."""
-    return list_gateways(db, current_user, greenhouse_id=greenhouse_id)
+    """List gateways. Optionally filter by zone_id."""
+    return list_gateways(db, current_user, zone_id=zone_id)
 
 
 @router.post("/pairing-code", response_model=PairingCodeResponse, status_code=201)
@@ -46,8 +46,8 @@ async def handle_generate_pairing_code(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a short-lived pairing code for a greenhouse."""
-    return generate_pairing_code(db, current_user, data.greenhouse_id)
+    """Generate a short-lived pairing code for a zone."""
+    return generate_pairing_code(db, current_user, data.zone_id)
 
 
 @router.post("/register", response_model=RegisterGatewayResponse, status_code=201)

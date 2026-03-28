@@ -1,17 +1,23 @@
-"""Greenhouse request/response schemas."""
+"""Zone (agriculture area) request/response schemas."""
 
 from pydantic import BaseModel
 
 
-class GreenhouseCreate(BaseModel):
+class ZoneCreate(BaseModel):
     name: str
     location: str | None = None
+    zone_type: str = "GREENHOUSE"
+    latitude: float | None = None
+    longitude: float | None = None
 
 
-class GreenhouseResponse(BaseModel):
+class ZoneResponse(BaseModel):
     id: str
     name: str
     location: str | None = None
+    zone_type: str = "GREENHOUSE"
+    latitude: float | None = None
+    longitude: float | None = None
     created_at: str
     gateway_count: int = 0
     sensor_count: int = 0
@@ -20,9 +26,10 @@ class GreenhouseResponse(BaseModel):
         from_attributes = True
 
 
-class GreenhouseOverview(BaseModel):
+class ZoneOverview(BaseModel):
     id: str
     name: str
+    zone_type: str
     total_gateways: int
     online_gateways: int
     total_sensors: int

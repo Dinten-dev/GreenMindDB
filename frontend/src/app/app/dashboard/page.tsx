@@ -3,13 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-    apiListGreenhouses, apiListGateways, apiListSensors, apiDeleteGateway,
-    Greenhouse, GatewayInfo, SensorInfo,
+    apiListZones, apiListGateways, apiListSensors, apiDeleteGateway,
+    Zone, GatewayInfo, SensorInfo,
 } from '@/lib/api';
 
 export default function DashboardPage() {
     const { user, createOrg, refresh } = useAuth();
-    const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
+    const [zones, setZones] = useState<Zone[]>([]);
     const [gateways, setGateways] = useState<GatewayInfo[]>([]);
     const [sensors, setSensors] = useState<SensorInfo[]>([]);
     const [loading, setLoading] = useState(true);
@@ -22,12 +22,12 @@ export default function DashboardPage() {
 
     const loadData = useCallback(async () => {
         try {
-            const [gh, gw, sen] = await Promise.all([
-                apiListGreenhouses(),
+            const [z, gw, sen] = await Promise.all([
+                apiListZones(),
                 apiListGateways(),
                 apiListSensors(),
             ]);
-            setGreenhouses(gh);
+            setZones(z);
             setGateways(gw);
             setSensors(sen);
         } catch (err) {
@@ -80,7 +80,7 @@ export default function DashboardPage() {
                     <div className="text-4xl mb-4">🏢</div>
                     <h2 className="text-xl font-semibold text-gray-800 mb-2">Organisation erstellen</h2>
                     <p className="text-sm text-gray-400 mb-6">
-                        Eine Organisation gruppiert Gewächshäuser, Gateways und Teammitglieder.
+                        Eine Organisation gruppiert Zonen, Gateways und Teammitglieder.
                     </p>
                     <input
                         type="text"
@@ -127,7 +127,7 @@ export default function DashboardPage() {
 
             {/* Stat Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Gewächshäuser" value={greenhouses.length} icon="⌂" />
+                <StatCard label="Zonen" value={zones.length} icon="⌂" />
                 <StatCard label="Gateways" value={gateways.length} sub={`${onlineGateways} online`} icon="◎" />
                 <StatCard label="Sensoren" value={sensors.length} icon="📡" />
                 <StatCard label="Online" value={onlineGateways} sub={`von ${gateways.length}`} icon="◉" accent />
@@ -143,7 +143,7 @@ export default function DashboardPage() {
                                 <span className={`w-2.5 h-2.5 rounded-full ${gw.status === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
                                 <div className="flex-1 min-w-0 pr-8">
                                     <p className="text-sm font-medium text-gray-800 truncate">{gw.name || gw.hardware_id}</p>
-                                    <p className="text-xs text-gray-400">{gw.sensor_count} Sensoren · {gw.greenhouse_name}</p>
+                                    <p className="text-xs text-gray-400">{gw.sensor_count} Sensoren · {gw.zone_name}</p>
                                 </div>
                                 <span className="text-xs text-gray-400 shrink-0">
                                     {gw.last_seen ? timeAgo(gw.last_seen) : 'nie'}
@@ -166,7 +166,7 @@ export default function DashboardPage() {
                     <div className="text-4xl mb-4">🖥</div>
                     <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Gateways</h3>
                     <p className="text-sm text-gray-400">
-                        Erstelle ein Gewächshaus und paire ein Raspberry Pi Gateway, um Sensordaten zu empfangen.
+                        Erstelle eine Zone und paire ein Raspberry Pi Gateway, um Sensordaten zu empfangen.
                     </p>
                 </div>
             )}

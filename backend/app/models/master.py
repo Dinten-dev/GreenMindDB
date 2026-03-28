@@ -1,4 +1,4 @@
-"""Master-data models: Greenhouse, Gateway, Sensor."""
+"""Master-data models: Zone, Gateway, Sensor."""
 
 import uuid
 
@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     String,
     Text,
@@ -16,9 +17,11 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 
+ZONE_TYPES = ("GREENHOUSE", "OPEN_FIELD", "VERTICAL_FARM", "ORCHARD")
 
-class Greenhouse(Base):
-    __tablename__ = "greenhouse"
+
+class Zone(Base):
+    __tablename__ = "zone"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(
@@ -29,10 +32,13 @@ class Greenhouse(Base):
     )
     name = Column(String(200), nullable=False)
     location = Column(String(500), nullable=True)
+    zone_type = Column(String(20), nullable=False, default="GREENHOUSE")
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
-    organization = relationship("Organization", back_populates="greenhouses")
-    gateways = relationship("Gateway", back_populates="greenhouse", cascade="all, delete-orphan")
+    organization = relationship("Organization", back_populates="zones")
+    gateways = relationship("Gateway", back_populates="zone", cascade="all, delete-orphan")
 
 
 class Gateway(Base):
@@ -41,9 +47,9 @@ class Gateway(Base):
     __tablename__ = "gateway"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    greenhouse_id = Column(
+    zone_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("greenhouse.id", ondelete="CASCADE"),
+        ForeignKey("zone.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -59,7 +65,7 @@ class Gateway(Base):
     paired_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
-    greenhouse = relationship("Greenhouse", back_populates="gateways")
+    zone = relationship("Zone", back_populates="gateways")
     sensors = relationship("Sensor", back_populates="gateway", cascade="all, delete-orphan")
 
 

@@ -31,7 +31,7 @@ async def ingest_data(
     gateway = db.query(Gateway).filter(Gateway.hardware_id == data.gateway_serial).first()
     if not gateway:
         raise HTTPException(
-            status_code=410, 
+            status_code=410,
             detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
         )
     if not gateway.is_active:
@@ -54,7 +54,7 @@ async def ingest_data(
         )
 
     # Broadcast real-time update
-    if gateway.greenhouse_id:
+    if gateway.zone_id:
         now = datetime.now(UTC)
         readings_out = [
             {
@@ -66,14 +66,14 @@ async def ingest_data(
             }
             for r in data.readings
         ]
-        await manager.broadcast_to_greenhouse(
+        await manager.broadcast_to_zone(
             {
                 "event": "new_readings",
                 "gateway_id": str(gateway.id),
                 "measurement_id": data.measurement_id,
                 "readings": readings_out,
             },
-            str(gateway.greenhouse_id),
+            str(gateway.zone_id),
         )
 
     return IngestResponse(

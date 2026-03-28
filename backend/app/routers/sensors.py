@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, verify_password
 from app.database import get_db
-from app.models.master import Gateway, Greenhouse, Sensor
+from app.models.master import Gateway, Sensor, Zone
 from app.models.timeseries import SensorReading
 from app.models.user import User
 from app.schemas.sensor import (
@@ -40,23 +40,23 @@ LIVENESS_THRESHOLD = timedelta(minutes=5)
 
 @router.get("", response_model=list[SensorResponse])
 async def list_sensors(
-    greenhouse_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
     gateway_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List sensors, optionally filtered by greenhouse or gateway."""
+    """List sensors, optionally filtered by zone or gateway."""
     if not current_user.organization_id:
         return []
 
     query = (
         db.query(Sensor, Gateway)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
-        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
-        .filter(Greenhouse.organization_id == current_user.organization_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(Zone.organization_id == current_user.organization_id)
     )
-    if greenhouse_id:
-        query = query.filter(Gateway.greenhouse_id == greenhouse_id)
+    if zone_id:
+        query = query.filter(Gateway.zone_id == zone_id)
     if gateway_id:
         query = query.filter(Sensor.gateway_id == gateway_id)
 
@@ -68,7 +68,7 @@ async def list_sensors(
             SensorResponse(
                 id=str(sensor.id),
                 gateway_id=str(sensor.gateway_id),
-                greenhouse_id=str(gw.greenhouse_id),
+                zone_id=str(gw.zone_id),
                 mac_address=sensor.mac_address,
                 name=sensor.name,
                 sensor_type=sensor.sensor_type,
@@ -132,7 +132,7 @@ async def move_sensor(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Move a sensor to a different gateway within the same greenhouse."""
+    """Move a sensor to a different gateway within the same zone."""
     if not current_user.organization_id:
         raise HTTPException(status_code=403, detail="No organization")
 
@@ -140,10 +140,10 @@ async def move_sensor(
     result = (
         db.query(Sensor, Gateway)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
-        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Greenhouse.organization_id == current_user.organization_id,
+            Zone.organization_id == current_user.organization_id,
         )
         .first()
     )
@@ -152,19 +152,19 @@ async def move_sensor(
 
     sensor, current_gw = result
 
-    # Verify target gateway belongs to same greenhouse
+    # Verify target gateway belongs to same zone
     target_gw = (
         db.query(Gateway)
         .filter(
             Gateway.id == data.target_gateway_id,
-            Gateway.greenhouse_id == current_gw.greenhouse_id,
+            Gateway.zone_id == current_gw.zone_id,
         )
         .first()
     )
     if not target_gw:
         raise HTTPException(
             status_code=400,
-            detail="Target gateway not found or not in the same greenhouse",
+            detail="Target gateway not found or not in the same zone",
         )
 
     sensor.gateway_id = target_gw.id
@@ -201,10 +201,10 @@ async def delete_sensor(
     result = (
         db.query(Sensor, Gateway)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
-        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Greenhouse.organization_id == current_user.organization_id,
+            Zone.organization_id == current_user.organization_id,
         )
         .first()
     )
@@ -254,10 +254,10 @@ async def get_sensor_data(
     result = (
         db.query(Sensor, Gateway)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
-        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Greenhouse.organization_id == current_user.organization_id,
+            Zone.organization_id == current_user.organization_id,
         )
         .first()
     )
@@ -392,19 +392,19 @@ async def export_sensor_data(
 
     # Verify sensor ownership
     result = (
-        db.query(Sensor, Gateway)
+        db.query(Sensor, Gateway, Zone)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
-        .join(Greenhouse, Greenhouse.id == Gateway.greenhouse_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Greenhouse.organization_id == current_user.organization_id,
+            Zone.organization_id == current_user.organization_id,
         )
         .first()
     )
     if not result:
         raise HTTPException(status_code=404, detail="Sensor not found")
 
-    sensor, gw = result
+    sensor, gw, zone = result
     td = EXPORT_RANGE_MAP[range]
     cutoff = datetime.now(UTC) - td
 
@@ -419,6 +419,17 @@ async def export_sensor_data(
     if not kinds:
         raise HTTPException(status_code=404, detail="No data available for export")
 
+    # Build zone metadata header
+    zone_meta = (
+        f"# Zone: {zone.name}\n"
+        f"# Type: {zone.zone_type}\n"
+        f"# Location: {zone.location or '—'}\n"
+    )
+    if zone.latitude is not None and zone.longitude is not None:
+        zone_meta += f"# GPS: {zone.latitude}, {zone.longitude}\n"
+    zone_meta += f"# Gateway: {gw.name or gw.hardware_id}\n"
+    zone_meta += f"# Sensor: {sensor.name or sensor.mac_address}\n"
+
     # Build ZIP in memory using streaming writes per kind
     zip_buffer = io.BytesIO()
     sensor_label = sensor.name or sensor.mac_address
@@ -426,6 +437,7 @@ async def export_sensor_data(
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for (kind,) in kinds:
             csv_buffer = io.StringIO()
+            csv_buffer.write(zone_meta)
             csv_buffer.write("timestamp,value,unit\n")
 
             offset = 0

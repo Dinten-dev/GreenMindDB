@@ -5,8 +5,8 @@ from pydantic import BaseModel
 
 class GatewayResponse(BaseModel):
     id: str
-    greenhouse_id: str
-    greenhouse_name: str | None = None
+    zone_id: str
+    zone_name: str | None = None
     hardware_id: str
     name: str | None = None
     local_ip: str | None = None
@@ -22,13 +22,13 @@ class GatewayResponse(BaseModel):
 
 
 class PairingCodeRequest(BaseModel):
-    greenhouse_id: str
+    zone_id: str
 
 
 class PairingCodeResponse(BaseModel):
     code: str
     expires_at: str
-    greenhouse_id: str
+    zone_id: str
 
 
 class RegisterGatewayRequest(BaseModel):
@@ -42,7 +42,7 @@ class RegisterGatewayRequest(BaseModel):
 class RegisterGatewayResponse(BaseModel):
     gateway_id: str
     api_key: str
-    greenhouse_id: str
+    zone_id: str
 
 
 class HeartbeatRequest(BaseModel):

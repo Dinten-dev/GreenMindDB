@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiListGateways, apiListGreenhouses, apiGeneratePairingCode, apiDeleteGateway, GatewayInfo, Greenhouse, PairingCode } from '@/lib/api';
+import { apiListGateways, apiListZones, apiGeneratePairingCode, apiDeleteGateway, GatewayInfo, Zone, PairingCode } from '@/lib/api';
 
 export default function GatewaysPage() {
     const [gateways, setGateways] = useState<GatewayInfo[]>([]);
-    const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
+    const [zones, setZones] = useState<Zone[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Pairing
     const [showPairing, setShowPairing] = useState(false);
-    const [selectedGreenhouse, setSelectedGreenhouse] = useState('');
+    const [selectedZone, setSelectedZone] = useState('');
     const [pairingCode, setPairingCode] = useState<PairingCode | null>(null);
     const [generating, setGenerating] = useState(false);
 
@@ -24,12 +24,12 @@ export default function GatewaysPage() {
 
     const loadData = async () => {
         try {
-            const [gws, ghs] = await Promise.all([
+            const [gws, zs] = await Promise.all([
                 apiListGateways(),
-                apiListGreenhouses(),
+                apiListZones(),
             ]);
             setGateways(gws);
-            setGreenhouses(ghs);
+            setZones(zs);
         } catch (err) {
             console.error(err);
         } finally {
@@ -38,10 +38,10 @@ export default function GatewaysPage() {
     };
 
     const handleGenerateCode = async () => {
-        if (!selectedGreenhouse) return;
+        if (!selectedZone) return;
         setGenerating(true);
         try {
-            const code = await apiGeneratePairingCode(selectedGreenhouse);
+            const code = await apiGeneratePairingCode(selectedZone);
             setPairingCode(code);
         } catch (err) {
             console.error(err);
@@ -82,7 +82,7 @@ export default function GatewaysPage() {
                 </div>
                 <button
                     onClick={() => { setShowPairing(true); setPairingCode(null); }}
-                    disabled={greenhouses.length === 0}
+                    disabled={zones.length === 0}
                     className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                     + Gateway pairen
@@ -98,15 +98,15 @@ export default function GatewaysPage() {
                         {!pairingCode ? (
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Gewächshaus</label>
+                                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Zone</label>
                                     <select
-                                        value={selectedGreenhouse}
-                                        onChange={(e) => setSelectedGreenhouse(e.target.value)}
+                                        value={selectedZone}
+                                        onChange={(e) => setSelectedZone(e.target.value)}
                                         className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 backdrop-blur-sm"
                                     >
-                                        <option value="">Gewächshaus wählen…</option>
-                                        {greenhouses.map(gh => (
-                                            <option key={gh.id} value={gh.id}>{gh.name}</option>
+                                        <option value="">Zone wählen…</option>
+                                        {zones.map(z => (
+                                            <option key={z.id} value={z.id}>{z.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -120,7 +120,7 @@ export default function GatewaysPage() {
                                     </button>
                                     <button
                                         onClick={handleGenerateCode}
-                                        disabled={!selectedGreenhouse || generating}
+                                        disabled={!selectedZone || generating}
                                         className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 shadow-sm"
                                     >
                                         {generating ? 'Generiere…' : 'Code erzeugen'}
@@ -156,7 +156,7 @@ export default function GatewaysPage() {
                     <div className="text-4xl mb-4">🖥</div>
                     <h3 className="text-lg font-semibold text-gray-800 mb-2">Keine Gateways</h3>
                     <p className="text-sm text-gray-400 mb-4">
-                        Verbinde dein erstes Raspberry Pi Gateway mit einem Gewächshaus.
+                        Verbinde dein erstes Raspberry Pi Gateway mit einer Zone.
                     </p>
                 </div>
             ) : (
@@ -197,8 +197,8 @@ export default function GatewaysPage() {
                                     <p className="font-semibold text-gray-800 text-xs font-mono truncate">{gw.local_ip || '–'}</p>
                                 </div>
                                 <div className="bg-white/40 rounded-xl px-2.5 py-1.5 border border-black/[0.03]">
-                                    <p className="text-gray-400 text-xs">Gewächshaus</p>
-                                    <p className="font-semibold text-gray-800 text-xs truncate">{gw.greenhouse_name || '–'}</p>
+                                    <p className="text-gray-400 text-xs">Zone</p>
+                                    <p className="font-semibold text-gray-800 text-xs truncate">{gw.zone_name || '–'}</p>
                                 </div>
                             </div>
 

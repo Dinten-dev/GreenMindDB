@@ -1,7 +1,7 @@
 /**
  * Shared TypeScript types for the GreenMind frontend.
  *
- * Add domain-specific types here (e.g., Sensor, Greenhouse, Device)
+ * Add domain-specific types here (e.g., Sensor, Zone, Device)
  * so they can be imported across components and pages.
  */
 
@@ -23,10 +23,11 @@ export interface Organization {
   name: string;
 }
 
-export interface Greenhouse {
+export interface Zone {
   id: string;
   name: string;
   location: string;
+  zone_type: string;
   organization_id: string;
 }
 
@@ -36,7 +37,7 @@ export interface Device {
   serial: string;
   type: string;
   status: "online" | "offline" | "pairing";
-  greenhouse_id: string;
+  zone_id: string;
 }
 
 export interface Sensor {
