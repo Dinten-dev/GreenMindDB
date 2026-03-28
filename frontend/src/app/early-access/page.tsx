@@ -53,7 +53,7 @@ export default function EarlyAccessPage() {
                         <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">Early Access anfragen</h1>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
-                        <p className="text-xl text-apple-gray-400 leading-relaxed">
+                        <p className="text-xl text-apple-gray-500 leading-relaxed">
                             Gehören Sie zu den ersten Anbauern, die die Zukunft der Gewächshaus-Intelligenz erleben. Füllen Sie das Formular aus um auf die Warteliste zu kommen.
                         </p>
                     </ScrollReveal>

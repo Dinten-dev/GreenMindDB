@@ -84,7 +84,7 @@ export default function ProductPage() {
                     </h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
-                    <p className="text-xl text-apple-gray-400 max-w-2xl mb-20 leading-relaxed">
+                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-20 leading-relaxed">
                         Alles, was Sie brauchen, um die Pflanzengesundheit zu überwachen, Anbaubedingungen zu optimieren und
                         schnellere, präzisere Anbauentscheidungen zu treffen — in einer einheitlichen Oberfläche.
                     </p>
@@ -96,7 +96,7 @@ export default function ProductPage() {
                             <div className="card-hover bg-apple-gray-100 rounded-apple-lg p-8 h-full">
                                 <div className="icon-container mb-5 text-gm-green-600">{f.icon}</div>
                                 <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">{f.title}</h3>
-                                <p className="text-apple-gray-400 leading-relaxed">{f.desc}</p>
+                                <p className="text-apple-gray-500 leading-relaxed">{f.desc}</p>
                             </div>
                         </ScrollReveal>
                     ))}

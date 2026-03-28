@@ -46,7 +46,7 @@ export default function SciencePage() {
                     </h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
-                    <p className="text-xl text-apple-gray-400 max-w-2xl mb-16 leading-relaxed">
+                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-16 leading-relaxed">
                         Unsere Technologie basiert auf peer-reviewed Forschung in der Pflanzenelektrophysiologie.
                         Hier findest du die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu
                         Machine-Learning-gestützter Stresserkennung.
@@ -58,7 +58,7 @@ export default function SciencePage() {
                     <div className="flex flex-col sm:flex-row gap-4 mb-8">
                         {/* Search Bar */}
                         <div className="relative flex-1 max-w-md">
-                            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                             <input
@@ -90,7 +90,7 @@ export default function SciencePage() {
                 </ScrollReveal>
 
                 {/* Results Count */}
-                <p className="text-sm text-apple-gray-300 mb-6">
+                <p className="text-sm text-apple-gray-500 mb-6">
                     {filtered.length} Paper gefunden
                 </p>
 
@@ -100,7 +100,7 @@ export default function SciencePage() {
                         <div className="bg-apple-gray-100 rounded-apple-lg p-16 text-center">
                             <div className="text-5xl mb-4">🔬</div>
                             <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">Keine Ergebnisse</h3>
-                            <p className="text-apple-gray-400">
+                            <p className="text-apple-gray-500">
                                 Passe deine Suche oder Kategorie an, um Paper zu finden.
                             </p>
                         </div>
@@ -119,7 +119,7 @@ export default function SciencePage() {
                                             <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${colors.bg} ${colors.text} border ${colors.border}`}>
                                                 {paper.categoryLabel}
                                             </span>
-                                            <span className="text-sm text-apple-gray-300 font-mono">{paper.year}</span>
+                                            <span className="text-sm text-apple-gray-500 font-mono">{paper.year}</span>
                                         </div>
 
                                         {/* Title */}
@@ -128,7 +128,7 @@ export default function SciencePage() {
                                         </h3>
 
                                         {/* Authors + Journal */}
-                                        <p className="text-sm text-apple-gray-400 mb-1 line-clamp-1">{paper.authors}</p>
+                                        <p className="text-sm text-apple-gray-500 mb-1 line-clamp-1">{paper.authors}</p>
                                         <p className="text-sm text-gm-green-600 font-medium mb-4">{paper.journal}</p>
 
                                         {/* GreenMind Relevanz */}
@@ -172,7 +172,7 @@ export default function SciencePage() {
                                         </div>
 
                                         {/* DOI */}
-                                        <p className="text-[11px] text-apple-gray-300 mt-3 font-mono truncate">
+                                        <p className="text-[11px] text-apple-gray-400 mt-3 font-mono truncate">
                                             DOI: {paper.doi}
                                         </p>
                                     </div>
@@ -185,10 +185,10 @@ export default function SciencePage() {
                 {/* Footer Note */}
                 <ScrollReveal>
                     <div className="text-center py-16 mt-8">
-                        <p className="text-sm text-apple-gray-400">
+                        <p className="text-sm text-apple-gray-500">
                             Alle aufgeführten Paper sind peer-reviewed und bevorzugt Open Access.
                         </p>
-                        <p className="text-sm text-apple-gray-300 mt-1">
+                        <p className="text-sm text-apple-gray-400 mt-1">
                             Letzte Aktualisierung: März 2026
                         </p>
                     </div>
