@@ -8,6 +8,7 @@ const team = [
         name: 'Prof. Dr. Peter Gloor',
         role: 'Wissenschaftliche Leitung & Forschung',
         image: '/team/peter-gloor.webp',
+        imagePosition: 'center 25%',
         linkedin: 'https://www.linkedin.com/in/petergloor/',
         bio: 'Peter war über zwei Jahrzehnte Research Scientist am MIT Sloan School of Management und ist Honorarprofessor an der Universität Köln. Sein aktueller Forschungsschwerpunkt bei Galaxylabs.org liegt auf Wohlbefinden, Mensch-Tier- und Mensch-Pflanze-Kommunikation. Mit einem PhD in Informatik der Universität Zürich und Post-Doc am MIT bringt er einzigartige Expertise in Collaborative Intelligence und datengetriebener Forschung in das GreenMind-Projekt ein.',
     },
@@ -15,8 +16,9 @@ const team = [
         name: 'Traver Dinten',
         role: 'Technische Entwicklung & Data Science',
         image: '/team/traver-dinten.jpg',
+        imagePosition: 'center 20%',
         linkedin: 'https://www.linkedin.com/in/traver-dinten-039532276/',
-        bio: 'Traver studiert Data Science an der FHNW und verbindet sein Studium mit praktischer Forschungsarbeit bei GreenMind. Mit einer abgeschlossenen Ausbildung als Physiklaborant EFZ bei armasuisse und Erfahrung in Datenanalyse, Elektronik und Sensorik bildet er die technische Brücke zwischen Hardware-Sensorik und intelligenter Datenauswertung. Er verantwortet die Plattformentwicklung, Sensorintegration und Daten-Pipeline.',
+        bio: 'Traver studiert Data Science an der FHNW und verbindet sein Studium mit praktischer Forschungsarbeit bei GreenMind. Mit einer abgeschlossenen Ausbildung als Physiklaborant EFZ bei armasuisse und Erfahrung in Datenanalyse, Elektronik und Sensorik bildet er die technische Brücke zwischen Hardware-Sensorik und intelligenter Datenauswertung. Er verantwortet die Plattformentwicklung, Sensorintegration und Daten-Pipeline.'
     },
 ];
 
@@ -85,6 +87,7 @@ export default function AboutPage() {
                                                     width={120}
                                                     height={120}
                                                     className="rounded-full object-cover w-[100px] h-[100px] sm:w-[120px] sm:h-[120px] border-2 border-white shadow-apple"
+                                                    style={{ objectPosition: member.imagePosition }}
                                                 />
                                             </div>
                                             <div className="flex-1 min-w-0">
