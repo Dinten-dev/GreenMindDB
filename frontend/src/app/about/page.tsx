@@ -16,7 +16,7 @@ const team = [
         name: 'Traver Dinten',
         role: 'Technische Entwicklung & Data Science',
         image: '/team/traver-dinten.jpg',
-        imagePosition: 'center 20%',
+        imagePosition: 'center 10%',
         linkedin: 'https://www.linkedin.com/in/traver-dinten-039532276/',
         bio: 'Traver studiert Data Science an der FHNW und verbindet sein Studium mit praktischer Forschungsarbeit bei GreenMind. Mit einer abgeschlossenen Ausbildung als Physiklaborant EFZ bei armasuisse und Erfahrung in Datenanalyse, Elektronik und Sensorik bildet er die technische Brücke zwischen Hardware-Sensorik und intelligenter Datenauswertung. Er verantwortet die Plattformentwicklung, Sensorintegration und Daten-Pipeline.'
     },
