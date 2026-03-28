@@ -45,7 +45,7 @@ export default function ContactPage() {
                             <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">Kontaktieren Sie uns.</h1>
                         </ScrollReveal>
                         <ScrollReveal delay={200}>
-                            <p className="text-xl text-apple-gray-400 mb-16 leading-relaxed">
+                            <p className="text-xl text-apple-gray-500 mb-16 leading-relaxed">
                                 Bereit, Ihren Anbaubetrieb auf das nächste Level zu bringen? Wir möchten gerne mehr über Ihr Gewächshaus erfahren und gemeinsam erkunden, wie GreenMind helfen kann.
                             </p>
                         </ScrollReveal>

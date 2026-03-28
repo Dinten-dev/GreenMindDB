@@ -55,7 +55,7 @@ export default function LandingPage() {
                     </ScrollReveal>
 
                     <ScrollReveal variant="fade-up" delay={400}>
-                        <p className="text-lg md:text-2xl text-apple-gray-400 max-w-2xl mx-auto leading-relaxed mb-14 px-2 md:px-0">
+                        <p className="text-lg md:text-2xl text-apple-gray-500 max-w-2xl mx-auto leading-relaxed mb-14 px-2 md:px-0">
                             Aktuelle Forschung in der Pflanzenelektrophysiologie zeigt, dass wir Stress erkennen können,
                             bevor sichtbare Symptome auftreten. GreenMind macht diese Wissenschaft zugänglich.
                         </p>
@@ -71,7 +71,7 @@ export default function LandingPage() {
                             </Link>
                             <Link
                                 href="/product"
-                                className="w-full md:w-auto px-8 py-4 text-apple-gray-600 rounded-full text-lg font-medium hover:bg-apple-gray-100 transition-all duration-300"
+                                className="w-full md:w-auto px-8 py-4 text-apple-gray-700 rounded-full text-lg font-medium hover:bg-apple-gray-100 transition-all duration-300"
                             >
                                 Plattform entdecken →
                             </Link>
@@ -94,11 +94,11 @@ export default function LandingPage() {
                     <ScrollReveal delay={150}>
                         <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 tracking-tight leading-tight mb-6">
                             Die meisten Ernteschäden werden erkannt,<br className="hidden md:block" />
-                            <span className="text-apple-gray-300">wenn es bereits zu spät ist.</span>
+                            <span className="text-apple-gray-500">wenn es bereits zu spät ist.</span>
                         </h2>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
-                        <p className="text-lg text-apple-gray-400 max-w-2xl mx-auto leading-relaxed">
+                        <p className="text-lg text-apple-gray-500 max-w-2xl mx-auto leading-relaxed">
                             Herkömmliche Gewächshausüberwachung erfasst Temperatur, Luftfeuchtigkeit und Boden —
                             aber nicht die Pflanze selbst. Wenn Stress sichtbar wird, ist der Ertrag bereits beeinträchtigt.
                             Aktuelle Forschung deutet darauf hin, dass biologische Signale der Schlüssel zur Früherkennung sein könnten.
@@ -121,7 +121,7 @@ export default function LandingPage() {
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
                                 Die Wissenschaft des intelligenteren Anbaus.
                             </h2>
-                            <p className="text-lg text-apple-gray-400 max-w-xl mx-auto">
+                            <p className="text-lg text-apple-gray-500 max-w-xl mx-auto">
                                 Jede Pflanze erzählt eine Geschichte. GreenMind hilft Ihnen, sie zu lesen — und danach zu handeln.
                             </p>
                         </div>
@@ -166,7 +166,7 @@ export default function LandingPage() {
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
                                 Vom Signal zur Strategie.
                             </h2>
-                            <p className="text-lg text-apple-gray-400 max-w-2xl mx-auto">
+                            <p className="text-lg text-apple-gray-500 max-w-2xl mx-auto">
                                 Pflanzen reagieren kontinuierlich auf ihre Umgebung. Diese Reaktionen tragen
                                 messbare Informationen. GreenMind macht sie nutzbar.
                             </p>
@@ -185,7 +185,7 @@ export default function LandingPage() {
                                         <span className="text-2xl font-bold gradient-text">{item.step}</span>
                                     </div>
                                     <h3 className="text-lg font-semibold text-apple-gray-800 mb-2">{item.title}</h3>
-                                    <p className="text-sm text-apple-gray-400 leading-relaxed">{item.desc}</p>
+                                    <p className="text-sm text-apple-gray-500 leading-relaxed">{item.desc}</p>
                                 </div>
                             </ScrollReveal>
                         ))}
@@ -207,7 +207,7 @@ export default function LandingPage() {
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
                                 Verwurzelt in Forschung. Erprobt im Feld.
                             </h2>
-                            <p className="text-lg text-apple-gray-400 max-w-2xl mx-auto">
+                            <p className="text-lg text-apple-gray-500 max-w-2xl mx-auto">
                                 Entwickelt in Zusammenarbeit mit angewandter Agrarforschung an der FHNW —
                                 derzeit in realen Gewächshausumgebungen getestet und validiert.
                             </p>
@@ -218,19 +218,19 @@ export default function LandingPage() {
                         <ScrollReveal delay={100}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">FHNW</div>
-                                <p className="text-sm text-apple-gray-400">Fachhochschule<br />Nordwestschweiz</p>
+                                <p className="text-sm text-apple-gray-500">Fachhochschule<br />Nordwestschweiz</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={250}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">24/7</div>
-                                <p className="text-sm text-apple-gray-400">Kontinuierliche biologische<br />Signalüberwachung</p>
+                                <p className="text-sm text-apple-gray-500">Kontinuierliche biologische<br />Signalüberwachung</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Brugg</div>
-                                <p className="text-sm text-apple-gray-400">Schweizer Präzisionstechnik<br />aus dem Innovationszentrum</p>
+                                <p className="text-sm text-apple-gray-500">Schweizer Präzisionstechnik<br />aus dem Innovationszentrum</p>
                             </div>
                         </ScrollReveal>
                     </div>
@@ -266,7 +266,7 @@ export default function LandingPage() {
                                 <div className="card-hover bg-white rounded-apple-lg p-6 shadow-apple-card h-full flex flex-col justify-between">
                                     <div>
                                         <h3 className="text-base font-semibold text-apple-gray-800 mb-2">{b.title}</h3>
-                                        <p className="text-sm text-apple-gray-400 leading-relaxed">{b.desc}</p>
+                                        <p className="text-sm text-apple-gray-500 leading-relaxed">{b.desc}</p>
                                     </div>
                                 </div>
                             </ScrollReveal>
@@ -322,7 +322,7 @@ export default function LandingPage() {
                             <span className="font-semibold text-apple-gray-800 tracking-tight">GreenMind</span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-apple-gray-400">
+                        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-apple-gray-500">
                             <Link href="/product" className="hover:text-apple-gray-800 transition-colors duration-200">Produkt</Link>
                             <Link href="/technology" className="hover:text-apple-gray-800 transition-colors duration-200">Technologie</Link>
                             <Link href="/science" className="hover:text-apple-gray-800 transition-colors duration-200">Science</Link>
@@ -332,8 +332,8 @@ export default function LandingPage() {
                     </div>
 
                     <div className="mt-8 pt-8 border-t border-apple-gray-200/50 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <p className="text-sm text-apple-gray-400">© 2026 GreenMind. Alle Rechte vorbehalten.</p>
-                        <p className="text-sm text-apple-gray-300">FHNW Campus Brugg-Windisch · Brugg, Schweiz</p>
+                        <p className="text-sm text-apple-gray-500">© 2026 GreenMind. Alle Rechte vorbehalten.</p>
+                        <p className="text-sm text-apple-gray-400">FHNW Campus Brugg-Windisch · Brugg, Schweiz</p>
                     </div>
                 </div>
             </footer>
@@ -347,7 +347,7 @@ function FeatureCard({ icon, title, description }: { icon: React.ReactNode; titl
         <div className="card-hover bg-white rounded-apple-lg p-8 shadow-apple-card h-full">
             <div className="icon-container mb-5 text-gm-green-600">{icon}</div>
             <h3 className="text-lg font-semibold text-apple-gray-800 mb-2">{title}</h3>
-            <p className="text-sm text-apple-gray-400 leading-relaxed">{description}</p>
+            <p className="text-sm text-apple-gray-500 leading-relaxed">{description}</p>
         </div>
     );
 }

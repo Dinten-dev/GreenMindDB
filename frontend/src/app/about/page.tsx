@@ -11,7 +11,7 @@ export default function AboutPage() {
                     <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">Über GreenMind.</h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
-                    <p className="text-xl text-apple-gray-400 max-w-2xl mb-20 leading-relaxed">
+                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-20 leading-relaxed">
                         Die Intelligenzschicht für modernen Gewächshausanbau aufbauen.
                     </p>
                 </ScrollReveal>
@@ -20,7 +20,7 @@ export default function AboutPage() {
                     <ScrollReveal>
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Unsere Mission</h2>
-                            <p className="text-apple-gray-400 leading-relaxed">
+                            <p className="text-apple-gray-500 leading-relaxed">
                                 Die Landwirtschaft ernährt die Welt — doch sie arbeitet mit überraschend wenig Echtzeit-Einblick
                                 in die Organismen, die sie anbaut. GreenMind will das ändern.
                                 Wir glauben, dass das Verständnis des Pflanzenzustands auf biologischer Ebene das Potenzial hat,
@@ -33,7 +33,7 @@ export default function AboutPage() {
                     <ScrollReveal>
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Warum es wichtig ist</h2>
-                            <p className="text-apple-gray-400 leading-relaxed">
+                            <p className="text-apple-gray-500 leading-relaxed">
                                 Der weltweite Nahrungsmittelbedarf steigt. Wasser und Ackerflächen stehen unter Druck. Klimatische
                                 Schwankungen machen traditionelle Anbaumethoden weniger vorhersehbar. Gewächshausanbauer
                                 brauchen neue Werkzeuge — nicht nur zur Überwachung der Umgebungsbedingungen, sondern um zu verstehen,
@@ -47,7 +47,7 @@ export default function AboutPage() {
                     <ScrollReveal>
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Das Team</h2>
-                            <p className="text-apple-gray-400 leading-relaxed">
+                            <p className="text-apple-gray-500 leading-relaxed">
                                 Wir sind ein multidisziplinäres Team aus Pflanzenwissenschaftlern, Ingenieuren und Produktdesignern
                                 mit Sitz am Campus Brugg-Windisch, Schweiz. Unsere Arbeit basiert auf angewandter Forschung der FHNW
                                 (Fachhochschule Nordwestschweiz) und ist getrieben von der tiefen Überzeugung,
@@ -59,7 +59,7 @@ export default function AboutPage() {
                     <ScrollReveal>
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Nachhaltige Innovation</h2>
-                            <p className="text-apple-gray-400 leading-relaxed">
+                            <p className="text-apple-gray-500 leading-relaxed">
                                 Wir arbeiten aktiv mit akademischen Forschungseinrichtungen und kommerziellen Anbauern zusammen,
                                 um sicherzustellen, dass unsere Plattform echte Herausforderungen adressiert. Jede Funktion, die wir
                                 entwickeln, wird in realen Gewächshausumgebungen getestet. Unser Ziel ist nicht Technologie um ihrer
