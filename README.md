@@ -1,6 +1,6 @@
-# GreenMind — Predictive Yield Optimization
+# GreenMind — Universal Agriculture Platform
 
-> Plant bioelectrical sensing platform for greenhouse agriculture. Real-time monitoring and predictive analytics powered by ESP32 sensors, Raspberry Pi gateways, and a modern web stack.
+> Plant bioelectrical sensing platform for universal agriculture — greenhouses, open fields, vertical farms, and orchards. Real-time monitoring and predictive analytics powered by ESP32 sensors, Raspberry Pi gateways, and a modern web stack.
 
 [![CI](https://github.com/<owner>/GreenMindDB/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/GreenMindDB/actions/workflows/ci.yml)
 
@@ -30,12 +30,12 @@
 
 ## Project Overview
 
-GreenMind is a full-stack platform for processing, storing, and analyzing **bioelectrical plant signals**. The system ingests data from ESP32 sensors via Raspberry Pi gateways into a TimescaleDB-backed FastAPI service, visualized on a modern Next.js frontend.
+GreenMind is a full-stack platform for processing, storing, and analyzing **bioelectrical plant signals** across diverse agricultural environments. The system ingests data from ESP32 sensors via Raspberry Pi gateways into a TimescaleDB-backed FastAPI service, visualized on a modern Next.js frontend.
 
 **Goals:**
 - Real-time sensor data ingestion and visualization
-- Predictive analytics for greenhouse yield optimization
-- Multi-greenhouse, multi-device management
+- Predictive analytics for agricultural yield optimization
+- Multi-zone management (Greenhouse, Open Field, Vertical Farm, Orchard) with geodata
 - Secure JWT-based authentication with role-based access
 
 ---
@@ -86,9 +86,9 @@ GreenMindDB/
 │   │   ├── database.py       # SQLAlchemy engine & session
 │   │   ├── auth.py           # JWT, password hashing, auth deps
 │   │   ├── logging_config.py # Structured logging setup
-│   │   ├── models/           # SQLAlchemy ORM models
-│   │   ├── routers/          # API route handlers
-│   │   └── services/         # Business logic (email, etc.)
+│   │   ├── models/           # SQLAlchemy ORM models (Zone, Gateway, Sensor)
+│   │   ├── routers/          # API route handlers (zones, gateways, sensors)
+│   │   └── services/         # Business logic (zone, gateway, email)
 │   ├── alembic/              # Database migrations
 │   ├── scripts/              # Utility scripts (seeding, import)
 │   ├── tests/                # pytest test suite
@@ -536,15 +536,17 @@ docker compose up -d
 |--------|------------------------------------|---------------------------------|
 | GET    | `/api/v1/organizations`               | List organizations              |
 | POST   | `/api/v1/organizations`               | Create organization             |
-| GET    | `/api/v1/greenhouses`                 | List greenhouses                |
-| POST   | `/api/v1/greenhouses`                 | Create greenhouse               |
-| GET    | `/api/v1/greenhouses/{id}/overview`   | Greenhouse dashboard overview   |
-| GET    | `/api/v1/gateways`                    | List gateways                   |
+| GET    | `/api/v1/zones`                       | List zones (all types)          |
+| POST   | `/api/v1/zones`                       | Create zone (type, GPS)         |
+| DELETE | `/api/v1/zones/{id}`                  | Delete zone + cascade           |
+| GET    | `/api/v1/zones/{id}/overview`         | Zone dashboard overview         |
+| GET    | `/api/v1/gateways`                    | List gateways (`?zone_id=`)     |
 | POST   | `/api/v1/gateways/pairing-code`       | Generate pairing code           |
 | POST   | `/api/v1/gateways/register`           | Register a gateway              |
 | POST   | `/api/v1/gateways/heartbeat`          | Gateway heartbeat (X-Api-Key)   |
-| GET    | `/api/v1/sensors`                     | List sensors                    |
+| GET    | `/api/v1/sensors`                     | List sensors (`?zone_id=`)      |
 | GET    | `/api/v1/sensors/{id}/data`           | Get sensor timeseries data      |
+| GET    | `/api/v1/sensors/{id}/export`         | Export sensor data as ZIP       |
 
 ### Ingestion (IoT)
 | Method | Endpoint          | Description                                    |
@@ -552,9 +554,9 @@ docker compose up -d
 | POST   | `/api/v1/ingest`     | Push sensor readings (`X-Api-Key` auth)        |
 
 ### Live Data (WebSocket)
-| Method | Endpoint          | Description                                    |
-|--------|-------------------|------------------------------------------------|
-| WS     | `/api/v1/ws/greenhouse/{id}` | Stream live sensor readings             |
+| Method | Endpoint                    | Description                             |
+|--------|-----------------------------|-----------------------------------------|
+| WS     | `/api/v1/ws/zone/{id}`      | Stream live sensor readings per zone    |
 
 ### Contact & Early Access
 | Method | Endpoint               | Description                                    |
@@ -568,12 +570,13 @@ docker compose up -d
 > Filter by type: `GET /api/v1/submissions?form_type=early_access`
 
 ### Gateway Pairing Flow
-1. User generates a 10-minute pairing code via the dashboard
-2. Raspberry Pi gateway sends `POST /api/v1/gateways/register` with code + hardware serial
-3. Backend validates, registers the gateway, returns an `X-Api-Key`
-4. Gateway sends heartbeats via `POST /api/v1/gateways/heartbeat`
-5. Gateway streams readings via `POST /api/v1/ingest` using the API key
-6. Live data appears on the dashboard via WebSocket
+1. User creates a **Zone** (Greenhouse, Open Field, Vertical Farm, or Orchard)
+2. User generates a 10-minute pairing code for that zone via the dashboard
+3. Raspberry Pi gateway sends `POST /api/v1/gateways/register` with code + hardware serial
+4. Backend validates, registers the gateway to the zone, returns an `X-Api-Key`
+5. Gateway sends heartbeats via `POST /api/v1/gateways/heartbeat`
+6. Gateway streams readings via `POST /api/v1/ingest` using the API key
+7. Live data appears on the zone dashboard via WebSocket
 
 ## Database Backup & Restore
 
