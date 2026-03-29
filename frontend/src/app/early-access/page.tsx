@@ -50,11 +50,12 @@ export default function EarlyAccessPage() {
                     </ScrollReveal>
 
                     <ScrollReveal delay={150}>
-                        <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">Early Access anfragen</h1>
+                        <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">Zugang anfragen</h1>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
                         <p className="text-xl text-apple-gray-500 leading-relaxed">
-                            Gehören Sie zu den ersten Anbauern, die die Zukunft der Gewächshaus-Intelligenz erleben. Füllen Sie das Formular aus um auf die Warteliste zu kommen.
+                            GreenMind befindet sich in Entwicklung. Sie möchten die Plattform
+                            testen oder Teil des Projekts werden? Wir freuen uns auf Ihre Anfrage.
                         </p>
                     </ScrollReveal>
                 </div>
@@ -69,8 +70,8 @@ export default function EarlyAccessPage() {
                                         <polyline points="22 4 12 14.01 9 11.01" />
                                     </svg>
                                 </div>
-                                <h3 className="text-3xl font-bold text-apple-gray-800 mb-4">Anfrage empfangen!</h3>
-                                <p className="text-lg text-apple-gray-500 mb-8 max-w-md mx-auto">Vielen Dank für Ihr Interesse an GreenMind. Wir prüfen Ihre Anfrage und melden uns in Kürze mit den nächsten Schritten.</p>
+                                <h3 className="text-3xl font-bold text-apple-gray-800 mb-4">Anfrage eingegangen!</h3>
+                                <p className="text-lg text-apple-gray-500 mb-8 max-w-md mx-auto">Vielen Dank für Ihr Interesse. Wir melden uns in Kürze bei Ihnen.</p>
                                 <button
                                     onClick={() => setStatus('idle')}
                                     className="px-8 py-3 bg-apple-gray-100 text-apple-gray-800 rounded-full font-medium hover:bg-apple-gray-200 transition-colors"
@@ -101,8 +102,8 @@ export default function EarlyAccessPage() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                        <label className="block text-sm font-medium text-apple-gray-600 mb-2">Unternehmen *</label>
-                                        <input required type="text" name="company" value={formData.company} onChange={handleChange} className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm" placeholder="Gewächshaus GmbH" />
+                                        <label className="block text-sm font-medium text-apple-gray-600 mb-2">Organisation / Betrieb *</label>
+                                        <input required type="text" name="company" value={formData.company} onChange={handleChange} className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm" placeholder="Unternehmen oder Betrieb" />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-apple-gray-600 mb-2">Land *</label>
@@ -117,8 +118,8 @@ export default function EarlyAccessPage() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-apple-gray-600 mb-2">Betriebsdetails</label>
-                                    <textarea name="message" value={formData.message} onChange={handleChange} rows={4} className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm resize-none" placeholder="Was bauen Sie an? Welche Fläche hat Ihr Betrieb (optional)?"></textarea>
+                                    <label className="block text-sm font-medium text-apple-gray-600 mb-2">Was interessiert Sie?</label>
+                                    <textarea name="message" value={formData.message} onChange={handleChange} rows={4} className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm resize-none" placeholder="Was bauen Sie an? Wie möchten Sie GreenMind einsetzen?"></textarea>
                                 </div>
 
                                 <div className="pt-2">
@@ -132,7 +133,7 @@ export default function EarlyAccessPage() {
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
-                                        ) : 'Early Access anfragen'}
+                                        ) : 'Zugang anfragen'}
                                     </button>
                                 </div>
                             </form>

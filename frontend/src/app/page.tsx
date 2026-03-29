@@ -35,15 +35,14 @@ export default function LandingPage() {
     return (
         <div className="min-h-screen">
             {/* ═══════════════════════════════════════════
-                 HERO — Vision + Emotionaler Aufhänger
-                 1 Botschaft: Was ist die Vision?
+                 HERO
             ═══════════════════════════════════════════ */}
             <section className="relative pt-36 pb-32 px-6 overflow-hidden">
                 <div className="relative z-10 max-w-[1280px] mx-auto text-center">
                     <ScrollReveal variant="fade-in" delay={100}>
-                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gm-green-50/80 backdrop-blur-sm text-gm-green-600 text-sm font-medium mb-8 border border-gm-green-200/40">
-                            <span className="w-1.5 h-1.5 rounded-full bg-gm-green-500 animate-pulse" />
-                            Jetzt in der Beta
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50/80 backdrop-blur-sm text-amber-700 text-sm font-medium mb-8 border border-amber-200/40">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            In Entwicklung
                         </div>
                     </ScrollReveal>
 
@@ -56,8 +55,8 @@ export default function LandingPage() {
 
                     <ScrollReveal variant="fade-up" delay={400}>
                         <p className="text-lg md:text-2xl text-apple-gray-500 max-w-2xl mx-auto leading-relaxed mb-14 px-2 md:px-0">
-                            Aktuelle Forschung in der Pflanzenelektrophysiologie zeigt, dass wir Stress erkennen können,
-                            bevor sichtbare Symptome auftreten. GreenMind macht diese Wissenschaft zugänglich.
+                            GreenMind analysiert bioelektrische Pflanzensignale, um Stress früher zu erkennen
+                            und Anbaustrategien gezielt zu verbessern.
                         </p>
                     </ScrollReveal>
 
@@ -67,13 +66,13 @@ export default function LandingPage() {
                                 href="/early-access"
                                 className="btn-glow w-full md:w-auto px-8 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-600 transition-all duration-300 shadow-lg shadow-gm-green-500/20"
                             >
-                                Pflanzensignale überwachen
+                                Zugang anfragen
                             </Link>
                             <Link
-                                href="/product"
+                                href="/technology"
                                 className="w-full md:w-auto px-8 py-4 text-apple-gray-700 rounded-full text-lg font-medium hover:bg-apple-gray-100 transition-all duration-300"
                             >
-                                Plattform entdecken →
+                                So funktioniert&apos;s →
                             </Link>
                         </div>
                     </ScrollReveal>
@@ -81,48 +80,48 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 PROBLEM — Der blinde Fleck
-                 1 Botschaft: Welches Problem gibt es?
+                 PROBLEM
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6">
                 <div className="max-w-[960px] mx-auto text-center">
                     <ScrollReveal>
                         <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                            Die Herausforderung
+                            Das Problem
                         </p>
                     </ScrollReveal>
                     <ScrollReveal delay={150}>
                         <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 tracking-tight leading-tight mb-6">
-                            Die meisten Ernteschäden werden erkannt,<br className="hidden md:block" />
-                            <span className="text-apple-gray-500">wenn es bereits zu spät ist.</span>
+                            Pflanzenstress wird erkannt,<br className="hidden md:block" />
+                            <span className="text-apple-gray-500">wenn der Schaden bereits sichtbar ist.</span>
                         </h2>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
                         <p className="text-lg text-apple-gray-500 max-w-2xl mx-auto leading-relaxed">
-                            Herkömmliche Gewächshausüberwachung erfasst Temperatur, Luftfeuchtigkeit und Boden —
-                            aber nicht die Pflanze selbst. Wenn Stress sichtbar wird, ist der Ertrag bereits beeinträchtigt.
-                            Aktuelle Forschung deutet darauf hin, dass biologische Signale der Schlüssel zur Früherkennung sein könnten.
+                            Heute überwachen Sensoren die Umgebung — Temperatur, Luftfeuchtigkeit,
+                            Bodenfeuchtigkeit. Aber nicht die Pflanze selbst. Dabei senden Pflanzen
+                            bioelektrische Signale, die auf Stress hinweisen — oft bevor äussere
+                            Symptome sichtbar werden.
                         </p>
                     </ScrollReveal>
                 </div>
             </section>
 
             {/* ═══════════════════════════════════════════
-                 LÖSUNG — Feature-Karten
-                 1 Botschaft: Wie löst GreenMind das Problem?
+                 LÖSUNG
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6 bg-apple-gray-100">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                Die Lösung
+                                Unser Ansatz
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                Die Wissenschaft des intelligenteren Anbaus.
+                                Pflanzensignale verstehen. Gezielter handeln.
                             </h2>
                             <p className="text-lg text-apple-gray-500 max-w-xl mx-auto">
-                                Jede Pflanze erzählt eine Geschichte. GreenMind hilft Ihnen, sie zu lesen — und danach zu handeln.
+                                GreenMind erfasst bioelektrische Signale direkt an der Pflanze und macht
+                                sie für datengestützte Anbauentscheidungen nutzbar.
                             </p>
                         </div>
                     </ScrollReveal>
@@ -131,21 +130,21 @@ export default function LandingPage() {
                             <FeatureCard
                                 icon={<IconSignal />}
                                 title="Frühe Stresserkennung"
-                                description="Erste Signale aus der laufenden Forschung deuten darauf hin, dass biologische Indikatoren Wasserdefizit, Nährstoffungleichgewicht und Krankheitsdruck erkennen können, bevor sichtbare Symptome auftreten."
+                                description="Bioelektrische Signale können Dürre-, Schädlings- und Nährstoffstress anzeigen — mit dem Ziel, Probleme zu erkennen, bevor sichtbare Schäden entstehen."
                             />
                         </ScrollReveal>
                         <ScrollReveal delay={250}>
                             <FeatureCard
                                 icon={<IconChart />}
-                                title="Prädiktive Ertragsintelligenz"
-                                description="Kombinieren Sie Umwelt- und biologische Trenddaten, um Ertragsmodelle zu erstellen — ein aufkommender Ansatz für intelligentere Ressourcenplanung und Erntevorbereitung."
+                                title="Datenbasierte Ertragsplanung"
+                                description="Pflanzensignale in Kombination mit Umweltdaten ermöglichen neue Ansätze für die Ertragsplanung — datengestützt statt rein erfahrungsbasiert."
                             />
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
                             <FeatureCard
                                 icon={<IconLeaf />}
-                                title="Präzises Ressourcenmanagement"
-                                description="Nutzen Sie kontinuierliche Daten für Wasser-, Nährstoff- und Energieentscheidungen. Unser Ziel: Verschwendung reduzieren und nachhaltigere Anbaumethoden unterstützen."
+                                title="Gezielter Ressourceneinsatz"
+                                description="Wenn die Pflanze signalisiert, was sie braucht, lassen sich Wasser und Nährstoffe bedarfsgerecht einsetzen — weniger Verbrauch, bessere Ergebnisse."
                             />
                         </ScrollReveal>
                     </div>
@@ -153,31 +152,30 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 SO FUNKTIONIERT ES — Visuelle Timeline
-                 1 Botschaft: Wie funktioniert der Prozess?
+                 WIE ES FUNKTIONIERT
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-20">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                So funktioniert es
+                                So funktioniert&apos;s
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                Vom Signal zur Strategie.
+                                Vom Signal zur Empfehlung.
                             </h2>
                             <p className="text-lg text-apple-gray-500 max-w-2xl mx-auto">
-                                Pflanzen reagieren kontinuierlich auf ihre Umgebung. Diese Reaktionen tragen
-                                messbare Informationen. GreenMind macht sie nutzbar.
+                                Pflanzen reagieren auf ihre Umgebung mit messbaren elektrischen Signalen.
+                                GreenMind macht diese Signale sichtbar und analysierbar.
                             </p>
                         </div>
                     </ScrollReveal>
                     <div className="grid md:grid-cols-4 gap-8">
                         {[
-                            { step: '01', title: 'Pflanzen reagieren', desc: 'Forschung zeigt, dass Pflanzen kontinuierlich messbare biologische Reaktionen auf Umweltveränderungen erzeugen — Signale, die diagnostischen Wert haben können.' },
-                            { step: '02', title: 'Signale erfasst', desc: 'Nicht-invasive Sensorik zeichnet Pflanzenvitalwerte zusammen mit Klimadaten auf — und erstellt einen synchronisierten, hochauflösenden Datensatz für die Analyse.' },
-                            { step: '03', title: 'Intelligenz entsteht', desc: 'Analysen identifizieren Muster, Anomalien und aufkommende Korrelationen — eine fortlaufende wissenschaftliche Untersuchung für prädiktiven Anbau.' },
-                            { step: '04', title: 'Anbauer profitieren', desc: 'Datengestützte Erkenntnisse helfen Anbauern, früher und präziser zu reagieren — für bessere Ertragsergebnisse und mehr Nachhaltigkeit.' },
+                            { step: '01', title: 'Pflanzensignal', desc: 'Pflanzen erzeugen elektrische Signale als Reaktion auf Veränderungen in ihrer Umgebung — Licht, Wasser, Temperatur, Nährstoffe.' },
+                            { step: '02', title: 'Sensorik', desc: 'Sensoren an der Pflanze erfassen diese Signale nicht-invasiv und kombinieren sie mit Umgebungsdaten wie Temperatur und Bodenfeuchtigkeit.' },
+                            { step: '03', title: 'Analyse', desc: 'Die Daten werden automatisch aufbereitet, gefiltert und auf Muster untersucht — welche Signale deuten auf welchen Stress hin?' },
+                            { step: '04', title: 'Empfehlung', desc: 'Erkenntnisse werden in konkrete Handlungsempfehlungen übersetzt — wann giessen, wann düngen, wann eingreifen.' },
                         ].map((item, i) => (
                             <ScrollReveal key={item.step} delay={i * 150}>
                                 <div className="timeline-step text-center">
@@ -194,22 +192,21 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 VERTRAUEN — Social Proof & Autorität
-                 1 Botschaft: Warum sollten Sie uns vertrauen?
+                 FUNDAMENT
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6 bg-apple-gray-100">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                Wissenschaftlich fundiert
+                                Fundament
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                Verwurzelt in Forschung. Erprobt im Feld.
+                                Wissenschaftlich fundiert. Im Feld erprobt.
                             </h2>
                             <p className="text-lg text-apple-gray-500 max-w-2xl mx-auto">
-                                Entwickelt in Zusammenarbeit mit angewandter Agrarforschung an der FHNW —
-                                derzeit in realen Gewächshausumgebungen getestet und validiert.
+                                Entwickelt in Zusammenarbeit mit der FHNW und aufbauend auf
+                                peer-reviewed Forschung zur Pflanzenelektrophysiologie.
                             </p>
                         </div>
                     </ScrollReveal>
@@ -224,13 +221,13 @@ export default function LandingPage() {
                         <ScrollReveal delay={250}>
                             <div className="text-center p-8">
                                 <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">24/7</div>
-                                <p className="text-sm text-apple-gray-500">Kontinuierliche biologische<br />Signalüberwachung</p>
+                                <p className="text-sm text-apple-gray-500">Kontinuierliche<br />Datenerfassung</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
                             <div className="text-center p-8">
-                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Brugg</div>
-                                <p className="text-sm text-apple-gray-500">Schweizer Präzisionstechnik<br />aus dem Innovationszentrum</p>
+                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Aarau</div>
+                                <p className="text-sm text-apple-gray-500">Entwicklungsstandort<br />Schweiz</p>
                             </div>
                         </ScrollReveal>
                     </div>
@@ -238,29 +235,28 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 VORTEILE — Warum Anbauer uns wählen
-                 1 Botschaft: Was sind die Ergebnisse?
+                 POTENZIALE
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
                         <div className="text-center mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                                Vorteile
+                                Potenziale
                             </p>
                             <h2 className="text-3xl md:text-5xl font-bold text-apple-gray-800 mb-4 tracking-tight">
-                                Warum Anbauer GreenMind wählen.
+                                Was GreenMind ermöglichen kann.
                             </h2>
                         </div>
                     </ScrollReveal>
                     <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-3 md:gap-6 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
                         {[
-                            { title: 'Gesündere Pflanzen', desc: 'Gewinnen Sie tiefere Einblicke in den Pflanzenzustand — Frühsignale können helfen, einzugreifen, bevor sich Stress in sichtbare Schäden verwandelt.' },
-                            { title: 'Höhere Ertragsvorhersagbarkeit', desc: 'Erstellen Sie Ertragsmodelle mithilfe biologischer und umweltbezogener Trenddaten — ein aufkommender Ansatz für eine zuverlässigere Ernteplanung.' },
-                            { title: 'Präziser Ressourceneinsatz', desc: 'Treffen Sie Wasser- und Nährstoffentscheidungen auf Basis kontinuierlicher Daten — konzipiert, um Verschwendung durch präziseres Ressourcenmanagement zu reduzieren.' },
-                            { title: 'Schnellere Risikoreaktion', desc: 'Frühindikatoren können Krankheitsdruck, Hitzestress oder Bewässerungsprobleme signalisieren — für schnellere Reaktionszeiten.' },
-                            { title: 'Nachhaltiger Betrieb', desc: 'Arbeiten Sie auf einen geringeren ökologischen Fussabdruck durch datengestützte Energie-, Wasser- und Inputoptimierung hin.' },
-                            { title: 'Klügere Entscheidungen', desc: 'Wechseln Sie von Vermutungen zu kontinuierlicher, wissenschaftsbasierter Intelligenz in Ihrem gesamten Anbaubetrieb.' },
+                            { title: 'Frühzeitige Stresserkennung', desc: 'Pflanzenstress erkennen, bevor er sichtbar wird — durch die Analyse bioelektrischer Signalmuster.' },
+                            { title: 'Bessere Ertragsplanung', desc: 'Pflanzensignale und Umweltdaten kombiniert ermöglichen fundiertere Prognosen für die Erntevorbereitung.' },
+                            { title: 'Gezieltes Bewässern und Düngen', desc: 'Wasser und Nährstoffe genau dann einsetzen, wenn die Pflanze es braucht — nicht nach starrem Zeitplan.' },
+                            { title: 'Schnellere Risikoerkennung', desc: 'Schädlingsbefall oder Krankheiten frühzeitig identifizieren und gezielt gegensteuern.' },
+                            { title: 'Weniger Ressourcenverbrauch', desc: 'Durch bedarfsgerechten Einsatz von Wasser und Energie den ökologischen Fussabdruck reduzieren.' },
+                            { title: 'Datengestützte Entscheidungen', desc: 'Vom Bauchgefühl zur Evidenz — Anbauentscheidungen auf Basis realer Pflanzendaten treffen.' },
                         ].map((b, i) => (
                             <ScrollReveal key={b.title} delay={i * 80} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
                                 <div className="card-hover bg-white rounded-apple-lg p-6 shadow-apple-card h-full flex flex-col justify-between">
@@ -276,26 +272,25 @@ export default function LandingPage() {
             </section>
 
             {/* ═══════════════════════════════════════════
-                 CTA — Finale Conversion
-                 1 Botschaft: Machen Sie den nächsten Schritt.
+                 CTA
             ═══════════════════════════════════════════ */}
             <section className="py-28 px-6 bg-apple-gray-800">
                 <div className="max-w-[1280px] mx-auto text-center">
                     <ScrollReveal>
                         <p className="text-sm font-semibold text-gm-green-400 uppercase tracking-widest mb-4">
-                            Jetzt starten
+                            Mitmachen
                         </p>
                     </ScrollReveal>
                     <ScrollReveal delay={150}>
                         <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 tracking-tight leading-tight">
-                            Die Zukunft des Anbaus<br className="hidden md:block" />
-                            hört zu.
+                            Die Zukunft der Agrardiagnostik<br className="hidden md:block" />
+                            wird datengetrieben.
                         </h2>
                     </ScrollReveal>
                     <ScrollReveal delay={300}>
                         <p className="text-lg text-apple-gray-300 mb-10 max-w-xl mx-auto leading-relaxed">
-                            Werden Sie Teil der vorausschauenden Anbauer, die nachhaltigere,
-                            produktivere und intelligentere Anbaubetriebe aufbauen.
+                            Sie betreiben eine Anbauumgebung und möchten Teil des Projekts werden?
+                            Wir suchen Partner für Feldtests und gemeinsame Weiterentwicklung.
                         </p>
                     </ScrollReveal>
                     <ScrollReveal delay={450}>
@@ -303,7 +298,7 @@ export default function LandingPage() {
                             href="/early-access"
                             className="btn-glow inline-flex px-10 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-400 transition-colors duration-300"
                         >
-                            Pflanzensignale überwachen
+                            Zugang anfragen
                         </Link>
                     </ScrollReveal>
                 </div>
@@ -323,7 +318,7 @@ export default function LandingPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-apple-gray-500">
-                            <Link href="/product" className="hover:text-apple-gray-800 transition-colors duration-200">Produkt</Link>
+                            <Link href="/product" className="hover:text-apple-gray-800 transition-colors duration-200">Plattform</Link>
                             <Link href="/technology" className="hover:text-apple-gray-800 transition-colors duration-200">Technologie</Link>
                             <Link href="/science" className="hover:text-apple-gray-800 transition-colors duration-200">Science</Link>
                             <Link href="/about" className="hover:text-apple-gray-800 transition-colors duration-200">Über uns</Link>
@@ -332,8 +327,11 @@ export default function LandingPage() {
                     </div>
 
                     <div className="mt-8 pt-8 border-t border-apple-gray-200/50 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <p className="text-sm text-apple-gray-500">© 2026 GreenMind. Alle Rechte vorbehalten.</p>
-                        <p className="text-sm text-apple-gray-400">FHNW Campus Brugg-Windisch · Brugg, Schweiz</p>
+                        <p className="text-sm text-apple-gray-500">© 2026 GreenMind — Galaxyadvisors AG</p>
+                        <p className="text-sm text-apple-gray-400">
+                            Laurenzenvorstadt 69 · 5000 Aarau ·{' '}
+                            <a href="mailto:info@galaxyadvisors.com" className="hover:text-apple-gray-600 transition-colors">info@galaxyadvisors.com</a>
+                        </p>
                     </div>
                 </div>
             </footer>

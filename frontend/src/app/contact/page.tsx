@@ -46,16 +46,20 @@ export default function ContactPage() {
                         </ScrollReveal>
                         <ScrollReveal delay={200}>
                             <p className="text-xl text-apple-gray-500 mb-16 leading-relaxed">
-                                Bereit, Ihren Anbaubetrieb auf das nächste Level zu bringen? Wir möchten gerne mehr über Ihr Gewächshaus erfahren und gemeinsam erkunden, wie GreenMind helfen kann.
+                                Sie forschen an bioelektrischen Pflanzensignalen oder betreiben eine Anbauumgebung, die als Forschungsstandort in Frage kommt? Wir freuen uns auf den wissenschaftlichen Austausch.
                             </p>
                         </ScrollReveal>
 
                         <ScrollReveal delay={350}>
                             <div className="bg-apple-gray-100 rounded-apple-lg p-10 border border-apple-gray-200/50">
-                                <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">Standort</h3>
+                                <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">Trägerorganisation</h3>
                                 <p className="text-lg text-apple-gray-800 leading-relaxed">
-                                    FHNW Campus Brugg-Windisch<br />
-                                    Brugg, Schweiz
+                                    Galaxyadvisors AG<br />
+                                    Laurenzenvorstadt 69<br />
+                                    5000 Aarau, Schweiz
+                                </p>
+                                <p className="text-sm text-apple-gray-500 mt-3">
+                                    <a href="mailto:info@galaxyadvisors.com" className="text-gm-green-600 hover:underline">info@galaxyadvisors.com</a>
                                 </p>
                             </div>
                         </ScrollReveal>

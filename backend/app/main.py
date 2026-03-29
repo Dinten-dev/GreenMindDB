@@ -36,7 +36,7 @@ _is_production = settings.environment.lower() in {"prod", "production"}
 
 app = FastAPI(
     title="GreenMind API",
-    description="Plant bioelectrical sensing platform for predictive yield optimization",
+    description="R&D platform for bioelectrical plant signal analysis — Galaxyadvisors AG",
     version="3.0.0",
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",

@@ -35,7 +35,7 @@ export default function Navbar() {
     }, [isMenuOpen]);
 
     const navLinks = [
-        { name: 'Produkt', href: '/product' },
+        { name: 'Plattform', href: '/product' },
         { name: 'Technologie', href: '/technology' },
         { name: 'Science', href: '/science' },
         { name: 'Über uns', href: '/about' },
@@ -92,7 +92,7 @@ export default function Navbar() {
                                     href="/early-access"
                                     className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
                                 >
-                                    Loslegen
+                                    Zugang anfragen
                                 </Link>
                             </>
                         )}
@@ -149,7 +149,7 @@ export default function Navbar() {
                                 href="/early-access"
                                 className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
                             >
-                                Loslegen
+                                Zugang anfragen
                             </Link>
                         </>
                     )}

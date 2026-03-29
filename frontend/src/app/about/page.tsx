@@ -40,7 +40,7 @@ export default function AboutPage() {
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
                     <p className="text-xl text-apple-gray-500 max-w-2xl mb-20 leading-relaxed">
-                        Die Intelligenzschicht für modernen Gewächshausanbau aufbauen.
+                        Bioelektrische Pflanzensignale verstehen, um den Anbau gezielt zu verbessern.
                     </p>
                 </ScrollReveal>
 
@@ -49,11 +49,11 @@ export default function AboutPage() {
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Unsere Mission</h2>
                             <p className="text-apple-gray-500 leading-relaxed">
-                                Die Landwirtschaft ernährt die Welt — doch sie arbeitet mit überraschend wenig Echtzeit-Einblick
-                                in die Organismen, die sie anbaut. GreenMind will das ändern.
-                                Wir glauben, dass das Verständnis des Pflanzenzustands auf biologischer Ebene das Potenzial hat,
-                                den Gewächshausbetrieb grundlegend zu verbessern — durch frühere Interventionen, präziseren
-                                Ressourceneinsatz und letztlich gesündere Pflanzen und höhere Erträge.
+                                Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit —
+                                aber nicht den Zustand der Pflanze selbst. GreenMind will das ändern.
+                                Wir entwickeln ein System, das bioelektrische Pflanzensignale erfasst und
+                                für bessere Anbauentscheidungen nutzbar macht.
+                                Ein Projekt der Galaxyadvisors AG in Zusammenarbeit mit der FHNW.
                             </p>
                         </section>
                     </ScrollReveal>
@@ -62,12 +62,12 @@ export default function AboutPage() {
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Warum es wichtig ist</h2>
                             <p className="text-apple-gray-500 leading-relaxed">
-                                Der weltweite Nahrungsmittelbedarf steigt. Wasser und Ackerflächen stehen unter Druck. Klimatische
-                                Schwankungen machen traditionelle Anbaumethoden weniger vorhersehbar. Gewächshausanbauer
-                                brauchen neue Werkzeuge — nicht nur zur Überwachung der Umgebungsbedingungen, sondern um zu verstehen,
-                                wie ihre Kulturen reagieren. GreenMind arbeitet an diesem Verständnis und erforscht,
-                                wie biologische Signale in handlungsrelevante Intelligenz für eine nachhaltigere,
-                                produktivere und widerstandsfähigere Landwirtschaft umgewandelt werden können.
+                                Der weltweite Nahrungsmittelbedarf steigt. Wasser und Anbauflächen
+                                stehen unter Druck. Klimatische Schwankungen machen konventionelle
+                                Anbaumethoden weniger vorhersehbar. Pflanzen senden dabei ständig
+                                elektrische Signale, die auf Stress hinweisen — oft bevor äussere
+                                Schäden sichtbar werden. GreenMind untersucht, ob diese Signale
+                                als Grundlage für bessere Entscheidungen im Anbau dienen können.
                             </p>
                         </section>
                     </ScrollReveal>
@@ -115,12 +115,13 @@ export default function AboutPage() {
 
                     <ScrollReveal>
                         <section>
-                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Nachhaltige Innovation</h2>
+                            <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Wie wir arbeiten</h2>
                             <p className="text-apple-gray-500 leading-relaxed">
-                                Wir arbeiten aktiv mit akademischen Forschungseinrichtungen und kommerziellen Anbauern zusammen,
-                                um sicherzustellen, dass unsere Plattform echte Herausforderungen adressiert. Jede Funktion, die wir
-                                entwickeln, wird in realen Gewächshausumgebungen getestet. Unser Ziel ist nicht Technologie um ihrer
-                                selbst willen — sondern messbare Verbesserungen in Nachhaltigkeit, Produktivität und Pflanzengesundheit.
+                                Jede Komponente wird unter realen Anbaubedingungen getestet —
+                                in Gewächshäusern und im Freiland, gemeinsam mit der FHNW
+                                und landwirtschaftlichen Partnerbetrieben. Unsere Ergebnisse
+                                dokumentieren wir im Science Center und gleichen sie mit
+                                aktueller wissenschaftlicher Literatur ab.
                             </p>
                         </section>
                     </ScrollReveal>

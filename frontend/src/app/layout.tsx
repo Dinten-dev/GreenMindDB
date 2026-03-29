@@ -11,8 +11,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-    title: 'GreenMind – Prädiktive Ertragsoptimierung',
-    description: 'Bioelektrisches Pflanzensensorsystem für prädiktive Ertragsoptimierung im Gewächshausanbau.',
+    title: 'GreenMind — Forschungsplattform für bioelektrische Phytosensorik',
+    description: 'Forschungs- und Entwicklungsplattform der Galaxyadvisors AG für die datenbasierte Analyse bioelektrischer Pflanzensignale.',
 }
 
 export default function RootLayout({
