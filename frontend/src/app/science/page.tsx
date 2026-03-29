@@ -48,8 +48,8 @@ export default function SciencePage() {
                 <ScrollReveal delay={200}>
                     <p className="text-xl text-apple-gray-500 max-w-2xl mb-16 leading-relaxed">
                         Unsere Technologie basiert auf peer-reviewed Forschung in der Pflanzenelektrophysiologie.
-                        Hier findest du die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu
-                        Machine-Learning-gestützter Stresserkennung.
+                        Hier finden Sie die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu
+                        datengestützter Stressklassifizierung.
                     </p>
                 </ScrollReveal>
 

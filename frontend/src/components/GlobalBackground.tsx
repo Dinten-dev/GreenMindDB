@@ -26,6 +26,9 @@ export default function GlobalBackground() {
     } else if (pathname === '/product') {
         toneClasses = 'tone-product';
         neuralOpacity = 'opacity-50';
+    } else if (pathname === '/science') {
+        toneClasses = 'tone-science';
+        neuralOpacity = 'opacity-60';
     } else if (pathname === '/about') {
         toneClasses = 'tone-about';
         neuralOpacity = 'opacity-20';

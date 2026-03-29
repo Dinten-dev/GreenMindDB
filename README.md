@@ -1,6 +1,8 @@
-# GreenMind — Universal Agriculture Platform
+# GreenMind — R&D Framework
 
-> Plant bioelectrical sensing platform for universal agriculture — greenhouses, open fields, vertical farms, and orchards. Real-time monitoring and predictive analytics powered by ESP32 sensors, Raspberry Pi gateways, and a modern web stack.
+> Research & development platform for bioelectrical plant signal analysis — a project of **Galaxyadvisors AG** (Aarau, Switzerland) in collaboration with FHNW. Captures, aggregates, and analyzes electrophysiological plant data from ESP32 sensors via Raspberry Pi gateways, stored in TimescaleDB and visualized on a modern Next.js frontend.
+
+> **⚠️ R&D Status:** GreenMind is in active research and development. The platform is not commercially available. Partnership inquiries for field studies and controlled experiments are welcome at [info@galaxyadvisors.com](mailto:info@galaxyadvisors.com).
 
 [![CI](https://github.com/<owner>/GreenMindDB/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/GreenMindDB/actions/workflows/ci.yml)
 
@@ -30,11 +32,13 @@
 
 ## Project Overview
 
-GreenMind is a full-stack platform for processing, storing, and analyzing **bioelectrical plant signals** across diverse agricultural environments. The system ingests data from ESP32 sensors via Raspberry Pi gateways into a TimescaleDB-backed FastAPI service, visualized on a modern Next.js frontend.
+GreenMind is a full-stack R&D platform for capturing, processing, and analyzing **bioelectrical plant signals** across diverse agricultural environments. The system ingests electrophysiological data from ESP32 sensors via Raspberry Pi gateways into a TimescaleDB-backed FastAPI service, visualized and exported through a modern Next.js frontend.
 
-**Goals:**
-- Real-time sensor data ingestion and visualization
-- Predictive analytics for agricultural yield optimization
+**Research Objectives:**
+- Data-driven analysis of bioelectrical plant responses for stress factor identification
+- Signal classification for drought, pathogen, and nutrient deficiency detection
+- Hardware resilience testing under extreme agricultural conditions
+- Scalable data aggregation pipeline for longitudinal studies
 - Multi-zone management (Greenhouse, Open Field, Vertical Farm, Orchard) with geodata
 - Secure JWT-based authentication with role-based access
 
