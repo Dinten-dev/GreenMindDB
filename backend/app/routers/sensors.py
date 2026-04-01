@@ -29,6 +29,7 @@ from app.services.gateway_service import gateway_commands_cache, generate_pairin
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
 RANGE_MAP = {
+    "5m": timedelta(minutes=5),
     "1h": timedelta(hours=1),
     "24h": timedelta(hours=24),
     "7d": timedelta(days=7),
@@ -260,7 +261,7 @@ RESOLUTION_BUCKET_MAP = {
 @router.get("/{sensor_id}/data", response_model=list[SensorDataResponse])
 async def get_sensor_data(
     sensor_id: str,
-    range: str = Query("24h", regex="^(1h|24h|7d|30d)$"),
+    range: str = Query("24h", regex="^(5m|1h|24h|7d|30d)$"),
     resolution: str | None = Query(None, regex="^(raw|1m|5m|1h|1d)$"),
     date: str | None = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$"),
     current_user: User = Depends(get_current_user),
@@ -340,10 +341,11 @@ async def get_sensor_data(
                     SensorReading.timestamp >= start,
                     SensorReading.timestamp < end,
                 )
-                .order_by(SensorReading.timestamp.asc())
+                .order_by(SensorReading.timestamp.desc())
                 .limit(5000)
                 .all()
             )
+            readings.reverse()  # Back to chronological order
             data = [
                 DataPoint(timestamp=r.timestamp.isoformat(), value=round(r.value, 2))
                 for r in readings
