@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiListSensors, apiGetSensorData, apiExportSensorData, apiDeleteSensor, SensorInfo, SensorDataResponse } from '@/lib/api';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Brush
 } from 'recharts';
 import PairSensorDialog from './PairSensorDialog';
 
@@ -14,6 +14,7 @@ const KIND_CONFIG: Record<string, { label: string; unit: string; color: string; 
     humidity: { label: 'Luftfeuchtigkeit', unit: '%', color: '#3b82f6', icon: '💧' },
     soil_moisture: { label: 'Bodenfeuchtigkeit', unit: '%', color: '#a855f7', icon: '🌱' },
     bioelectric: { label: 'Bioelektrisches Signal', unit: 'mV', color: '#10b981', icon: '⚡' },
+    bio_signal: { label: 'Bioelektrisches Signal', unit: 'V', color: '#10b981', icon: '⚡' },
 };
 
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
@@ -25,6 +26,7 @@ export default function SensorsPage() {
     const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
     const [loadingData, setLoadingData] = useState(false);
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+    const hasInitialData = useRef(false);
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
     const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -41,17 +43,21 @@ export default function SensorsPage() {
         refreshSensors();
     }, [refreshSensors]);
 
-    const loadSensorData = useCallback(async (sensorId: string, range: TimeRange) => {
-        setLoadingData(true);
+    const loadSensorData = useCallback(async (sensorId: string, range: TimeRange, silent = false) => {
+        if (!silent) {
+            setLoadingData(true);
+            hasInitialData.current = false;
+        }
         try {
             const apiRange = range === 'live' ? '1h' : range;
             const data = await apiGetSensorData(sensorId, apiRange);
             setSensorData(data);
+            hasInitialData.current = true;
         } catch (err) {
             console.error('Failed to load sensor data:', err);
-            setSensorData([]);
+            if (!silent) setSensorData([]);
         } finally {
-            setLoadingData(false);
+            if (!silent) setLoadingData(false);
         }
     }, []);
 
@@ -87,11 +93,11 @@ export default function SensorsPage() {
         }
     };
 
-    // Auto-refresh data every 5s when live mode is active
+    // Auto-refresh data every 5s when live mode is active (silent – no loading flash)
     useEffect(() => {
         if (!selectedSensor || timeRange !== 'live') return;
         const interval = setInterval(() => {
-            loadSensorData(selectedSensor, 'live');
+            loadSensorData(selectedSensor, 'live', true);
         }, 5000);
         return () => clearInterval(interval);
     }, [selectedSensor, timeRange, loadSensorData]);
@@ -355,7 +361,7 @@ export default function SensorsPage() {
 
                                                     {/* Chart */}
                                                     {series.data.length > 0 ? (
-                                                        <ResponsiveContainer width="100%" height={160}>
+                                                        <ResponsiveContainer width="100%" height={220}>
                                                             <LineChart data={series.data}>
                                                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
                                                                 <XAxis
@@ -400,6 +406,18 @@ export default function SensorsPage() {
                                                                     strokeWidth={2}
                                                                     dot={false}
                                                                     activeDot={{ r: 3, fill: config.color, stroke: '#fff', strokeWidth: 2 }}
+                                                                    isAnimationActive={timeRange !== 'live'}
+                                                                />
+                                                                <Brush
+                                                                    dataKey="timestamp"
+                                                                    height={24}
+                                                                    stroke={config.color}
+                                                                    fill="rgba(0,0,0,0.02)"
+                                                                    travellerWidth={8}
+                                                                    tickFormatter={(t) => {
+                                                                        const d = new Date(t);
+                                                                        return d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                                                                    }}
                                                                 />
                                                             </LineChart>
                                                         </ResponsiveContainer>
