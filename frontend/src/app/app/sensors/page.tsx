@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { apiListSensors, apiGetSensorData, apiExportSensorData, apiDeleteSensor, SensorInfo, SensorDataResponse } from '@/lib/api';
+import { apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced, apiExportSensorData, apiDeleteSensor, SensorInfo, SensorDataResponse } from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Brush
 } from 'recharts';
@@ -50,8 +50,13 @@ export default function SensorsPage() {
             hasInitialData.current = false;
         }
         try {
-            const apiRange = range === 'live' ? '1h' : range;
-            const data = await apiGetSensorData(sensorId, apiRange);
+            let data: SensorDataResponse[];
+            if (range === 'live') {
+                // Raw data for last 5 minutes — max resolution (~1600 points at 5Hz)
+                data = await apiGetSensorDataAdvanced(sensorId, { range: '5m', resolution: 'raw' });
+            } else {
+                data = await apiGetSensorData(sensorId, range);
+            }
             setSensorData(data);
             hasInitialData.current = true;
         } catch (err) {
@@ -110,14 +115,17 @@ export default function SensorsPage() {
         }
     };
 
-    // Auto-refresh data every 5s when live mode is active (silent – no loading flash)
+    // Check if any chart is zoomed
+    const isZoomed = Object.keys(brushRanges).length > 0;
+
+    // Auto-refresh data every 5s when live mode is active and NOT zoomed
     useEffect(() => {
-        if (!selectedSensor || timeRange !== 'live') return;
+        if (!selectedSensor || timeRange !== 'live' || isZoomed) return;
         const interval = setInterval(() => {
             loadSensorData(selectedSensor, 'live', true);
         }, 5000);
         return () => clearInterval(interval);
-    }, [selectedSensor, timeRange, loadSensorData]);
+    }, [selectedSensor, timeRange, loadSensorData, isZoomed]);
 
     const confirmDeleteSensor = async () => {
         if (!deletingSensorId) return;
@@ -458,8 +466,23 @@ export default function SensorsPage() {
                                 {/* Live indicator */}
                                 {timeRange === 'live' && !loadingData && sensorData.length > 0 && (
                                     <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                                        Live – aktualisiert alle 5s
+                                        {isZoomed ? (
+                                            <>
+                                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                                Zoom aktiv – Live-Aktualisierung pausiert
+                                                <button
+                                                    onClick={() => setBrushRanges({})}
+                                                    className="ml-2 px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-500 transition-colors"
+                                                >
+                                                    Zoom zurücksetzen
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                                                Live – aktualisiert alle 5s
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>
