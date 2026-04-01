@@ -25,6 +25,11 @@ class ClaimSensorRequest(BaseModel):
     sensor_type: str = "generic"
     name: str | None = None
 
+class PairSensorRequest(BaseModel):
+    code: str
+    zone_id: str
+    name: str | None = None
+
 
 class ClaimSensorResponse(BaseModel):
     sensor_id: str

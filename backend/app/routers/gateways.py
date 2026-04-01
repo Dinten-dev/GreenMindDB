@@ -19,11 +19,22 @@ from app.schemas.gateway import (
     RegisterGatewayResponse,
 )
 from app.services.gateway_service import (
+    delete_gateway,
     generate_pairing_code,
     list_gateways,
+    pull_gateway_commands,
     register_gateway,
-    delete_gateway,
+    register_sensor,
 )
+
+
+def _auth_gateway(db: Session, api_key: str):
+    gateways = db.query(Gateway).filter(Gateway.is_active.is_(True)).all()
+    for gw in gateways:
+        if gw.api_key_hash and verify_password(api_key, gw.api_key_hash):
+            return gw
+    raise HTTPException(status_code=401, detail="Invalid API key")
+
 
 router = APIRouter(prefix="/gateways", tags=["gateways"])
 
@@ -99,3 +110,33 @@ async def handle_delete_gateway(
 ):
     """Delete a gateway and invalidate its API key."""
     delete_gateway(db, current_user, gateway_id)
+
+@router.post("/{gateway_id}/sensors/register", status_code=201)
+async def handle_sensor_register(
+    gateway_id: str,
+    data: dict,
+    db: Session = Depends(get_db),
+    x_api_key: str | None = Header(None),
+):
+    """Gateway registers a sensor utilizing a pairing code."""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Missing API Key")
+    gw = _auth_gateway(db, x_api_key)
+
+    if str(gw.id) != gateway_id:
+        raise HTTPException(status_code=403, detail="Gateway ID mismatch")
+
+    return register_sensor(db, gw, data.get("mac_address", ""), data.get("code", ""))
+
+@router.get("/{gateway_id}/commands", response_model=list[dict])
+async def handle_get_commands(
+    gateway_id: str,
+    db: Session = Depends(get_db),
+    x_api_key: str | None = Header(None),
+):
+    """Gateway pulls pending commands."""
+    if not x_api_key:
+        raise HTTPException(status_code=401)
+    _auth_gateway(db, x_api_key)
+    return pull_gateway_commands(db, gateway_id)
+
