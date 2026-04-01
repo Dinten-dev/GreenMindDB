@@ -48,3 +48,11 @@ class RegisterGatewayResponse(BaseModel):
 class HeartbeatRequest(BaseModel):
     hardware_id: str
     local_ip: str | None = None
+
+class GatewayDiscoveryRequest(BaseModel):
+    mac_address: str
+    code: str
+
+class GatewayCommandResponse(BaseModel):
+    action: str
+    mac_address: str | None = None

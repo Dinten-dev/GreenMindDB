@@ -5,6 +5,7 @@ import { apiListSensors, apiGetSensorData, apiExportSensorData, apiDeleteSensor,
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+import PairSensorDialog from './PairSensorDialog';
 
 type TimeRange = 'live' | '1h' | '24h' | '7d' | '30d';
 
@@ -27,13 +28,18 @@ export default function SensorsPage() {
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
     const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
 
-    useEffect(() => {
+    const refreshSensors = useCallback(() => {
         apiListSensors()
             .then(setSensors)
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
+
+    useEffect(() => {
+        refreshSensors();
+    }, [refreshSensors]);
 
     const loadSensorData = useCallback(async (sensorId: string, range: TimeRange) => {
         setLoadingData(true);
@@ -120,10 +126,21 @@ export default function SensorsPage() {
     const selectedSensorInfo = sensors.find(s => s.id === selectedSensor);
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Sensoren</h1>
-                <p className="text-sm text-gray-400 mt-1">ESP32-Sensormodule – klicke auf einen Sensor für Live-Daten</p>
+        <div className="space-y-6 relative">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Sensoren</h1>
+                    <p className="text-sm text-gray-400 mt-1">ESP32-Sensormodule – klicke auf einen Sensor für Live-Daten</p>
+                </div>
+                <button
+                    onClick={() => setIsPairDialogOpen(true)}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-2xl hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md active:scale-95 text-center whitespace-nowrap"
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Sensor Koppeln
+                </button>
             </div>
 
             {sensors.length === 0 ? (
@@ -442,6 +459,15 @@ export default function SensorsPage() {
                     </div>
                 </div>
             )}
+
+            <PairSensorDialog
+                isOpen={isPairDialogOpen}
+                onClose={() => setIsPairDialogOpen(false)}
+                onSuccess={() => {
+                    setIsPairDialogOpen(false);
+                    refreshSensors();
+                }}
+            />
         </div>
     );
 }

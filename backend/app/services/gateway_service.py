@@ -23,6 +23,13 @@ PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
 LIVENESS_THRESHOLD = timedelta(minutes=5)
 
+# Transient in-memory state for ESP32 Handshake (MVP)
+# MAC -> {"code": "...", "gateway_id": "...", "expires_at": datetime}
+discovered_sensors_cache = {}
+
+# gateway_id -> [ {"action": "...", "mac_address": "..."} ]
+gateway_commands_cache = {}
+
 
 def _require_org(user: User):
     if not user.organization_id:
@@ -171,3 +178,49 @@ def delete_gateway(db: Session, user: User, gateway_id: str) -> None:
 
     db.delete(gateway)
     db.commit()
+
+# --- Sensor Pairing Workflow ---
+
+def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> dict:
+    """Gateway forwards the sensor's pairing code to register it to its zone."""
+    now = datetime.now(UTC)
+
+    pc = (
+        db.query(PairingCode)
+        .filter(
+            PairingCode.code == code.upper(),
+            PairingCode.used_at.is_(None),
+            PairingCode.expires_at > now,
+        )
+        .first()
+    )
+    if not pc:
+        raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
+
+    if pc.zone_id != gw.zone_id:
+        raise HTTPException(status_code=400, detail="Pairing code zone does not match Gateway zone")
+
+    # Clean up any existing old record
+    existing = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
+    if existing:
+        db.delete(existing)
+        db.flush()
+
+    sensor = Sensor(
+        gateway_id=gw.id,
+        mac_address=mac_address,
+        name=f"Sensor-{mac_address[-4:]}",
+        sensor_type="generic",
+        status="online"
+    )
+    db.add(sensor)
+
+    pc.used_at = now
+    db.commit()
+    db.refresh(sensor)
+
+    return {"status": "ok", "sensor_id": str(sensor.id)}
+
+def pull_gateway_commands(db: Session, gateway_id: str) -> list[dict]:
+    cmds = gateway_commands_cache.pop(gateway_id, [])
+    return cmds

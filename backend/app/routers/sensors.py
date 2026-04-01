@@ -4,7 +4,7 @@ import io
 import zipfile
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -14,6 +14,8 @@ from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.timeseries import SensorReading
 from app.models.user import User
+from app.rate_limit import limiter
+from app.schemas.gateway import PairingCodeRequest, PairingCodeResponse
 from app.schemas.sensor import (
     ClaimSensorRequest,
     ClaimSensorResponse,
@@ -22,6 +24,7 @@ from app.schemas.sensor import (
     SensorDataResponse,
     SensorResponse,
 )
+from app.services.gateway_service import gateway_commands_cache, generate_pairing_code
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
@@ -122,6 +125,18 @@ async def claim_sensor(
     )
 
 
+@router.post("/pairing-code", response_model=PairingCodeResponse, status_code=201)
+@limiter.limit("5/minute")
+async def handle_generate_pairing_code(
+    request: Request,
+    data: PairingCodeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate a short-lived pairing code for a sensor to use in its Captive Portal."""
+    return generate_pairing_code(db, current_user, data.zone_id)
+
+
 # ── Move Sensor ─────────────────────────────────────
 
 
@@ -218,6 +233,16 @@ async def delete_sensor(
         text("DELETE FROM sensor_reading WHERE sensor_id = :sid"),
         {"sid": str(sensor.id)},
     )
+
+    # Send remote delete command to gateway
+    gw_id = str(sensor.gateway_id)
+    if gw_id not in gateway_commands_cache:
+        gateway_commands_cache[gw_id] = []
+    gateway_commands_cache[gw_id].append({
+        "action": "delete_sensor",
+        "mac_address": sensor.mac_address
+    })
+
     db.delete(sensor)
     db.commit()
 
@@ -270,7 +295,7 @@ async def get_sensor_data(
         try:
             day = date_type.fromisoformat(date)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format")
+            raise HTTPException(status_code=400, detail="Invalid date format") from None
         start = datetime(day.year, day.month, day.day, tzinfo=UTC)
         end = start + timedelta(days=1)
     else:
