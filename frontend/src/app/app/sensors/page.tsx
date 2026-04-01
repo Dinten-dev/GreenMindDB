@@ -27,6 +27,7 @@ export default function SensorsPage() {
     const [loadingData, setLoadingData] = useState(false);
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const hasInitialData = useRef(false);
+    const [brushRanges, setBrushRanges] = useState<Record<string, { startIndex: number; endIndex: number }>>({});
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
     const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -69,13 +70,29 @@ export default function SensorsPage() {
             setSelectedSensor(sensorId);
             loadSensorData(sensorId, timeRange);
         }
+        setBrushRanges({});
     };
 
     const handleRangeChange = (range: TimeRange) => {
         setTimeRange(range);
+        setBrushRanges({});
         if (selectedSensor) {
             loadSensorData(selectedSensor, range);
         }
+    };
+
+    const formatTime = (t: string) => {
+        const d = new Date(t);
+        const h = d.getHours().toString().padStart(2, '0');
+        const m = d.getMinutes().toString().padStart(2, '0');
+        return `${h}:${m}`;
+    };
+
+    const formatDate = (t: string) => {
+        const d = new Date(t);
+        const day = d.getDate().toString().padStart(2, '0');
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        return `${day}.${month}`;
     };
 
     const handleExport = async () => {
@@ -367,11 +384,10 @@ export default function SensorsPage() {
                                                                 <XAxis
                                                                     dataKey="timestamp"
                                                                     tickFormatter={(t) => {
-                                                                        const d = new Date(t);
                                                                         if (timeRange === '1h' || timeRange === '24h' || timeRange === 'live') {
-                                                                            return d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                                                                            return formatTime(t);
                                                                         }
-                                                                        return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' });
+                                                                        return formatDate(t);
                                                                     }}
                                                                     tick={{ fontSize: 10, fill: '#94a3b8' }}
                                                                     axisLine={{ stroke: 'rgba(0,0,0,0.04)' }}
@@ -414,10 +430,17 @@ export default function SensorsPage() {
                                                                     stroke={config.color}
                                                                     fill="rgba(0,0,0,0.02)"
                                                                     travellerWidth={8}
-                                                                    tickFormatter={(t) => {
-                                                                        const d = new Date(t);
-                                                                        return d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                                                                    startIndex={brushRanges[series.kind]?.startIndex}
+                                                                    endIndex={brushRanges[series.kind]?.endIndex}
+                                                                    onChange={(range) => {
+                                                                        if (range && typeof range.startIndex === 'number' && typeof range.endIndex === 'number') {
+                                                                            setBrushRanges(prev => ({
+                                                                                ...prev,
+                                                                                [series.kind]: { startIndex: range.startIndex!, endIndex: range.endIndex! },
+                                                                            }));
+                                                                        }
                                                                     }}
+                                                                    tickFormatter={(t) => formatTime(t)}
                                                                 />
                                                             </LineChart>
                                                         </ResponsiveContainer>
