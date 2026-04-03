@@ -27,6 +27,7 @@ from app.routers import (  # noqa: E402
     ingest_router,
     organizations_router,
     sensors_router,
+    wav_router,
     ws_router,
 )
 
@@ -113,6 +114,7 @@ api_v1_router.include_router(gateways_router)
 api_v1_router.include_router(sensors_router)
 api_v1_router.include_router(ingest_router)
 api_v1_router.include_router(contact_router)
+api_v1_router.include_router(wav_router)
 api_v1_router.include_router(ws_router)
 
 app.include_router(api_v1_router)

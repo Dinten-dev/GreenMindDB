@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     frontend_url: str = "https://biolingo.org"
     contact_form_to: str = ""
 
+    # S3 / MinIO
+    s3_endpoint: str = "http://minio:9000"
+    s3_region: str = "eu-central-1"
+    s3_access_key_id: str = "minioadmin"
+    s3_secret_access_key: str = "change-me-minio-root-password"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value):

@@ -48,19 +48,24 @@ GreenMind is a full-stack R&D platform for capturing, processing, and analyzing 
 
 ```mermaid
 graph TD;
-    Sensors[ESP32 Sensors] -->|USB / Serial| Pi[Raspberry Pi Gateway]
+    Sensors[ESP32 Sensors 380 Hz] -->|HTTP POST| Pi[Raspberry Pi Gateway]
     Pi -->|POST /api/v1/ingest| API[FastAPI Backend :8000]
+    Pi -->|POST /api/v1/wav/upload| API
     API -->|SQLAlchemy| DB[(TimescaleDB :5432)]
+    API -->|boto3| S3[(MinIO / S3 :9000)]
     UI[Next.js Frontend :3000] -->|REST API| API
     API -->|Resend API| Email[Email Notifications]
 ```
 
 ### Data Flow
 
-1. **ESP32 sensors** capture bioelectrical signals from plants
-2. **Raspberry Pi gateway** aggregates and forwards readings via REST
-3. **FastAPI backend** validates, stores to TimescaleDB, and serves data
-4. **Next.js frontend** renders real-time dashboards and management UIs
+1. **ESP32 sensors** capture bioelectrical signals at **380 Hz** with a 3-sample Moving Average filter
+2. **Raspberry Pi gateway** receives 380-sample batches (1 second of data) via HTTP POST
+   - **Raw samples** → written to local **WAV files** (10-minute chunks, 16-bit PCM)
+   - **Aggregate** (mean of 380 samples) → queued for cloud upload
+3. **Gateway WAV uploader** transfers completed WAV files to the cloud (MinIO)
+4. **FastAPI backend** stores aggregates in TimescaleDB, WAV metadata in PostgreSQL, WAV files in MinIO
+5. **Next.js frontend** renders real-time dashboards and provides WAV download access
 
 ---
 
@@ -71,6 +76,7 @@ graph TD;
 | **Frontend**   | Next.js 14, TypeScript, TailwindCSS, Recharts    |
 | **Backend**    | FastAPI, SQLAlchemy, Alembic, Pydantic            |
 | **Database**   | PostgreSQL 15 + TimescaleDB                       |
+| **Object Storage** | MinIO (S3-compatible) — WAV raw data archive  |
 | **Auth**       | JWT (httpOnly cookies), bcrypt                    |
 | **Email**      | Resend (transactional email API)                  |
 | **Deployment** | Docker Compose                                    |
@@ -90,9 +96,9 @@ GreenMindDB/
 │   │   ├── database.py       # SQLAlchemy engine & session
 │   │   ├── auth.py           # JWT, password hashing, auth deps
 │   │   ├── logging_config.py # Structured logging setup
-│   │   ├── models/           # SQLAlchemy ORM models (Zone, Gateway, Sensor)
-│   │   ├── routers/          # API route handlers (zones, gateways, sensors)
-│   │   └── services/         # Business logic (zone, gateway, email)
+│   │   ├── models/           # SQLAlchemy ORM models (Zone, Gateway, Sensor, WavFile)
+│   │   ├── routers/          # API route handlers (zones, gateways, sensors, wav)
+│   │   └── services/         # Business logic (zone, gateway, email, wav_service)
 │   ├── alembic/              # Database migrations
 │   ├── scripts/              # Utility scripts (seeding, import)
 │   ├── tests/                # pytest test suite
@@ -329,6 +335,10 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `EMAIL_FROM`                      | Sender address for outgoing email           | `onboarding@biolingo.org`     |
 | `FRONTEND_URL`                    | Frontend URL (used in email links)          | `https://biolingo.org`        |
 | `CONTACT_FORM_TO`                 | Recipient for contact/early-access emails   | *(optional)*                  |
+| `S3_ENDPOINT`                     | MinIO / S3 endpoint URL                     | `http://minio:9000`           |
+| `S3_REGION`                       | S3 region                                   | `eu-central-1`                |
+| `S3_ACCESS_KEY_ID`                | MinIO / S3 access key                       | `minioadmin`                  |
+| `S3_SECRET_ACCESS_KEY`            | MinIO / S3 secret key                       | *(required in production)*    |
 
 > **🔒 Never commit `.env` files with real credentials.** Use `.env.example` as a template.
 
@@ -572,6 +582,16 @@ docker compose up -d
 > All submissions are persisted to the database as a durable backup.
 > Email notifications via Resend are sent as best-effort.
 > Filter by type: `GET /api/v1/submissions?form_type=early_access`
+
+### WAV File Management
+| Method | Endpoint                    | Description                                       |
+|--------|-----------------------------|-------------------------------------------------|
+| POST   | `/api/v1/wav/upload`          | Upload WAV file from gateway (multipart, X-Api-Key) |
+| GET    | `/api/v1/wav/files`           | List WAV files (`?sensor_id=`, `?from_dt=`, `?to_dt=`) |
+| GET    | `/api/v1/wav/download/{id}`   | Get presigned MinIO download URL                  |
+
+> WAV files are 16-bit PCM, mono, 380 Hz. Each file covers a 10-minute recording
+> (~456 KB). Stored in MinIO bucket `greenmind-raw` under `wav/{MAC}/{date}/{time}.wav`.
 
 ### Gateway Pairing Flow
 1. User creates a **Zone** (Greenhouse, Open Field, Vertical Farm, or Orchard)
