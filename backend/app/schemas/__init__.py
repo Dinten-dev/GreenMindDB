@@ -19,11 +19,6 @@ from app.schemas.gateway import (
     RegisterGatewayRequest,
     RegisterGatewayResponse,
 )
-from app.schemas.zone import (
-    ZoneCreate,
-    ZoneOverview,
-    ZoneResponse,
-)
 from app.schemas.ingest import IngestRequest, IngestResponse, ReadingPayload
 from app.schemas.organization import OrgCreate, OrgResponse
 from app.schemas.sensor import (
@@ -33,6 +28,11 @@ from app.schemas.sensor import (
     MoveSensorRequest,
     SensorDataResponse,
     SensorResponse,
+)
+from app.schemas.zone import (
+    ZoneCreate,
+    ZoneOverview,
+    ZoneResponse,
 )
 
 __all__ = [

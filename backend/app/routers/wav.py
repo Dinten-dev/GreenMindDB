@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
@@ -39,9 +39,7 @@ async def upload_wav(
         raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
 
     # Authenticate gateway
-    gateway = (
-        db.query(Gateway).filter(Gateway.hardware_id == gateway_serial).first()
-    )
+    gateway = db.query(Gateway).filter(Gateway.hardware_id == gateway_serial).first()
     if not gateway or not gateway.api_key_hash:
         raise HTTPException(status_code=403, detail="Unknown or unconfigured gateway")
     if not verify_password(x_api_key, gateway.api_key_hash):
@@ -51,8 +49,10 @@ async def upload_wav(
     try:
         start_dt = datetime.fromisoformat(started_at)
         end_dt = datetime.fromisoformat(ended_at)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid timestamp format (ISO 8601 required)")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400, detail="Invalid timestamp format (ISO 8601 required)"
+        ) from e
 
     # Read file
     file_data = await file.read()
@@ -62,8 +62,8 @@ async def upload_wav(
     # Extract WAV metadata for validation
     try:
         meta = wav_service.extract_wav_metadata(file_io)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid WAV file")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid WAV file") from e
 
     # Upload to MinIO
     s3_key = wav_service.upload_wav(
@@ -127,19 +127,15 @@ def list_wav_files(
     if from_dt:
         try:
             query = query.filter(WavFile.started_at >= datetime.fromisoformat(from_dt))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid from_dt format")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid from_dt format") from e
     if to_dt:
         try:
             query = query.filter(WavFile.ended_at <= datetime.fromisoformat(to_dt))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid to_dt format")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid to_dt format") from e
 
-    files = (
-        query.order_by(desc(WavFile.started_at))
-        .limit(min(limit, 500))
-        .all()
-    )
+    files = query.order_by(desc(WavFile.started_at)).limit(min(limit, 500)).all()
 
     return [
         {

@@ -37,14 +37,10 @@ def _require_org(user: User):
     return user.organization_id
 
 
-def list_gateways(
-    db: Session, user: User, *, zone_id: str | None = None
-) -> list[GatewayResponse]:
+def list_gateways(db: Session, user: User, *, zone_id: str | None = None) -> list[GatewayResponse]:
     org_id = _require_org(user)
 
-    z_ids = [
-        z.id for z in db.query(Zone.id).filter(Zone.organization_id == org_id).all()
-    ]
+    z_ids = [z.id for z in db.query(Zone.id).filter(Zone.organization_id == org_id).all()]
     if not z_ids:
         return []
 
@@ -81,11 +77,7 @@ def list_gateways(
 def generate_pairing_code(db: Session, user: User, zone_id: str) -> PairingCodeResponse:
     org_id = _require_org(user)
 
-    z = (
-        db.query(Zone)
-        .filter(Zone.id == zone_id, Zone.organization_id == org_id)
-        .first()
-    )
+    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
 
@@ -103,9 +95,7 @@ def generate_pairing_code(db: Session, user: User, zone_id: str) -> PairingCodeR
         raise HTTPException(status_code=500, detail="Could not generate unique code")
 
     expires_at = datetime.now(UTC) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES)
-    pc = PairingCode(
-        code=code, zone_id=z.id, expires_at=expires_at, created_by_user_id=user.id
-    )
+    pc = PairingCode(code=code, zone_id=z.id, expires_at=expires_at, created_by_user_id=user.id)
     db.add(pc)
     db.commit()
     db.refresh(pc)
@@ -179,7 +169,9 @@ def delete_gateway(db: Session, user: User, gateway_id: str) -> None:
     db.delete(gateway)
     db.commit()
 
+
 # --- Sensor Pairing Workflow ---
+
 
 def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> dict:
     """Gateway forwards the sensor's pairing code to register it to its zone."""
@@ -211,7 +203,7 @@ def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> di
         mac_address=mac_address,
         name=f"Sensor-{mac_address[-4:]}",
         sensor_type="generic",
-        status="online"
+        status="online",
     )
     db.add(sensor)
 
@@ -220,6 +212,7 @@ def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> di
     db.refresh(sensor)
 
     return {"status": "ok", "sensor_id": str(sensor.id)}
+
 
 def pull_gateway_commands(db: Session, gateway_id: str) -> list[dict]:
     cmds = gateway_commands_cache.pop(gateway_id, [])

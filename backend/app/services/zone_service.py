@@ -23,9 +23,7 @@ def list_zones(db: Session, user: User) -> list[ZoneResponse]:
     zones = db.query(Zone).filter(Zone.organization_id == org_id).all()
     results = []
     for z in zones:
-        gateway_count = (
-            db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
-        )
+        gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
         sensor_count = (
             db.query(func.count(Sensor.id))
             .join(Gateway, Gateway.id == Sensor.gateway_id)
@@ -74,11 +72,7 @@ def create_zone(db: Session, user: User, data: ZoneCreate) -> ZoneResponse:
 
 def get_zone(db: Session, user: User, zone_id: str) -> ZoneResponse:
     org_id = _require_org(user)
-    z = (
-        db.query(Zone)
-        .filter(Zone.id == zone_id, Zone.organization_id == org_id)
-        .first()
-    )
+    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
     gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
@@ -103,11 +97,7 @@ def get_zone(db: Session, user: User, zone_id: str) -> ZoneResponse:
 
 def get_zone_overview(db: Session, user: User, zone_id: str) -> ZoneOverview:
     org_id = _require_org(user)
-    z = (
-        db.query(Zone)
-        .filter(Zone.id == zone_id, Zone.organization_id == org_id)
-        .first()
-    )
+    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
 
@@ -146,11 +136,7 @@ def get_zone_overview(db: Session, user: User, zone_id: str) -> ZoneOverview:
 
 def delete_zone(db: Session, user: User, zone_id: str) -> None:
     org_id = _require_org(user)
-    z = (
-        db.query(Zone)
-        .filter(Zone.id == zone_id, Zone.organization_id == org_id)
-        .first()
-    )
+    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
 
@@ -162,6 +148,7 @@ def delete_zone(db: Session, user: User, zone_id: str) -> None:
         if sensors:
             sensor_ids_str = [str(s[0]) for s in sensors]
             from sqlalchemy import text
+
             db.execute(
                 text("DELETE FROM sensor_reading WHERE sensor_id = ANY(:sids)"),
                 {"sids": sensor_ids_str},

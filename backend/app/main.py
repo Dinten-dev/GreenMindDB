@@ -23,12 +23,12 @@ from app.routers import (  # noqa: E402
     auth_router,
     contact_router,
     gateways_router,
-    zones_router,
     ingest_router,
     organizations_router,
     sensors_router,
     wav_router,
     ws_router,
+    zones_router,
 )
 
 # ── App initialization ───────────────────────────────────────────────

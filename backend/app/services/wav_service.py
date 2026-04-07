@@ -1,10 +1,8 @@
 """Service layer for WAV file storage in MinIO/S3."""
 
 import logging
-import struct
 import wave
-from datetime import datetime, timezone
-from io import BytesIO
+from datetime import datetime
 from typing import BinaryIO
 
 import boto3

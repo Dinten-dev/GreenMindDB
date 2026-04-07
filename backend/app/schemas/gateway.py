@@ -48,10 +48,16 @@ class RegisterGatewayResponse(BaseModel):
 class HeartbeatRequest(BaseModel):
     hardware_id: str
     local_ip: str | None = None
+    cpu_temp_c: float | None = None
+    ram_usage_pct: float | None = None
+    wifi_rssi_dbm: int | None = None
+    queue_depth: int | None = None
+
 
 class GatewayDiscoveryRequest(BaseModel):
     mac_address: str
     code: str
+
 
 class GatewayCommandResponse(BaseModel):
     action: str
