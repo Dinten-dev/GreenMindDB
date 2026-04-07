@@ -18,7 +18,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class Role(str, enum.Enum):
+class Role(enum.StrEnum):
     OWNER = "owner"
     ADMIN = "admin"
     MEMBER = "member"
@@ -32,9 +32,7 @@ class Organization(Base):
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
-    zones = relationship(
-        "Zone", back_populates="organization", cascade="all, delete-orphan"
-    )
+    zones = relationship("Zone", back_populates="organization", cascade="all, delete-orphan")
 
 
 class User(Base):

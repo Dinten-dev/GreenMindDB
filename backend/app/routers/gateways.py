@@ -85,8 +85,7 @@ async def handle_heartbeat(
     gateway = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
     if not gateway:
         raise HTTPException(
-            status_code=410,
-            detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
+            status_code=410, detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
         )
     if not gateway.is_active:
         raise HTTPException(status_code=403, detail="Gateway deactivated")
@@ -111,6 +110,7 @@ async def handle_delete_gateway(
     """Delete a gateway and invalidate its API key."""
     delete_gateway(db, current_user, gateway_id)
 
+
 @router.post("/{gateway_id}/sensors/register", status_code=201)
 async def handle_sensor_register(
     gateway_id: str,
@@ -128,6 +128,7 @@ async def handle_sensor_register(
 
     return register_sensor(db, gw, data.get("mac_address", ""), data.get("code", ""))
 
+
 @router.get("/{gateway_id}/commands", response_model=list[dict])
 async def handle_get_commands(
     gateway_id: str,
@@ -139,4 +140,3 @@ async def handle_get_commands(
         raise HTTPException(status_code=401)
     _auth_gateway(db, x_api_key)
     return pull_gateway_commands(db, gateway_id)
-

@@ -56,7 +56,7 @@ export default function ContactPage() {
                                 <p className="text-lg text-apple-gray-800 leading-relaxed">
                                     Galaxyadvisors AG<br />
                                     Laurenzenvorstadt 69<br />
-                                    5000 Aarau, Schweiz
+                                    5000 Aarau
                                 </p>
                                 <p className="text-sm text-apple-gray-500 mt-3">
                                     <a href="mailto:info@galaxyadvisors.com" className="text-gm-green-600 hover:underline">info@galaxyadvisors.com</a>

@@ -239,10 +239,9 @@ async def delete_sensor(
     gw_id = str(sensor.gateway_id)
     if gw_id not in gateway_commands_cache:
         gateway_commands_cache[gw_id] = []
-    gateway_commands_cache[gw_id].append({
-        "action": "delete_sensor",
-        "mac_address": sensor.mac_address
-    })
+    gateway_commands_cache[gw_id].append(
+        {"action": "delete_sensor", "mac_address": sensor.mac_address}
+    )
 
     db.delete(sensor)
     db.commit()
@@ -293,6 +292,7 @@ async def get_sensor_data(
     # Determine time window
     if date:
         from datetime import date as date_type
+
         try:
             day = date_type.fromisoformat(date)
         except ValueError:
@@ -353,8 +353,7 @@ async def get_sensor_data(
         else:
             bucket_size = RESOLUTION_BUCKET_MAP[resolution]
             rows = db.execute(
-                text(
-                    f"""
+                text(f"""
                     SELECT time_bucket('{bucket_size}', timestamp) AS bucket,
                            AVG(value) AS avg_value
                     FROM sensor_reading
@@ -362,8 +361,7 @@ async def get_sensor_data(
                       AND timestamp >= :start AND timestamp < :end_ts
                     GROUP BY bucket
                     ORDER BY bucket ASC
-                """
-                ),
+                """),
                 {"sid": sensor_id, "kind": kind, "start": start, "end_ts": end},
             ).fetchall()
             data = [

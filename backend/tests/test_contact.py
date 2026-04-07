@@ -1,7 +1,23 @@
+"""Unit tests for contact & early‑access form endpoints."""
+
+from unittest.mock import MagicMock
+
 from fastapi.testclient import TestClient
 
+from app.database import get_db
 from app.main import app
 
+
+def _override_get_db():
+    """Yield a mock DB session so tests don't need a live database."""
+    db = MagicMock()
+    try:
+        yield db
+    finally:
+        pass
+
+
+app.dependency_overrides[get_db] = _override_get_db
 client = TestClient(app)
 
 

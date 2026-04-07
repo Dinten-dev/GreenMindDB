@@ -14,7 +14,7 @@ const KIND_CONFIG: Record<string, { label: string; unit: string; color: string; 
     humidity: { label: 'Luftfeuchtigkeit', unit: '%', color: '#3b82f6', icon: '💧' },
     soil_moisture: { label: 'Bodenfeuchtigkeit', unit: '%', color: '#a855f7', icon: '🌱' },
     bioelectric: { label: 'Bioelektrisches Signal', unit: 'mV', color: '#10b981', icon: '⚡' },
-    bio_signal: { label: 'Bioelektrisches Signal', unit: 'V', color: '#10b981', icon: '⚡' },
+    bio_signal: { label: 'Bioelektrisches Signal', unit: 'mV', color: '#10b981', icon: '⚡' },
 };
 
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
