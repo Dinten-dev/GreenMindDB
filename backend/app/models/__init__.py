@@ -1,5 +1,6 @@
 """All SQLAlchemy models – re-exported for Alembic and app use."""
 
+from app.models.biosignal import BioAggregate, BioSession
 from app.models.form_submission import FormSubmission
 from app.models.ingest_log import IngestLog
 from app.models.master import Gateway, Sensor, Zone
@@ -21,4 +22,6 @@ __all__ = [
     "EmailVerification",
     "FormSubmission",
     "WavFile",
+    "BioSession",
+    "BioAggregate",
 ]
