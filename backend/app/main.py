@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 from app.rate_limit import limiter  # noqa: E402
 from app.routers import (  # noqa: E402
     auth_router,
+    biosignal_router,
     contact_router,
     gateways_router,
     ingest_router,
@@ -116,6 +117,7 @@ api_v1_router.include_router(ingest_router)
 api_v1_router.include_router(contact_router)
 api_v1_router.include_router(wav_router)
 api_v1_router.include_router(ws_router)
+api_v1_router.include_router(biosignal_router)
 
 app.include_router(api_v1_router)
 

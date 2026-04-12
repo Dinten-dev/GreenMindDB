@@ -106,3 +106,73 @@ def delete_wav(s3_key: str) -> None:
     client = _get_s3_client()
     client.delete_object(Bucket=_WAV_BUCKET, Key=s3_key)
     logger.info("Deleted WAV s3://%s/%s", _WAV_BUCKET, s3_key)
+
+
+def export_wav_from_session(session_id: str, raw_path: str, sample_rate: int) -> None:
+    """Read a raw JSONL session log, convert the signal to a clean WAV, and upload it."""
+    import io
+    import json
+    import os
+    import struct
+
+    from app.database import SessionLocal
+    from app.models.biosignal import BioSession
+
+    if not os.path.exists(raw_path):
+        logger.error(f"Cannot export session {session_id}, raw file not found at {raw_path}")
+        return
+
+    frames = []
+
+    # Process the raw signal
+    with open(raw_path) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                batch = json.loads(line)
+                readings = batch["readings"]
+                for r in readings:
+                    mv_val = r[0]
+                    flags = r[3]
+
+                    # Clean generation: if invalid (flag > 0), set to 0 PCM (1.65V baseline equivalent)
+                    if flags != 0:
+                        pcm_val = 0
+                    else:
+                        # AD8232 limits: 0 .. 3300mV. Centered at 1650mV.
+                        # Scale perfectly to 16 bit PCM (-32768 to +32767)
+                        normalized = (mv_val - 1650.0) / 1650.0
+                        # Clamp
+                        normalized = max(min(normalized, 1.0), -1.0)
+                        pcm_val = int(normalized * 32767)
+
+                    frames.append(struct.pack("<h", pcm_val))
+            except Exception as e:
+                logger.error(f"Export parsing error in {raw_path}: {e}")
+
+    # Generate WAV in-memory
+    wav_io = io.BytesIO()
+    with wave.open(wav_io, "wb") as wf:
+        wf.setnchannels(1)  # Mono
+        wf.setsampwidth(2)  # 16-bit PCM
+        wf.setframerate(sample_rate)
+        wf.writeframes(b"".join(frames))
+
+    wav_size = wav_io.tell()
+    wav_io.seek(0)
+
+    # Store back to DB
+    with SessionLocal() as db:
+        session = db.query(BioSession).filter(BioSession.id == session_id).first()
+        if session:
+            # We use upload_wav logic to upload to MinIO
+            s3_key = upload_wav(
+                wav_io,
+                sensor_mac=session.sensor_mac,
+                started_at=session.start_time,
+                file_size=wav_size,
+            )
+            session.wav_storage_key = s3_key
+            db.commit()
+            logger.info(f"Session {session_id} WAV exported successfully to {s3_key}")
