@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.biosignal import BioAggregate, BioSession
+from app.models.master import Gateway, Sensor
+from app.models.timeseries import SensorReading
 from app.routers.ws import manager
 from app.services.wav_service import export_wav_from_session
 
@@ -28,6 +30,35 @@ class BioIngestPayload(BaseModel):
     hardware: str
     columns: list[str]
     readings: list[list[float | int]]  # [out_mv, lp, lm, flags]
+    gateway_serial: str | None = None  # Injected by gateway proxy
+
+
+def _resolve_sensor(db: Session, mac_address: str, gateway_serial: str | None) -> Sensor | None:
+    """Find or auto-register a sensor for the given MAC, linking it to the gateway."""
+    sensor = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
+    if sensor:
+        return sensor
+
+    # No sensor with this MAC — try to find the gateway by hardware_id
+    gateway = None
+    if gateway_serial:
+        gateway = db.query(Gateway).filter(Gateway.hardware_id == gateway_serial).first()
+
+    if not gateway:
+        return None
+
+    # Auto-register the sensor under this gateway
+    sensor = Sensor(
+        gateway_id=gateway.id,
+        mac_address=mac_address,
+        name=f"AD8232-{mac_address[-5:].replace(':', '')}",
+        sensor_type="bio_signal",
+        status="online",
+        last_seen=datetime.now(UTC),
+    )
+    db.add(sensor)
+    db.flush()
+    return sensor
 
 
 @router.post("/ingest", status_code=201)
@@ -35,11 +66,11 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
     """Ingest a chunk of high-frequency bio-signals (e.g. 1 second at 380Hz)."""
     now = datetime.now(UTC)
 
-    # Note: In a real system you'd also authenticate the gateway with API keys.
-    # For now, we assume this is called locally by the Gateway bridging logic.
+    # 1. Resolve sensor and gateway via the existing master tables
+    sensor = _resolve_sensor(db, payload.mac_address, payload.gateway_serial)
+    gateway_id = sensor.gateway_id if sensor else None
 
-    # 1. Find or Create Active Session
-    # For simplicity, if there's no active session in the last 10 minutes, create one.
+    # 2. Find or Create Active BioSession
     session = (
         db.query(BioSession)
         .filter(BioSession.sensor_mac == payload.mac_address, BioSession.end_time.is_(None))
@@ -48,13 +79,6 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
     )
 
     if not session:
-        # We need the gateway id, assume a default or fetch from DB if mac_address is known
-        # In this minimal E2E we find a gateway that owns a sensor with this mac, or just fallback
-        from app.models.master import Sensor
-
-        sensor = db.query(Sensor).filter(Sensor.mac_address == payload.mac_address).first()
-        gateway_id = sensor.gateway_id if sensor else None
-
         session = BioSession(
             sensor_mac=payload.mac_address,
             gateway_id=gateway_id,
@@ -66,24 +90,24 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
         db.commit()
         db.refresh(session)
 
-    # 2. Append Raw Data to JSONL
+    # 3. Append Raw Data to JSONL
     filepath = os.path.join(RAW_DATA_DIR, session.raw_storage_key)
     with open(filepath, "a") as f:
-        # We write one line per batch to keep it fast
         f.write(json.dumps({"timestamp": now.isoformat(), "readings": payload.readings}) + "\n")
 
-    # 3. Calculate Aggregates
+    # 4. Calculate Aggregates
     if not payload.readings:
         return {"status": "ok", "session_id": str(session.id)}
 
     mvs = [r[0] for r in payload.readings]
     invalid_count = sum(1 for r in payload.readings if r[3] != 0)
     total_count = len(mvs)
+    mean_mv = sum(mvs) / total_count
 
     agg = BioAggregate(
         session_id=session.id,
         timestamp=now,
-        mean_mv=sum(mvs) / total_count,
+        mean_mv=mean_mv,
         min_mv=min(mvs),
         max_mv=max(mvs),
         samples_total=total_count,
@@ -94,14 +118,29 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
     # Update session tally
     session.total_samples += total_count
     session.invalid_samples += invalid_count
+
+    # 5. Write 1-second aggregate to sensor_reading for dashboard integration
+    if sensor:
+        sensor.last_seen = now
+        sensor.status = "online"
+        db.add(
+            SensorReading(
+                timestamp=now,
+                sensor_id=sensor.id,
+                kind="bio_signal",
+                value=round(mean_mv, 2),
+                unit="mV",
+            )
+        )
+
     db.commit()
 
-    # 4. Broadcast live data to Frontend (ONLY the output signal per requirements)
-    # The frontend is naive about LO+/LO- and just wants `out_mv`.
+    # 6. Broadcast live data to Frontend
     frontend_readings = [{"t": now.isoformat(), "v": mv} for mv in mvs]
+    room_id = str(gateway_id) if gateway_id else "biosignal"
     await manager.broadcast_to_zone(
         {"event": "bio_stream", "mac": payload.mac_address, "data": frontend_readings},
-        str(session.gateway_id),  # Using gateway ID as room for now or generic room
+        room_id,
     )
 
     return {"status": "ok", "session_id": str(session.id)}
