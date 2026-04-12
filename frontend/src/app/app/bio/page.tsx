@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 // In a real app this would be in a types file
 interface BioSession {
@@ -43,8 +43,8 @@ export default function BioSignalDashboard() {
       if (!resSig.ok) throw new Error("Error fetching signal");
       const sig = await resSig.json();
       setSignalData(sig.data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
