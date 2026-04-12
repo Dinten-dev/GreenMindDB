@@ -1,7 +1,7 @@
 """Add biosignal tables
 
-Revision ID: 0010_biosignals
-Revises: 0009_wav_file_and_mv_migration
+Revision ID: 0010
+Revises: 0009
 Create Date: 2026-04-07 19:25:00.000000
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0010_biosignals"
-down_revision = "0009_wav_file_and_mv_migration"
+revision = "0010"
+down_revision = "0009"
 branch_labels = None
 depends_on = None
 
