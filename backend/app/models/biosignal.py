@@ -17,7 +17,7 @@ class BioSession(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sensor_mac = Column(String(17), nullable=False, index=True)
     gateway_id = Column(
-        UUID(as_uuid=True), ForeignKey("gateway.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("gateway.id", ondelete="SET NULL"), nullable=True
     )
 
     hardware_model = Column(String(50), nullable=False, default="AD8232")

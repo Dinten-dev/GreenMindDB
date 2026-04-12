@@ -21,7 +21,7 @@ def upgrade() -> None:
         "bio_session",
         sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sensor_mac", sa.String(length=17), nullable=False),
-        sa.Column("gateway_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("gateway_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("hardware_model", sa.String(length=50), nullable=False),
         sa.Column("sample_rate_hz", sa.Integer(), nullable=False),
         sa.Column("start_time", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("invalid_samples", sa.Integer(), nullable=False),
         sa.Column("raw_storage_key", sa.String(length=500), nullable=True),
         sa.Column("wav_storage_key", sa.String(length=500), nullable=True),
-        sa.ForeignKeyConstraint(["gateway_id"], ["gateway.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["gateway_id"], ["gateway.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_bio_session_sensor_mac"), "bio_session", ["sensor_mac"], unique=False)

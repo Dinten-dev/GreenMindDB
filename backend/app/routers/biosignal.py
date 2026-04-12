@@ -53,7 +53,7 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
         from app.models.master import Sensor
 
         sensor = db.query(Sensor).filter(Sensor.mac_address == payload.mac_address).first()
-        gateway_id = sensor.gateway_id if sensor else uuid.uuid4()  # Mock if not registered
+        gateway_id = sensor.gateway_id if sensor else None
 
         session = BioSession(
             sensor_mac=payload.mac_address,
