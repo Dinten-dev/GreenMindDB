@@ -58,6 +58,8 @@ services:
       S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_BUCKET: greenmind-exports
       S3_PROVIDER: minio
+      # Firmware storage location inside the container
+      FIRMWARE_STORAGE_DIR: /app/firmware_data
       # Resend / Email
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-onboarding@biolingo.org}
@@ -68,6 +70,8 @@ services:
       GUNICORN_WORKERS: 4
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - firmware_data:/app/firmware_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,3 +116,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  firmware_data:  # Mapped to /var/lib/docker/volumes/... on host, or configure local binding

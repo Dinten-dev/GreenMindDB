@@ -10,6 +10,7 @@ const NAV_LINKS = [
     { href: '/app/zones', label: 'Zonen', icon: '⌂' },
     { href: '/app/gateways', label: 'Gateways', icon: '◎' },
     { href: '/app/sensors', label: 'Sensoren', icon: '◈' },
+    { href: '/app/firmware/dashboard', label: 'Firmware', icon: '⬡', roles: ['admin', 'owner'] },
     { href: '/app/account', label: 'Account', icon: '○' },
 ];
 
@@ -36,8 +37,13 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-0.5">
-                {NAV_LINKS.map((link) => {
-                    const isActive = pathname === link.href || (link.href !== '/app/dashboard' && pathname.startsWith(link.href));
+                {NAV_LINKS.filter((link) => {
+                    if ('roles' in link && link.roles) {
+                        return user && link.roles.includes(user.role);
+                    }
+                    return true;
+                }).map((link) => {
+                    const isActive = pathname === link.href || (link.href !== '/app/dashboard' && pathname.startsWith(link.href.replace('/dashboard', '')));
                     return (
                         <Link
                             key={link.href}
