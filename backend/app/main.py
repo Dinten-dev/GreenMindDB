@@ -30,6 +30,7 @@ from app.routers import (  # noqa: E402
     wav_router,
     ws_router,
     zones_router,
+    firmware_router,
 )
 
 # ── App initialization ───────────────────────────────────────────────
@@ -118,6 +119,7 @@ api_v1_router.include_router(contact_router)
 api_v1_router.include_router(wav_router)
 api_v1_router.include_router(ws_router)
 api_v1_router.include_router(biosignal_router)
+api_v1_router.include_router(firmware_router)
 
 app.include_router(api_v1_router)
 

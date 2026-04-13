@@ -60,6 +60,9 @@ services:
       ENABLE_CONTINUOUS_AGGREGATES: ${ENABLE_CONTINUOUS_AGGREGATES}
       LOG_LEVEL: ${LOG_LEVEL}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      FIRMWARE_STORAGE_DIR: /app/firmware_data
+    volumes:
+      - firmware_data:/app/firmware_data
     depends_on:
       db:
         condition: service_healthy
@@ -90,6 +93,7 @@ services:
       - "${PROXY_HTTPS_PORT}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - firmware_data:/app/firmware_data:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -134,3 +138,4 @@ volumes:
   caddy_config:
   prometheus_data:
   grafana_data:
+  firmware_data:

@@ -8,6 +8,7 @@ from app.routers.sensors import router as sensors_router
 from app.routers.wav import router as wav_router
 from app.routers.ws import router as ws_router
 from app.routers.zones import router as zones_router
+from app.routers.firmware import router as firmware_router
 
 __all__ = [
     "auth_router",
@@ -20,4 +21,5 @@ __all__ = [
     "ws_router",
     "zones_router",
     "biosignal_router",
+    "firmware_router",
 ]

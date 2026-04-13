@@ -8,6 +8,8 @@ from app.models.pairing import PairingCode
 from app.models.timeseries import SensorReading
 from app.models.user import EmailVerification, Organization, Role, User
 from app.models.wav_file import WavFile
+from app.models.firmware import FirmwareRelease, RolloutPolicy, FirmwareReport
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -24,4 +26,8 @@ __all__ = [
     "WavFile",
     "BioSession",
     "BioAggregate",
+    "FirmwareRelease",
+    "RolloutPolicy",
+    "FirmwareReport",
+    "AuditLog",
 ]
