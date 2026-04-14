@@ -31,6 +31,8 @@ from app.routers import (  # noqa: E402
     ws_router,
     zones_router,
     firmware_router,
+    gateway_desired_state_router,
+    gateway_admin_router,
 )
 
 # ── App initialization ───────────────────────────────────────────────
@@ -120,6 +122,8 @@ api_v1_router.include_router(wav_router)
 api_v1_router.include_router(ws_router)
 api_v1_router.include_router(biosignal_router)
 api_v1_router.include_router(firmware_router)
+api_v1_router.include_router(gateway_desired_state_router)
+api_v1_router.include_router(gateway_admin_router)
 
 app.include_router(api_v1_router)
 

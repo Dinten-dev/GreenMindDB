@@ -60,6 +60,8 @@ services:
       S3_PROVIDER: minio
       # Firmware storage location inside the container
       FIRMWARE_STORAGE_DIR: /app/firmware_data
+      # Gateway release tarballs (under same volume)
+      GATEWAY_RELEASE_DIR: /app/firmware_data/gateway_releases
       # Resend / Email
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-onboarding@biolingo.org}

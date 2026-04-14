@@ -10,6 +10,14 @@ from app.models.user import EmailVerification, Organization, Role, User
 from app.models.wav_file import WavFile
 from app.models.firmware import FirmwareRelease, RolloutPolicy, FirmwareReport
 from app.models.audit_log import AuditLog
+from app.models.gateway_remote import (
+    GatewayAppRelease,
+    GatewayCommand,
+    GatewayConfigRelease,
+    GatewayDesiredState,
+    GatewayStateReport,
+    GatewayUpdateLog,
+)
 
 __all__ = [
     "User",
@@ -30,4 +38,10 @@ __all__ = [
     "RolloutPolicy",
     "FirmwareReport",
     "AuditLog",
+    "GatewayAppRelease",
+    "GatewayConfigRelease",
+    "GatewayDesiredState",
+    "GatewayCommand",
+    "GatewayStateReport",
+    "GatewayUpdateLog",
 ]

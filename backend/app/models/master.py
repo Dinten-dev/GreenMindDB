@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     Text,
     text,
@@ -64,6 +65,19 @@ class Gateway(Base):
     last_seen = Column(DateTime(timezone=True), nullable=True)
     paired_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+
+    # Remote management columns (added in migration 0013)
+    app_version = Column(String(50), nullable=True)
+    config_version = Column(String(50), nullable=True)
+    agent_version = Column(String(50), nullable=True)
+    rollout_ring = Column(String(50), nullable=True, default="stable")
+    maintenance_mode = Column(Boolean, nullable=True, default=False)
+    blocked = Column(Boolean, nullable=True, default=False)
+    os_version = Column(String(100), nullable=True)
+    disk_free_mb = Column(Integer, nullable=True)
+    update_download_status = Column(String(20), nullable=True)
+    update_apply_status = Column(String(20), nullable=True)
+    signature_status = Column(String(20), nullable=True)
 
     zone = relationship("Zone", back_populates="gateways")
     sensors = relationship("Sensor", back_populates="gateway", cascade="all, delete-orphan")

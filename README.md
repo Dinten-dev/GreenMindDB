@@ -51,9 +51,12 @@ graph TD;
     Sensors[ESP32 Sensors 380 Hz] -->|HTTP POST| Pi[Raspberry Pi Gateway]
     Pi -->|POST /api/v1/ingest| API[FastAPI Backend :8000]
     Pi -->|POST /api/v1/wav/upload| API
+    Agent[Update Agent on Pi] -->|Poll desired-state| API
+    Agent -->|Report state| API
     API -->|SQLAlchemy| DB[(TimescaleDB :5432)]
     API -->|boto3| S3[(MinIO / S3 :9000)]
     UI[Next.js Frontend :3000] -->|REST API| API
+    UI -->|Gateway Fleet Admin| API
     API -->|Resend API| Email[Email Notifications]
 ```
 
@@ -79,6 +82,7 @@ graph TD;
 | **Object Storage** | MinIO (S3-compatible) — WAV raw data archive  |
 | **Auth**       | JWT (httpOnly cookies), bcrypt                    |
 | **Email**      | Resend (transactional email API)                  |
+| **OTA/Fleet**  | Desired-state agent, Ed25519 signatures, symlink releases |
 | **Deployment** | Docker Compose                                    |
 | **CI/CD**      | GitHub Actions                                    |
 | **Linting**    | ruff, black (Python) · ESLint, Prettier (TS)      |
@@ -96,9 +100,10 @@ GreenMindDB/
 │   │   ├── database.py       # SQLAlchemy engine & session
 │   │   ├── auth.py           # JWT, password hashing, auth deps
 │   │   ├── logging_config.py # Structured logging setup
-│   │   ├── models/           # SQLAlchemy ORM models (Zone, Gateway, Sensor, WavFile)
-│   │   ├── routers/          # API route handlers (zones, gateways, sensors, wav)
-│   │   └── services/         # Business logic (zone, gateway, email, wav_service)
+│   │   ├── models/           # SQLAlchemy ORM models (Zone, Gateway, Sensor, WavFile, GatewayRemote)
+│   │   ├── routers/          # API route handlers (zones, gateways, sensors, wav, gateway_admin, gateway_desired_state)
+│   │   ├── schemas/          # Pydantic schemas (gateway_remote)
+│   │   └── services/         # Business logic (zone, gateway, email, wav_service, gateway_remote_service)
 │   ├── alembic/              # Database migrations
 │   ├── scripts/              # Utility scripts (seeding, import)
 │   ├── tests/                # pytest test suite
@@ -108,10 +113,11 @@ GreenMindDB/
 ├── frontend/                 # Next.js TypeScript frontend
 │   ├── src/
 │   │   ├── app/              # Next.js App Router pages
+│   │   │   └── app/gateway-fleet/  # Gateway Fleet Admin UI (6 tabs)
 │   │   ├── components/       # Reusable UI components
 │   │   ├── contexts/         # React context providers
 │   │   ├── hooks/            # Custom React hooks
-│   │   ├── lib/              # API client, utilities
+│   │   ├── lib/              # API client, utilities (gateway-admin-api.ts)
 │   │   └── types/            # Shared TypeScript types
 │   ├── public/               # Static assets
 │   ├── Dockerfile
@@ -339,6 +345,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `S3_REGION`                       | S3 region                                   | `eu-central-1`                |
 | `S3_ACCESS_KEY_ID`                | MinIO / S3 access key                       | `minioadmin`                  |
 | `S3_SECRET_ACCESS_KEY`            | MinIO / S3 secret key                       | *(required in production)*    |
+| `GATEWAY_RELEASE_DIR`             | Storage path for gateway release tarballs   | `/app/firmware_data/gateway_releases` |
 
 > **🔒 Never commit `.env` files with real credentials.** Use `.env.example` as a template.
 
@@ -533,6 +540,19 @@ docker compose up -d
 - JWT secret validator rejects defaults in production
 - `COOKIE_SECURE` configurable via env (set `true` when HTTPS is enabled)
 
+### OTA / Gateway Remote Management Security
+
+- **Agent identity**: Each agent authenticates via the same `X-Api-Key` used by its gateway
+- **Artifact integrity**: All release tarballs are verified by SHA256 hash before installation
+- **Ed25519 signatures**: Optional code-signing verification (enforcement-ready)
+- **Privilege separation**: Agent runs as unprivileged `greenmind-agent` user with restricted `sudo` (whitelist: `systemctl restart/reboot` only)
+- **Offline install**: Python wheels are pre-built and installed via `pip --no-index` — no PyPI access on the Pi
+- **Atomic updates**: Symlink-based release switch prevents partial installations
+- **Disk pre-checks**: Agent verifies sufficient disk space (`file_size * 2 + 100 MB`) before downloading
+- **Global locking**: `fcntl.flock()` prevents concurrent update/command execution
+- **Update windows**: Configurable per-gateway time windows for apply phase (download allowed anytime)
+- **Audit trail**: All admin actions (upload, rollout, command, rollback) are logged with timestamps, IP, and entity
+
 ---
 
 ## API Endpoints
@@ -601,6 +621,42 @@ docker compose up -d
 5. Gateway sends heartbeats via `POST /api/v1/gateways/heartbeat`
 6. Gateway streams readings via `POST /api/v1/ingest` using the API key
 7. Live data appears on the zone dashboard via WebSocket
+
+### Gateway Remote Management (OTA)
+| Method | Endpoint                                     | Auth      | Description                               |
+|--------|----------------------------------------------|-----------|-------------------------------------------|
+| GET    | `/api/v1/gateway/desired-state`              | X-Api-Key | Agent polls for desired app/config version |
+| POST   | `/api/v1/gateway/state-report`               | X-Api-Key | Agent reports current state + health       |
+| POST   | `/api/v1/gateway/command-result`             | X-Api-Key | Agent reports command execution result     |
+| GET    | `/api/v1/gateway/releases/{id}/download`     | X-Api-Key | Download release tarball                   |
+| GET    | `/api/v1/gateway/configs/{id}/download`      | X-Api-Key | Download config payload                    |
+
+### Gateway Admin (Fleet Management)
+| Method | Endpoint                                     | Auth | Description                               |
+|--------|----------------------------------------------|------|-------------------------------------------|
+| GET    | `/api/v1/admin/gateway/fleet`                | JWT  | Fleet overview (all gateways + status)     |
+| POST   | `/api/v1/admin/gateway/releases`             | JWT  | Upload new app release tarball             |
+| GET    | `/api/v1/admin/gateway/releases`             | JWT  | List app releases                          |
+| PATCH  | `/api/v1/admin/gateway/releases/{id}`        | JWT  | Activate/deactivate release                |
+| POST   | `/api/v1/admin/gateway/configs`              | JWT  | Create config release (JSON)               |
+| GET    | `/api/v1/admin/gateway/configs`              | JWT  | List config releases                       |
+| PUT    | `/api/v1/admin/gateway/{id}/desired-state`   | JWT  | Set desired app/config version per gateway |
+| POST   | `/api/v1/admin/gateway/{id}/command`         | JWT  | Issue remote command                       |
+| POST   | `/api/v1/admin/gateway/rollout`              | JWT  | Start staged rollout to ring               |
+| POST   | `/api/v1/admin/gateway/{id}/rollback`        | JWT  | Initiate rollback to previous release      |
+| GET    | `/api/v1/admin/gateway/update-logs`          | JWT  | List update logs (filterable, paginated)   |
+| GET    | `/api/v1/admin/gateway/audit-logs`           | JWT  | Audit trail of all admin actions           |
+
+### OTA Update Flow
+1. Admin uploads a **release tarball** (containing `src/`, `wheels/`, `requirements.lock`)
+2. Admin starts a **staged rollout** targeting a ring (`canary` → `early` → `stable`)
+3. Matching gateways receive the update via the **desired-state** endpoint
+4. The **agent** downloads the tarball, verifies **SHA256** and optional **Ed25519 signature**
+5. Agent extracts to `/opt/greenmind/releases/<version>/`, installs wheels **offline**
+6. **Atomic symlink switch**: `/opt/greenmind/current` → new release
+7. Agent restarts `greenmind-gateway.service` and runs a **6-point healthcheck**
+8. On healthcheck failure → **automatic rollback** to previous release
+9. Agent reports status back to the cloud (download/apply/rollback status)
 
 ## Database Backup & Restore
 
