@@ -23,6 +23,9 @@ from app.routers import (  # noqa: E402
     auth_router,
     biosignal_router,
     contact_router,
+    firmware_router,
+    gateway_admin_router,
+    gateway_desired_state_router,
     gateways_router,
     ingest_router,
     organizations_router,
@@ -30,9 +33,6 @@ from app.routers import (  # noqa: E402
     wav_router,
     ws_router,
     zones_router,
-    firmware_router,
-    gateway_desired_state_router,
-    gateway_admin_router,
 )
 
 # ── App initialization ───────────────────────────────────────────────

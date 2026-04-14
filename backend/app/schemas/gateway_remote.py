@@ -5,7 +5,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ── Desired State (agent-facing) ─────────────────────────────────────
 
 

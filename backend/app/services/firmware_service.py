@@ -28,6 +28,7 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(-[\w.]+)?$")
 
 # ── Audit helpers ────────────────────────────────────────────────────
 
+
 def _audit(
     db: Session,
     user: User,
@@ -51,33 +52,50 @@ def _audit(
 
 # ── Dashboard ────────────────────────────────────────────────────────
 
+
 def get_dashboard_summary(db: Session) -> dict:
     now = datetime.now(UTC)
     h24_ago = now - timedelta(hours=24)
 
-    active_releases = db.query(func.count(FirmwareRelease.id)).filter(
-        FirmwareRelease.is_active.is_(True)
-    ).scalar() or 0
+    active_releases = (
+        db.query(func.count(FirmwareRelease.id))
+        .filter(FirmwareRelease.is_active.is_(True))
+        .scalar()
+        or 0
+    )
     total_releases = db.query(func.count(FirmwareRelease.id)).scalar() or 0
 
-    online_gateways = db.query(func.count(Gateway.id)).filter(
-        Gateway.status == "online", Gateway.is_active.is_(True)
-    ).scalar() or 0
-    total_gateways = db.query(func.count(Gateway.id)).filter(
-        Gateway.is_active.is_(True)
-    ).scalar() or 0
+    online_gateways = (
+        db.query(func.count(Gateway.id))
+        .filter(Gateway.status == "online", Gateway.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+    total_gateways = (
+        db.query(func.count(Gateway.id)).filter(Gateway.is_active.is_(True)).scalar() or 0
+    )
 
     total_devices = db.query(func.count(Sensor.id)).scalar() or 0
 
-    failed_24h = db.query(func.count(FirmwareReport.id)).filter(
-        FirmwareReport.reported_at >= h24_ago,
-        FirmwareReport.status.in_(["failed", "hash_mismatch", "rollback", "incompatible"]),
-    ).scalar() or 0
+    failed_24h = (
+        db.query(func.count(FirmwareReport.id))
+        .filter(
+            FirmwareReport.reported_at >= h24_ago,
+            FirmwareReport.status.in_(["failed", "hash_mismatch", "rollback", "incompatible"]),
+        )
+        .scalar()
+        or 0
+    )
 
-    success_24h = db.query(func.count(FirmwareReport.id)).filter(
-        FirmwareReport.reported_at >= h24_ago,
-        FirmwareReport.status == "success",
-    ).scalar() or 0
+    success_24h = (
+        db.query(func.count(FirmwareReport.id))
+        .filter(
+            FirmwareReport.reported_at >= h24_ago,
+            FirmwareReport.status == "success",
+        )
+        .scalar()
+        or 0
+    )
 
     active_rollouts = db.query(func.count(RolloutPolicy.id)).scalar() or 0
 
@@ -94,6 +112,7 @@ def get_dashboard_summary(db: Session) -> dict:
 
 
 # ── Releases ─────────────────────────────────────────────────────────
+
 
 def list_releases(
     db: Session,
@@ -148,7 +167,9 @@ def upload_release(
     # Read and validate size
     content = file.file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail=f"File exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit")
+        raise HTTPException(
+            status_code=413, detail=f"File exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"
+        )
     if len(content) == 0:
         raise HTTPException(status_code=422, detail="Empty file")
 
@@ -193,9 +214,20 @@ def upload_release(
         changelog=changelog,
     )
     db.add(release)
-    _audit(db, user, "firmware.upload", "firmware_release", details=json.dumps({
-        "version": version, "board_type": board_type, "sha256": sha256_hash,
-    }), ip_address=ip_address)
+    _audit(
+        db,
+        user,
+        "firmware.upload",
+        "firmware_release",
+        details=json.dumps(
+            {
+                "version": version,
+                "board_type": board_type,
+                "sha256": sha256_hash,
+            }
+        ),
+        ip_address=ip_address,
+    )
     db.commit()
     db.refresh(release)
     return release
@@ -208,17 +240,27 @@ def toggle_release(
     old_state = release.is_active
     release.is_active = is_active
     action = "firmware.activate" if is_active else "firmware.deactivate"
-    _audit(db, user, action, "firmware_release", str(release.id), json.dumps({
-        "version": release.version, "old_active": old_state, "new_active": is_active,
-    }), ip_address=ip)
+    _audit(
+        db,
+        user,
+        action,
+        "firmware_release",
+        str(release.id),
+        json.dumps(
+            {
+                "version": release.version,
+                "old_active": old_state,
+                "new_active": is_active,
+            }
+        ),
+        ip_address=ip,
+    )
     db.commit()
     db.refresh(release)
     return release
 
 
-def delete_release(
-    db: Session, user: User, release_id: uuid.UUID, ip: str | None = None
-) -> None:
+def delete_release(db: Session, user: User, release_id: uuid.UUID, ip: str | None = None) -> None:
     release = get_release(db, release_id)
 
     # Remove file from disk
@@ -226,15 +268,27 @@ def delete_release(
     if os.path.exists(file_loc):
         os.remove(file_loc)
 
-    _audit(db, user, "firmware.delete", "firmware_release", str(release.id), json.dumps({
-        "version": release.version, "board_type": release.board_type,
-    }), ip_address=ip)
+    _audit(
+        db,
+        user,
+        "firmware.delete",
+        "firmware_release",
+        str(release.id),
+        json.dumps(
+            {
+                "version": release.version,
+                "board_type": release.board_type,
+            }
+        ),
+        ip_address=ip,
+    )
 
     db.delete(release)
     db.commit()
 
 
 # ── Reports ──────────────────────────────────────────────────────────
+
 
 def list_reports(
     db: Session,
@@ -257,21 +311,24 @@ def list_reports(
     for r in items:
         release = db.query(FirmwareRelease).filter(FirmwareRelease.id == r.release_id).first()
         gateway = db.query(Gateway).filter(Gateway.id == r.gateway_id).first()
-        result.append({
-            "id": r.id,
-            "sensor_id": r.sensor_id,
-            "gateway_id": r.gateway_id,
-            "release_id": r.release_id,
-            "status": r.status,
-            "error_message": r.error_message,
-            "reported_at": r.reported_at,
-            "release_version": release.version if release else None,
-            "gateway_name": gateway.name or gateway.hardware_id if gateway else None,
-        })
+        result.append(
+            {
+                "id": r.id,
+                "sensor_id": r.sensor_id,
+                "gateway_id": r.gateway_id,
+                "release_id": r.release_id,
+                "status": r.status,
+                "error_message": r.error_message,
+                "reported_at": r.reported_at,
+                "release_version": release.version if release else None,
+                "gateway_name": gateway.name or gateway.hardware_id if gateway else None,
+            }
+        )
     return result, total
 
 
 # ── Rollout Policies ─────────────────────────────────────────────────
+
 
 def list_policies(db: Session) -> list[dict]:
     items = db.query(RolloutPolicy).order_by(RolloutPolicy.created_at.desc()).all()
@@ -279,21 +336,26 @@ def list_policies(db: Session) -> list[dict]:
     for p in items:
         release = db.query(FirmwareRelease).filter(FirmwareRelease.id == p.release_id).first()
         zone = db.query(Zone).filter(Zone.id == p.zone_id).first() if p.zone_id else None
-        result.append({
-            "id": p.id,
-            "release_id": p.release_id,
-            "zone_id": p.zone_id,
-            "canary_percentage": p.canary_percentage,
-            "created_at": p.created_at,
-            "release_version": release.version if release else None,
-            "zone_name": zone.name if zone else None,
-        })
+        result.append(
+            {
+                "id": p.id,
+                "release_id": p.release_id,
+                "zone_id": p.zone_id,
+                "canary_percentage": p.canary_percentage,
+                "created_at": p.created_at,
+                "release_version": release.version if release else None,
+                "zone_name": zone.name if zone else None,
+            }
+        )
     return result
 
 
 def create_policy(
-    db: Session, user: User, release_id: uuid.UUID,
-    zone_id: uuid.UUID | None, canary_percentage: str,
+    db: Session,
+    user: User,
+    release_id: uuid.UUID,
+    zone_id: uuid.UUID | None,
+    canary_percentage: str,
     ip: str | None = None,
 ) -> RolloutPolicy:
     # Verify release exists
@@ -304,18 +366,26 @@ def create_policy(
         canary_percentage=canary_percentage,
     )
     db.add(policy)
-    _audit(db, user, "rollout.create", "rollout_policy", details=json.dumps({
-        "release_id": str(release_id), "zone_id": str(zone_id) if zone_id else None,
-        "canary_percentage": canary_percentage,
-    }), ip_address=ip)
+    _audit(
+        db,
+        user,
+        "rollout.create",
+        "rollout_policy",
+        details=json.dumps(
+            {
+                "release_id": str(release_id),
+                "zone_id": str(zone_id) if zone_id else None,
+                "canary_percentage": canary_percentage,
+            }
+        ),
+        ip_address=ip,
+    )
     db.commit()
     db.refresh(policy)
     return policy
 
 
-def delete_policy(
-    db: Session, user: User, policy_id: uuid.UUID, ip: str | None = None
-) -> None:
+def delete_policy(db: Session, user: User, policy_id: uuid.UUID, ip: str | None = None) -> None:
     policy = db.query(RolloutPolicy).filter(RolloutPolicy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -325,6 +395,7 @@ def delete_policy(
 
 
 # ── Audit Logs ───────────────────────────────────────────────────────
+
 
 def list_audit_logs(
     db: Session,
@@ -344,15 +415,17 @@ def list_audit_logs(
     result = []
     for a in items:
         user = db.query(UserModel).filter(UserModel.id == a.user_id).first() if a.user_id else None
-        result.append({
-            "id": a.id,
-            "user_id": a.user_id,
-            "user_email": user.email if user else None,
-            "action": a.action,
-            "entity_type": a.entity_type,
-            "entity_id": a.entity_id,
-            "details": a.details,
-            "ip_address": a.ip_address,
-            "created_at": a.created_at,
-        })
+        result.append(
+            {
+                "id": a.id,
+                "user_id": a.user_id,
+                "user_email": user.email if user else None,
+                "action": a.action,
+                "entity_type": a.entity_type,
+                "entity_id": a.entity_id,
+                "details": a.details,
+                "ip_address": a.ip_address,
+                "created_at": a.created_at,
+            }
+        )
     return result, total

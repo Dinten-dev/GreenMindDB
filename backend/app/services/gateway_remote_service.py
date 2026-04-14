@@ -12,7 +12,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -73,11 +72,7 @@ def get_desired_state(
 ) -> DesiredStateResponse:
     """Build the full desired-state response for an agent poll."""
 
-    ds = (
-        db.query(GatewayDesiredState)
-        .filter(GatewayDesiredState.gateway_id == gateway.id)
-        .first()
-    )
+    ds = db.query(GatewayDesiredState).filter(GatewayDesiredState.gateway_id == gateway.id).first()
 
     if not ds:
         # No desired state set yet — return defaults
@@ -426,7 +421,9 @@ def upload_config_release(
 ) -> GatewayConfigRelease:
     """Upload a new gateway config release."""
 
-    existing = db.query(GatewayConfigRelease).filter(GatewayConfigRelease.version == version).first()
+    existing = (
+        db.query(GatewayConfigRelease).filter(GatewayConfigRelease.version == version).first()
+    )
     if existing:
         raise HTTPException(status_code=409, detail=f"Config version {version} already exists")
 
@@ -506,11 +503,7 @@ def set_desired_state(
     if not gateway:
         raise HTTPException(status_code=404, detail="Gateway not found")
 
-    ds = (
-        db.query(GatewayDesiredState)
-        .filter(GatewayDesiredState.gateway_id == gateway_id)
-        .first()
-    )
+    ds = db.query(GatewayDesiredState).filter(GatewayDesiredState.gateway_id == gateway_id).first()
 
     if not ds:
         ds = GatewayDesiredState(gateway_id=gateway_id)
@@ -636,11 +629,7 @@ def get_fleet_overview(
 
         zone = db.query(Zone).filter(Zone.id == gw.zone_id).first()
 
-        ds = (
-            db.query(GatewayDesiredState)
-            .filter(GatewayDesiredState.gateway_id == gw.id)
-            .first()
-        )
+        ds = db.query(GatewayDesiredState).filter(GatewayDesiredState.gateway_id == gw.id).first()
 
         # Disk status classification
         disk_status = None
@@ -775,12 +764,14 @@ def initiate_rollout(
         "gateway_rollout.start",
         "gateway_app_release",
         str(release.id),
-        json.dumps({
-            "version": release_version,
-            "ring": target_ring,
-            "zone_id": str(zone_id) if zone_id else None,
-            "gateways_affected": count,
-        }),
+        json.dumps(
+            {
+                "version": release_version,
+                "ring": target_ring,
+                "zone_id": str(zone_id) if zone_id else None,
+                "gateways_affected": count,
+            }
+        ),
         ip_address=ip,
     )
     db.commit()
