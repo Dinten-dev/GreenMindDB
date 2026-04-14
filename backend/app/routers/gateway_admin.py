@@ -3,19 +3,14 @@
 All endpoints require JWT authentication and ADMIN or OWNER role.
 """
 
-import json
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_role
+from app.auth import require_role
 from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.models.gateway_remote import (
-    GatewayAppRelease,
     GatewayCommand,
-    GatewayConfigRelease,
-    GatewayDesiredState,
 )
 from app.models.user import Role, User
 from app.schemas.gateway_remote import (
@@ -119,7 +114,9 @@ async def handle_list_app_releases(
     db: Session = Depends(get_db),
 ):
     """List all gateway app releases."""
-    items, total = list_app_releases(db, channel=channel, is_active=is_active, offset=offset, limit=limit)
+    items, total = list_app_releases(
+        db, channel=channel, is_active=is_active, offset=offset, limit=limit
+    )
     return AppReleaseListResponse(
         items=[AppReleaseResponse.model_validate(r) for r in items],
         total=total,
@@ -304,7 +301,6 @@ async def handle_start_rollout(
     db: Session = Depends(get_db),
 ):
     """Start a staged rollout of a gateway app release."""
-    import uuid as _uuid
 
     z_id = data.zone_id
     count = initiate_rollout(

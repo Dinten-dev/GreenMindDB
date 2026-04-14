@@ -6,15 +6,12 @@ Uses an in-memory SQLite database for speed and isolation.
 
 import hashlib
 import io
-import json
-import tarfile
-import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, get_db
@@ -22,12 +19,10 @@ from app.main import app
 from app.models.gateway_remote import (
     GatewayAppRelease,
     GatewayCommand,
-    GatewayConfigRelease,
     GatewayDesiredState,
 )
 from app.models.master import Gateway, Zone
 from app.models.user import Organization, Role, User
-from app.schemas.gateway_remote import ALLOWED_COMMAND_TYPES
 from app.services.gateway_remote_service import (
     expire_stale_commands,
     get_desired_state,
@@ -39,6 +34,16 @@ from app.services.gateway_remote_service import (
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_gateway_remote.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+
+
+@event.listens_for(engine, "connect")
+def _register_sqlite_functions(dbapi_conn, connection_record):
+    """Register PostgreSQL-compatible functions for SQLite test engine."""
+    from datetime import datetime
+
+    dbapi_conn.create_function("now", 0, lambda: datetime.now(UTC).isoformat())
+
+
 TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -81,7 +86,7 @@ def admin_user(db: Session) -> User:
 
     user = User(
         email="admin@test.com",
-        hashed_password="$2b$12$fakehash",
+        password_hash="$2b$12$fakehash",
         role=Role.ADMIN,
         is_active=True,
         organization_id=org.id,
@@ -240,14 +245,17 @@ def test_state_report_updates_gateway(client, gateway):
 
 def test_app_release_upload_validates_semver(db, admin_user):
     """Rejects non-semver version strings."""
-    from app.services.gateway_remote_service import upload_app_release
     from fastapi import HTTPException, UploadFile
+
+    from app.services.gateway_remote_service import upload_app_release
 
     fake_file = UploadFile(filename="test.tar.gz", file=io.BytesIO(b"test content"))
 
     with pytest.raises(HTTPException) as exc_info:
         upload_app_release(
-            db, admin_user, fake_file,
+            db,
+            admin_user,
+            fake_file,
             version="not-a-version",
             mandatory=False,
             channel="stable",
@@ -260,16 +268,22 @@ def test_app_release_upload_validates_semver(db, admin_user):
 
 def test_app_release_sha256_computed(db, admin_user):
     """SHA256 is correctly computed for uploaded content."""
-    from app.services.gateway_remote_service import upload_app_release
     from fastapi import UploadFile
+
+    from app.services.gateway_remote_service import upload_app_release
 
     content = b"test binary content for hashing"
     expected_sha256 = hashlib.sha256(content).hexdigest()
     fake_file = UploadFile(filename="test.tar.gz", file=io.BytesIO(content))
 
-    with patch("app.services.gateway_remote_service.GATEWAY_RELEASE_DIR", "/tmp/test_releases"):
+    with patch(
+        "app.services.gateway_remote_service.GATEWAY_RELEASE_DIR",
+        "/tmp/test_releases",  # noqa: S108
+    ):
         release = upload_app_release(
-            db, admin_user, fake_file,
+            db,
+            admin_user,
+            fake_file,
             version="2.0.0",
             mandatory=False,
             channel="stable",
@@ -288,7 +302,8 @@ def test_app_release_sha256_computed(db, admin_user):
 def test_config_release_validates_payload(db, admin_user):
     """Config release computes SHA256 and stores payload."""
     config = upload_config_release(
-        db, admin_user,
+        db,
+        admin_user,
         version="v3",
         config_payload={"upload_interval": 30, "log_level": "INFO"},
         schema_version="1",
@@ -337,11 +352,7 @@ def test_command_audit_logged(db, admin_user, gateway):
     from app.models.audit_log import AuditLog
 
     issue_command(db, admin_user, gateway.id, "restart_gateway_service")
-    audit = (
-        db.query(AuditLog)
-        .filter(AuditLog.action == "gateway_command.issue")
-        .first()
-    )
+    audit = db.query(AuditLog).filter(AuditLog.action == "gateway_command.issue").first()
     assert audit is not None
 
 

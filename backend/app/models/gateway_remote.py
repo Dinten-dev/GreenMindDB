@@ -18,8 +18,9 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import JSON
 
 from app.database import Base
 
@@ -45,9 +46,7 @@ class GatewayAppRelease(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
 
 class GatewayConfigRelease(Base):
@@ -57,7 +56,7 @@ class GatewayConfigRelease(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     version = Column(String(50), nullable=False, unique=True, index=True)
-    config_payload = Column(JSONB, nullable=False)
+    config_payload = Column(JSON, nullable=False)
     schema_version = Column(String(20), nullable=False, default="1")
     compatible_app_min = Column(String(50), nullable=True)
     compatible_app_max = Column(String(50), nullable=True)
@@ -68,9 +67,7 @@ class GatewayConfigRelease(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
 
 class GatewayDesiredState(Base):
@@ -107,9 +104,7 @@ class GatewayDesiredState(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    updated_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), nullable=False
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
     gateway = relationship("Gateway", backref="desired_state_rel")
 
@@ -127,16 +122,14 @@ class GatewayCommand(Base):
         index=True,
     )
     command_type = Column(String(50), nullable=False)
-    payload = Column(JSONB, nullable=True)
+    payload = Column(JSON, nullable=True)
     status = Column(String(20), nullable=False, default="pending")
     created_by = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     executed_at = Column(DateTime(timezone=True), nullable=True)
@@ -194,9 +187,7 @@ class GatewayUpdateLog(Base):
     to_version = Column(String(50), nullable=False)
     status = Column(String(50), nullable=False)
     error_message = Column(Text, nullable=True)
-    started_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), nullable=False
-    )
+    started_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     gateway = relationship("Gateway")

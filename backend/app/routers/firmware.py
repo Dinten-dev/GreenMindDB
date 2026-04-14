@@ -6,10 +6,20 @@ Admin endpoints require owner/admin role via JWT cookie.
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_role, verify_password
+from app.auth import require_role, verify_password
 from app.database import get_db
 from app.models.firmware import FirmwareRelease, FirmwareReport, RolloutPolicy
 from app.models.master import Gateway, Sensor
@@ -47,6 +57,7 @@ def _auth_gateway(db: Session, api_key: str) -> Gateway:
 # ─────────────────────────────────────────────────────────────────────
 # Gateway Endpoints (machine-to-machine, X-Api-Key auth)
 # ─────────────────────────────────────────────────────────────────────
+
 
 @router.get("/sync", response_model=list[FirmwareSyncResponse])
 async def sync_firmware(
@@ -123,6 +134,7 @@ async def report_firmware_status(
 # Admin Endpoints (JWT auth, role-gated)
 # ─────────────────────────────────────────────────────────────────────
 
+
 @router.get("/dashboard", response_model=DashboardSummary)
 async def dashboard(
     current_user: User = Depends(_require_admin),
@@ -144,8 +156,12 @@ async def list_releases(
 ):
     """Paginated list of firmware releases with optional filters."""
     items, total = fw_svc.list_releases(
-        db, board_type=board_type, search=search, is_active=is_active,
-        offset=offset, limit=limit,
+        db,
+        board_type=board_type,
+        search=search,
+        is_active=is_active,
+        offset=offset,
+        limit=limit,
     )
     return FirmwareReleaseListResponse(
         items=items,
@@ -179,8 +195,15 @@ async def upload_firmware(
 ):
     """Upload a new firmware binary. Rate-limited to 10/min."""
     return fw_svc.upload_release(
-        db, current_user, file, version, board_type, hardware_revision,
-        mandatory, min_version, changelog,
+        db,
+        current_user,
+        file,
+        version,
+        board_type,
+        hardware_revision,
+        mandatory,
+        min_version,
+        changelog,
         ip_address=request.client.host if request.client else None,
     )
 
@@ -195,7 +218,10 @@ async def toggle_release_status(
 ):
     """Activate or deactivate a firmware release."""
     return fw_svc.toggle_release(
-        db, current_user, release_id, is_active,
+        db,
+        current_user,
+        release_id,
+        is_active,
         ip=request.client.host if request.client else None,
     )
 
@@ -209,12 +235,15 @@ async def delete_release(
 ):
     """Permanently delete a release and its file."""
     fw_svc.delete_release(
-        db, current_user, release_id,
+        db,
+        current_user,
+        release_id,
         ip=request.client.host if request.client else None,
     )
 
 
 # ── Reports ──────────────────────────────────────────────────────────
+
 
 @router.get("/reports", response_model=FirmwareReportListResponse)
 async def list_reports(
@@ -227,7 +256,11 @@ async def list_reports(
 ):
     """Paginated list of device update reports."""
     items, total = fw_svc.list_reports(
-        db, status=status, gateway_id=gateway_id, offset=offset, limit=limit,
+        db,
+        status=status,
+        gateway_id=gateway_id,
+        offset=offset,
+        limit=limit,
     )
     return FirmwareReportListResponse(
         items=items,
@@ -236,6 +269,7 @@ async def list_reports(
 
 
 # ── Rollout Policies ─────────────────────────────────────────────────
+
 
 @router.get("/policies")
 async def list_policies(
@@ -255,7 +289,10 @@ async def create_rollout_policy(
 ):
     """Create a rollout policy for a release."""
     p = fw_svc.create_policy(
-        db, current_user, policy.release_id, policy.zone_id,
+        db,
+        current_user,
+        policy.release_id,
+        policy.zone_id,
         policy.canary_percentage,
         ip=request.client.host if request.client else None,
     )
@@ -274,12 +311,15 @@ async def delete_rollout_policy(
 ):
     """Delete a rollout policy."""
     fw_svc.delete_policy(
-        db, current_user, policy_id,
+        db,
+        current_user,
+        policy_id,
         ip=request.client.host if request.client else None,
     )
 
 
 # ── Audit Logs ───────────────────────────────────────────────────────
+
 
 @router.get("/audit-logs", response_model=AuditLogListResponse)
 async def list_audit_logs(
@@ -291,7 +331,10 @@ async def list_audit_logs(
 ):
     """Admin action audit trail."""
     items, total = fw_svc.list_audit_logs(
-        db, action=action, offset=offset, limit=limit,
+        db,
+        action=action,
+        offset=offset,
+        limit=limit,
     )
     return AuditLogListResponse(
         items=items,

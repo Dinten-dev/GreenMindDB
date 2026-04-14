@@ -5,8 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ── Base & Create ────────────────────────────────────────────────────
+
 
 class FirmwareReleaseBase(BaseModel):
     version: str = Field(..., description="Semantic version string, e.g., 1.0.0")
@@ -23,6 +23,7 @@ class FirmwareReleaseCreate(FirmwareReleaseBase):
 
 # ── Responses ────────────────────────────────────────────────────────
 
+
 class FirmwareReleaseResponse(FirmwareReleaseBase):
     id: uuid.UUID
     file_path: str
@@ -35,6 +36,7 @@ class FirmwareReleaseResponse(FirmwareReleaseBase):
 
 class FirmwareSyncResponse(BaseModel):
     """Returned to gateway when checking for updates."""
+
     id: uuid.UUID
     version: str
     board_type: str
@@ -48,6 +50,7 @@ class FirmwareSyncResponse(BaseModel):
 
 # ── Paginated list ───────────────────────────────────────────────────
 
+
 class PaginationMeta(BaseModel):
     total: int
     offset: int
@@ -60,6 +63,7 @@ class FirmwareReleaseListResponse(BaseModel):
 
 
 # ── Reports ──────────────────────────────────────────────────────────
+
 
 class FirmwareReportRequest(BaseModel):
     sensor_mac: str | None = Field(None, description="MAC of sensor updating")
@@ -89,6 +93,7 @@ class FirmwareReportListResponse(BaseModel):
 
 # ── Rollout Policies ─────────────────────────────────────────────────
 
+
 class RolloutPolicyCreate(BaseModel):
     release_id: uuid.UUID
     zone_id: uuid.UUID | None = None
@@ -106,6 +111,7 @@ class RolloutPolicyResponse(RolloutPolicyCreate):
 
 # ── Dashboard ────────────────────────────────────────────────────────
 
+
 class DashboardSummary(BaseModel):
     active_releases: int
     total_releases: int
@@ -118,6 +124,7 @@ class DashboardSummary(BaseModel):
 
 
 # ── Audit ────────────────────────────────────────────────────────────
+
 
 class AuditLogResponse(BaseModel):
     id: uuid.UUID

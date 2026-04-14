@@ -1,6 +1,7 @@
 """Firmware OTA models: Releases, Policies, and Deployment Logs."""
 
 import uuid
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -21,16 +22,16 @@ class FirmwareRelease(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     version = Column(String(50), nullable=False, index=True)  # e.g., "1.2.0"
-    board_type = Column(String(50), nullable=False)           # e.g., "ESP32_WROOM"
-    hardware_revision = Column(String(50), nullable=False)    # e.g., "v1"
-    
-    file_path = Column(String(500), nullable=False)           # path relative to /firmware/ static dir
-    sha256 = Column(String(64), nullable=False)               # strict hash for ESP32 validation
-    
+    board_type = Column(String(50), nullable=False)  # e.g., "ESP32_WROOM"
+    hardware_revision = Column(String(50), nullable=False)  # e.g., "v1"
+
+    file_path = Column(String(500), nullable=False)  # path relative to /firmware/ static dir
+    sha256 = Column(String(64), nullable=False)  # strict hash for ESP32 validation
+
     is_active = Column(Boolean, nullable=False, default=True)
     mandatory = Column(Boolean, nullable=False, default=False)
-    min_version = Column(String(50), nullable=True)           # required minimum version before applying
-    
+    min_version = Column(String(50), nullable=True)  # required minimum version before applying
+
     changelog = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
@@ -51,7 +52,9 @@ class RolloutPolicy(Base):
         ForeignKey("zone.id", ondelete="CASCADE"),
         nullable=True,  # If null, applies to all zones
     )
-    canary_percentage = Column(String(10), nullable=True, default="100") # simplified representation
+    canary_percentage = Column(
+        String(10), nullable=True, default="100"
+    )  # simplified representation
     created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
     release = relationship("FirmwareRelease")
@@ -76,8 +79,10 @@ class FirmwareReport(Base):
         ForeignKey("firmware_release.id", ondelete="CASCADE"),
         nullable=False,
     )
-    
-    status = Column(String(50), nullable=False) # success, failed, hash_mismatch, rollback, incompatible
+
+    status = Column(
+        String(50), nullable=False
+    )  # success, failed, hash_mismatch, rollback, incompatible
     error_message = Column(Text, nullable=True)
     reported_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
 
