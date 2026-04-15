@@ -1,6 +1,6 @@
 """Zone (agriculture area) request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ZoneCreate(BaseModel):
@@ -22,8 +22,7 @@ class ZoneResponse(BaseModel):
     gateway_count: int = 0
     sensor_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ZoneOverview(BaseModel):

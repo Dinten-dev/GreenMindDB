@@ -1,6 +1,6 @@
 """Sensor (ESP32) request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SensorResponse(BaseModel):
@@ -16,8 +16,7 @@ class SensorResponse(BaseModel):
     gateway_name: str | None = None
     gateway_hardware_id: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClaimSensorRequest(BaseModel):

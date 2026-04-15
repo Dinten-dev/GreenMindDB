@@ -1,6 +1,6 @@
 """Gateway management request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class GatewayResponse(BaseModel):
@@ -17,8 +17,7 @@ class GatewayResponse(BaseModel):
     paired_at: str | None = None
     sensor_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PairingCodeRequest(BaseModel):
