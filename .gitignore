@@ -16,6 +16,7 @@ venv/
 .env
 !.env.example
 dev-tools/greenmind_deploy_key*
+scripts/.simulator_state.json
 
 # ── IDE ──────────────────────────────────────
 .vscode/
@@ -30,8 +31,12 @@ Thumbs.db
 
 # ── Docker / Data ────────────────────────────
 postgres_data/
+data/
 backups/
 *.sql.gz
+*.db
+*.db-shm
+*.db-wal
 
 # ── Node / Frontend ──────────────────────────
 node_modules/

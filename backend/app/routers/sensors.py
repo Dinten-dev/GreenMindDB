@@ -260,9 +260,9 @@ RESOLUTION_BUCKET_MAP = {
 @router.get("/{sensor_id}/data", response_model=list[SensorDataResponse])
 async def get_sensor_data(
     sensor_id: str,
-    range: str = Query("24h", regex="^(5m|1h|24h|7d|30d)$"),
-    resolution: str | None = Query(None, regex="^(raw|1m|5m|1h|1d)$"),
-    date: str | None = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$"),
+    range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+    resolution: str | None = Query(None, pattern="^(raw|1m|5m|1h|1d)$"),
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -407,7 +407,7 @@ BATCH_SIZE = 10_000
 @router.get("/{sensor_id}/export")
 async def export_sensor_data(
     sensor_id: str,
-    range: str = Query("24h", regex="^(1h|24h|7d|30d|all)$"),
+    range: str = Query("24h", pattern="^(1h|24h|7d|30d|all)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
