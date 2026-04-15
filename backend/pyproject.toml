@@ -1,0 +1,52 @@
+[project]
+name = "greenmind-backend"
+version = "3.0.0"
+description = "GreenMind — FastAPI backend for plant bioelectrical sensing"
+requires-python = ">=3.11"
+
+# ─── ruff ────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+]
+ignore = [
+    "E501",  # line length handled by black
+    "B008",  # allow Depends() in function defaults (FastAPI pattern)
+    "S608",  # allow string-based SQL construction (controlled use with parameterized queries)
+    "S105",  # hardcoded password (false positives in config)
+    "S106",  # hardcoded password argument
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = ["S101", "S501", "E501", "S603"]  # allow assert, verify=False, long lines, subprocess in tests
+"**/scripts/*" = ["S311"]  # allow standard random for data seeding
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# ─── black ───────────────────────────────────────────────────────────
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+# ─── pytest ──────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests that require Docker stack (deselect with '-m \"not integration\"')",
+]

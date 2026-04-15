@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: compose/Dockerfile.test-db
+    env_file: ./compose/.env.test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: greenmind-test-db-password
+      POSTGRES_DB: greenmind
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d greenmind"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    env_file: ./compose/.env.test
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    env_file: ./compose/.env.test
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg2://postgres:greenmind-test-db-password@postgres:5432/greenmind
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command: sh -c "for i in 1 2 3 4 5; do alembic upgrade head && break || sleep 2; done && gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+
+  test_runner:
+    build:
+      context: ./backend
+    env_file: ./compose/.env.test
+    environment:
+      IN_DOCKER_TEST: "1"
+      DATABASE_URL: postgresql+psycopg2://postgres:greenmind-test-db-password@postgres:5432/greenmind
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: sh -c "pip install -r requirements.txt && pip install httpx pytest-asyncio pytest-mock && python -m pytest tests/ -v"

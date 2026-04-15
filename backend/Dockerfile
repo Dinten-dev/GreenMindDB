@@ -1,32 +1,22 @@
-FROM python:3.11-slim
+FROM python:3.11.11-slim-bookworm
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create entrypoint script for migrations + data import
-RUN echo '#!/bin/bash\n\
-    set -e\n\
-    echo "Running migrations..."\n\
-    alembic upgrade head\n\
-    echo "Seeding database..."\n\
-    python -m app.seed.seed_data || true\n\
-    echo "Importing WAV data if available..."\n\
-    if [ -d "/data/wav" ] && ls /data/wav/*.wav 1> /dev/null 2>&1; then\n\
-    python /app/scripts/import_wav_data.py || echo "WAV import skipped"\n\
-    fi\n\
-    echo "Starting server..."\n\
-    exec uvicorn app.main:app --host 0.0.0.0 --port 8000\n\
-    ' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+USER appuser
+
+# Run migrations and start API
+CMD ["sh", "-c", "alembic upgrade head && gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2}"]

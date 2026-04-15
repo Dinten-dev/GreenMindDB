@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.macmini.main:app --reload --host 0.0.0.0 --port 8000
+    user: "${CURRENT_UID}:${CURRENT_GID}"
+    environment:
+      ENVIRONMENT: development
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CORS_ORIGINS: "*"
+      # Ensure HOME is set correctly for user
+      HOME: /tmp
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    # Use Yarn as it handles volume mounting better than npm in this env
+    # Clean package-lock to avoid conflicts
+    command: sh -c "rm -f package-lock.json && yarn install && yarn run dev"
+    user: "${CURRENT_UID}:${CURRENT_GID}"
+    environment:
+      NODE_ENV: development
+      INTERNAL_API_URL: http://backend:8000
+      # Ensure HOME is set correctly for user (yarn/npm might need it)
+      HOME: /tmp

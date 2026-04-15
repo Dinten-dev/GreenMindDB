@@ -1,36 +1,57 @@
-# WAV example data - now included for reproducibility
-# (small chunks only, not raw recordings)
-
-
-# Python
+# ── Python ────────────────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
-.venv/
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# ── Virtual environments ─────────────────────
 venv/
+.venv/
+
+# ── Environment / Secrets ────────────────────
 .env
+!.env.example
+dev-tools/greenmind_deploy_key*
+scripts/.simulator_state.json
 
-# Docker volumes
-db/data/
+# ── IDE ──────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# OS
+# ── OS files ─────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# ── Docker / Data ────────────────────────────
+postgres_data/
+data/
+backups/
+*.sql.gz
+*.db
+*.db-shm
+*.db-wal
 
-# Dev import scripts (moved to scripts/)
-import_*.py
-add_test_device.py
-test_*.py
+# ── Node / Frontend ──────────────────────────
+node_modules/
+.next/
+out/
+frontend/.next/
+frontend/node_modules/
 
-# Logs
+# ── Logs ─────────────────────────────────────
 *.log
 
-# Node modules (frontend)
-frontend/node_modules/
-frontend/.next/
+# ── Coverage / Testing ───────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ── Ruff cache ───────────────────────────────
+.ruff_cache/

@@ -1,259 +1,297 @@
-// Auto-detect API URL based on current browser location
-const isServer = typeof window === 'undefined';
+const API_BASE = typeof window === 'undefined'
+    ? `${process.env.INTERNAL_API_URL || 'http://localhost:8000'}/api/v1`
+    : '/api/v1';
 
-function getApiUrl(): string {
-    if (isServer) {
-        // Server-side: use Docker internal network
-        return process.env.INTERNAL_API_URL || 'http://backend:8000';
-    }
-    // Client-side: use same host as frontend, but port 8000
-    const host = window.location.hostname;
-    return `http://${host}:8000`;
+interface FetchOptions extends RequestInit {
+    params?: Record<string, string>;
 }
 
-const API_URL = getApiUrl();
+async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+    const { params, ...fetchOpts } = options;
 
-// === Helper for auth headers ===
-function getAuthHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (!isServer) {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+    let url = `${API_BASE}${path}`;
+    if (params) {
+        const searchParams = new URLSearchParams(params);
+        url += `?${searchParams.toString()}`;
     }
-    return headers;
+
+    const res = await fetch(url, {
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            ...fetchOpts.headers,
+        },
+        ...fetchOpts,
+    });
+
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail || `API error ${res.status}`);
+    }
+
+    if (res.status === 204) return {} as T;
+    return res.json();
 }
 
-export interface User {
-    id: number;
+// ── Auth ─────────────────────────────────────
+export interface AuthUser {
+    id: string;
     email: string;
+    name: string | null;
+    role: string;
+    organization_id: string | null;
+    organization_name: string | null;
     is_active: boolean;
 }
 
-export interface Species {
-    id: number;
-    common_name: string;
-    latin_name: string;
-    category: string;
-    notes: string | null;
+interface AuthResponse {
+    detail: string;
+    user: AuthUser;
 }
 
-export interface Metric {
-    id: number;
-    key: string;
-    label: string;
-    unit: string;
-    description: string | null;
+export async function apiSignup(email: string, password: string, name: string): Promise<AuthResponse> {
+    return apiFetch<AuthResponse>('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, name }),
+    });
 }
 
-export interface Source {
-    id: number;
-    title: string;
-    publisher: string;
-    year: number | null;
-    url: string | null;
-    notes: string | null;
+export async function apiLogin(email: string, password: string): Promise<AuthResponse> {
+    return apiFetch<AuthResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+    });
 }
 
-export interface TargetRange {
-    id: number;
-    species_id: number;
-    metric_id: number;
-    optimal_low: number;
-    optimal_high: number;
-    source_id: number;
-    metric: Metric;
-    source: Source;
+export async function apiLogout(): Promise<void> {
+    await apiFetch('/auth/logout', { method: 'POST' });
 }
 
-export interface SpeciesDetail extends Species {
-    target_ranges: TargetRange[];
+export async function apiGetMe(): Promise<AuthUser> {
+    return apiFetch<AuthUser>('/auth/me');
 }
 
-export interface AuditEntry {
-    id: number;
+// ── Organizations ────────────────────────────
+export interface Org {
+    id: string;
+    name: string;
+    created_at: string;
+}
+
+export async function apiGetOrg(): Promise<Org | null> {
+    return apiFetch<Org | null>('/organizations');
+}
+
+export async function apiCreateOrg(name: string): Promise<Org> {
+    return apiFetch<Org>('/organizations', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+    });
+}
+
+// ── Zones (Agriculture Areas) ────────────────
+export interface Zone {
+    id: string;
+    name: string;
+    location: string | null;
+    zone_type: string;
+    latitude: number | null;
+    longitude: number | null;
+    created_at: string;
+    gateway_count: number;
+    sensor_count: number;
+}
+
+export interface ZoneOverview {
+    id: string;
+    name: string;
+    zone_type: string;
+    total_gateways: number;
+    online_gateways: number;
+    total_sensors: number;
+    readings_24h: number;
+}
+
+export const ZONE_TYPES = [
+    { value: 'GREENHOUSE', label: 'Gewächshaus', icon: '🏠' },
+    { value: 'OPEN_FIELD', label: 'Freiland', icon: '🌾' },
+    { value: 'VERTICAL_FARM', label: 'Vertical Farm', icon: '🏢' },
+    { value: 'ORCHARD', label: 'Obstgarten', icon: '🍎' },
+] as const;
+
+export async function apiListZones(): Promise<Zone[]> {
+    return apiFetch<Zone[]>('/zones');
+}
+
+export async function apiCreateZone(
+    name: string,
+    zone_type: string = 'GREENHOUSE',
+    location?: string,
+    latitude?: number,
+    longitude?: number,
+): Promise<Zone> {
+    return apiFetch<Zone>('/zones', {
+        method: 'POST',
+        body: JSON.stringify({ name, zone_type, location, latitude, longitude }),
+    });
+}
+
+export async function apiDeleteZone(id: string): Promise<void> {
+    return apiFetch<void>(`/zones/${id}`, { method: 'DELETE' });
+}
+
+export async function apiGetZoneOverview(id: string): Promise<ZoneOverview> {
+    return apiFetch<ZoneOverview>(`/zones/${id}/overview`);
+}
+
+// ── Gateways ─────────────────────────────────
+export interface GatewayInfo {
+    id: string;
+    zone_id: string;
+    zone_name: string | null;
+    hardware_id: string;
+    name: string | null;
+    local_ip: string | null;
+    fw_version: string | null;
+    status: string;
+    is_active: boolean;
+    last_seen: string | null;
+    paired_at: string | null;
+    sensor_count: number;
+}
+
+export interface PairingCode {
+    code: string;
+    expires_at: string;
+    zone_id: string;
+}
+
+export async function apiListGateways(zone_id?: string): Promise<GatewayInfo[]> {
+    const params = zone_id ? { zone_id } : undefined;
+    return apiFetch<GatewayInfo[]>('/gateways', { params });
+}
+
+export async function apiDeleteGateway(gatewayId: string): Promise<void> {
+    return apiFetch<void>(`/gateways/${gatewayId}`, { method: 'DELETE' });
+}
+
+export async function apiGeneratePairingCode(zone_id: string): Promise<PairingCode> {
+    return apiFetch<PairingCode>('/gateways/pairing-code', {
+        method: 'POST',
+        body: JSON.stringify({ zone_id }),
+    });
+}
+
+// ── Sensors (ESP32) ──────────────────────────
+export interface SensorInfo {
+    id: string;
+    gateway_id: string;
+    zone_id: string | null;
+    mac_address: string;
+    name: string | null;
+    sensor_type: string;
+    status: string;
+    last_seen: string | null;
+    claimed_at: string | null;
+    gateway_name: string | null;
+    gateway_hardware_id: string | null;
+}
+
+export async function apiListSensors(zone_id?: string, gateway_id?: string): Promise<SensorInfo[]> {
+    const params: Record<string, string> = {};
+    if (zone_id) params.zone_id = zone_id;
+    if (gateway_id) params.gateway_id = gateway_id;
+    return apiFetch<SensorInfo[]>('/sensors', { params: Object.keys(params).length ? params : undefined });
+}
+
+export interface DataPoint {
     timestamp: string;
-    user_email: string | null;
-    entity_type: string;
-    action: string;
-    diff_json: { before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+    value: number;
 }
 
-// === Source input for inline creation ===
-export interface SourceInput {
-    source_type: 'url' | 'own_experience';
-    url?: string;
-    title?: string;
-    publisher?: string;
-    year?: number;
-    notes?: string;
+export interface SensorDataResponse {
+    sensor_id: string;
+    kind: string;
+    unit: string;
+    data: DataPoint[];
 }
 
-// === AUTH Functions ===
-export async function signup(email: string, password: string): Promise<User> {
-    const res = await fetch(`${API_URL}/auth/signup`, {
+export async function apiGetSensorData(sensorId: string, range: string = '24h'): Promise<SensorDataResponse[]> {
+    return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params: { range } });
+}
+
+export async function apiDeleteSensor(sensorId: string): Promise<void> {
+    return apiFetch<void>(`/sensors/${sensorId}`, { method: 'DELETE' });
+}
+
+export async function apiGetSensorDataAdvanced(
+    sensorId: string,
+    opts: { range?: string; resolution?: string; date?: string }
+): Promise<SensorDataResponse[]> {
+    const params: Record<string, string> = {};
+    if (opts.range) params.range = opts.range;
+    if (opts.resolution) params.resolution = opts.resolution;
+    if (opts.date) params.date = opts.date;
+    return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params });
+}
+
+// ── Contact & Early Access ───────────────────
+export interface ContactPayload {
+    name: string;
+    email: string;
+    company?: string;
+    message: string;
+    website?: string;
+}
+
+export async function apiSubmitContact(payload: ContactPayload): Promise<{status: string}> {
+    return apiFetch<{status: string}>('/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ company: '', website: '', ...payload }),
     });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Signup failed');
-    }
-    return res.json();
 }
 
-export async function login(email: string, password: string): Promise<string> {
-    const res = await fetch(`${API_URL}/auth/login`, {
+export interface EarlyAccessPayload {
+    name: string;
+    company: string;
+    email: string;
+    country: string;
+    message?: string;
+    website?: string;
+}
+
+export async function apiSubmitEarlyAccess(payload: EarlyAccessPayload): Promise<{status: string}> {
+    return apiFetch<{status: string}>('/early-access', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ message: '', website: '', ...payload }),
     });
+}
+
+// ── Sensor Data Export ───────────────────────────
+export async function apiExportSensorData(sensorId: string, range: string = '24h'): Promise<void> {
+    const url = `${API_BASE}/sensors/${sensorId}/export?range=${range}`;
+    const res = await fetch(url, {
+        credentials: 'include',
+    });
+
     if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Login failed');
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail || `Export failed: ${res.status}`);
     }
-    const data = await res.json();
-    return data.access_token;
-}
 
-export async function getMe(): Promise<User> {
-    const res = await fetch(`${API_URL}/auth/me`, {
-        headers: getAuthHeaders()
-    });
-    if (!res.ok) throw new Error('Not authenticated');
-    return res.json();
-}
+    const blob = await res.blob();
+    const downloadUrl = URL.createObjectURL(blob);
 
-// === READ Functions ===
-export async function fetchSpecies(): Promise<Species[]> {
-    const res = await fetch(`${API_URL}/species`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch species');
-    return res.json();
-}
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : `sensor_export_${range}.zip`;
 
-export async function fetchSpeciesDetail(id: number): Promise<SpeciesDetail> {
-    const res = await fetch(`${API_URL}/species/${id}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch species detail');
-    return res.json();
-}
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
 
-export async function fetchSpeciesTargets(id: number): Promise<TargetRange[]> {
-    const res = await fetch(`${API_URL}/species/${id}/targets`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch targets');
-    return res.json();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
 }
-
-export async function fetchSpeciesHistory(id: number, limit = 50): Promise<AuditEntry[]> {
-    const res = await fetch(`${API_URL}/species/${id}/history?limit=${limit}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch history');
-    return res.json();
-}
-
-export async function fetchSources(): Promise<Source[]> {
-    const res = await fetch(`${API_URL}/sources`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch sources');
-    return res.json();
-}
-
-export async function fetchMetrics(): Promise<Metric[]> {
-    const res = await fetch(`${API_URL}/metrics`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch metrics');
-    return res.json();
-}
-
-// === SPECIES CRUD (requires auth) ===
-export async function createSpecies(data: { common_name: string; latin_name?: string; category?: string }): Promise<Species> {
-    const res = await fetch(`${API_URL}/species`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to create species');
-    }
-    return res.json();
-}
-
-export async function updateSpecies(id: number, data: { common_name?: string; latin_name?: string; category?: string }): Promise<Species> {
-    const res = await fetch(`${API_URL}/species/${id}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to update species');
-    }
-    return res.json();
-}
-
-export async function deleteSpecies(id: number): Promise<void> {
-    const res = await fetch(`${API_URL}/species/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to delete species');
-    }
-}
-
-// === TARGET RANGE CRUD (with inline source) ===
-export async function createTargetRange(data: {
-    species_id: number;
-    metric_id: number;
-    optimal_low: number;
-    optimal_high: number;
-    source: SourceInput;
-}): Promise<TargetRange> {
-    const res = await fetch(`${API_URL}/target-ranges`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to create target range');
-    }
-    return res.json();
-}
-
-export async function updateTargetRange(id: number, data: {
-    optimal_low?: number;
-    optimal_high?: number;
-    source?: SourceInput;
-}): Promise<TargetRange> {
-    const res = await fetch(`${API_URL}/target-ranges/${id}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to update target range');
-    }
-    return res.json();
-}
-
-export async function deleteTargetRange(id: number): Promise<void> {
-    const res = await fetch(`${API_URL}/target-ranges/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to delete target range');
-    }
-}
-
-// Metric display order
-export const METRIC_ORDER = [
-    'air_temperature_c',
-    'rel_humidity_pct',
-    'soil_moisture_vwc_pct',
-    'light_ppfd_umol_m2_s',
-    'soil_ph'
-];
