@@ -1,0 +1,7 @@
+services:
+  postgres:
+    volumes:
+      - ${HOME}/LocalData/greenmind/postgres:/var/lib/postgresql/data
+  minio:
+    volumes:
+      - ${HOME}/LocalData/greenmind/minio:/data

@@ -1,0 +1,20 @@
+# Code Owners
+# These users will be automatically requested for review on PRs
+# that touch the paths listed.
+
+# Global fallback
+* @traver
+
+# Backend
+/backend/ @traver
+
+# Frontend
+/frontend/ @traver
+
+# Infrastructure & DevOps
+/docker-compose*.yml @traver
+/compose/ @traver
+/infra/ @traver
+
+# CI/CD
+/.github/ @traver

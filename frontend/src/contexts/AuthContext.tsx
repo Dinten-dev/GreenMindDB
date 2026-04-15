@@ -1,68 +1,68 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, getMe, login as apiLogin, signup as apiSignup } from '@/lib/api';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { AuthUser, apiGetMe, apiLogin, apiSignup, apiLogout, apiCreateOrg } from '@/lib/api';
 
 interface AuthContextType {
-    user: User | null;
+    user: AuthUser | null;
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
-    signup: (email: string, password: string) => Promise<void>;
-    logout: () => void;
+    signup: (email: string, password: string, name: string) => Promise<void>;
+    logout: () => Promise<void>;
+    createOrg: (name: string) => Promise<void>;
+    refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Check for existing token on mount
-    useEffect(() => {
-        const checkAuth = async () => {
-            const token = localStorage.getItem('auth_token');
-            if (token) {
-                try {
-                    const user = await getMe();
-                    setUser(user);
-                } catch {
-                    localStorage.removeItem('auth_token');
-                }
-            }
+    const refresh = useCallback(async () => {
+        try {
+            const me = await apiGetMe();
+            setUser(me);
+        } catch {
+            setUser(null);
+        } finally {
             setLoading(false);
-        };
-        checkAuth();
+        }
     }, []);
 
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
     const login = async (email: string, password: string) => {
-        const token = await apiLogin(email, password);
-        localStorage.setItem('auth_token', token);
-        const user = await getMe();
-        setUser(user);
+        const res = await apiLogin(email, password);
+        setUser(res.user);
     };
 
-    const signup = async (email: string, password: string) => {
-        await apiSignup(email, password);
-        // Auto-login after signup
-        await login(email, password);
+    const signup = async (email: string, password: string, name: string) => {
+        const res = await apiSignup(email, password, name);
+        setUser(res.user);
     };
 
-    const logout = () => {
-        localStorage.removeItem('auth_token');
+    const logout = async () => {
+        await apiLogout();
         setUser(null);
     };
 
+    const createOrg = async (name: string) => {
+        await apiCreateOrg(name);
+        await refresh();
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, signup, logout, createOrg, refresh }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-export function useAuth() {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
+export function useAuth(): AuthContextType {
+    const ctx = useContext(AuthContext);
+    if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+    return ctx;
 }

@@ -1,0 +1,41 @@
+# Normalize line endings across all platforms
+* text=auto
+
+# Explicit text files
+*.py text
+*.ts text
+*.tsx text
+*.js text
+*.jsx text
+*.css text
+*.html text
+*.md text
+*.json text
+*.yml text
+*.yaml text
+*.toml text
+*.cfg text
+*.ini text
+*.txt text
+*.sql text
+*.sh text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.zip binary
+*.tar.gz binary
+*.pdf binary

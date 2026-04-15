@@ -1,101 +1,143 @@
-"""Authentication API endpoints."""
-import re
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, field_validator
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+"""Authentication API endpoints: signup, login, logout, me."""
 
-from app.database import get_db
-from app.models import User
+import secrets
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.orm import Session
+
 from app.auth import (
-    get_password_hash, 
-    verify_password, 
     create_access_token,
-    get_current_user
+    delete_auth_cookie,
+    get_current_user,
+    get_password_hash,
+    set_auth_cookie,
+    verify_password,
 )
+from app.database import get_db
+from app.models.user import EmailVerification, Role, User
+from app.rate_limit import limiter
+from app.schemas.auth import (
+    AuthResponse,
+    LoginRequest,
+    SignupRequest,
+    UserResponse,
+    VerifyEmailRequest,
+)
+from app.services.email_service import EmailService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
 
 
-class SignupRequest(BaseModel):
-    email: EmailStr
-    password: str
-    
-    @field_validator('password')
-    @classmethod
-    def validate_password(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters')
-        return v
+# ── Endpoints ────────────────────────────────────
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    is_active: bool
-    
-    class Config:
-        from_attributes = True
-
-
-@router.post("/signup", response_model=UserResponse, status_code=201)
+@router.post("/signup", response_model=AuthResponse, status_code=201)
 @limiter.limit("5/minute")
-async def signup(request: Request, data: SignupRequest, db: Session = Depends(get_db)):
-    """Create a new user account."""
-    # Check if email already exists
+async def signup(
+    request: Request, data: SignupRequest, response: Response, db: Session = Depends(get_db)
+):
+    """Create a new user account and auto-login."""
     existing = db.query(User).filter(User.email == data.email.lower()).first()
     if existing:
-        # Don't reveal if email exists (prevent enumeration)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not create account"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Could not create account"
         )
-    
+
     user = User(
         email=data.email.lower(),
-        password_hash=get_password_hash(data.password)
+        name=data.name or data.email.split("@")[0],
+        password_hash=get_password_hash(data.password),
+        role=Role.OWNER,
+        is_verified=False,
     )
     db.add(user)
+    db.flush()  # get user.id
+
+    # Create email verification token
+    token_str = secrets.token_hex(16)
+    verification = EmailVerification(
+        user_id=user.id, token=token_str, expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.add(verification)
     db.commit()
     db.refresh(user)
-    return user
+
+    # Dispatch Verification Email
+    EmailService.send_verification_email(to_email=user.email, token=token_str)
+
+    token = create_access_token(data={"sub": str(user.id)})
+    set_auth_cookie(response, token)
+
+    return AuthResponse(user=_user_response(user))
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/verify-email", status_code=200)
+@limiter.limit("3/minute")
+async def verify_email(request: Request, data: VerifyEmailRequest, db: Session = Depends(get_db)):
+    """Verify a user's email using the token."""
+    verification = (
+        db.query(EmailVerification)
+        .filter(EmailVerification.token == data.token, EmailVerification.used_at.is_(None))
+        .first()
+    )
+
+    if not verification or verification.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
+        )
+
+    verification.used_at = datetime.utcnow()
+    user = db.query(User).filter(User.id == verification.user_id).first()
+    if user:
+        user.is_verified = True
+
+    db.commit()
+    return {"detail": "Email successfully verified"}
+
+
+@router.post("/login", response_model=AuthResponse)
 @limiter.limit("5/minute")
-async def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
-    """Login and get access token."""
+async def login(
+    request: Request, data: LoginRequest, response: Response, db: Session = Depends(get_db)
+):
+    """Login and get access token (also set as httpOnly cookie)."""
     user = db.query(User).filter(User.email == data.email.lower()).first()
-    
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
-    
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account disabled"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    if not user.is_verified:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
+
     token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+    set_auth_cookie(response, token)
+
+    return AuthResponse(user=_user_response(user))
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear authentication cookie."""
+    delete_auth_cookie(response)
+    return {"detail": "Logged out"}
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     """Get current authenticated user."""
-    return current_user
+    return _user_response(current_user)
+
+
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=str(user.id),
+        email=user.email,
+        name=user.name,
+        role=user.role.value if isinstance(user.role, Role) else user.role,
+        organization_id=str(user.organization_id) if user.organization_id else None,
+        organization_name=user.organization.name if user.organization else None,
+        is_active=user.is_active,
+    )
