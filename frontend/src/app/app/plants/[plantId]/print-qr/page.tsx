@@ -19,6 +19,7 @@ export default function PrintQRPage() {
     useEffect(() => {
         setBaseUrl(window.location.origin);
         loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [plantId]);
 
     const loadData = async () => {
