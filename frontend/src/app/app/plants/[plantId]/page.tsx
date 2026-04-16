@@ -11,7 +11,7 @@ import {
     apiRevokeObservationAccess 
 } from '@/lib/plants-api';
 import { apiListSensors } from '@/lib/api';
-import { Plant, PlantSensorAssignment, ObservationAccess, SensorInfo } from '@/types';
+import { Plant, PlantSensorAssignment, ObservationAccess } from '@/types';
 
 export default function PlantDetailPage() {
     const params = useParams() as { plantId: string };
@@ -19,7 +19,8 @@ export default function PlantDetailPage() {
 
     const [plant, setPlant] = useState<Plant | null>(null);
     const [history, setHistory] = useState<PlantSensorAssignment[]>([]);
-    const [availableSensors, setAvailableSensors] = useState<SensorInfo[]>([]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [availableSensors, setAvailableSensors] = useState<any[]>([]);
     const [access, setAccess] = useState<ObservationAccess | null>(null);
     const [loading, setLoading] = useState(true);
     
