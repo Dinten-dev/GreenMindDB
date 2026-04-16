@@ -10,6 +10,7 @@ const NAV_LINKS = [
     { href: '/app/zones', label: 'Zonen', icon: '⌂' },
     { href: '/app/gateways', label: 'Gateways', icon: '◎' },
     { href: '/app/sensors', label: 'Sensoren', icon: '◈' },
+    { href: '/app/plants', label: 'Pflanzen', icon: '🌱' },
     { href: '/app/firmware/dashboard', label: 'Firmware', icon: '⬡', roles: ['admin', 'owner'] },
     { href: '/app/gateway-fleet/overview', label: 'Gateway Fleet', icon: '⊞', roles: ['admin', 'owner'] },
     { href: '/app/account', label: 'Account', icon: '○' },
