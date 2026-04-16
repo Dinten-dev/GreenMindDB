@@ -165,6 +165,15 @@ def update_plant(db: Session, user: User, plant_id: str, data: PlantUpdate) -> P
     db.refresh(p)
     return get_plant(db, user, str(p.id))
 
+def delete_plant(db: Session, user: User, plant_id: str) -> None:
+    org_id = _require_org(user)
+    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Plant not found")
+        
+    db.delete(p)
+    db.commit()
+
 
 def assign_sensor(db: Session, user: User, plant_id: str, data: AssignSensorRequest) -> PlantSensorAssignmentResponse:
     org_id = _require_org(user)

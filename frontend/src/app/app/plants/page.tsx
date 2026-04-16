@@ -154,7 +154,7 @@ export default function PlantsPage() {
             {/* List */}
             {plants.length === 0 ? (
                 <div className="glass-card p-12 text-center">
-                    <div className="text-4xl mb-4">🌱</div>
+                    <div className="text-4xl mb-4 text-emerald-500">⍋</div>
                     <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Pflanzen</h3>
                     <p className="text-sm text-gray-400 mb-4">
                         Lege Pflanzen an, um die Beobachtungs-App nutzen zu können.
