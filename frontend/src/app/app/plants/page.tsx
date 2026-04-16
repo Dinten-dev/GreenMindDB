@@ -18,11 +18,12 @@ export default function PlantsPage() {
     const [plantCode, setPlantCode] = useState('');
     const [zoneId, setZoneId] = useState('');
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const loadData = async () => {
         try {
             const [pData, zData] = await Promise.all([

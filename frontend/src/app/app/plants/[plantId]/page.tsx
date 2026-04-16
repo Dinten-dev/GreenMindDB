@@ -30,9 +30,9 @@ export default function PlantDetailPage() {
     const [assignNote, setAssignNote] = useState('');
     const [assigning, setAssigning] = useState(false);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [plantId]);
 
     const loadData = async () => {
