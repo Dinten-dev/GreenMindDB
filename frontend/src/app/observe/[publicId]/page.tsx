@@ -44,9 +44,10 @@ export default function PublicObservationApp() {
             const ctx = await apiGetPlantContext(session.session_token);
             setContext(ctx);
             setStep('FORM');
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            setError(err.message || 'Zugang ungültig oder abgelaufen.');
+            const errorMessage = err instanceof Error ? err.message : 'Zugang ungültig oder abgelaufen.';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -67,9 +68,10 @@ export default function PublicObservationApp() {
             });
             setObservationId(obs.id);
             setStep('PHOTO');
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            setError(err.message || 'Fehler beim Speichern der Beobachtung.');
+            const errorMessage = err instanceof Error ? err.message : 'Fehler beim Speichern der Beobachtung.';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -84,9 +86,10 @@ export default function PublicObservationApp() {
         try {
             await apiUploadObservationPhoto(sessionToken, observationId, file);
             setStep('DONE');
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            setError(err.message || 'Upload fehlgeschlagen.');
+            const errorMessage = err instanceof Error ? err.message : 'Upload fehlgeschlagen.';
+            setError(errorMessage);
         } finally {
             setPhotoUploading(false);
         }
