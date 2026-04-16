@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiGetPlant, apiCreateObservationAccess } from '@/lib/plants-api';
@@ -15,10 +15,10 @@ export default function PrintQRPage() {
     const [loading, setLoading] = useState(true);
     const [baseUrl, setBaseUrl] = useState('');
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         setBaseUrl(window.location.origin);
         loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [plantId]);
 
     const loadData = async () => {
