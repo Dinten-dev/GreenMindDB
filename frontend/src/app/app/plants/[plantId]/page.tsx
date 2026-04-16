@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
     apiGetPlant, 
     apiAssignSensor, 
     apiGetSensorHistory, 
     apiCreateObservationAccess, 
-    apiRevokeObservationAccess 
+    apiRevokeObservationAccess,
+    apiDeletePlant
 } from '@/lib/plants-api';
 import { apiListSensors } from '@/lib/api';
 import { Plant, PlantSensorAssignment, ObservationAccess } from '@/types';
@@ -29,6 +30,8 @@ export default function PlantDetailPage() {
     const [selectedSensor, setSelectedSensor] = useState('');
     const [assignNote, setAssignNote] = useState('');
     const [assigning, setAssigning] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const router = useRouter();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
@@ -97,6 +100,18 @@ export default function PlantDetailPage() {
         }
     };
 
+    const handleDelete = async () => {
+        if (!confirm('Soll diese Pflanze wirklich gelöscht werden?')) return;
+        setDeleting(true);
+        try {
+            await apiDeletePlant(plantId);
+            router.push('/app/plants');
+        } catch (err) {
+            console.error(err);
+            setDeleting(false);
+        }
+    };
+
     if (loading) return <div className="p-8 text-gray-500">Lade Struktur...</div>;
     if (!plant) return <div className="p-8 text-red-500">Pflanze nicht gefunden.</div>;
 
@@ -104,14 +119,23 @@ export default function PlantDetailPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <Link href="/app/plants" className="p-2 bg-white/40 rounded-xl hover:bg-white/60">
-                    ←
-                </Link>
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800">{plant.name}</h1>
-                    <p className="text-sm text-gray-400">ID: {plant.plant_code || plant.id}</p>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Link href="/app/plants" className="p-2 bg-white/40 rounded-xl hover:bg-white/60">
+                        ←
+                    </Link>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-800">{plant.name}</h1>
+                        <p className="text-sm text-gray-400">ID: {plant.plant_code || plant.id}</p>
+                    </div>
                 </div>
+                <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-medium hover:bg-red-100 transition disabled:opacity-50"
+                >
+                    {deleting ? 'Lösche...' : 'Pflanze löschen'}
+                </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

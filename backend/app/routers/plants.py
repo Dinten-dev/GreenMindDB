@@ -23,6 +23,7 @@ from app.services.plant_service import (
     list_plants,
     revoke_observation_access,
     update_plant,
+    delete_plant,
 )
 
 router = APIRouter(prefix="/plants", tags=["plants"])
@@ -63,6 +64,15 @@ def handle_update_plant(
     db: Session = Depends(get_db),
 ):
     return update_plant(db, current_user, plant_id, data)
+
+@router.delete("/{plant_id}", status_code=204)
+def handle_delete_plant(
+    plant_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    delete_plant(db, current_user, plant_id)
+
 
 
 @router.post("/{plant_id}/assign-sensor", response_model=PlantSensorAssignmentResponse)

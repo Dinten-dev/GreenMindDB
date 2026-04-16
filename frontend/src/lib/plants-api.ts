@@ -58,6 +58,12 @@ export async function apiUpdatePlant(plantId: string, payload: Partial<Plant>): 
     });
 }
 
+export async function apiDeletePlant(plantId: string): Promise<void> {
+    return apiFetch<void>(`/plants/${plantId}`, {
+        method: 'DELETE',
+    });
+}
+
 export async function apiAssignSensor(plantId: string, sensorId: string, notes?: string): Promise<PlantSensorAssignment> {
     return apiFetch<PlantSensorAssignment>(`/plants/${plantId}/assign-sensor`, {
         method: 'POST',
