@@ -18,6 +18,13 @@ from app.models.pairing import PairingCode
 from app.models.timeseries import SensorReading
 from app.models.user import EmailVerification, Organization, Role, User
 from app.models.wav_file import WavFile
+from app.models.plant import Plant, PlantSensorAssignment
+from app.models.observation import (
+    PlantObservationAccess,
+    PlantObservationSession,
+    PlantObservation,
+    PlantObservationPhoto,
+)
 
 __all__ = [
     "User",
@@ -44,4 +51,10 @@ __all__ = [
     "GatewayCommand",
     "GatewayStateReport",
     "GatewayUpdateLog",
+    "Plant",
+    "PlantSensorAssignment",
+    "PlantObservationAccess",
+    "PlantObservationSession",
+    "PlantObservation",
+    "PlantObservationPhoto",
 ]

@@ -34,6 +34,22 @@ from app.schemas.zone import (
     ZoneOverview,
     ZoneResponse,
 )
+from app.schemas.plant import (
+    PlantCreate,
+    PlantUpdate,
+    PlantResponse,
+    PlantSensorAssignmentResponse,
+    AssignSensorRequest,
+)
+from app.schemas.observation import (
+    ObservationAccessResponse,
+    ObservationSessionCreate,
+    ObservationSessionResponse,
+    PublicPlantContextResponse,
+    PlantObservationCreate,
+    PlantObservationResponse,
+    PlantObservationPhotoResponse,
+)
 
 __all__ = [
     "SignupRequest",
@@ -62,4 +78,16 @@ __all__ = [
     "IngestResponse",
     "ContactRequest",
     "EarlyAccessRequest",
+    "PlantCreate",
+    "PlantUpdate",
+    "PlantResponse",
+    "PlantSensorAssignmentResponse",
+    "AssignSensorRequest",
+    "ObservationAccessResponse",
+    "ObservationSessionCreate",
+    "ObservationSessionResponse",
+    "PublicPlantContextResponse",
+    "PlantObservationCreate",
+    "PlantObservationResponse",
+    "PlantObservationPhotoResponse",
 ]

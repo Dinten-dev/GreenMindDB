@@ -11,6 +11,8 @@ from app.routers.sensors import router as sensors_router
 from app.routers.wav import router as wav_router
 from app.routers.ws import router as ws_router
 from app.routers.zones import router as zones_router
+from app.routers.plants import router as plants_router
+from app.routers.public_observe import router as public_observe_router
 
 __all__ = [
     "auth_router",
@@ -26,4 +28,6 @@ __all__ = [
     "firmware_router",
     "gateway_desired_state_router",
     "gateway_admin_router",
+    "plants_router",
+    "public_observe_router",
 ]
