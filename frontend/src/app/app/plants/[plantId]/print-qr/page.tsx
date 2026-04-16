@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { apiGetPlant, apiCreateObservationAccess } from '@/lib/plants-api';
 import { Plant, ObservationAccess } from '@/types';
 
