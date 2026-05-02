@@ -38,6 +38,23 @@ export default function LandingPage() {
                  HERO
             ═══════════════════════════════════════════ */}
             <section className="relative pt-36 pb-32 px-6 overflow-hidden">
+                {/* Hero background image with green overlay */}
+                <div
+                    className="absolute inset-0 z-0"
+                    style={{
+                        backgroundImage: 'url(/hero-greenhouse.jpg)',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center top',
+                        backgroundRepeat: 'no-repeat',
+                        opacity: 0.18,
+                    }}
+                />
+                <div
+                    className="absolute inset-0 z-[1]"
+                    style={{
+                        background: 'radial-gradient(ellipse at center, rgba(52,199,89,0.06) 0%, rgba(255,255,255,0.40) 50%, rgba(255,255,255,0.85) 100%)',
+                    }}
+                />
                 <div className="relative z-10 max-w-[1280px] mx-auto text-center">
                     <ScrollReveal variant="fade-in" delay={100}>
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50/80 backdrop-blur-sm text-amber-700 text-sm font-medium mb-8 border border-amber-200/40">

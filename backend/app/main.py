@@ -29,6 +29,9 @@ from app.routers import (  # noqa: E402
     gateways_router,
     ingest_router,
     organizations_router,
+    plants_router,
+    public_evaluate_router,
+    public_observe_router,
     sensors_router,
     wav_router,
     ws_router,
@@ -124,6 +127,9 @@ api_v1_router.include_router(biosignal_router)
 api_v1_router.include_router(firmware_router)
 api_v1_router.include_router(gateway_desired_state_router)
 api_v1_router.include_router(gateway_admin_router)
+api_v1_router.include_router(plants_router)
+api_v1_router.include_router(public_observe_router)
+api_v1_router.include_router(public_evaluate_router)
 
 app.include_router(api_v1_router)
 

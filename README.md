@@ -290,32 +290,50 @@ This will automatically run linting and formatting checks before each commit.
 
 ---
 
-## Build & Deployment
+## Build & Deployment (CI/CD)
 
-### Docker Build
+GreenMind utilizes a dual-environment deployment strategy powered by **GitHub Actions** and **Docker Compose**, hosted on a Hetzner VPS.
 
-```bash
-make build     # Build all Docker images
-# or: docker compose build
-```
+### Environments
 
-### Production Deployment (Hetzner)
+1. **Production** (`main` branch)
+   - **URL:** [https://green-mind.ch](https://green-mind.ch)
+   - **Path:** `/home/traver/greenmind-prod/`
+   - **Deploy Trigger:** Push or merge to `main`
 
-Deploy to the Hetzner production server with the automated script:
-```bash
-./scripts/deploy_production.sh
-```
+2. **Staging** (`develop` branch)
+   - **URL:** [https://test.green-mind.ch](https://test.green-mind.ch) (No-Index)
+   - **Path:** `/home/traver/greenmind-staging/`
+   - **Deploy Trigger:** Push or merge to `develop`
+   - **Constraint:** Independent databases and volumes. Safe for testing migrations.
 
-This will:
-1. Sync code via `rsync` (excludes `node_modules`, `.env`, etc.)
-2. **Skip** overwriting the production `.env` (protects secrets)
-3. Build Docker images on the server
-4. Run Alembic migrations automatically
-5. Restart all containers
+### CI/CD Workflow
+
+The pipeline consists of two stages:
+1. **CI (Continuous Integration):** Triggered on pushes/PRs. Runs `ruff`, `black`, and `pytest` for the backend, plus `npm build` and `eslint` for the frontend.
+2. **CD (Continuous Deployment):** If CI passes on `develop` or `main`, the deployment workflow executes `scripts/deploy.sh`:
+   - Uses `rsync` over SSH to copy code to the appropriate environment folder on Hetzner.
+   - Preserves `.env` files and Docker data volumes.
+   - Starts containers using `docker-compose.prod.yml` or `docker-compose.staging.yml`.
+   - Runs `smoke-test.sh` to guarantee both Frontend and Backend API are reachable.
+
+### GitHub Secrets Required
+
+To enable automated deployments, configure these secrets in `Settings > Secrets and variables > Actions`:
+- `DEPLOY_HOST`: Set to `188.245.247.156`
+- `DEPLOY_USER`: The SSH username (e.g., `traver`)
+- `DEPLOY_SSH_KEY`: The **private** SSH deploy key
 
 > **⚠️ Important:** The `.env` on the server is never overwritten by deploy.
-> To change production environment variables, SSH into the server and edit `~/GreenMindDB/.env` directly,
-> then restart with `docker compose -f docker-compose.prod.yml restart backend`.
+> To change environment variables, SSH into the server and edit `/home/traver/greenmind-prod/.env` or `/home/traver/greenmind-staging/.env` directly,
+> then restart the corresponding compose stack.
+
+### Manual Local Docker Build
+
+```bash
+make build     # Build all Docker images locally
+# or: docker compose build
+```
 
 ---
 

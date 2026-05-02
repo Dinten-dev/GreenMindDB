@@ -1,0 +1,29 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+          
+      - name: Deploy to Production
+        run: ./scripts/deploy.sh --env production
+        env:
+          DEPLOY_SSH_KEY_FILE: /tmp/ssh_key
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
