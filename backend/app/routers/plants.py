@@ -17,13 +17,13 @@ from app.schemas.plant import (
 from app.services.plant_service import (
     assign_sensor,
     create_plant,
+    delete_plant,
     get_or_create_observation_access,
     get_plant,
     get_sensor_history,
     list_plants,
     revoke_observation_access,
     update_plant,
-    delete_plant,
 )
 
 router = APIRouter(prefix="/plants", tags=["plants"])

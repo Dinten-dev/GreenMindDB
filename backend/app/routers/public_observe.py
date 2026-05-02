@@ -1,6 +1,6 @@
 """Router for public, login-free plant observations."""
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -63,15 +63,15 @@ def handle_upload_photo(
 ):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
-    
+
     file_size = 0
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
-    
+
     if file_size > 10 * 1024 * 1024:  # 10 MB limit
         raise HTTPException(status_code=400, detail="File too large")
-        
+
     return upload_observation_photo(
         db,
         session_token,

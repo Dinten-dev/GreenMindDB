@@ -15,17 +15,11 @@ export default function PrintQRPage() {
     const [loading, setLoading] = useState(true);
     const [baseUrl, setBaseUrl] = useState('');
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        setBaseUrl(window.location.origin);
-        loadData();
-    }, [plantId]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             const p = await apiGetPlant(plantId);
             setPlant(p);
-            
+
             // Get or create access
             const a = await apiCreateObservationAccess(plantId);
             setAccess(a);
@@ -34,7 +28,12 @@ export default function PrintQRPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [plantId]);
+
+    useEffect(() => {
+        setBaseUrl(window.location.origin);
+        loadData();
+    }, [loadData]);
 
     if (loading) return <div className="p-8 text-gray-500">Lade QR Code...</div>;
     if (!plant || !access) return <div className="p-8 text-red-500">Fehler beim Laden.</div>;
