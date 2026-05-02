@@ -1,4 +1,10 @@
-import { PlantObservation, PlantObservationPhoto, PublicPlantContext } from '@/types';
+import {
+    PlantEvaluationCreate,
+    PlantEvaluationResponse,
+    PlantObservation,
+    PlantObservationPhoto,
+    PublicPlantContext,
+} from '@/types';
 
 const API_BASE = typeof window === 'undefined'
     ? `${process.env.INTERNAL_API_URL || 'http://localhost:8000'}/api/v1`
@@ -59,5 +65,18 @@ export async function apiUploadObservationPhoto(
             method: 'POST',
             body: formData,
         }
+    );
+}
+
+export async function apiCreateEvaluation(
+    sessionToken: string,
+    payload: PlantEvaluationCreate,
+): Promise<PlantEvaluationResponse> {
+    return apiFetch<PlantEvaluationResponse>(
+        `/public/evaluate/session/${sessionToken}/evaluations`,
+        {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        },
     );
 }

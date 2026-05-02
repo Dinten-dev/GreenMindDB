@@ -128,6 +128,37 @@ export interface PublicPlantContext {
   zone_name: string | null;
 }
 
+export interface PlantEvaluationCreate {
+  overall_score: number;
+  color_raw: string;
+  structure_raw: string;
+  growth_raw: string;
+  water_raw: string;
+  anomalies_raw: string[];
+  detail_notes?: string;
+}
+
+export interface PlantEvaluationResponse {
+  id: string;
+  plant_id: string;
+  sensor_id: string | null;
+  zone_id: string;
+  evaluated_at: string;
+  overall_score: number;
+  color_score: number;
+  structure_score: number;
+  growth_score: number;
+  water_score: number;
+  anomalies_vector: number;
+  color_raw: string;
+  structure_raw: string;
+  growth_raw: string;
+  water_raw: string;
+  anomalies_raw: string;
+  confidence_score: number | null;
+  created_at: string;
+}
+
 // ─── API Responses ──────────────────────────────────────────────────
 
 export interface ApiError {
