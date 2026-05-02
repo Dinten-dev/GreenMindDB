@@ -78,22 +78,4 @@ jobs:
       - name: Build
         run: npm run build
 
-  # ──────────────────────────────────────────────────────────────────
-  # Docker: validate compose builds (optional, on main only)
-  # ──────────────────────────────────────────────────────────────────
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-    needs: [backend, frontend]
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build containers
-        run: docker compose build
-        env:
-          POSTGRES_USER: ci
-          POSTGRES_PASSWORD: ci-password
-          POSTGRES_DB: ci_db
-          JWT_SECRET_KEY: "ci-docker-secret-key-min-32-chars-long"

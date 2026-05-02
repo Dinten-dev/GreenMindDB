@@ -11,6 +11,10 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.schemas.contact import ContactRequest, EarlyAccessRequest
+from app.schemas.evaluation import (
+    PlantEvaluationCreate,
+    PlantEvaluationResponse,
+)
 from app.schemas.gateway import (
     GatewayResponse,
     HeartbeatRequest,
@@ -20,7 +24,23 @@ from app.schemas.gateway import (
     RegisterGatewayResponse,
 )
 from app.schemas.ingest import IngestRequest, IngestResponse, ReadingPayload
+from app.schemas.observation import (
+    ObservationAccessResponse,
+    ObservationSessionCreate,
+    ObservationSessionResponse,
+    PlantObservationCreate,
+    PlantObservationPhotoResponse,
+    PlantObservationResponse,
+    PublicPlantContextResponse,
+)
 from app.schemas.organization import OrgCreate, OrgResponse
+from app.schemas.plant import (
+    AssignSensorRequest,
+    PlantCreate,
+    PlantResponse,
+    PlantSensorAssignmentResponse,
+    PlantUpdate,
+)
 from app.schemas.sensor import (
     ClaimSensorRequest,
     ClaimSensorResponse,
@@ -62,4 +82,18 @@ __all__ = [
     "IngestResponse",
     "ContactRequest",
     "EarlyAccessRequest",
+    "PlantCreate",
+    "PlantUpdate",
+    "PlantResponse",
+    "PlantSensorAssignmentResponse",
+    "AssignSensorRequest",
+    "ObservationAccessResponse",
+    "ObservationSessionCreate",
+    "ObservationSessionResponse",
+    "PublicPlantContextResponse",
+    "PlantObservationCreate",
+    "PlantObservationResponse",
+    "PlantObservationPhotoResponse",
+    "PlantEvaluationCreate",
+    "PlantEvaluationResponse",
 ]

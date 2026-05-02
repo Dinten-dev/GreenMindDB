@@ -7,6 +7,9 @@ from app.routers.gateway_desired_state import router as gateway_desired_state_ro
 from app.routers.gateways import router as gateways_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as organizations_router
+from app.routers.plants import router as plants_router
+from app.routers.public_evaluate import router as public_evaluate_router
+from app.routers.public_observe import router as public_observe_router
 from app.routers.sensors import router as sensors_router
 from app.routers.wav import router as wav_router
 from app.routers.ws import router as ws_router
@@ -26,4 +29,7 @@ __all__ = [
     "firmware_router",
     "gateway_desired_state_router",
     "gateway_admin_router",
+    "plants_router",
+    "public_observe_router",
+    "public_evaluate_router",
 ]
