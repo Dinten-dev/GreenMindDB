@@ -1,5 +1,6 @@
 """Authentication utilities: password hashing, JWT tokens, cookie helpers."""
 
+import uuid as uuid_mod
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -107,7 +108,14 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
 
-    user = db.query(User).filter(User.id == user_id).first()
+    try:
+        user_uuid = uuid_mod.UUID(user_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
+        ) from None
+
+    user = db.query(User).filter(User.id == user_uuid).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:

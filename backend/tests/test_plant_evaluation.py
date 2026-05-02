@@ -1,8 +1,17 @@
 """Tests for the plant evaluation flow and score mapping logic."""
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
-from app.schemas.evaluation import Anomaly, GrowthState, LeafColor, LeafStructure, WaterState
+from app.schemas.evaluation import (
+    Anomaly,
+    GrowthState,
+    LeafColor,
+    LeafStructure,
+    PlantEvaluationCreate,
+    WaterState,
+)
 from app.services.evaluation_service import (
     compute_confidence,
     encode_anomalies,
@@ -108,9 +117,126 @@ class TestConfidenceScore:
         assert high == low
 
 
-# ── Integration tests ────────────────────────────────────────────────
+# ── Schema validation tests (no DB needed) ───────────────────────────
 
 
+
+class TestSchemaValidation:
+    def test_rejects_overall_score_too_high(self):
+        with pytest.raises(ValidationError, match="overall_score"):
+            PlantEvaluationCreate(
+                overall_score=7,
+                color_raw="light_green",
+                structure_raw="firm_taut",
+                growth_raw="normal",
+                water_raw="optimal",
+                anomalies_raw=["none"],
+            )
+
+    def test_rejects_overall_score_too_low(self):
+        with pytest.raises(ValidationError, match="overall_score"):
+            PlantEvaluationCreate(
+                overall_score=0,
+                color_raw="light_green",
+                structure_raw="firm_taut",
+                growth_raw="normal",
+                water_raw="optimal",
+                anomalies_raw=["none"],
+            )
+
+    def test_rejects_invalid_color_enum(self):
+        with pytest.raises(ValidationError):
+            PlantEvaluationCreate(
+                overall_score=3,
+                color_raw="neon_pink",
+                structure_raw="firm_taut",
+                growth_raw="normal",
+                water_raw="optimal",
+                anomalies_raw=["none"],
+            )
+
+    def test_rejects_anomaly_none_with_others(self):
+        with pytest.raises(ValidationError, match="none"):
+            PlantEvaluationCreate(
+                overall_score=3,
+                color_raw="light_green",
+                structure_raw="firm_taut",
+                growth_raw="normal",
+                water_raw="optimal",
+                anomalies_raw=["none", "spots"],
+            )
+
+    def test_rejects_empty_anomalies(self):
+        with pytest.raises(ValidationError, match="anomaly"):
+            PlantEvaluationCreate(
+                overall_score=3,
+                color_raw="light_green",
+                structure_raw="firm_taut",
+                growth_raw="normal",
+                water_raw="optimal",
+                anomalies_raw=[],
+            )
+
+    def test_rejects_missing_required_field(self):
+        with pytest.raises(ValidationError):
+            PlantEvaluationCreate(
+                overall_score=3,
+                structure_raw="firm_taut",
+                growth_raw="normal",
+                water_raw="optimal",
+                anomalies_raw=["none"],
+            )
+
+    def test_accepts_valid_payload(self):
+        data = PlantEvaluationCreate(
+            overall_score=4,
+            color_raw="saturated_green",
+            structure_raw="firm_taut",
+            growth_raw="normal",
+            water_raw="optimal",
+            anomalies_raw=["none"],
+        )
+        assert data.overall_score == 4
+        assert data.color_raw == LeafColor.SATURATED_GREEN
+
+    def test_accepts_detail_notes(self):
+        data = PlantEvaluationCreate(
+            overall_score=1,
+            color_raw="brown_dead",
+            structure_raw="curled_deformed",
+            growth_raw="none",
+            water_raw="too_dry",
+            anomalies_raw=["spots", "mold"],
+            detail_notes="Severely damaged",
+        )
+        assert data.detail_notes == "Severely damaged"
+
+
+# ── API endpoint tests (no auth/DB needed for validation) ────────────
+
+
+def test_evaluation_invalid_session(client: TestClient):
+    """Reject evaluations with invalid session token."""
+    res = client.post(
+        "/api/v1/public/evaluate/session/invalid_token/evaluations",
+        json={
+            "overall_score": 3,
+            "color_raw": "light_green",
+            "structure_raw": "slightly_limp",
+            "growth_raw": "normal",
+            "water_raw": "optimal",
+            "anomalies_raw": ["none"],
+        },
+    )
+    assert res.status_code == 401
+
+
+# ── Integration tests (require PostgreSQL, skipped in CI) ────────────
+
+pytestmark_integration = pytest.mark.integration
+
+
+@pytest.mark.integration
 def test_evaluation_full_flow(client: TestClient, db, admin_token, setup_test_data):
     """Test the complete QR → session → evaluation flow."""
     zone = setup_test_data["zone"]
@@ -167,6 +293,7 @@ def test_evaluation_full_flow(client: TestClient, db, admin_token, setup_test_da
     assert 0.0 <= data["confidence_score"] <= 1.0
 
 
+@pytest.mark.integration
 def test_evaluation_with_bad_scores(client: TestClient, db, admin_token, setup_test_data):
     """Test evaluation with poor plant health."""
     zone = setup_test_data["zone"]
@@ -211,130 +338,3 @@ def test_evaluation_with_bad_scores(client: TestClient, db, admin_token, setup_t
     assert data["growth_score"] == 1
     assert data["water_score"] == 2
     assert data["anomalies_vector"] == 1 | 4 | 8  # 13
-
-
-def test_evaluation_invalid_session(client: TestClient):
-    """Reject evaluations with invalid session token."""
-    res = client.post(
-        "/api/v1/public/evaluate/session/invalid_token/evaluations",
-        json={
-            "overall_score": 3,
-            "color_raw": "light_green",
-            "structure_raw": "slightly_limp",
-            "growth_raw": "normal",
-            "water_raw": "optimal",
-            "anomalies_raw": ["none"],
-        },
-    )
-    assert res.status_code == 401
-
-
-def test_evaluation_missing_required_field(client: TestClient, db, admin_token, setup_test_data):
-    """Reject evaluation with missing required fields."""
-    zone = setup_test_data["zone"]
-
-    res = client.post(
-        "/api/v1/plants",
-        json={"name": "Validation Plant", "zone_id": str(zone.id)},
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    plant_id = res.json()["id"]
-
-    res = client.post(
-        f"/api/v1/plants/{plant_id}/observation-access",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    public_id = res.json()["public_id"]
-
-    res = client.post(
-        "/api/v1/public/observe/session",
-        json={"public_id": public_id},
-    )
-    session_token = res.json()["session_token"]
-
-    # Missing color_raw
-    res = client.post(
-        f"/api/v1/public/evaluate/session/{session_token}/evaluations",
-        json={
-            "overall_score": 3,
-            "structure_raw": "firm_taut",
-            "growth_raw": "normal",
-            "water_raw": "optimal",
-            "anomalies_raw": ["none"],
-        },
-    )
-    assert res.status_code == 422
-
-
-def test_evaluation_invalid_overall_score(client: TestClient, db, admin_token, setup_test_data):
-    """Reject evaluation with out-of-range overall score."""
-    zone = setup_test_data["zone"]
-
-    res = client.post(
-        "/api/v1/plants",
-        json={"name": "Range Plant", "zone_id": str(zone.id)},
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    plant_id = res.json()["id"]
-
-    res = client.post(
-        f"/api/v1/plants/{plant_id}/observation-access",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    public_id = res.json()["public_id"]
-
-    res = client.post(
-        "/api/v1/public/observe/session",
-        json={"public_id": public_id},
-    )
-    session_token = res.json()["session_token"]
-
-    res = client.post(
-        f"/api/v1/public/evaluate/session/{session_token}/evaluations",
-        json={
-            "overall_score": 7,
-            "color_raw": "light_green",
-            "structure_raw": "firm_taut",
-            "growth_raw": "normal",
-            "water_raw": "optimal",
-            "anomalies_raw": ["none"],
-        },
-    )
-    assert res.status_code == 422
-
-
-def test_evaluation_anomaly_none_with_others(client: TestClient, db, admin_token, setup_test_data):
-    """Reject 'none' combined with other anomalies."""
-    zone = setup_test_data["zone"]
-
-    res = client.post(
-        "/api/v1/plants",
-        json={"name": "Anomaly Plant", "zone_id": str(zone.id)},
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    plant_id = res.json()["id"]
-
-    res = client.post(
-        f"/api/v1/plants/{plant_id}/observation-access",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    public_id = res.json()["public_id"]
-
-    res = client.post(
-        "/api/v1/public/observe/session",
-        json={"public_id": public_id},
-    )
-    session_token = res.json()["session_token"]
-
-    res = client.post(
-        f"/api/v1/public/evaluate/session/{session_token}/evaluations",
-        json={
-            "overall_score": 3,
-            "color_raw": "light_green",
-            "structure_raw": "firm_taut",
-            "growth_raw": "normal",
-            "water_raw": "optimal",
-            "anomalies_raw": ["none", "spots"],
-        },
-    )
-    assert res.status_code == 422
