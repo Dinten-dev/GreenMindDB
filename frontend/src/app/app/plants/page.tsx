@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { apiListPlants, apiCreatePlant } from '@/lib/plants-api';
 import { apiListZones } from '@/lib/api';
@@ -18,13 +18,7 @@ export default function PlantsPage() {
     const [plantCode, setPlantCode] = useState('');
     const [zoneId, setZoneId] = useState('');
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             const [pData, zData] = await Promise.all([
                 apiListPlants(),
@@ -40,7 +34,12 @@ export default function PlantsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
