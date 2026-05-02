@@ -1,17 +1,164 @@
-"""Test fixtures for GreenMindDB integration tests."""
+"""Test fixtures for GreenMindDB tests.
+
+Provides two fixture scopes:
+1. SQLite-based fixtures (db, client, admin_token, setup_test_data) for fast
+   unit and integration tests that don't need Docker.
+2. Docker-based fixtures (docker_stack, seeded_stack, base_url) for full-stack
+   integration tests. These are skipped when SKIP_DOCKER_TESTS=1.
+"""
 
 from __future__ import annotations
 
 import os
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-import httpx
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth import get_password_hash
+from app.database import Base, get_db
+from app.main import app
+from app.models.master import Gateway, Sensor, Zone
+from app.models.user import Organization, Role, User
+
+# ── SQLite-based fixtures (no Docker required) ──────────────────────
+
+SQLITE_URL = "sqlite:///./test_ci.db"
+_sqlite_engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
+
+
+@event.listens_for(_sqlite_engine, "connect")
+def _register_sqlite_functions(dbapi_conn, connection_record):
+    """Register PostgreSQL-compatible functions for SQLite."""
+    import sqlite3
+    import uuid as uuid_mod
+
+    dbapi_conn.create_function("now", 0, lambda: datetime.now(UTC).isoformat())
+
+    # Allow SQLite to handle UUID comparisons with string inputs
+    sqlite3.register_adapter(uuid_mod.UUID, lambda u: str(u))
+
+
+_TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=_sqlite_engine)
+
+
+@pytest.fixture(autouse=True)
+def _reset_tables():
+    """Create all tables before each test, drop after."""
+    Base.metadata.create_all(bind=_sqlite_engine)
+    yield
+    Base.metadata.drop_all(bind=_sqlite_engine)
+
+
+@pytest.fixture
+def db():
+    """Provide a clean SQLite session."""
+    session = _TestingSession()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def client(db: Session):
+    """TestClient with overridden DB dependency."""
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def admin_token(client: TestClient, db: Session) -> str:
+    """Create an admin user and return a valid JWT token."""
+    org = Organization(name="Test Org CI")
+    db.add(org)
+    db.flush()
+
+    user = User(
+        email="ci-admin@test.com",
+        password_hash=get_password_hash("TestPass123"),
+        role=Role.ADMIN,
+        name="CI Admin",
+        is_active=True,
+        is_verified=True,
+        organization_id=org.id,
+    )
+    db.add(user)
+    db.commit()
+
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": "ci-admin@test.com", "password": "TestPass123"},
+    )
+    assert resp.status_code == 200, f"Admin login failed: {resp.text}"
+    token = resp.cookies.get("access_token")
+    assert token, "No access_token cookie in login response"
+    return token
+
+
+@pytest.fixture
+def setup_test_data(db: Session) -> dict:
+    """Seed minimal test data: org, zone, gateway, sensor."""
+    org = Organization(name="Test Org Fixture")
+    db.add(org)
+    db.flush()
+
+    zone = Zone(
+        organization_id=org.id,
+        name="Test Zone",
+        location="CI Lab",
+        zone_type="GREENHOUSE",
+    )
+    db.add(zone)
+    db.flush()
+
+    gw = Gateway(
+        zone_id=zone.id,
+        hardware_id="test-gw-ci",
+        name="CI Gateway",
+        api_key_hash=get_password_hash("ci-api-key"),
+        status="online",
+        is_active=True,
+        last_seen=datetime.now(UTC),
+    )
+    db.add(gw)
+    db.flush()
+
+    sensor = Sensor(
+        gateway_id=gw.id,
+        mac_address="AA:BB:CC:DD:EE:FF",
+        name="CI Sensor",
+        sensor_type="leaf_voltage",
+        status="online",
+        last_seen=datetime.now(UTC),
+    )
+    db.add(sensor)
+    db.commit()
+
+    return {
+        "org": org,
+        "zone": zone,
+        "gateway": gw,
+        "sensor": sensor,
+    }
+
+
+# ── Docker-based fixtures (full-stack, skipped in CI) ───────────────
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = ROOT_DIR / "compose" / "docker-compose.yml"
@@ -41,6 +188,8 @@ def _compose_cmd(env_file: Path) -> list[str]:
 
 
 def _wait_for_health(base_url: str, timeout_seconds: int = 180) -> None:
+    import httpx
+
     deadline = time.time() + timeout_seconds
     last_error: Exception | None = None
     while time.time() < deadline:
@@ -60,7 +209,10 @@ def _run_sql(stack_env: dict[str, str], sql: str) -> None:
 
         db_url = os.environ.get("DATABASE_URL")
         if not db_url:
-            db_url = f"postgresql+psycopg2://{stack_env['POSTGRES_USER']}:{stack_env['POSTGRES_PASSWORD']}@postgres:5432/{stack_env['POSTGRES_DB']}"
+            db_url = (
+                f"postgresql+psycopg2://{stack_env['POSTGRES_USER']}:"
+                f"{stack_env['POSTGRES_PASSWORD']}@postgres:5432/{stack_env['POSTGRES_DB']}"
+            )
 
         engine = create_engine(db_url)
         with engine.begin() as conn:
@@ -118,7 +270,6 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     org_id = str(uuid4())
 
     sql = f"""
-    -- Clean up first
     DELETE FROM sensor_reading;
     DELETE FROM sensor;
     DELETE FROM gateway;
@@ -126,7 +277,6 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
     DELETE FROM zone;
     DELETE FROM organization;
 
-    -- Insert organization
     INSERT INTO organization (id, name)
     VALUES ('{org_id}', 'Test Org')
     ON CONFLICT DO NOTHING;
@@ -168,61 +318,22 @@ def seeded_stack(docker_stack: dict[str, str]) -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def base_url(seeded_stack: dict[str, str]) -> str:
+def docker_base_url(seeded_stack: dict[str, str]) -> str:
     if os.getenv("IN_DOCKER_TEST") == "1":
         return "http://backend:8000"
     return f"https://localhost:{seeded_stack['PROXY_HTTPS_PORT']}"
 
 
 @pytest.fixture(scope="session")
-def admin_token(base_url: str, seeded_stack: dict[str, str]) -> str:
-    """Login as admin and return access token."""
+def docker_admin_token(docker_base_url: str, seeded_stack: dict[str, str]) -> str:
+    """Login as admin and return access token (Docker stack only)."""
+    import httpx
+
     resp = httpx.post(
-        f"{base_url}/auth/login",
+        f"{docker_base_url}/auth/login",
         json={"email": seeded_stack["ADMIN_EMAIL"], "password": seeded_stack["ADMIN_PASSWORD"]},
         verify=False,
         timeout=10.0,
     )
     assert resp.status_code == 200, f"Admin login failed: {resp.text}"
     return resp.json()["access_token"]
-
-
-@pytest.fixture(scope="session")
-def operator_user_and_token(
-    base_url: str, admin_token: str, seeded_stack: dict[str, str]
-) -> dict[str, str]:
-    """Create an operator user via admin API and return {token, user_id, email}."""
-    # Create operator
-    create_resp = httpx.post(
-        f"{base_url}/admin/users",
-        json={
-            "email": "operator@test.local",
-            "password": "test-operator-pass",
-            "role": "operator",
-            "greenhouse_id": "11111111-1111-1111-1111-111111111111",
-        },
-        headers={"Authorization": f"Bearer {admin_token}"},
-        verify=False,
-        timeout=10.0,
-    )
-    assert create_resp.status_code == 201, f"Operator creation failed: {create_resp.text}"
-    user_id = create_resp.json()["id"]
-
-    # Manually verify the operator for the test using the stack env
-    _run_sql(seeded_stack, f"UPDATE users SET is_verified = true WHERE id = '{user_id}';")
-
-    # Login as operator
-    login_resp = httpx.post(
-        f"{base_url}/auth/login",
-        json={"email": "operator@test.local", "password": "test-operator-pass"},
-        verify=False,
-        timeout=10.0,
-    )
-    assert login_resp.status_code == 200, f"Operator login failed: {login_resp.text}"
-    data = login_resp.json()
-    return {
-        "token": data["access_token"],
-        "refresh_token": data["refresh_token"],
-        "user_id": user_id,
-        "email": "operator@test.local",
-    }
