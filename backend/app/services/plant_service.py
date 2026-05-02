@@ -4,14 +4,12 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.models.master import Zone
 from app.models.observation import PlantObservationAccess
 from app.models.plant import Plant, PlantSensorAssignment
 from app.models.user import User
-from app.models.master import Zone
 from app.schemas.observation import ObservationAccessResponse
 from app.schemas.plant import (
     AssignSensorRequest,
@@ -33,7 +31,7 @@ def list_plants(db: Session, user: User, zone_id: str | None = None) -> list[Pla
     query = db.query(Plant).filter(Plant.organization_id == org_id)
     if zone_id:
         query = query.filter(Plant.zone_id == zone_id)
-    
+
     plants = query.all()
     results = []
     for p in plants:
@@ -42,12 +40,12 @@ def list_plants(db: Session, user: User, zone_id: str | None = None) -> list[Pla
             db.query(PlantSensorAssignment)
             .filter(
                 PlantSensorAssignment.plant_id == p.id,
-                PlantSensorAssignment.is_active == True
+                PlantSensorAssignment.is_active
             )
             .first()
         )
         current_sensor_id = str(active_assignment.sensor_id) if active_assignment else None
-        
+
         results.append(
             PlantResponse(
                 id=str(p.id),
@@ -70,12 +68,12 @@ def list_plants(db: Session, user: User, zone_id: str | None = None) -> list[Pla
 
 def create_plant(db: Session, user: User, data: PlantCreate) -> PlantResponse:
     org_id = _require_org(user)
-    
+
     # Verify zone
     zone = db.query(Zone).filter(Zone.id == data.zone_id, Zone.organization_id == org_id).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
-        
+
     p = Plant(
         organization_id=org_id,
         zone_id=data.zone_id,
@@ -90,7 +88,7 @@ def create_plant(db: Session, user: User, data: PlantCreate) -> PlantResponse:
     db.add(p)
     db.commit()
     db.refresh(p)
-    
+
     return PlantResponse(
         id=str(p.id),
         organization_id=str(p.organization_id),
@@ -113,12 +111,12 @@ def get_plant(db: Session, user: User, plant_id: str) -> PlantResponse:
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     active_assignment = (
         db.query(PlantSensorAssignment)
         .filter(
             PlantSensorAssignment.plant_id == p.id,
-            PlantSensorAssignment.is_active == True
+            PlantSensorAssignment.is_active
         )
         .first()
     )
@@ -146,7 +144,7 @@ def update_plant(db: Session, user: User, plant_id: str, data: PlantUpdate) -> P
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     if data.name is not None:
         p.name = data.name
     if data.plant_code is not None:
@@ -159,7 +157,7 @@ def update_plant(db: Session, user: User, plant_id: str, data: PlantUpdate) -> P
         p.description = data.description
     if data.status is not None:
         p.status = data.status
-        
+
     p.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(p)
@@ -170,7 +168,7 @@ def delete_plant(db: Session, user: User, plant_id: str) -> None:
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     db.delete(p)
     db.commit()
 
@@ -180,13 +178,13 @@ def assign_sensor(db: Session, user: User, plant_id: str, data: AssignSensorRequ
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     # Unassign current if any
     active_assignment = (
         db.query(PlantSensorAssignment)
         .filter(
             PlantSensorAssignment.plant_id == p.id,
-            PlantSensorAssignment.is_active == True
+            PlantSensorAssignment.is_active
         )
         .first()
     )
@@ -204,7 +202,7 @@ def assign_sensor(db: Session, user: User, plant_id: str, data: AssignSensorRequ
             )
         active_assignment.is_active = False
         active_assignment.unassigned_at = datetime.now(UTC)
-        
+
     # Create new assignment
     new_assignment = PlantSensorAssignment(
         plant_id=p.id,
@@ -216,7 +214,7 @@ def assign_sensor(db: Session, user: User, plant_id: str, data: AssignSensorRequ
     db.add(new_assignment)
     db.commit()
     db.refresh(new_assignment)
-    
+
     return PlantSensorAssignmentResponse(
         id=str(new_assignment.id),
         plant_id=str(new_assignment.plant_id),
@@ -233,7 +231,7 @@ def get_sensor_history(db: Session, user: User, plant_id: str) -> list[PlantSens
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     assignments = (
         db.query(PlantSensorAssignment)
         .filter(PlantSensorAssignment.plant_id == p.id)
@@ -259,12 +257,12 @@ def get_or_create_observation_access(db: Session, user: User, plant_id: str) -> 
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     access = (
         db.query(PlantObservationAccess)
         .filter(
             PlantObservationAccess.plant_id == p.id,
-            PlantObservationAccess.is_active == True
+            PlantObservationAccess.is_active
         )
         .first()
     )
@@ -279,7 +277,7 @@ def get_or_create_observation_access(db: Session, user: User, plant_id: str) -> 
         db.add(access)
         db.commit()
         db.refresh(access)
-        
+
     return ObservationAccessResponse(
         id=str(access.id),
         plant_id=str(access.plant_id),
@@ -295,23 +293,23 @@ def revoke_observation_access(db: Session, user: User, plant_id: str) -> Observa
     p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
-        
+
     access = (
         db.query(PlantObservationAccess)
         .filter(
             PlantObservationAccess.plant_id == p.id,
-            PlantObservationAccess.is_active == True
+            PlantObservationAccess.is_active
         )
         .first()
     )
     if not access:
         raise HTTPException(status_code=400, detail="No active observation access found")
-        
+
     access.is_active = False
     access.revoked_at = datetime.now(UTC)
     db.commit()
     db.refresh(access)
-    
+
     return ObservationAccessResponse(
         id=str(access.id),
         plant_id=str(access.plant_id),

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -33,12 +33,7 @@ export default function PlantDetailPage() {
     const [deleting, setDeleting] = useState(false);
     const router = useRouter();
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        loadData();
-    }, [plantId]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             const [p, h, s] = await Promise.all([
                 apiGetPlant(plantId),
@@ -48,7 +43,7 @@ export default function PlantDetailPage() {
             setPlant(p);
             setHistory(h);
             setAvailableSensors(s);
-            
+
             // Try to load access
             try {
                 const a = await apiCreateObservationAccess(plantId);
@@ -57,13 +52,17 @@ export default function PlantDetailPage() {
                 // Ignore if creating fails or already revoked 
                 // Currently get_or_create logic in backend handles it.
             }
-            
+
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [plantId]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const handleAssign = async (e: React.FormEvent) => {
         e.preventDefault();
