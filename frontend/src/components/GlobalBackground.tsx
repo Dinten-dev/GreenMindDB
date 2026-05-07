@@ -45,7 +45,7 @@ export default function GlobalBackground() {
             <div className="blob-third" />
 
             {/* Neural Signal Lines Overlay */}
-            <div className={`neural-overlay ${neuralOpacity} transition-opacity duration-1000`}>
+            <div className={`neural-overlay hidden md:block ${neuralOpacity} transition-opacity duration-1000`}>
                 <svg
                     className="w-full h-full"
                     viewBox="0 0 100 100"

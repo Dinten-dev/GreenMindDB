@@ -5,19 +5,19 @@ import ScrollReveal from '@/components/ScrollReveal';
 export default function TechnologyPage() {
     return (
         <div className="min-h-screen">
-            <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
+            <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
                 <ScrollReveal>
                     <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Technologie</p>
                     <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">Die Wissenschaft<br />hinter GreenMind.</h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
-                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-20 leading-relaxed">
+                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-12 md:mb-20 leading-relaxed">
                         Wie wir bioelektrische Pflanzensignale erfassen, verarbeiten und in
                         verwertbare Erkenntnisse für den Anbau umwandeln.
                     </p>
                 </ScrollReveal>
 
-                <div className="space-y-24">
+                <div className="space-y-14 md:space-y-24">
                     <ScrollReveal>
                         <section className="max-w-3xl">
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-6">Bioelektrische Signale</h2>
@@ -40,7 +40,7 @@ export default function TechnologyPage() {
                         <ScrollReveal>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-8">Drei Schichten, ein System</h2>
                         </ScrollReveal>
-                        <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-3 md:gap-6 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                        <div className="flex flex-col gap-4 md:grid md:grid-cols-3 md:gap-6">
                             {[
                                 {
                                     title: 'Sensorik',
@@ -55,7 +55,7 @@ export default function TechnologyPage() {
                                     desc: 'Signalmuster werden mit dokumentierten Stressereignissen abgeglichen. So entstehen Erkenntnisse über Zusammenhänge zwischen Pflanzensignalen und realen Bedingungen im Feld.'
                                 },
                             ].map((item, i) => (
-                                <ScrollReveal key={item.title} delay={i * 150} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
+                                <ScrollReveal key={item.title} delay={i * 150}>
                                     <div className="card-hover bg-apple-gray-100 rounded-apple-lg p-8 h-full">
                                         <h3 className="font-semibold text-apple-gray-800 mb-3">{item.title}</h3>
                                         <p className="text-sm text-apple-gray-500 leading-relaxed">{item.desc}</p>

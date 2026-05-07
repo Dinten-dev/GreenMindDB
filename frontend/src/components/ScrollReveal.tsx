@@ -24,6 +24,11 @@ export default function ScrollReveal({
     const ref = useRef<HTMLDivElement>(null);
     const [isVisible, setIsVisible] = useState(false);
 
+    // Halve delays on mobile for snappier perceived load
+    const effectiveDelay = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+        ? Math.round(delay * 0.5)
+        : delay;
+
     useEffect(() => {
         const node = ref.current;
         if (!node) return;
@@ -48,7 +53,7 @@ export default function ScrollReveal({
         transitionProperty: 'opacity, transform',
         transitionDuration: `${duration}ms`,
         transitionTimingFunction: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-        transitionDelay: `${delay}ms`,
+        transitionDelay: `${effectiveDelay}ms`,
     };
 
     const hiddenStyles: Record<string, React.CSSProperties> = {

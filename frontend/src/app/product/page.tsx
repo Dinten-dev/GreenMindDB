@@ -98,7 +98,7 @@ const researchAreas: { title: string; desc: string; icon: React.ReactNode }[] = 
 export default function ProductPage() {
     return (
         <div className="min-h-screen">
-            <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
+            <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
                 <ScrollReveal>
                     <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Plattform</p>
                     <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
@@ -112,15 +112,15 @@ export default function ProductPage() {
                     </p>
                 </ScrollReveal>
                 <ScrollReveal delay={300}>
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50/80 text-amber-700 text-sm font-medium mb-16 border border-amber-200/40">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50/80 text-amber-700 text-sm font-medium mb-10 md:mb-16 border border-amber-200/40">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                         In Entwicklung — nicht kommerziell verfügbar
                     </div>
                 </ScrollReveal>
 
-                <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-2 md:gap-8 mb-24 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:gap-8 mb-14 md:mb-24">
                     {researchAreas.map((f, i) => (
-                        <ScrollReveal key={f.title} delay={i * 100} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
+                        <ScrollReveal key={f.title} delay={i * 100}>
                             <div className="card-hover bg-apple-gray-100 rounded-apple-lg p-8 h-full">
                                 <div className="icon-container mb-5 text-gm-green-600">{f.icon}</div>
                                 <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">{f.title}</h3>

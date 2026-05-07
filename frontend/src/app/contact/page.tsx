@@ -37,21 +37,21 @@ export default function ContactPage() {
 
     return (
         <div className="min-h-screen">
-            <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
-                <div className="flex flex-col lg:flex-row gap-16">
+            <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
+                <div className="flex flex-col lg:flex-row gap-10 md:gap-16">
                     <div className="flex-1 max-w-2xl">
                         <ScrollReveal>
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Kontakt</p>
                             <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">Kontaktieren Sie uns.</h1>
                         </ScrollReveal>
                         <ScrollReveal delay={200}>
-                            <p className="text-xl text-apple-gray-500 mb-16 leading-relaxed">
+                            <p className="text-xl text-apple-gray-500 mb-10 md:mb-16 leading-relaxed">
                                 Sie forschen an bioelektrischen Pflanzensignalen oder betreiben eine Anbauumgebung, die als Forschungsstandort in Frage kommt? Wir freuen uns auf den wissenschaftlichen Austausch.
                             </p>
                         </ScrollReveal>
 
                         <ScrollReveal delay={350}>
-                            <div className="bg-apple-gray-100 rounded-apple-lg p-10 border border-apple-gray-200/50">
+                            <div className="bg-apple-gray-100 rounded-apple-lg p-6 md:p-10 border border-apple-gray-200/50">
                                 <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">Trägerorganisation</h3>
                                 <p className="text-lg text-apple-gray-800 leading-relaxed">
                                     Galaxyadvisors AG<br />
@@ -67,7 +67,7 @@ export default function ContactPage() {
 
                     <div className="flex-1">
                         <ScrollReveal delay={250}>
-                            <div className="bg-white rounded-apple-lg shadow-apple p-10 border border-apple-gray-100">
+                            <div className="bg-white rounded-apple-lg shadow-apple p-6 md:p-10 border border-apple-gray-100">
                                 {status === 'success' ? (
                                     <div className="text-center py-12">
                                         <div className="w-20 h-20 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-6">

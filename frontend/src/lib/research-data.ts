@@ -117,6 +117,19 @@ export const RESEARCH_PAPERS: ResearchPaper[] = [
         greenmindLink: 'Hedera helix wird mit einem PhytoNode-Wearable ausgestattet, das über 5 Monate elektrophysiologische Signale im Freien erfasst. AutoML-Klassifikatoren erreichen bis zu 95 % F1-Score — ein Beweis, dass pflanzliche Elektrosignale auch unter realen Bedingungen für präzises Umweltmonitoring nutzbar sind.',
         abstract: 'Biohybrides System mit pflanzentragbarem Gerät (PhytoNode) zur kontinuierlichen Erfassung elektrophysiologischer Aktivität von Hedera helix. AutoML-Ansätze übertreffen manuelles Tuning mit bis zu 95 % F1-Score.',
     },
+    {
+        id: 'reissig-tomato-ripening-2021',
+        title: 'Machine Learning for Automatic Classification of Tomato Ripening Stages Using Electrophysiological Recordings',
+        authors: 'Reissig GN, Oliveira TFC, Costa ÁVL, Parise AG, Pereira DR, Souza GM',
+        year: 2021,
+        journal: 'Frontiers in Sustainable Food Systems',
+        url: 'https://doi.org/10.3389/fsufs.2021.696829',
+        doi: '10.3389/fsufs.2021.696829',
+        category: 'predictive-analytics',
+        categoryLabel: 'Prädiktive Analytik',
+        greenmindLink: 'ML-Klassifikatoren (Random Forest, SVC) unterscheiden Reifestadien von Tomatenfrüchten anhand elektrophysiologischer Signale mit über 80 % Genauigkeit. Die Studie belegt, dass das pflanzliche Elektrom — wie GreenMind es erfasst — auch Entwicklungsprozesse in Früchten zuverlässig abbilden kann.',
+        abstract: 'Elektrische Aktivität von Tomatenfrüchten (Solanum lycopersicum var. cerasiforme) wird während der Reifung als Spannungsvariationen erfasst und mittels FFT, Wavelet-Transformation, PSD und Approximate Entropy analysiert. ML-Techniken (Random Forest, SVC, KNN u. a.) klassifizieren drei Reifestadien (Mature Green, Breaker, Light Red) mit bis zu 80,76 % Genauigkeit.',
+    },
 ];
 
 export const CATEGORY_OPTIONS = [

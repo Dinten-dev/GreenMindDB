@@ -499,3 +499,46 @@ html {
 .drawer-panel.open {
   transform: translateX(0);
 }
+
+/* ══════════════════════════════════════════════════════
+   MOBILE UX OPTIMIZATIONS — max-width: 767px only
+   Desktop remains completely untouched.
+   ══════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  /* ── Reduce background blob sizes & pause animations ── */
+  .blob-first {
+    width: 300px;
+    height: 300px;
+    animation-play-state: paused;
+  }
+  .blob-second {
+    width: 250px;
+    height: 250px;
+    animation-play-state: paused;
+  }
+  .blob-third {
+    width: 200px;
+    height: 200px;
+    animation-play-state: paused;
+  }
+
+  /* ── Disable card hover transform (sticks on touch) ── */
+  .card-hover:hover {
+    transform: none;
+  }
+  .card-hover:hover .icon-container {
+    transform: none;
+  }
+
+  /* ── Hide timeline horizontal connectors ── */
+  .timeline-step::after {
+    display: none;
+  }
+
+  /* ── Scroll hint fade for horizontal swipe containers ── */
+  .mobile-scroll-fade {
+    -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  }
+}
