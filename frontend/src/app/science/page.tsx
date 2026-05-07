@@ -189,7 +189,7 @@ export default function SciencePage() {
                             Alle aufgeführten Paper sind peer-reviewed und bevorzugt Open Access.
                         </p>
                         <p className="text-sm text-apple-gray-400 mt-1">
-                            Letzte Aktualisierung: März 2026
+                            Letzte Aktualisierung: Mai 2026
                         </p>
                     </div>
                 </ScrollReveal>
