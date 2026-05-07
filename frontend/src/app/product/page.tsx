@@ -118,9 +118,9 @@ export default function ProductPage() {
                     </div>
                 </ScrollReveal>
 
-                <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-2 md:gap-8 mb-14 md:mb-24 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:gap-8 mb-14 md:mb-24">
                     {researchAreas.map((f, i) => (
-                        <ScrollReveal key={f.title} delay={i * 100} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
+                        <ScrollReveal key={f.title} delay={i * 100}>
                             <div className="card-hover bg-apple-gray-100 rounded-apple-lg p-8 h-full">
                                 <div className="icon-container mb-5 text-gm-green-600">{f.icon}</div>
                                 <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">{f.title}</h3>

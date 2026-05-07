@@ -266,7 +266,7 @@ export default function LandingPage() {
                             </h2>
                         </div>
                     </ScrollReveal>
-                    <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-3 md:gap-6 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                    <div className="flex flex-col gap-4 md:grid md:grid-cols-3 md:gap-6">
                         {[
                             { title: 'Frühzeitige Stresserkennung', desc: 'Pflanzenstress erkennen, bevor er sichtbar wird — durch die Analyse bioelektrischer Signalmuster.' },
                             { title: 'Bessere Ertragsplanung', desc: 'Pflanzensignale und Umweltdaten kombiniert ermöglichen fundiertere Prognosen für die Erntevorbereitung.' },
@@ -275,7 +275,7 @@ export default function LandingPage() {
                             { title: 'Weniger Ressourcenverbrauch', desc: 'Durch bedarfsgerechten Einsatz von Wasser und Energie den ökologischen Fussabdruck reduzieren.' },
                             { title: 'Datengestützte Entscheidungen', desc: 'Vom Bauchgefühl zur Evidenz — Anbauentscheidungen auf Basis realer Pflanzendaten treffen.' },
                         ].map((b, i) => (
-                            <ScrollReveal key={b.title} delay={i * 80} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
+                            <ScrollReveal key={b.title} delay={i * 80}>
                                 <div className="card-hover bg-white rounded-apple-lg p-6 shadow-apple-card h-full flex flex-col justify-between">
                                     <div>
                                         <h3 className="text-base font-semibold text-apple-gray-800 mb-2">{b.title}</h3>

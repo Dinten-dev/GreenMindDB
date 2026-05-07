@@ -40,7 +40,7 @@ export default function TechnologyPage() {
                         <ScrollReveal>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-8">Drei Schichten, ein System</h2>
                         </ScrollReveal>
-                        <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-3 md:gap-6 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                        <div className="flex flex-col gap-4 md:grid md:grid-cols-3 md:gap-6">
                             {[
                                 {
                                     title: 'Sensorik',
@@ -55,7 +55,7 @@ export default function TechnologyPage() {
                                     desc: 'Signalmuster werden mit dokumentierten Stressereignissen abgeglichen. So entstehen Erkenntnisse über Zusammenhänge zwischen Pflanzensignalen und realen Bedingungen im Feld.'
                                 },
                             ].map((item, i) => (
-                                <ScrollReveal key={item.title} delay={i * 150} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
+                                <ScrollReveal key={item.title} delay={i * 150}>
                                     <div className="card-hover bg-apple-gray-100 rounded-apple-lg p-8 h-full">
                                         <h3 className="font-semibold text-apple-gray-800 mb-3">{item.title}</h3>
                                         <p className="text-sm text-apple-gray-500 leading-relaxed">{item.desc}</p>
