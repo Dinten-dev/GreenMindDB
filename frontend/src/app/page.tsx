@@ -37,7 +37,7 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  HERO
             ═══════════════════════════════════════════ */}
-            <section className="relative pt-36 pb-32 px-6 overflow-hidden">
+            <section className="relative pt-24 pb-16 md:pt-36 md:pb-32 px-6 overflow-hidden">
                 {/* Hero background image with green overlay */}
                 <div
                     className="absolute inset-0 z-0"
@@ -64,14 +64,14 @@ export default function LandingPage() {
                     </ScrollReveal>
 
                     <ScrollReveal variant="fade-up" delay={200}>
-                        <h1 className="text-5xl md:text-8xl font-bold text-apple-gray-800 tracking-tight leading-[1.05] mb-8 mt-12 md:mt-0">
+                        <h1 className="text-[2.5rem] md:text-8xl font-bold text-apple-gray-800 tracking-tight leading-[1.08] mb-6 md:mb-8 mt-6 md:mt-0">
                             Pflanzen eine<br />
                             <span className="gradient-text">Stimme geben.</span>
                         </h1>
                     </ScrollReveal>
 
                     <ScrollReveal variant="fade-up" delay={400}>
-                        <p className="text-lg md:text-2xl text-apple-gray-500 max-w-2xl mx-auto leading-relaxed mb-14 px-2 md:px-0">
+                        <p className="text-base md:text-2xl text-apple-gray-500 max-w-2xl mx-auto leading-relaxed mb-8 md:mb-14 px-2 md:px-0">
                             GreenMind analysiert bioelektrische Pflanzensignale, um Stress früher zu erkennen
                             und Anbaustrategien gezielt zu verbessern.
                         </p>
@@ -99,7 +99,7 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  PROBLEM
             ═══════════════════════════════════════════ */}
-            <section className="py-28 px-6">
+            <section className="py-16 md:py-28 px-6">
                 <div className="max-w-[960px] mx-auto text-center">
                     <ScrollReveal>
                         <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
@@ -126,10 +126,10 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  LÖSUNG
             ═══════════════════════════════════════════ */}
-            <section className="py-28 px-6 bg-apple-gray-100">
+            <section className="py-16 md:py-28 px-6 bg-apple-gray-100">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
-                        <div className="text-center mb-16">
+                        <div className="text-center mb-10 md:mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
                                 Unser Ansatz
                             </p>
@@ -142,7 +142,7 @@ export default function LandingPage() {
                             </p>
                         </div>
                     </ScrollReveal>
-                    <div className="grid md:grid-cols-3 gap-6">
+                    <div className="grid md:grid-cols-3 gap-4 md:gap-6">
                         <ScrollReveal delay={100}>
                             <FeatureCard
                                 icon={<IconSignal />}
@@ -171,10 +171,10 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  WIE ES FUNKTIONIERT
             ═══════════════════════════════════════════ */}
-            <section className="py-28 px-6">
+            <section className="py-16 md:py-28 px-6">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
-                        <div className="text-center mb-20">
+                        <div className="text-center mb-10 md:mb-20">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
                                 So funktioniert&apos;s
                             </p>
@@ -187,7 +187,7 @@ export default function LandingPage() {
                             </p>
                         </div>
                     </ScrollReveal>
-                    <div className="grid md:grid-cols-4 gap-8">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
                         {[
                             { step: '01', title: 'Pflanzensignal', desc: 'Pflanzen erzeugen elektrische Signale als Reaktion auf Veränderungen in ihrer Umgebung — Licht, Wasser, Temperatur, Nährstoffe.' },
                             { step: '02', title: 'Sensorik', desc: 'Sensoren an der Pflanze erfassen diese Signale nicht-invasiv und kombinieren sie mit Umgebungsdaten wie Temperatur und Bodenfeuchtigkeit.' },
@@ -211,10 +211,10 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  FUNDAMENT
             ═══════════════════════════════════════════ */}
-            <section className="py-28 px-6 bg-apple-gray-100">
+            <section className="py-16 md:py-28 px-6 bg-apple-gray-100">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
-                        <div className="text-center mb-16">
+                        <div className="text-center mb-10 md:mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
                                 Fundament
                             </p>
@@ -228,22 +228,22 @@ export default function LandingPage() {
                         </div>
                     </ScrollReveal>
 
-                    <div className="grid md:grid-cols-3 gap-8 max-w-[960px] mx-auto">
+                    <div className="grid grid-cols-3 gap-4 md:gap-8 max-w-[960px] mx-auto">
                         <ScrollReveal delay={100}>
-                            <div className="text-center p-8">
-                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">FHNW</div>
+                            <div className="text-center p-4 md:p-8">
+                                <div className="text-2xl md:text-5xl font-bold gradient-text stat-value mb-2">FHNW</div>
                                 <p className="text-sm text-apple-gray-500">Fachhochschule<br />Nordwestschweiz</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={250}>
-                            <div className="text-center p-8">
-                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">24/7</div>
+                            <div className="text-center p-4 md:p-8">
+                                <div className="text-2xl md:text-5xl font-bold gradient-text stat-value mb-2">24/7</div>
                                 <p className="text-sm text-apple-gray-500">Kontinuierliche<br />Datenerfassung</p>
                             </div>
                         </ScrollReveal>
                         <ScrollReveal delay={400}>
-                            <div className="text-center p-8">
-                                <div className="text-4xl md:text-5xl font-bold gradient-text stat-value mb-2">Aarau</div>
+                            <div className="text-center p-4 md:p-8">
+                                <div className="text-2xl md:text-5xl font-bold gradient-text stat-value mb-2">Aarau</div>
                                 <p className="text-sm text-apple-gray-500">Entwicklungsstandort<br />Schweiz</p>
                             </div>
                         </ScrollReveal>
@@ -254,10 +254,10 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  POTENZIALE
             ═══════════════════════════════════════════ */}
-            <section className="py-28 px-6">
+            <section className="py-16 md:py-28 px-6">
                 <div className="max-w-[1280px] mx-auto">
                     <ScrollReveal>
-                        <div className="text-center mb-16">
+                        <div className="text-center mb-10 md:mb-16">
                             <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
                                 Potenziale
                             </p>
@@ -266,7 +266,7 @@ export default function LandingPage() {
                             </h2>
                         </div>
                     </ScrollReveal>
-                    <div className="flex hide-scrollbar overflow-x-auto snap-x snap-mandatory gap-4 md:grid md:grid-cols-3 md:gap-6 pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                    <div className="flex flex-col gap-4 md:grid md:grid-cols-3 md:gap-6">
                         {[
                             { title: 'Frühzeitige Stresserkennung', desc: 'Pflanzenstress erkennen, bevor er sichtbar wird — durch die Analyse bioelektrischer Signalmuster.' },
                             { title: 'Bessere Ertragsplanung', desc: 'Pflanzensignale und Umweltdaten kombiniert ermöglichen fundiertere Prognosen für die Erntevorbereitung.' },
@@ -275,7 +275,7 @@ export default function LandingPage() {
                             { title: 'Weniger Ressourcenverbrauch', desc: 'Durch bedarfsgerechten Einsatz von Wasser und Energie den ökologischen Fussabdruck reduzieren.' },
                             { title: 'Datengestützte Entscheidungen', desc: 'Vom Bauchgefühl zur Evidenz — Anbauentscheidungen auf Basis realer Pflanzendaten treffen.' },
                         ].map((b, i) => (
-                            <ScrollReveal key={b.title} delay={i * 80} className="w-[85vw] md:w-auto flex-shrink-0 snap-center">
+                            <ScrollReveal key={b.title} delay={i * 80}>
                                 <div className="card-hover bg-white rounded-apple-lg p-6 shadow-apple-card h-full flex flex-col justify-between">
                                     <div>
                                         <h3 className="text-base font-semibold text-apple-gray-800 mb-2">{b.title}</h3>
@@ -291,7 +291,7 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  CTA
             ═══════════════════════════════════════════ */}
-            <section className="py-28 px-6 bg-apple-gray-800">
+            <section className="py-16 md:py-28 px-6 bg-apple-gray-800">
                 <div className="max-w-[1280px] mx-auto text-center">
                     <ScrollReveal>
                         <p className="text-sm font-semibold text-gm-green-400 uppercase tracking-widest mb-4">
@@ -313,7 +313,7 @@ export default function LandingPage() {
                     <ScrollReveal delay={450}>
                         <Link
                             href="/early-access"
-                            className="btn-glow inline-flex px-10 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-400 transition-colors duration-300"
+                            className="btn-glow inline-flex w-full md:w-auto justify-center px-10 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-400 transition-colors duration-300"
                         >
                             Zugang anfragen
                         </Link>
@@ -324,7 +324,7 @@ export default function LandingPage() {
             {/* ═══════════════════════════════════════════
                  FOOTER
             ═══════════════════════════════════════════ */}
-            <footer className="py-16 px-6 border-t border-apple-gray-200">
+            <footer className="py-10 md:py-16 px-6 border-t border-apple-gray-200">
                 <div className="max-w-[1280px] mx-auto">
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
                         <div className="flex items-center gap-2">
@@ -359,7 +359,7 @@ export default function LandingPage() {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
     return (
-        <div className="card-hover bg-white rounded-apple-lg p-8 shadow-apple-card h-full">
+        <div className="card-hover bg-white rounded-apple-lg p-5 md:p-8 shadow-apple-card h-full">
             <div className="icon-container mb-5 text-gm-green-600">{icon}</div>
             <h3 className="text-lg font-semibold text-apple-gray-800 mb-2">{title}</h3>
             <p className="text-sm text-apple-gray-500 leading-relaxed">{description}</p>

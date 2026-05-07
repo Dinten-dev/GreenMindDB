@@ -19,6 +19,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth import get_password_hash
@@ -31,6 +32,17 @@ from app.models.user import Organization, Role, User
 
 SQLITE_URL = "sqlite:///./test_ci.db"
 _sqlite_engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
+
+# Register PostgreSQL UUID type with SQLite compiler so models using
+# sqlalchemy.dialects.postgresql.UUID can be created in the test DB.
+
+
+def _visit_uuid(self, type_, **kw):
+    """Render PostgreSQL UUID columns as CHAR(32) in SQLite."""
+    return "CHAR(32)"
+
+
+SQLiteTypeCompiler.visit_UUID = _visit_uuid
 
 
 @event.listens_for(_sqlite_engine, "connect")

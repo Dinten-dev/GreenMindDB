@@ -33,18 +33,18 @@ function LinkedInIcon() {
 export default function AboutPage() {
     return (
         <div className="min-h-screen">
-            <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
+            <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
                 <ScrollReveal>
                     <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">Über uns</p>
                     <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">Über GreenMind.</h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
-                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-20 leading-relaxed">
+                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-12 md:mb-20 leading-relaxed">
                         Bioelektrische Pflanzensignale verstehen, um den Anbau gezielt zu verbessern.
                     </p>
                 </ScrollReveal>
 
-                <div className="max-w-3xl space-y-16">
+                <div className="max-w-3xl space-y-10 md:space-y-16">
                     <ScrollReveal>
                         <section>
                             <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">Unsere Mission</h2>
