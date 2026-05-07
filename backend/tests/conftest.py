@@ -32,6 +32,18 @@ from app.models.user import Organization, Role, User
 SQLITE_URL = "sqlite:///./test_ci.db"
 _sqlite_engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
 
+# Register PostgreSQL UUID type with SQLite compiler so models using
+# sqlalchemy.dialects.postgresql.UUID can be created in the test DB.
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
+
+
+def _visit_uuid(self, type_, **kw):
+    """Render PostgreSQL UUID columns as CHAR(32) in SQLite."""
+    return "CHAR(32)"
+
+
+SQLiteTypeCompiler.visit_UUID = _visit_uuid
+
 
 @event.listens_for(_sqlite_engine, "connect")
 def _register_sqlite_functions(dbapi_conn, connection_record):
