@@ -32,7 +32,7 @@ export default function SciencePage() {
 
     return (
         <div className="min-h-screen">
-            <div className="pt-28 pb-24 px-6 max-w-[1280px] mx-auto">
+            <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
                 {/* Hero */}
                 <ScrollReveal>
                     <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
@@ -46,7 +46,7 @@ export default function SciencePage() {
                     </h1>
                 </ScrollReveal>
                 <ScrollReveal delay={200}>
-                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-16 leading-relaxed">
+                    <p className="text-xl text-apple-gray-500 max-w-2xl mb-10 md:mb-16 leading-relaxed">
                         Unsere Technologie basiert auf peer-reviewed Forschung in der Pflanzenelektrophysiologie.
                         Hier finden Sie die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu
                         datengestützter Stressklassifizierung.
@@ -113,7 +113,7 @@ export default function SciencePage() {
 
                             return (
                                 <ScrollReveal key={paper.id} delay={i * 80}>
-                                    <div className="card-hover bg-white rounded-apple-lg shadow-apple-card p-8 flex flex-col h-full">
+                                    <div className="card-hover bg-white rounded-apple-lg shadow-apple-card p-5 md:p-8 flex flex-col h-full">
                                         {/* Category + Year */}
                                         <div className="flex items-center justify-between mb-4">
                                             <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${colors.bg} ${colors.text} border ${colors.border}`}>

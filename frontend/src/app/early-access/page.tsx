@@ -38,8 +38,8 @@ export default function EarlyAccessPage() {
 
     return (
         <div className="min-h-screen">
-            <div className="pt-28 pb-24 px-6 max-w-[800px] mx-auto">
-                <div className="text-center mb-16">
+            <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[800px] mx-auto">
+                <div className="text-center mb-10 md:mb-16">
                     <ScrollReveal variant="scale-in">
                         <div className="w-16 h-16 rounded-full bg-gm-green-50 flex items-center justify-center mx-auto mb-6">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gm-green-600">
@@ -61,7 +61,7 @@ export default function EarlyAccessPage() {
                 </div>
 
                 <ScrollReveal delay={400}>
-                    <div className="bg-white rounded-apple-lg shadow-apple p-8 md:p-12 border border-apple-gray-100">
+                    <div className="bg-white rounded-apple-lg shadow-apple p-5 md:p-12 border border-apple-gray-100">
                         {status === 'success' ? (
                             <div className="text-center py-12">
                                 <div className="w-20 h-20 rounded-full bg-gm-green-50 flex items-center justify-center mx-auto mb-6">

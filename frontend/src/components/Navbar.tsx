@@ -100,7 +100,7 @@ export default function Navbar() {
 
                     {/* Mobile Hamburger Button */}
                     <button
-                        className="md:hidden p-2 -mr-2 relative z-[110] text-apple-gray-800"
+                        className="md:hidden p-3 -mr-3 relative z-[110] text-apple-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center"
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         aria-label="Menü umschalten"
                     >
@@ -117,7 +117,7 @@ export default function Navbar() {
             <div
                 className={`fixed inset-0 bg-white z-[90] flex flex-col pt-24 px-6 pb-8 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] md:hidden ${isMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
             >
-                <div className="flex flex-col gap-6 text-2xl font-semibold tracking-tight text-apple-gray-800">
+                <div className="flex flex-col gap-5 text-xl font-semibold tracking-tight text-apple-gray-800">
                     {navLinks.map((link) => (
                         <Link
                             key={link.href}
