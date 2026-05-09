@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
     apiListSensors, apiGetSensorDataAdvanced, apiExportSensorData,
-    SensorInfo, SensorDataResponse,
+    apiListWavFiles, apiDownloadWav,
+    SensorInfo, SensorDataResponse, WavFileInfo,
 } from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -43,6 +44,10 @@ export default function SensorDetailPage() {
     const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
     const [resolution, setResolution] = useState<Resolution>('5m');
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
+    const [exportRange, setExportRange] = useState<string>('30d');
+    const [wavFiles, setWavFiles] = useState<WavFileInfo[]>([]);
+    const [wavLoading, setWavLoading] = useState(false);
+    const [downloadingWavId, setDownloadingWavId] = useState<string | null>(null);
 
     // Load sensor info
     useEffect(() => {
@@ -53,6 +58,13 @@ export default function SensorDetailPage() {
             })
             .catch(console.error)
             .finally(() => setLoading(false));
+
+        // Load WAV files
+        setWavLoading(true);
+        apiListWavFiles(sensorId)
+            .then(setWavFiles)
+            .catch(() => setWavFiles([]))
+            .finally(() => setWavLoading(false));
     }, [zoneId, sensorId]);
 
     // Load sensor data
@@ -85,7 +97,7 @@ export default function SensorDetailPage() {
     const handleExport = async () => {
         setExportStatus('loading');
         try {
-            await apiExportSensorData(sensorId, '24h');
+            await apiExportSensorData(sensorId, exportRange);
             setExportStatus('done');
             setTimeout(() => setExportStatus('idle'), 2000);
         } catch {
@@ -143,25 +155,38 @@ export default function SensorDetailPage() {
                 </div>
 
                 {/* Export */}
-                <button
-                    onClick={handleExport}
-                    disabled={exportStatus !== 'idle'}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50 shrink-0"
-                >
-                    {exportStatus === 'idle' && (
-                        <>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                            Forschungsdaten-Sicherung
-                        </>
-                    )}
-                    {exportStatus === 'loading' && 'Exportiere…'}
-                    {exportStatus === 'done' && '✓ Fertig'}
-                    {exportStatus === 'error' && '✗ Fehler'}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                    <select
+                        value={exportRange}
+                        onChange={e => setExportRange(e.target.value)}
+                        disabled={exportStatus !== 'idle'}
+                        className="px-3 py-2 text-sm rounded-xl bg-white border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    >
+                        <option value="24h">Letzte 24h</option>
+                        <option value="7d">Letzte 7 Tage</option>
+                        <option value="30d">Letzte 30 Tage</option>
+                        <option value="all">Alle Daten</option>
+                    </select>
+                    <button
+                        onClick={handleExport}
+                        disabled={exportStatus !== 'idle'}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
+                    >
+                        {exportStatus === 'idle' && (
+                            <>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                Export
+                            </>
+                        )}
+                        {exportStatus === 'loading' && 'Exportiere…'}
+                        {exportStatus === 'done' && '✓ Fertig'}
+                        {exportStatus === 'error' && '✗ Fehler'}
+                    </button>
+                </div>
             </div>
 
             {/* Controls Bar */}
@@ -321,6 +346,95 @@ export default function SensorDetailPage() {
                     {sensorData.reduce((sum, s) => sum + s.data.length, 0).toLocaleString()} Datenpunkte · Auflösung: {resolution === 'raw' ? 'Rohdaten' : resolution}
                 </div>
             )}
+
+            {/* WAV Files Section */}
+            <div className="glass-card p-5">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">🎵</span>
+                        <h2 className="text-sm font-semibold text-gray-700">WAV-Aufnahmen</h2>
+                    </div>
+                    <span className="text-xs text-gray-400">
+                        {wavFiles.length} Datei{wavFiles.length !== 1 ? 'en' : ''}
+                    </span>
+                </div>
+
+                {wavLoading ? (
+                    <div className="space-y-2">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="animate-pulse h-12 bg-black/[0.03] rounded-xl" />
+                        ))}
+                    </div>
+                ) : wavFiles.length === 0 ? (
+                    <div className="py-8 text-center text-gray-400 text-sm">
+                        Keine WAV-Dateien für diesen Sensor vorhanden
+                    </div>
+                ) : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                        {wavFiles.map(wav => {
+                            const startDate = new Date(wav.started_at);
+                            const sizeKB = (wav.file_size_bytes / 1024).toFixed(0);
+                            const sizeMB = (wav.file_size_bytes / (1024 * 1024)).toFixed(1);
+                            const sizeLabel = wav.file_size_bytes > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
+                            const isDownloading = downloadingWavId === wav.id;
+
+                            return (
+                                <div
+                                    key={wav.id}
+                                    className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/60 border border-black/[0.04] hover:border-emerald-200/60 transition-all group"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0">
+                                            WAV
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-medium text-gray-700 truncate">
+                                                {startDate.toLocaleDateString('de-CH', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                {' · '}
+                                                {startDate.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                            </div>
+                                            <div className="text-xs text-gray-400 flex gap-2">
+                                                <span>{wav.duration_seconds.toFixed(1)}s</span>
+                                                <span>·</span>
+                                                <span>{wav.sample_rate} Hz</span>
+                                                <span>·</span>
+                                                <span>{sizeLabel}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            setDownloadingWavId(wav.id);
+                                            try {
+                                                await apiDownloadWav(wav.id);
+                                            } catch (err) {
+                                                console.error('WAV download failed:', err);
+                                            } finally {
+                                                setDownloadingWavId(null);
+                                            }
+                                        }}
+                                        disabled={isDownloading}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50 opacity-0 group-hover:opacity-100 shrink-0"
+                                    >
+                                        {isDownloading ? (
+                                            'Laden…'
+                                        ) : (
+                                            <>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                    <polyline points="7 10 12 15 17 10" />
+                                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                                </svg>
+                                                Download
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
