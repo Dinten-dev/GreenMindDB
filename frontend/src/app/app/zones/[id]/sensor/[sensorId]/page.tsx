@@ -45,6 +45,8 @@ export default function SensorDetailPage() {
     const [resolution, setResolution] = useState<Resolution>('5m');
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
     const [exportRange, setExportRange] = useState<string>('30d');
+    const [exportFormat, setExportFormat] = useState<'csv' | 'wav' | 'both'>('csv');
+    const [showExportModal, setShowExportModal] = useState(false);
     const [wavFiles, setWavFiles] = useState<WavFileInfo[]>([]);
     const [wavLoading, setWavLoading] = useState(false);
     const [downloadingWavId, setDownloadingWavId] = useState<string | null>(null);
@@ -97,9 +99,19 @@ export default function SensorDetailPage() {
     const handleExport = async () => {
         setExportStatus('loading');
         try {
-            await apiExportSensorData(sensorId, exportRange);
+            const tasks: Promise<void>[] = [];
+            if (exportFormat === 'csv' || exportFormat === 'both') {
+                tasks.push(apiExportSensorData(sensorId, exportRange));
+            }
+            if (exportFormat === 'wav' || exportFormat === 'both') {
+                // Download all WAV files for this sensor
+                for (const wav of wavFiles) {
+                    tasks.push(apiDownloadWav(wav.id));
+                }
+            }
+            await Promise.all(tasks);
             setExportStatus('done');
-            setTimeout(() => setExportStatus('idle'), 2000);
+            setTimeout(() => { setExportStatus('idle'); setShowExportModal(false); }, 1500);
         } catch {
             setExportStatus('error');
             setTimeout(() => setExportStatus('idle'), 3000);
@@ -154,39 +166,18 @@ export default function SensorDetailPage() {
                     </p>
                 </div>
 
-                {/* Export */}
-                <div className="flex items-center gap-2 shrink-0">
-                    <select
-                        value={exportRange}
-                        onChange={e => setExportRange(e.target.value)}
-                        disabled={exportStatus !== 'idle'}
-                        className="px-3 py-2 text-sm rounded-xl bg-white border border-gray-200 text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    >
-                        <option value="24h">Letzte 24h</option>
-                        <option value="7d">Letzte 7 Tage</option>
-                        <option value="30d">Letzte 30 Tage</option>
-                        <option value="all">Alle Daten</option>
-                    </select>
-                    <button
-                        onClick={handleExport}
-                        disabled={exportStatus !== 'idle'}
-                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
-                    >
-                        {exportStatus === 'idle' && (
-                            <>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                    <polyline points="7 10 12 15 17 10" />
-                                    <line x1="12" y1="15" x2="12" y2="3" />
-                                </svg>
-                                Export
-                            </>
-                        )}
-                        {exportStatus === 'loading' && 'Exportiere…'}
-                        {exportStatus === 'done' && '✓ Fertig'}
-                        {exportStatus === 'error' && '✗ Fehler'}
-                    </button>
-                </div>
+                {/* Export Button */}
+                <button
+                    onClick={() => setShowExportModal(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-[0.97] transition-all border border-emerald-200/50 shadow-sm shrink-0"
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Forschungsdaten-Sicherung
+                </button>
             </div>
 
             {/* Controls Bar */}
@@ -435,6 +426,130 @@ export default function SensorDetailPage() {
                     </div>
                 )}
             </div>
+
+            {/* ── Export Modal (Apple HIG Style) ── */}
+            {showExportModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/25 backdrop-blur-md"
+                        onClick={() => { if (exportStatus === 'idle') setShowExportModal(false); }}
+                    />
+
+                    {/* Modal */}
+                    <div className="relative w-full max-w-md bg-white/85 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/60 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="px-6 pt-6 pb-4">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-gray-800 tracking-tight">Forschungsdaten-Sicherung</h2>
+                                <button
+                                    onClick={() => { if (exportStatus === 'idle') setShowExportModal(false); }}
+                                    className="w-8 h-8 rounded-full bg-black/[0.06] flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-black/[0.1] transition-all"
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <p className="text-sm text-gray-400 mt-1">Wähle Zeitraum und Format für den Export</p>
+                        </div>
+
+                        {/* Time Range */}
+                        <div className="px-6 pb-4">
+                            <label className="block text-[11px] text-gray-400 uppercase tracking-wider font-semibold mb-2">Zeitraum</label>
+                            <div className="flex gap-1.5 p-1 bg-black/[0.04] rounded-2xl">
+                                {[
+                                    { value: '24h', label: '24 Std.' },
+                                    { value: '7d', label: '7 Tage' },
+                                    { value: '30d', label: '30 Tage' },
+                                    { value: 'all', label: 'Alles' },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => setExportRange(opt.value)}
+                                        className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all duration-200 ${
+                                            exportRange === opt.value
+                                                ? 'bg-white text-gray-800 shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Format */}
+                        <div className="px-6 pb-5">
+                            <label className="block text-[11px] text-gray-400 uppercase tracking-wider font-semibold mb-2">Format</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {([
+                                    { value: 'csv' as const, icon: '📊', label: 'CSV', desc: 'Tabellarisch' },
+                                    { value: 'wav' as const, icon: '🎵', label: 'WAV', desc: 'Biosignale' },
+                                    { value: 'both' as const, icon: '📦', label: 'Beides', desc: 'CSV + WAV' },
+                                ]).map(fmt => (
+                                    <button
+                                        key={fmt.value}
+                                        onClick={() => setExportFormat(fmt.value)}
+                                        className={`flex flex-col items-center p-3 rounded-2xl border transition-all duration-200 ${
+                                            exportFormat === fmt.value
+                                                ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-300/50 shadow-sm'
+                                                : 'bg-white/60 border-black/[0.06] hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <span className="text-xl mb-1">{fmt.icon}</span>
+                                        <span className={`text-xs font-semibold ${exportFormat === fmt.value ? 'text-emerald-700' : 'text-gray-700'}`}>{fmt.label}</span>
+                                        <span className="text-[10px] text-gray-400 mt-0.5">{fmt.desc}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            {exportFormat !== 'csv' && wavFiles.length === 0 && (
+                                <p className="mt-2 text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2 border border-amber-200/50">
+                                    Keine WAV-Dateien für diesen Sensor vorhanden
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-black/[0.06]" />
+
+                        {/* Action */}
+                        <div className="p-4 flex gap-3">
+                            <button
+                                onClick={() => { if (exportStatus === 'idle') setShowExportModal(false); }}
+                                disabled={exportStatus === 'loading'}
+                                className="flex-1 py-3 text-sm font-semibold text-gray-600 bg-black/[0.04] rounded-2xl hover:bg-black/[0.07] active:scale-[0.98] transition-all disabled:opacity-50"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={handleExport}
+                                disabled={exportStatus !== 'idle' || (exportFormat !== 'csv' && wavFiles.length === 0)}
+                                className="flex-1 py-3 text-sm font-semibold text-white bg-gradient-to-b from-emerald-500 to-emerald-600 rounded-2xl hover:from-emerald-600 hover:to-emerald-700 active:scale-[0.98] transition-all disabled:opacity-50 shadow-sm flex items-center justify-center gap-2"
+                            >
+                                {exportStatus === 'idle' && (
+                                    <>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="7 10 12 15 17 10" />
+                                            <line x1="12" y1="15" x2="12" y2="3" />
+                                        </svg>
+                                        Exportieren
+                                    </>
+                                )}
+                                {exportStatus === 'loading' && (
+                                    <span className="flex items-center gap-2">
+                                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Exportiere…
+                                    </span>
+                                )}
+                                {exportStatus === 'done' && '✓ Fertig'}
+                                {exportStatus === 'error' && '✗ Fehler – erneut versuchen'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
