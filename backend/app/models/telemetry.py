@@ -1,9 +1,22 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, SmallInteger, text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import uuid
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
+from sqlalchemy.orm import relationship
+
 from app.database import Base
+
 
 class Device(Base):
     """IoT Device registry."""
@@ -52,5 +65,5 @@ class TelemetryMeasurement(Base):
     value = Column(Float, nullable=False)
     quality = Column(SmallInteger, default=0) # 0=ok, 1=artefact, 2=missing
 
-    # No relationships defined for high-throughput table usually, 
+    # No relationships defined for high-throughput table usually,
     # but we could define if needed. For write speed, often kept minimal.

@@ -1,15 +1,14 @@
 """Target Range API endpoints with inline source creation."""
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
-from typing import List, Optional
-
-from app.database import get_db
-from app.models import TargetRange, Species, Metric, Source, User
-from app.schemas import TargetRangeResponse
-from app.auth import get_current_user
-from app.audit import log_change, entity_to_dict
 from pydantic import BaseModel
+from sqlalchemy.orm import Session, joinedload
 
+from app.audit import entity_to_dict, log_change
+from app.auth import get_current_user
+from app.database import get_db
+from app.models import Metric, Source, Species, TargetRange, User
+from app.schemas import TargetRangeResponse
 
 router = APIRouter(prefix="/target-ranges", tags=["target-ranges"])
 
@@ -17,11 +16,11 @@ router = APIRouter(prefix="/target-ranges", tags=["target-ranges"])
 class SourceInput(BaseModel):
     """Inline source input - either URL or own experience."""
     source_type: str  # 'url' or 'own_experience'
-    url: Optional[str] = None
-    title: Optional[str] = None
-    publisher: Optional[str] = None
-    year: Optional[int] = None
-    notes: Optional[str] = None
+    url: str | None = None
+    title: str | None = None
+    publisher: str | None = None
+    year: int | None = None
+    notes: str | None = None
 
 
 class TargetRangeCreateWithSource(BaseModel):
@@ -35,9 +34,9 @@ class TargetRangeCreateWithSource(BaseModel):
 
 class TargetRangeUpdateWithSource(BaseModel):
     """Update target range with optional source."""
-    optimal_low: Optional[float] = None
-    optimal_high: Optional[float] = None
-    source: Optional[SourceInput] = None
+    optimal_low: float | None = None
+    optimal_high: float | None = None
+    source: SourceInput | None = None
 
 
 def get_or_create_source(db: Session, source_input: SourceInput) -> Source:
@@ -45,12 +44,12 @@ def get_or_create_source(db: Session, source_input: SourceInput) -> Source:
     if source_input.source_type == 'url':
         if not source_input.url:
             raise HTTPException(status_code=400, detail="URL required for URL source")
-        
+
         # Try to find existing source with same URL (dedup)
         existing = db.query(Source).filter(Source.url == source_input.url).first()
         if existing:
             return existing
-        
+
         # Create new source
         source = Source(
             title=source_input.title or "External Source",
@@ -62,14 +61,14 @@ def get_or_create_source(db: Session, source_input: SourceInput) -> Source:
         db.add(source)
         db.flush()  # Get ID without committing
         return source
-    
+
     elif source_input.source_type == 'own_experience':
         # Find or create the "Own experience" source
         own_exp = db.query(Source).filter(
             Source.publisher == "User",
             Source.title == "Own Experience"
         ).first()
-        
+
         if not own_exp:
             own_exp = Source(
                 title="Own Experience",
@@ -78,14 +77,14 @@ def get_or_create_source(db: Session, source_input: SourceInput) -> Source:
             )
             db.add(own_exp)
             db.flush()
-        
+
         return own_exp
-    
+
     else:
         raise HTTPException(status_code=400, detail="Invalid source type")
 
 
-@router.get("", response_model=List[TargetRangeResponse])
+@router.get("", response_model=list[TargetRangeResponse])
 def list_target_ranges(db: Session = Depends(get_db)):
     """List all target ranges (public)."""
     return db.query(TargetRange).options(
@@ -105,12 +104,12 @@ def create_target_range(
     species = db.query(Species).filter(Species.id == data.species_id).first()
     if not species:
         raise HTTPException(status_code=404, detail="Species not found")
-    
+
     # Validate metric
     metric = db.query(Metric).filter(Metric.id == data.metric_id).first()
     if not metric:
         raise HTTPException(status_code=404, detail="Metric not found")
-    
+
     # Check unique constraint
     existing = db.query(TargetRange).filter(
         TargetRange.species_id == data.species_id,
@@ -118,14 +117,14 @@ def create_target_range(
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail="Condition already exists for this metric")
-    
+
     # Validate range
     if data.optimal_high < data.optimal_low:
         raise HTTPException(status_code=400, detail="optimal_high must be >= optimal_low")
-    
+
     # Get or create source
     source = get_or_create_source(db, data.source)
-    
+
     target_range = TargetRange(
         species_id=data.species_id,
         metric_id=data.metric_id,
@@ -136,13 +135,13 @@ def create_target_range(
     db.add(target_range)
     db.commit()
     db.refresh(target_range)
-    
+
     # Audit log
     log_change(
         db, current_user, "target_range", target_range.id, data.species_id,
         "CREATE", None, entity_to_dict(target_range)
     )
-    
+
     # Reload with relationships
     return db.query(TargetRange).options(
         joinedload(TargetRange.metric),
@@ -157,17 +156,17 @@ def get_target_range(target_id: int, db: Session = Depends(get_db)):
         joinedload(TargetRange.metric),
         joinedload(TargetRange.source)
     ).filter(TargetRange.id == target_id).first()
-    
+
     if not target:
         raise HTTPException(status_code=404, detail="Target range not found")
-    
+
     return target
 
 
 @router.put("/{target_id}", response_model=TargetRangeResponse)
 def update_target_range(
-    target_id: int, 
-    data: TargetRangeUpdateWithSource, 
+    target_id: int,
+    data: TargetRangeUpdateWithSource,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -175,32 +174,32 @@ def update_target_range(
     target = db.query(TargetRange).filter(TargetRange.id == target_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Target range not found")
-    
+
     before = entity_to_dict(target)
-    
+
     if data.optimal_low is not None:
         target.optimal_low = data.optimal_low
     if data.optimal_high is not None:
         target.optimal_high = data.optimal_high
-    
+
     # Update source if provided
     if data.source:
         source = get_or_create_source(db, data.source)
         target.source_id = source.id
-    
+
     # Validate final range
     if target.optimal_high < target.optimal_low:
         raise HTTPException(status_code=400, detail="optimal_high must be >= optimal_low")
-    
+
     db.commit()
     db.refresh(target)
-    
+
     # Audit log
     log_change(
         db, current_user, "target_range", target_id, target.species_id,
         "UPDATE", before, entity_to_dict(target)
     )
-    
+
     return db.query(TargetRange).options(
         joinedload(TargetRange.metric),
         joinedload(TargetRange.source)
@@ -209,7 +208,7 @@ def update_target_range(
 
 @router.delete("/{target_id}", status_code=204)
 def delete_target_range(
-    target_id: int, 
+    target_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -217,17 +216,17 @@ def delete_target_range(
     target = db.query(TargetRange).filter(TargetRange.id == target_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Target range not found")
-    
+
     before = entity_to_dict(target)
     species_id = target.species_id
-    
+
     db.delete(target)
     db.commit()
-    
+
     # Audit log
     log_change(
         db, current_user, "target_range", target_id, species_id,
         "DELETE", before, None
     )
-    
+
     return None

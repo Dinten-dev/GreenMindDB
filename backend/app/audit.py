@@ -1,5 +1,6 @@
 """Audit logging utilities."""
-from typing import Any, Optional
+from typing import Any
+
 from sqlalchemy.orm import Session
 
 from app.models import AuditLog, User
@@ -7,16 +8,16 @@ from app.models import AuditLog, User
 
 def log_change(
     db: Session,
-    user: Optional[User],
+    user: User | None,
     entity_type: str,
     entity_id: int,
     species_id: int,
     action: str,
-    before: Optional[dict] = None,
-    after: Optional[dict] = None
+    before: dict | None = None,
+    after: dict | None = None
 ) -> AuditLog:
     """Log a change to the audit log.
-    
+
     Args:
         db: Database session
         user: Current user (None for system actions)
