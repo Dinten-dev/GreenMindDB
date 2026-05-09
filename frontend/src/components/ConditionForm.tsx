@@ -41,6 +41,7 @@ export default function ConditionForm({
     const [sourceUrl, setSourceUrl] = useState<string>(condition?.source?.url || '');
     const [sourceTitle, setSourceTitle] = useState<string>(condition?.source?.title || '');
     const [sourcePublisher, setSourcePublisher] = useState<string>(condition?.source?.publisher || '');
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [sourceYear, setSourceYear] = useState<string>(condition?.source?.year?.toString() || '');
     const [sourceNotes, setSourceNotes] = useState<string>(condition?.source?.notes || '');
 

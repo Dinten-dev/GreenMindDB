@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
     SpeciesDetail,
@@ -46,9 +46,8 @@ export default function PlantDetailClient({ id }: PlantDetailClientProps) {
     const [deletingCondition, setDeletingCondition] = useState<TargetRange | null>(null);
     const [showEditPlant, setShowEditPlant] = useState(false);
     const [showDeletePlant, setShowDeletePlant] = useState(false);
-    const [actionError, setActionError] = useState<string | null>(null);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             const speciesRes = await fetch(`${API_URL}/species/${id}`);
@@ -61,16 +60,16 @@ export default function PlantDetailClient({ id }: PlantDetailClientProps) {
 
             const historyData = await fetchSpeciesHistory(parseInt(id));
             setHistory(historyData);
-        } catch (e) {
+        } catch {
             setError('Failed to load plant data');
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         loadData();
-    }, [id]);
+    }, [loadData]);
 
     const handleConditionCreated = (condition: TargetRange) => {
         if (species) {

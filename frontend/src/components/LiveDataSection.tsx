@@ -10,6 +10,11 @@ interface MetricValue {
     timestamp: string | null;
 }
 
+interface ChartDataPoint {
+    timestamp: string;
+    value: number;
+}
+
 interface LiveDataSectionProps {
     speciesId: number | string;
 }
@@ -32,7 +37,7 @@ const LiveDataSection: React.FC<LiveDataSectionProps> = ({ speciesId }) => {
     const [latestValues, setLatestValues] = useState<MetricValue[]>([]);
     const [selectedMetric, setSelectedMetric] = useState<string>("air_temperature_c");
     const [timeRange, setTimeRange] = useState<string>("24h");
-    const [chartData, setChartData] = useState<any[]>([]);
+    const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [initLoading, setInitLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>("");
@@ -66,7 +71,7 @@ const LiveDataSection: React.FC<LiveDataSectionProps> = ({ speciesId }) => {
             if (!res.ok) throw new Error('Failed to load chart data');
             const data = await res.json();
 
-            const points = data.points.map((pt: any) => ({
+            const points = data.points.map((pt: [string, number]) => ({
                 timestamp: pt[0],
                 value: pt[1]
             }));

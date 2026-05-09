@@ -56,6 +56,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_bio_aggregate_timestamp"), table_name="bio_aggregate")
     op.drop_index(op.f("ix_bio_aggregate_session_id"), table_name="bio_aggregate")
     op.drop_table("bio_aggregate")
-    
+
     op.drop_index(op.f("ix_bio_session_sensor_mac"), table_name="bio_session")
     op.drop_table("bio_session")

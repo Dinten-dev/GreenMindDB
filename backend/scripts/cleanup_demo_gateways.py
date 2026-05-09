@@ -1,4 +1,5 @@
 import logging
+
 from app.database import SessionLocal
 from app.models.master import Gateway
 
@@ -11,7 +12,7 @@ def cleanup_demo_gateways():
         gateways = db.query(Gateway).filter(
             Gateway.name.ilike('%demo%') | Gateway.hardware_id.ilike('%test%') | Gateway.hardware_id.ilike('%DEMO%')
         ).all()
-        
+
         if not gateways:
             logger.info("No demo gateways found.")
             return
@@ -19,7 +20,7 @@ def cleanup_demo_gateways():
         for gw in gateways:
             logger.info(f"Deleting Demo Gateway: {gw.name} ({gw.hardware_id})")
             db.delete(gw)
-        
+
         db.commit()
         logger.info(f"Successfully deleted {len(gateways)} demo gateways and their associated sensors.")
     except Exception as e:

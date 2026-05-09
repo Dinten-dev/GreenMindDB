@@ -11,8 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.models import Species, Metric, Source, TargetRange
+
 from app.config import settings
+from app.models import Metric, Source, Species, TargetRange
 
 
 def seed_database():
@@ -20,15 +21,15 @@ def seed_database():
     engine = create_engine(settings.database_url)
     Session = sessionmaker(bind=engine)
     session = Session()
-    
+
     # Check if already seeded
     if session.query(Species).first():
         print("Database already seeded, skipping...")
         session.close()
         return
-    
+
     print("Seeding database...")
-    
+
     # === METRICS (exactly 5 required metrics) ===
     metrics = {
         "air_temperature_c": Metric(
@@ -64,7 +65,7 @@ def seed_database():
     }
     session.add_all(metrics.values())
     session.flush()
-    
+
     # === SOURCES ===
     sources = {
         "usu": Source(
@@ -105,9 +106,9 @@ def seed_database():
     }
     session.add_all(sources.values())
     session.flush()
-    
+
     # === SPECIES with exactly 5 target_range entries each ===
-    
+
     # LETTUCE
     lettuce = Species(
         common_name="Lettuce",
@@ -117,7 +118,7 @@ def seed_database():
     )
     session.add(lettuce)
     session.flush()
-    
+
     lettuce_targets = [
         TargetRange(species_id=lettuce.id, metric_id=metrics["air_temperature_c"].id,
                     optimal_low=15, optimal_high=21, source_id=sources["usu"].id),
@@ -131,7 +132,7 @@ def seed_database():
                     optimal_low=6.0, optimal_high=6.5, source_id=sources["cornell"].id),
     ]
     session.add_all(lettuce_targets)
-    
+
     # TOMATO
     tomato = Species(
         common_name="Tomato",
@@ -141,7 +142,7 @@ def seed_database():
     )
     session.add(tomato)
     session.flush()
-    
+
     tomato_targets = [
         TargetRange(species_id=tomato.id, metric_id=metrics["air_temperature_c"].id,
                     optimal_low=22, optimal_high=26, source_id=sources["osu"].id),
@@ -155,7 +156,7 @@ def seed_database():
                     optimal_low=5.8, optimal_high=6.5, source_id=sources["cornell"].id),
     ]
     session.add_all(tomato_targets)
-    
+
     # CUCUMBER
     cucumber = Species(
         common_name="Cucumber",
@@ -165,7 +166,7 @@ def seed_database():
     )
     session.add(cucumber)
     session.flush()
-    
+
     cucumber_targets = [
         TargetRange(species_id=cucumber.id, metric_id=metrics["air_temperature_c"].id,
                     optimal_low=23, optimal_high=27, source_id=sources["osu"].id),
@@ -179,7 +180,7 @@ def seed_database():
                     optimal_low=6.0, optimal_high=6.5, source_id=sources["cornell"].id),
     ]
     session.add_all(cucumber_targets)
-    
+
     # BASIL
     basil = Species(
         common_name="Basil",
@@ -189,7 +190,7 @@ def seed_database():
     )
     session.add(basil)
     session.flush()
-    
+
     basil_targets = [
         TargetRange(species_id=basil.id, metric_id=metrics["air_temperature_c"].id,
                     optimal_low=21, optimal_high=27, source_id=sources["tamu"].id),
@@ -203,7 +204,7 @@ def seed_database():
                     optimal_low=5.8, optimal_high=6.5, source_id=sources["cornell"].id),
     ]
     session.add_all(basil_targets)
-    
+
     # RADISH
     radish = Species(
         common_name="Radish",
@@ -213,7 +214,7 @@ def seed_database():
     )
     session.add(radish)
     session.flush()
-    
+
     radish_targets = [
         TargetRange(species_id=radish.id, metric_id=metrics["air_temperature_c"].id,
                     optimal_low=15, optimal_high=18, source_id=sources["usu"].id),
@@ -227,14 +228,14 @@ def seed_database():
                     optimal_low=6.0, optimal_high=7.0, source_id=sources["cornell"].id),
     ]
     session.add_all(radish_targets)
-    
+
     session.commit()
     print(f"✓ Seeded {session.query(Species).count()} species")
     print(f"✓ Seeded {session.query(Metric).count()} metrics")
     print(f"✓ Seeded {session.query(Source).count()} sources")
     print(f"✓ Seeded {session.query(TargetRange).count()} target ranges (5 per species)")
     print("Database seeding complete!")
-    
+
     session.close()
 
 

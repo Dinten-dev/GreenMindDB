@@ -1,16 +1,16 @@
 """Source API endpoints."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.database import get_db
 from app.models import Source
-from app.schemas import SourceResponse, SourceCreate
+from app.schemas import SourceCreate, SourceResponse
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 
-@router.get("", response_model=List[SourceResponse])
+@router.get("", response_model=list[SourceResponse])
 def list_sources(db: Session = Depends(get_db)):
     """List all data sources."""
     sources = db.query(Source).order_by(Source.publisher, Source.year.desc()).all()

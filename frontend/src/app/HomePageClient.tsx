@@ -24,7 +24,7 @@ export default function HomePageClient() {
         try {
             const data = await fetchSpecies();
             setSpecies(data);
-        } catch (e) {
+        } catch {
             setError('Failed to load plants');
         } finally {
             setLoading(false);
