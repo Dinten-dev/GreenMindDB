@@ -295,3 +295,30 @@ export async function apiExportSensorData(sensorId: string, range: string = '24h
     document.body.removeChild(a);
     URL.revokeObjectURL(downloadUrl);
 }
+
+// ── WAV Files ────────────────────────────────────
+export interface WavFileInfo {
+    id: string;
+    sensor_mac: string;
+    sensor_id: string;
+    sample_rate: number;
+    duration_seconds: number;
+    file_size_bytes: number;
+    started_at: string;
+    ended_at: string;
+    created_at: string;
+}
+
+export async function apiListWavFiles(sensorId: string): Promise<WavFileInfo[]> {
+    return apiFetch<WavFileInfo[]>('/wav/files', { params: { sensor_id: sensorId } });
+}
+
+export async function apiDownloadWav(wavId: string): Promise<void> {
+    const data = await apiFetch<{ download_url: string; sensor_mac: string }>(`/wav/download/${wavId}`);
+    const a = document.createElement('a');
+    a.href = data.download_url;
+    a.download = `${data.sensor_mac}_${wavId}.wav`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}

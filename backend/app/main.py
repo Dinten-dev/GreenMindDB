@@ -1,9 +1,11 @@
 """GreenMind API – FastAPI application."""
 
+import os
 import time
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -132,6 +134,11 @@ api_v1_router.include_router(public_observe_router)
 api_v1_router.include_router(public_evaluate_router)
 
 app.include_router(api_v1_router)
+
+# ── Static firmware file serving (OTA binary downloads) ──────────────
+_firmware_dir = os.getenv("FIRMWARE_STORAGE_DIR", "/app/firmware_data")
+os.makedirs(_firmware_dir, exist_ok=True)
+app.mount("/firmware", StaticFiles(directory=_firmware_dir), name="firmware")
 
 
 # ── Health & Root ────────────────────────────────────────────────────
