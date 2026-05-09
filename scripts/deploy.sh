@@ -146,7 +146,27 @@ ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "
     COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} up -d --remove-orphans
 "
 
-# ── 6. Wait for healthy ─────────────────────────────────
+# ── 6. Sync Nginx config ────────────────────────────────
+echo "🌐 Syncing Nginx config..."
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    NGINX_SRC="${REMOTE_DIR}/nginx/green-mind.ch.conf"
+    NGINX_DST="/etc/nginx/sites-available/greenmind"
+elif [[ "$ENVIRONMENT" == "staging" ]]; then
+    NGINX_SRC="${REMOTE_DIR}/nginx/test.green-mind.ch.conf"
+    NGINX_DST="/etc/nginx/sites-available/greenmind-staging"
+fi
+
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "
+    if ! diff -q ${NGINX_SRC} ${NGINX_DST} > /dev/null 2>&1; then
+        sudo cp ${NGINX_SRC} ${NGINX_DST}
+        sudo nginx -t && sudo systemctl reload nginx
+        echo '✅ Nginx config updated and reloaded'
+    else
+        echo '✅ Nginx config unchanged — skipping reload'
+    fi
+"
+
+# ── 7. Wait for healthy ─────────────────────────────────
 echo "🏥 Waiting for services to become healthy..."
 MAX_RETRIES=30
 RETRY_INTERVAL=5
@@ -173,7 +193,7 @@ for i in $(seq 1 $MAX_RETRIES); do
     sleep $RETRY_INTERVAL
 done
 
-# ── 7. Show status ───────────────────────────────────────
+# ── 8. Show status ───────────────────────────────────────
 echo ""
 echo "📊 Container status:"
 ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
