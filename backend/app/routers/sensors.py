@@ -401,8 +401,6 @@ EXPORT_RANGE_MAP = {
     "all": timedelta(days=365 * 10),
 }
 
-BATCH_SIZE = 10_000
-
 
 @router.get("/{sensor_id}/export")
 async def export_sensor_data(
@@ -455,7 +453,7 @@ async def export_sensor_data(
     zone_meta += f"# Gateway: {gw.name or gw.hardware_id}\n"
     zone_meta += f"# Sensor: {sensor.name or sensor.mac_address}\n"
 
-    # Build ZIP in memory using streaming writes per kind
+    # Build ZIP in memory
     zip_buffer = io.BytesIO()
     sensor_label = sensor.name or sensor.mac_address
 
@@ -465,31 +463,23 @@ async def export_sensor_data(
             csv_buffer.write(zone_meta)
             csv_buffer.write("timestamp,value,unit\n")
 
-            offset = 0
-            while True:
-                batch = (
-                    db.query(SensorReading)
-                    .filter(
-                        SensorReading.sensor_id == sensor_id,
-                        SensorReading.kind == kind,
-                        SensorReading.timestamp >= cutoff,
-                    )
-                    .order_by(SensorReading.timestamp.asc())
-                    .offset(offset)
-                    .limit(BATCH_SIZE)
-                    .all()
+            readings = (
+                db.query(
+                    SensorReading.timestamp,
+                    SensorReading.value,
+                    SensorReading.unit,
                 )
+                .filter(
+                    SensorReading.sensor_id == sensor_id,
+                    SensorReading.kind == kind,
+                    SensorReading.timestamp >= cutoff,
+                )
+                .order_by(SensorReading.timestamp.asc())
+                .yield_per(5000)
+            )
 
-                for reading in batch:
-                    csv_buffer.write(
-                        f"{reading.timestamp.isoformat()},"
-                        f"{round(reading.value, 4)},"
-                        f"{reading.unit}\n"
-                    )
-
-                if len(batch) < BATCH_SIZE:
-                    break
-                offset += BATCH_SIZE
+            for ts, val, unit in readings:
+                csv_buffer.write(f"{ts.isoformat()},{round(val, 4)},{unit}\n")
 
             zf.writestr(f"{kind}.csv", csv_buffer.getvalue())
             csv_buffer.close()
