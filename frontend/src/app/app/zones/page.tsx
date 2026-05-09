@@ -233,7 +233,7 @@ export default function ZonesPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button
-                                        onClick={(e) => { e.preventDefault(); setDeletingZoneId(z.id); }}
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeletingZoneId(z.id); }}
                                         className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
                                         title="Zone löschen"
                                     >
@@ -244,7 +244,7 @@ export default function ZonesPage() {
                                     <span className="text-gray-400 text-lg">›</span>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mt-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mt-4 pointer-events-none">
                                 <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
                                     <p className="text-gray-400 text-xs">Gateways</p>
                                     <p className="font-semibold text-gray-800">{z.gateway_count}</p>
