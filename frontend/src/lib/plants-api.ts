@@ -1,39 +1,5 @@
 import { Plant, PlantSensorAssignment, ObservationAccess } from '@/types';
-
-const API_BASE = typeof window === 'undefined'
-    ? `${process.env.INTERNAL_API_URL || 'http://localhost:8000'}/api/v1`
-    : '/api/v1';
-
-interface FetchOptions extends RequestInit {
-    params?: Record<string, string>;
-}
-
-async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
-    const { params, ...fetchOpts } = options;
-
-    let url = `${API_BASE}${path}`;
-    if (params) {
-        const searchParams = new URLSearchParams(params);
-        url += `?${searchParams.toString()}`;
-    }
-
-    const res = await fetch(url, {
-        credentials: 'include',
-        headers: {
-            'Content-Type': 'application/json',
-            ...fetchOpts.headers,
-        },
-        ...fetchOpts,
-    });
-
-    if (!res.ok) {
-        const body = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(body.detail || `API error ${res.status}`);
-    }
-
-    if (res.status === 204) return {} as T;
-    return res.json();
-}
+import { apiFetch } from '@/lib/api';
 
 export async function apiListPlants(zone_id?: string): Promise<Plant[]> {
     const params = zone_id ? { zone_id } : undefined;

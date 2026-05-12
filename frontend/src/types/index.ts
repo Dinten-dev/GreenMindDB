@@ -26,9 +26,13 @@ export interface Organization {
 export interface Zone {
   id: string;
   name: string;
-  location: string;
+  location: string | null;
   zone_type: string;
-  organization_id: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  created_at?: string;
+  gateway_count?: number;
+  sensor_count?: number;
 }
 
 export interface Device {
