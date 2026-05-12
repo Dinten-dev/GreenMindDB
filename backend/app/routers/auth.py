@@ -1,7 +1,7 @@
 """Authentication API endpoints: signup, login, logout, me."""
 
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -57,7 +57,7 @@ async def signup(
     # Create email verification token
     token_str = secrets.token_hex(16)
     verification = EmailVerification(
-        user_id=user.id, token=token_str, expires_at=datetime.utcnow() + timedelta(hours=24)
+        user_id=user.id, token=token_str, expires_at=datetime.now(UTC) + timedelta(hours=24)
     )
     db.add(verification)
     db.commit()
@@ -82,12 +82,12 @@ async def verify_email(request: Request, data: VerifyEmailRequest, db: Session =
         .first()
     )
 
-    if not verification or verification.expires_at < datetime.utcnow():
+    if not verification or verification.expires_at < datetime.now(UTC):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
         )
 
-    verification.used_at = datetime.utcnow()
+    verification.used_at = datetime.now(UTC)
     user = db.query(User).filter(User.id == verification.user_id).first()
     if user:
         user.is_verified = True
