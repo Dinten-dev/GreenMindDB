@@ -14,6 +14,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     const [mode, setMode] = useState<'login' | 'signup'>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -26,11 +27,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             if (mode === 'login') {
                 await login(email, password);
             } else {
-                await signup(email, password);
+                await signup(email, password, name);
             }
             onClose();
             setEmail('');
             setPassword('');
+            setName('');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
@@ -38,7 +40,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }
     };
 
-    const isFormValid = email.length > 0 && password.length >= 8;
+    const isFormValid = email.length > 0 && password.length >= 8 && (mode === 'login' || name.trim().length > 0);
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={mode === 'login' ? 'Login' : 'Create Account'}>
@@ -46,6 +48,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 {error && (
                     <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg">
                         {error}
+                    </div>
+                )}
+
+                {mode === 'signup' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Name
+                        </label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Your name"
+                            required
+                        />
                     </div>
                 )}
 

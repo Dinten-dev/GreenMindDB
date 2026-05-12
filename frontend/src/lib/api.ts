@@ -2,11 +2,11 @@ const API_BASE = typeof window === 'undefined'
     ? `${process.env.INTERNAL_API_URL || 'http://localhost:8000'}/api/v1`
     : '/api/v1';
 
-interface FetchOptions extends RequestInit {
+export interface FetchOptions extends RequestInit {
     params?: Record<string, string>;
 }
 
-async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
     const { params, ...fetchOpts } = options;
 
     let url = `${API_BASE}${path}`;
