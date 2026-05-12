@@ -38,6 +38,10 @@ backups/
 *.db-shm
 *.db-wal
 
+# ── Audio / Test data ────────────────────────
+*.wav
+wav/
+
 # ── Node / Frontend ──────────────────────────
 node_modules/
 .next/
