@@ -78,7 +78,7 @@ GreenMind is a multi-repo project. This repository (`GreenMindDB`) contains the 
 |---|---|
 | **[GreenMindDB](https://github.com/Dinten-dev/GreenMindDB)** (this repo) | FastAPI backend, Next.js frontend, Docker Compose, CI/CD |
 | **[GreenMindRPI](https://github.com/Dinten-dev/GreenMindRPIv1)** | Raspberry Pi gateway — data aggregation, WAV recording, OTA update agent |
-| **GreenMindArdu** *(private)* | ESP32 sensor firmware — 380 Hz bioelectric signal capture (Arduino C++) |
+| **[GreenMindArdu](https://github.com/Dinten-dev/GreenMindArdu)** | ESP32 sensor firmware — 380 Hz bioelectric signal capture (Arduino C++) |
 
 ## Architecture
 
