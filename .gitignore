@@ -14,7 +14,11 @@ venv/
 
 # ── Environment / Secrets ────────────────────
 .env
+.env.production
+.env.staging
 !.env.example
+!.env.production.example
+!.env.staging.example
 dev-tools/greenmind_deploy_key*
 scripts/.simulator_state.json
 
@@ -48,6 +52,8 @@ node_modules/
 out/
 frontend/.next/
 frontend/node_modules/
+tsconfig.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
 
 # ── Logs ─────────────────────────────────────
 *.log

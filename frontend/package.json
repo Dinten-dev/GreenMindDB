@@ -2,6 +2,9 @@
     "name": "greenmind-frontend",
     "version": "3.0.0",
     "private": true,
+    "description": "GreenMind — Next.js frontend for plant bioelectrical signal visualization",
+    "author": "Traver Dinten",
+    "license": "MIT",
     "scripts": {
         "dev": "next dev",
         "build": "next build",

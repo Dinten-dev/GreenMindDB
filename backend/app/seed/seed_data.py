@@ -1,10 +1,13 @@
 """
-Seed data script for Plant Wiki database.
+Seed data script for GreenMind database.
 Populates species, metrics, sources, and target ranges.
 Simplified to exactly 5 metrics per plant.
 """
+import logging
 import os
 import sys
+
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,11 +27,11 @@ def seed_database():
 
     # Check if already seeded
     if session.query(Species).first():
-        print("Database already seeded, skipping...")
+        logger.info("Database already seeded, skipping.")
         session.close()
         return
 
-    print("Seeding database...")
+    logger.info("Seeding database...")
 
     # === METRICS (exactly 5 required metrics) ===
     metrics = {
@@ -230,11 +233,11 @@ def seed_database():
     session.add_all(radish_targets)
 
     session.commit()
-    print(f"✓ Seeded {session.query(Species).count()} species")
-    print(f"✓ Seeded {session.query(Metric).count()} metrics")
-    print(f"✓ Seeded {session.query(Source).count()} sources")
-    print(f"✓ Seeded {session.query(TargetRange).count()} target ranges (5 per species)")
-    print("Database seeding complete!")
+    logger.info("✓ Seeded %d species", session.query(Species).count())
+    logger.info("✓ Seeded %d metrics", session.query(Metric).count())
+    logger.info("✓ Seeded %d sources", session.query(Source).count())
+    logger.info("✓ Seeded %d target ranges (5 per species)", session.query(TargetRange).count())
+    logger.info("Database seeding complete.")
 
     session.close()
 
