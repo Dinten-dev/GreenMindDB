@@ -3,6 +3,9 @@ name = "greenmind-backend"
 version = "3.0.0"
 description = "GreenMind — FastAPI backend for plant bioelectrical sensing"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Traver Dinten"}]
+readme = "../README.md"
 
 # ─── ruff ────────────────────────────────────────────────────────────
 [tool.ruff]
@@ -31,6 +34,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/*" = ["S101", "S501", "E501", "S603"]  # allow assert, verify=False, long lines, subprocess in tests
 "**/scripts/*" = ["S311"]  # allow standard random for data seeding
+"**/seed/*" = ["E402"]  # sys.path manipulation must precede imports
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

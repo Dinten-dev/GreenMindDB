@@ -4,29 +4,36 @@
 
 > **⚠️ R&D Status:** GreenMind is in active research and development. The platform is not commercially available. Partnership inquiries for field studies and controlled experiments are welcome at [info@galaxyadvisors.com](mailto:info@galaxyadvisors.com).
 
-[![CI](https://github.com/<owner>/GreenMindDB/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/GreenMindDB/actions/workflows/ci.yml)
+[![CI](https://github.com/Dinten-dev/GreenMindDB/actions/workflows/ci.yml/badge.svg)](https://github.com/Dinten-dev/GreenMindDB/actions/workflows/ci.yml)
 
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Architecture](#architecture)
-3. [Tech Stack](#tech-stack)
-4. [Project Structure](#project-structure)
-5. [Prerequisites](#prerequisites)
-6. [Local Setup](#local-setup)
-7. [Development](#development)
-8. [Testing](#testing)
-9. [Linting & Formatting](#linting--formatting)
-10. [Build & Deployment](#build--deployment)
-11. [Environment Variables](#environment-variables)
-12. [Branching Strategy](#branching-strategy)
-13. [Git Workflow](#git-workflow)
-14. [Pull Request Rules](#pull-request-rules)
-15. [CI/CD](#cicd)
-16. [Troubleshooting](#troubleshooting)
-17. [Security](#security)
+2. [Features](#features)
+3. [Related Repositories](#related-repositories)
+4. [Architecture](#architecture)
+5. [Tech Stack](#tech-stack)
+6. [Project Structure](#project-structure)
+7. [Prerequisites](#prerequisites)
+8. [Local Setup](#local-setup)
+9. [Development](#development)
+10. [Testing](#testing)
+11. [Linting & Formatting](#linting--formatting)
+12. [Build & Deployment](#build--deployment)
+13. [Environment Variables](#environment-variables)
+14. [API Endpoints](#api-endpoints)
+15. [Database Backup & Restore](#database-backup--restore)
+16. [Branching Strategy](#branching-strategy)
+17. [Git Workflow](#git-workflow)
+18. [Pull Request Rules](#pull-request-rules)
+19. [CI/CD](#cicd)
+20. [Troubleshooting](#troubleshooting)
+21. [Security](#security)
+22. [Known Limitations](#known-limitations)
+23. [Author & Credits](#author--credits)
+24. [License](#license)
 
 ---
 
@@ -43,6 +50,35 @@ GreenMind is a full-stack R&D platform for capturing, processing, and analyzing 
 - Secure JWT-based authentication with role-based access
 
 ---
+
+## Features
+
+- **Real-time biosignal streaming** — 380 Hz data capture from ESP32 sensors via WebSocket
+- **Multi-zone management** — Greenhouse, Open Field, Vertical Farm, Orchard with GPS metadata
+- **Interactive dashboards** — live sensor charts with configurable time ranges and resolution
+- **Data export** — CSV/ZIP export per sensor with zone metadata headers
+- **WAV raw data archive** — 10-minute PCM recordings stored in MinIO (S3-compatible)
+- **Gateway fleet management** — OTA updates with staged rollouts (canary → early → stable)
+- **Secure device pairing** — captive portal provisioning with short-lived pairing codes
+- **Plant observation app** — login-free mobile observation via short-lived QR access tokens
+- **Plant evaluation engine** — automated scoring based on species-specific target ranges
+- **Firmware OTA** — Ed25519-signed releases with SHA256 verification and automatic rollback
+- **JWT authentication** — httpOnly cookies, bcrypt password hashing, RBAC with org-scoping
+- **Audit trail** — all admin actions logged with timestamps, IP, and entity references
+- **Prometheus monitoring** — `/metrics` endpoint for operational observability
+- **CI/CD** — GitHub Actions pipeline with automated deployment to staging and production
+
+---
+
+## Related Repositories
+
+GreenMind is a multi-repo project. This repository (`GreenMindDB`) contains the cloud backend, frontend, and infrastructure. The embedded components live in separate repositories:
+
+| Repository | Description |
+|---|---|
+| **[GreenMindDB](https://github.com/Dinten-dev/GreenMindDB)** (this repo) | FastAPI backend, Next.js frontend, Docker Compose, CI/CD |
+| **[GreenMindRPI](https://github.com/Dinten-dev/GreenMindRPIv1)** | Raspberry Pi gateway — data aggregation, WAV recording, OTA update agent |
+| **GreenMindArdu** *(private)* | ESP32 sensor firmware — 380 Hz bioelectric signal capture (Arduino C++) |
 
 ## Architecture
 
@@ -694,6 +730,23 @@ This generates a timestamped `.sql` file in the `./backups` directory.
 
 ---
 
+## Known Limitations
+
+- **R&D status** — GreenMind is in active research and development; the platform is not commercially available
+- **Single-tenant** — the current architecture supports one organization per deployment
+- **No automated database backups** — backup scripts exist but must be triggered manually or via cron
+- **Frontend test coverage** — Jest is configured but test coverage is minimal
+- **WebSocket scaling** — the current WebSocket implementation is single-process and does not scale horizontally without a pub/sub layer
+- **Offline gateway sync** — gateways queue data locally but conflict resolution for extended offline periods is not implemented
+
+---
+
+## Author & Credits
+
+**Traver Dinten** 
+
+---
+
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
