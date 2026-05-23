@@ -60,7 +60,9 @@ frontend/tsconfig.tsbuildinfo
 
 # ── Coverage / Testing ───────────────────────
 .coverage
+coverage.xml
 htmlcov/
+frontend/coverage/
 .pytest_cache/
 
 # ── Ruff cache ───────────────────────────────

@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────────────
 # GreenMind – Developer Convenience Commands
 # ──────────────────────────────────────────────────────────────────────
-.PHONY: help dev stop logs clean build test lint format seed health setup
+.PHONY: help dev stop logs clean build test test-cov lint format seed health setup install-hooks
 
 # Default target
 help: ## Show this help
@@ -43,6 +43,10 @@ seed: ## Seed demo data
 
 test: ## Run backend tests
 	cd backend && python -m pytest tests/ -v --tb=short -x
+
+test-cov: ## Run backend tests with coverage report
+	cd backend && python -m pytest tests/ -v --tb=short -x --cov=app --cov-report=term-missing --cov-report=html:htmlcov
+	@echo "\n📊 Coverage report: backend/htmlcov/index.html"
 
 lint: ## Lint backend (ruff) + frontend (eslint)
 	cd backend && python -m ruff check app/ tests/
