@@ -11,7 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -36,7 +36,7 @@ class Zone(Base):
     zone_type = Column(String(20), nullable=False, default="GREENHOUSE")
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     organization = relationship("Organization", back_populates="zones")
     gateways = relationship("Gateway", back_populates="zone", cascade="all, delete-orphan")
@@ -64,7 +64,7 @@ class Gateway(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     last_seen = Column(DateTime(timezone=True), nullable=True)
     paired_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Remote management columns (added in migration 0013)
     app_version = Column(String(50), nullable=True)
@@ -100,6 +100,6 @@ class Sensor(Base):
     sensor_type = Column(String(50), nullable=False, default="generic")
     status = Column(String(20), nullable=False, default="offline")
     last_seen = Column(DateTime(timezone=True), nullable=True)
-    claimed_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    claimed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     gateway = relationship("Gateway", back_populates="sensors")

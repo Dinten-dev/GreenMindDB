@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, SmallInteger, String, Text, text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, SmallInteger, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -26,7 +26,7 @@ class PlantEvaluation(Base):
         nullable=True,
     )
 
-    evaluated_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Numerical scores (1–5), directly usable for ML
     overall_score = Column(SmallInteger, nullable=False)
@@ -55,6 +55,6 @@ class PlantEvaluation(Base):
     used_ip = Column(String(45), nullable=True)
     user_agent = Column(String(500), nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     plant = relationship("Plant")

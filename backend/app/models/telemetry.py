@@ -10,7 +10,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     UniqueConstraint,
-    text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import relationship
@@ -28,7 +28,7 @@ class Device(Base):
     description = Column(String(255), nullable=True)
     api_key_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     channels = relationship("TelemetryChannel", back_populates="device")
@@ -44,7 +44,7 @@ class TelemetryChannel(Base):
     device_id = Column(UUID(as_uuid=True), ForeignKey("device.id"), nullable=False)
     channel_key = Column(String(100), nullable=False) # No longer unique globally, unique per device/species/metric logical combo
     unit = Column(String(20), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint('species_id', 'metric_id', name='uq_telemetry_channel_species_metric'),

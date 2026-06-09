@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, text
+from sqlalchemy import Column, DateTime, Float, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
@@ -31,4 +31,4 @@ class WavFile(Base):
     file_size_bytes = Column(Integer, nullable=False)
     started_at = Column(DateTime(timezone=True), nullable=False, index=True)
     ended_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

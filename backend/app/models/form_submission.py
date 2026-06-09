@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, String, Text, text
+from sqlalchemy import Column, DateTime, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
@@ -20,4 +20,4 @@ class FormSubmission(Base):
     company = Column(String(200), nullable=True)
     country = Column(String(100), nullable=True)
     message = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

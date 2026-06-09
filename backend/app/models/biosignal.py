@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -23,7 +23,7 @@ class BioSession(Base):
     hardware_model = Column(String(50), nullable=False, default="AD8232")
     sample_rate_hz = Column(Integer, nullable=False, default=380)
 
-    start_time = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    start_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     end_time = Column(DateTime(timezone=True), nullable=True)
 
     total_samples = Column(Integer, nullable=False, default=0)

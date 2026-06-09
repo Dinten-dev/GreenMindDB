@@ -9,7 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Text,
-    text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -33,7 +33,7 @@ class FirmwareRelease(Base):
     min_version = Column(String(50), nullable=True)  # required minimum version before applying
 
     changelog = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     reports = relationship("FirmwareReport", back_populates="release", cascade="all, delete-orphan")
 
@@ -55,7 +55,7 @@ class RolloutPolicy(Base):
     canary_percentage = Column(
         String(10), nullable=True, default="100"
     )  # simplified representation
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     release = relationship("FirmwareRelease")
 
@@ -84,7 +84,7 @@ class FirmwareReport(Base):
         String(50), nullable=False
     )  # success, failed, hash_mismatch, rollback, incompatible
     error_message = Column(Text, nullable=True)
-    reported_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    reported_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     release = relationship("FirmwareRelease", back_populates="reports")
     # You can add relationship for sensor and gateway if needed

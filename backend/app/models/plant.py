@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -26,9 +26,9 @@ class Plant(Base):
     description = Column(Text, nullable=True)
     planted_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(50), nullable=False, default="active")  # active, archived, removed
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), onupdate=text("now()"), nullable=False
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     organization = relationship("Organization")
@@ -48,14 +48,14 @@ class PlantSensorAssignment(Base):
     sensor_id = Column(
         UUID(as_uuid=True), ForeignKey("sensor.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    assigned_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     unassigned_at = Column(DateTime(timezone=True), nullable=True)
     assigned_by_user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     plant = relationship("Plant", back_populates="sensor_assignments")
     sensor = relationship("Sensor")
