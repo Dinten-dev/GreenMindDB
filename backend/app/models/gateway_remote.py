@@ -16,7 +16,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -46,7 +46,7 @@ class GatewayAppRelease(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class GatewayConfigRelease(Base):
@@ -67,7 +67,7 @@ class GatewayConfigRelease(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class GatewayDesiredState(Base):
@@ -104,7 +104,7 @@ class GatewayDesiredState(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    updated_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     gateway = relationship("Gateway", backref="desired_state_rel")
 
@@ -129,7 +129,7 @@ class GatewayCommand(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     executed_at = Column(DateTime(timezone=True), nullable=True)
@@ -164,7 +164,7 @@ class GatewayStateReport(Base):
     update_apply_status = Column(String(20), nullable=True)
     signature_status = Column(String(20), nullable=True)
     reported_at = Column(
-        DateTime(timezone=True), server_default=text("now()"), nullable=False, index=True
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
 
     gateway = relationship("Gateway")
@@ -187,7 +187,7 @@ class GatewayUpdateLog(Base):
     to_version = Column(String(50), nullable=False)
     status = Column(String(50), nullable=False)
     error_message = Column(Text, nullable=True)
-    started_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     gateway = relationship("Gateway")

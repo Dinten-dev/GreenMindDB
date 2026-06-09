@@ -10,7 +10,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     String,
-    text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -29,7 +29,7 @@ class Organization(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(200), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
     zones = relationship("Zone", back_populates="organization", cascade="all, delete-orphan")
@@ -55,7 +55,7 @@ class User(Base):
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True), nullable=True)
 
     organization = relationship("Organization", back_populates="users", lazy="joined")
@@ -69,6 +69,6 @@ class EmailVerification(Base):
     token = Column(String(255), nullable=False, index=True, unique=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user = relationship("User")
