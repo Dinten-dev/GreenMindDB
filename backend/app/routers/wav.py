@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, verify_password
 from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
-from app.models.wav_file import WavFile
 from app.models.user import User
+from app.models.wav_file import WavFile
 from app.services import wav_service
 
 logger = logging.getLogger(__name__)
