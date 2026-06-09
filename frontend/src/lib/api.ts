@@ -322,3 +322,73 @@ export async function apiDownloadWav(wavId: string): Promise<void> {
     a.click();
     document.body.removeChild(a);
 }
+
+// ── Sensor WebSocket (Live Streaming) ────────────
+export interface SensorWebSocketMessage {
+    event: string;
+    sensor_id: string;
+    sensor_mac: string;
+    readings: Array<{
+        value: number;
+        unit: string;
+        kind: string;
+        timestamp: string;
+    }>;
+}
+
+export function createSensorWebSocket(
+    sensorId: string,
+    onMessage: (msg: SensorWebSocketMessage) => void,
+    onStatusChange?: (connected: boolean) => void,
+): () => void {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    let intentionalClose = false;
+
+    const wsBase = typeof window !== 'undefined'
+        ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+        : 'ws://localhost:8000';
+
+    function connect() {
+        if (intentionalClose) return;
+
+        ws = new WebSocket(`${wsBase}/api/v1/ws/sensor/${sensorId}`);
+
+        ws.onopen = () => {
+            reconnectAttempts = 0;
+            onStatusChange?.(true);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data) as SensorWebSocketMessage;
+                onMessage(msg);
+            } catch {
+                // Ignore unparseable messages
+            }
+        };
+
+        ws.onclose = () => {
+            onStatusChange?.(false);
+            if (!intentionalClose) {
+                const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000);
+                reconnectAttempts++;
+                reconnectTimer = setTimeout(connect, delay);
+            }
+        };
+
+        ws.onerror = () => {
+            ws?.close();
+        };
+    }
+
+    connect();
+
+    // Return teardown function
+    return () => {
+        intentionalClose = true;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        ws?.close();
+    };
+}

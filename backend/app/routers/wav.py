@@ -9,10 +9,11 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.auth import verify_password
+from app.auth import get_current_user, verify_password
 from app.database import get_db
-from app.models.master import Gateway, Sensor
+from app.models.master import Gateway, Sensor, Zone
 from app.models.wav_file import WavFile
+from app.models.user import User
 from app.services import wav_service
 
 logger = logging.getLogger(__name__)
@@ -115,10 +116,21 @@ def list_wav_files(
     from_dt: str | None = None,
     to_dt: str | None = None,
     limit: int = 100,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List available WAV files with optional filters."""
-    query = db.query(WavFile)
+    """List available WAV files with optional filters (scoped to organization)."""
+    if not current_user.organization_id:
+        return []
+
+    # Join through ownership chain: WavFile → Sensor → Gateway → Zone
+    query = (
+        db.query(WavFile)
+        .join(Sensor, Sensor.id == WavFile.sensor_id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(Zone.organization_id == current_user.organization_id)
+    )
 
     if sensor_id:
         query = query.filter(WavFile.sensor_id == sensor_id)
@@ -156,10 +168,25 @@ def list_wav_files(
 @router.get("/download/{wav_id}")
 def download_wav(
     wav_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get a presigned download URL for a WAV file."""
-    wav_file = db.query(WavFile).filter(WavFile.id == wav_id).first()
+    """Get a presigned download URL for a WAV file (scoped to organization)."""
+    if not current_user.organization_id:
+        raise HTTPException(status_code=403, detail="No organization")
+
+    # Verify ownership: WavFile → Sensor → Gateway → Zone → Organization
+    wav_file = (
+        db.query(WavFile)
+        .join(Sensor, Sensor.id == WavFile.sensor_id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(
+            WavFile.id == wav_id,
+            Zone.organization_id == current_user.organization_id,
+        )
+        .first()
+    )
     if not wav_file:
         raise HTTPException(status_code=404, detail="WAV file not found")
 

@@ -1,7 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced, apiExportSensorData, apiDeleteSensor, SensorInfo, SensorDataResponse } from '@/lib/api';
+import {
+    apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced,
+    apiExportSensorData, apiDeleteSensor, apiListWavFiles, apiDownloadWav,
+    createSensorWebSocket,
+    SensorInfo, SensorDataResponse, WavFileInfo,
+} from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Brush
 } from 'recharts';
@@ -32,6 +37,17 @@ export default function SensorsPage() {
     const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
+    const [wsConnected, setWsConnected] = useState(false);
+    const [wavFiles, setWavFiles] = useState<WavFileInfo[]>([]);
+    const [wavLoading, setWavLoading] = useState(false);
+    const [downloadingWavId, setDownloadingWavId] = useState<string | null>(null);
+    const wsCleanupRef = useRef<(() => void) | null>(null);
+    const [realtimeActive, setRealtimeActive] = useState(false);
+    const [realtimeRemaining, setRealtimeRemaining] = useState(0);
+    const realtimeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const realtimeExpiryRef = useRef<number>(0);
+
+    const REALTIME_DURATION_S = 300; // 5 minutes
 
     const refreshSensors = useCallback(() => {
         apiListSensors()
@@ -118,14 +134,131 @@ export default function SensorsPage() {
     // Check if any chart is zoomed
     const isZoomed = Object.keys(brushRanges).length > 0;
 
-    // Auto-refresh data every 5s when live mode is active and NOT zoomed
+    // Realtime mode: start/stop handlers
+    const stopRealtime = useCallback(() => {
+        setRealtimeActive(false);
+        setRealtimeRemaining(0);
+        realtimeExpiryRef.current = 0;
+        if (realtimeTimerRef.current) {
+            clearInterval(realtimeTimerRef.current);
+            realtimeTimerRef.current = null;
+        }
+        if (wsCleanupRef.current) {
+            wsCleanupRef.current();
+            wsCleanupRef.current = null;
+            setWsConnected(false);
+        }
+    }, []);
+
+    const startRealtime = useCallback(() => {
+        setRealtimeActive(true);
+        const expiry = Date.now() + REALTIME_DURATION_S * 1000;
+        realtimeExpiryRef.current = expiry;
+        setRealtimeRemaining(REALTIME_DURATION_S);
+
+        // Countdown timer
+        if (realtimeTimerRef.current) clearInterval(realtimeTimerRef.current);
+        realtimeTimerRef.current = setInterval(() => {
+            const left = Math.max(0, Math.ceil((realtimeExpiryRef.current - Date.now()) / 1000));
+            setRealtimeRemaining(left);
+            if (left <= 0) {
+                stopRealtime();
+            }
+        }, 1000);
+    }, [stopRealtime]);
+
+    // Stop realtime when leaving live mode or deselecting sensor
     useEffect(() => {
-        if (!selectedSensor || timeRange !== 'live' || isZoomed) return;
+        if (timeRange !== 'live' || !selectedSensor) {
+            stopRealtime();
+        }
+    }, [timeRange, selectedSensor, stopRealtime]);
+
+    // WebSocket: only active during Realtime mode
+    useEffect(() => {
+        // Clean up any previous WebSocket
+        if (wsCleanupRef.current) {
+            wsCleanupRef.current();
+            wsCleanupRef.current = null;
+            setWsConnected(false);
+        }
+
+        if (!selectedSensor || timeRange !== 'live' || !realtimeActive || isZoomed) return;
+
+        const cleanup = createSensorWebSocket(
+            selectedSensor,
+            (msg) => {
+                if (msg.event !== 'live_reading') return;
+                setSensorData((prev) => {
+                    return prev.map((series) => {
+                        const relevantReadings = msg.readings.filter(r => r.kind === series.kind);
+                        if (relevantReadings.length === 0) return series;
+
+                        const newPoints = relevantReadings.map(r => ({
+                            timestamp: typeof r.timestamp === 'string' ? r.timestamp : new Date(r.timestamp).toISOString(),
+                            value: r.value,
+                        }));
+
+                        const merged = [...series.data, ...newPoints].slice(-300);
+                        return { ...series, data: merged };
+                    });
+                });
+            },
+            (connected) => setWsConnected(connected),
+        );
+
+        wsCleanupRef.current = cleanup;
+        return () => {
+            cleanup();
+            wsCleanupRef.current = null;
+            setWsConnected(false);
+        };
+    }, [selectedSensor, timeRange, realtimeActive, isZoomed]);
+
+    // Default live polling (5s) — always runs in live mode unless Realtime is active
+    useEffect(() => {
+        if (!selectedSensor || timeRange !== 'live' || isZoomed || realtimeActive) return;
         const interval = setInterval(() => {
             loadSensorData(selectedSensor, 'live', true);
         }, 5000);
         return () => clearInterval(interval);
-    }, [selectedSensor, timeRange, loadSensorData, isZoomed]);
+    }, [selectedSensor, timeRange, loadSensorData, isZoomed, realtimeActive]);
+
+    const formatCountdown = (seconds: number): string => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    // Load WAV files when a sensor is selected
+    useEffect(() => {
+        if (!selectedSensor) {
+            setWavFiles([]);
+            return;
+        }
+        setWavLoading(true);
+        apiListWavFiles(selectedSensor)
+            .then(setWavFiles)
+            .catch(() => setWavFiles([]))
+            .finally(() => setWavLoading(false));
+    }, [selectedSensor]);
+
+    const handleWavDownload = async (wavId: string) => {
+        setDownloadingWavId(wavId);
+        try {
+            await apiDownloadWav(wavId);
+        } catch (err) {
+            console.error('WAV download failed:', err);
+        } finally {
+            setDownloadingWavId(null);
+        }
+    };
+
+    const formatFileSize = (bytes: number): string => {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    };
 
     const confirmDeleteSensor = async () => {
         if (!deletingSensorId) return;
@@ -463,9 +596,9 @@ export default function SensorsPage() {
                                     </div>
                                 )}
 
-                                {/* Live indicator */}
+                                {/* Live indicator + Realtime button */}
                                 {timeRange === 'live' && !loadingData && sensorData.length > 0 && (
-                                    <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
+                                    <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
                                         {isZoomed ? (
                                             <>
                                                 <span className="w-2 h-2 rounded-full bg-amber-500" />
@@ -477,12 +610,102 @@ export default function SensorsPage() {
                                                     Zoom zurücksetzen
                                                 </button>
                                             </>
-                                        ) : (
+                                        ) : realtimeActive ? (
                                             <>
                                                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                                                <span className="text-emerald-600 font-medium">
+                                                    Realtime {wsConnected ? 'verbunden' : 'verbindet…'}
+                                                </span>
+                                                <span className="font-mono text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                                    {formatCountdown(realtimeRemaining)}
+                                                </span>
+                                                <button
+                                                    onClick={stopRealtime}
+                                                    className="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium transition-colors border border-red-200/50"
+                                                >
+                                                    Stop
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
                                                 Live – aktualisiert alle 5s
+                                                <button
+                                                    onClick={startRealtime}
+                                                    className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-all duration-200 border border-emerald-200/50 hover:shadow-sm"
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                                                    </svg>
+                                                    Realtime
+                                                </button>
                                             </>
                                         )}
+                                    </div>
+                                )}
+
+                                {/* WAV Files Section */}
+                                {wavFiles.length > 0 && (
+                                    <div className="mt-6 pt-6 border-t border-black/[0.04]">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg">🎵</span>
+                                                <span className="text-sm font-medium text-gray-700">WAV-Dateien (380 Hz Rohdaten)</span>
+                                            </div>
+                                            <span className="text-xs text-gray-400">{wavFiles.length} Dateien</span>
+                                        </div>
+                                        <div className="bg-white/40 rounded-2xl border border-black/[0.04] overflow-hidden">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-black/[0.04]">
+                                                        <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Datum</th>
+                                                        <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Dauer</th>
+                                                        <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Grösse</th>
+                                                        <th className="text-right px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-24"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-black/[0.03]">
+                                                    {wavFiles.map((wf) => (
+                                                        <tr key={wf.id} className="hover:bg-white/50 transition-colors">
+                                                            <td className="px-4 py-2.5 text-gray-700">
+                                                                {new Date(wf.started_at).toLocaleString('de-CH')}
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-gray-500">
+                                                                {wf.duration_seconds.toFixed(0)}s
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-gray-500">
+                                                                {formatFileSize(wf.file_size_bytes)}
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-right">
+                                                                <button
+                                                                    onClick={() => handleWavDownload(wf.id)}
+                                                                    disabled={downloadingWavId === wf.id}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
+                                                                >
+                                                                    {downloadingWavId === wf.id ? (
+                                                                        'Lade…'
+                                                                    ) : (
+                                                                        <>
+                                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                                <polyline points="7 10 12 15 17 10" />
+                                                                                <line x1="12" y1="15" x2="12" y2="3" />
+                                                                            </svg>
+                                                                            WAV
+                                                                        </>
+                                                                    )}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                                {wavLoading && (
+                                    <div className="mt-6 pt-6 border-t border-black/[0.04]">
+                                        <div className="animate-pulse h-24 bg-black/[0.03] rounded-2xl" />
                                     </div>
                                 )}
                             </div>
