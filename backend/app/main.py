@@ -137,7 +137,14 @@ app.include_router(api_v1_router)
 
 # ── Static firmware file serving (OTA binary downloads) ──────────────
 _firmware_dir = os.getenv("FIRMWARE_STORAGE_DIR", "/app/firmware_data")
-os.makedirs(_firmware_dir, exist_ok=True)
+try:
+    os.makedirs(_firmware_dir, exist_ok=True)
+except PermissionError:
+    import tempfile
+
+    _firmware_dir = os.path.join(tempfile.gettempdir(), "greenmind_firmware")
+    os.makedirs(_firmware_dir, exist_ok=True)
+    logger.warning("Cannot create %s, using fallback: %s", "/app/firmware_data", _firmware_dir)
 app.mount("/firmware", StaticFiles(directory=_firmware_dir), name="firmware")
 
 
