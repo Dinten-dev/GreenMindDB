@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import verify_password
 from app.database import get_db
-from app.models.master import Gateway
+from app.models.master import Gateway, Sensor
 from app.routers.ws import manager
 from app.schemas.ingest import IngestRequest, IngestResponse
 from app.services.ingest_service import DuplicateIngestionError, process_ingestion
@@ -52,7 +52,7 @@ async def ingest_data(
             measurement_id=data.measurement_id,
         )
 
-    # Broadcast real-time update
+    # Broadcast real-time update to zone subscribers
     if gateway.zone_id:
         now = datetime.now(UTC)
         readings_out = [
@@ -73,6 +73,38 @@ async def ingest_data(
                 "readings": readings_out,
             },
             str(gateway.zone_id),
+        )
+
+    # Broadcast to per-sensor WebSocket subscribers (live view)
+    now = datetime.now(UTC)
+    sensor_macs_seen: set[str] = set()
+    for r in data.readings:
+        if r.sensor_mac in sensor_macs_seen:
+            continue
+        sensor_macs_seen.add(r.sensor_mac)
+
+        sensor = db.query(Sensor).filter(Sensor.mac_address == r.sensor_mac).first()
+        if not sensor:
+            continue
+
+        sensor_readings = [
+            {
+                "value": rd.value,
+                "unit": rd.unit,
+                "kind": rd.sensor_kind,
+                "timestamp": rd.timestamp or now.isoformat(),
+            }
+            for rd in data.readings
+            if rd.sensor_mac == r.sensor_mac
+        ]
+        await manager.broadcast_to_sensor(
+            {
+                "event": "live_reading",
+                "sensor_id": str(sensor.id),
+                "sensor_mac": r.sensor_mac,
+                "readings": sensor_readings,
+            },
+            str(sensor.id),
         )
 
     return IngestResponse(
