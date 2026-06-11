@@ -81,6 +81,13 @@ def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str:
     return url
 
 
+def download_wav_bytes(s3_key: str) -> bytes:
+    """Download a WAV file from MinIO and return the raw bytes."""
+    client = _get_s3_client()
+    response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
+    return response["Body"].read()
+
+
 def extract_wav_metadata(file_data: BinaryIO) -> dict:
     """Extract metadata from a WAV file (sample rate, duration, size).
 
