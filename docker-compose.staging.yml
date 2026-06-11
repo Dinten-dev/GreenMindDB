@@ -20,11 +20,11 @@ services:
       - no-new-privileges:true
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: always
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     volumes:
       - staging_minio_data:/data
@@ -54,8 +54,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       S3_BUCKET: greenmind-exports
       S3_PROVIDER: minio
       FIRMWARE_STORAGE_DIR: /app/firmware_data
@@ -69,7 +69,7 @@ services:
       API_PORT: 8000
       GUNICORN_WORKERS: 2
     ports:
-      - "${BACKEND_PORT:-8001}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
     volumes:
       - staging_firmware_data:/app/firmware_data
     depends_on:
@@ -97,7 +97,7 @@ services:
       INTERNAL_API_URL: http://backend:8000
       NEXT_PUBLIC_API_URL: /api
     ports:
-      - "${FRONTEND_PORT:-3001}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3001}:3000"
     depends_on:
       backend:
         condition: service_healthy

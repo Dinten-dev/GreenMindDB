@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.rate_limit import limiter
 from app.schemas.observation import (
     ObservationSessionCreate,
     ObservationSessionResponse,
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/public/observe", tags=["public-observe"])
 
 
 @router.post("/session", response_model=ObservationSessionResponse)
+@limiter.limit("10/minute")
 def handle_create_session(
     request: Request,
     data: ObservationSessionCreate,
@@ -35,7 +37,9 @@ def handle_create_session(
 
 
 @router.get("/session/{session_token}/context", response_model=PublicPlantContextResponse)
+@limiter.limit("30/minute")
 def handle_get_context(
+    request: Request,
     session_token: str,
     db: Session = Depends(get_db),
 ):
@@ -43,7 +47,9 @@ def handle_get_context(
 
 
 @router.post("/session/{session_token}/observations", response_model=PlantObservationResponse)
+@limiter.limit("10/minute")
 def handle_create_observation(
+    request: Request,
     session_token: str,
     data: PlantObservationCreate,
     db: Session = Depends(get_db),
@@ -55,7 +61,9 @@ def handle_create_observation(
     "/session/{session_token}/observations/{observation_id}/photos",
     response_model=PlantObservationPhotoResponse,
 )
+@limiter.limit("10/minute")
 def handle_upload_photo(
+    request: Request,
     session_token: str,
     observation_id: str,
     file: UploadFile,
