@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.rate_limit import limiter
 from app.schemas.evaluation import PlantEvaluationCreate, PlantEvaluationResponse
 from app.services.evaluation_service import create_evaluation
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/public/evaluate", tags=["public-evaluate"])
     "/session/{session_token}/evaluations",
     response_model=PlantEvaluationResponse,
 )
+@limiter.limit("10/minute")
 def handle_create_evaluation(
     session_token: str,
     data: PlantEvaluationCreate,

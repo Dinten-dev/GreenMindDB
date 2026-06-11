@@ -64,6 +64,8 @@ app.add_middleware(
 
 
 # ── Monitoring ───────────────────────────────────────────────────────
+# /metrics is safe: backend port is bound to 127.0.0.1 in production,
+# only reachable from the Docker network (Prometheus) and localhost.
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # ── Middleware ───────────────────────────────────────────────────────
