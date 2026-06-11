@@ -1,5 +1,7 @@
 """Business logic for gateways and pairing."""
 
+import logging
+
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
@@ -22,6 +24,8 @@ from app.schemas.gateway import (
 PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
 LIVENESS_THRESHOLD = timedelta(minutes=5)
+
+logger = logging.getLogger(__name__)
 
 # Transient in-memory state for ESP32 Handshake (MVP)
 # MAC -> {"code": "...", "gateway_id": "...", "expires_at": datetime}
@@ -122,24 +126,38 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
     if not pc:
         raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
 
-    existing = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="Gateway hardware_id already registered")
-
     api_key = secrets.token_urlsafe(32)
 
-    gateway = Gateway(
-        zone_id=pc.zone_id,
-        hardware_id=data.hardware_id,
-        name=data.name or data.hardware_id,
-        fw_version=data.fw_version,
-        local_ip=data.local_ip,
-        status="online",
-        api_key_hash=get_password_hash(api_key),
-        paired_at=now,
-        last_seen=now,
-    )
-    db.add(gateway)
+    existing = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
+    if existing:
+        # Re-provisioning: gateway was factory-reset and is registering again.
+        # Update credentials and zone assignment, keep existing sensors.
+        existing.zone_id = pc.zone_id
+        existing.api_key_hash = get_password_hash(api_key)
+        existing.name = data.name or existing.name
+        existing.fw_version = data.fw_version or existing.fw_version
+        existing.local_ip = data.local_ip
+        existing.status = "online"
+        existing.paired_at = now
+        existing.last_seen = now
+        gateway = existing
+        logger.info(
+            "Re-provisioned gateway %s (hw: %s) to zone %s",
+            gateway.id, data.hardware_id, pc.zone_id,
+        )
+    else:
+        gateway = Gateway(
+            zone_id=pc.zone_id,
+            hardware_id=data.hardware_id,
+            name=data.name or data.hardware_id,
+            fw_version=data.fw_version,
+            local_ip=data.local_ip,
+            status="online",
+            api_key_hash=get_password_hash(api_key),
+            paired_at=now,
+            last_seen=now,
+        )
+        db.add(gateway)
     db.flush()
 
     pc.used_at = now

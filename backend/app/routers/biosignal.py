@@ -35,14 +35,23 @@ class BioIngestPayload(BaseModel):
 
 def _resolve_sensor(db: Session, mac_address: str, gateway_serial: str | None) -> Sensor | None:
     """Find or auto-register a sensor for the given MAC, linking it to the gateway."""
-    sensor = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
-    if sensor:
-        return sensor
+    import logging
+    _logger = logging.getLogger(__name__)
 
-    # No sensor with this MAC — try to find the gateway by hardware_id
     gateway = None
     if gateway_serial:
         gateway = db.query(Gateway).filter(Gateway.hardware_id == gateway_serial).first()
+
+    sensor = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
+    if sensor:
+        # Migrate sensor to current gateway if it moved (e.g. after factory reset)
+        if gateway and sensor.gateway_id != gateway.id:
+            _logger.info(
+                "Migrating bio-sensor MAC=%s from gateway=%s to gateway=%s",
+                mac_address, sensor.gateway_id, gateway.id,
+            )
+            sensor.gateway_id = gateway.id
+        return sensor
 
     if not gateway:
         return None

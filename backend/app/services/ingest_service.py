@@ -45,14 +45,13 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> int
         sensor = db.query(Sensor).filter(Sensor.mac_address == reading.sensor_mac).first()
 
         if sensor and sensor.gateway_id != gateway.id:
-            # Sensor belongs to a different gateway – reject this reading
-            logger.warning(
-                "Sensor-gateway affinity violation: MAC=%s belongs to gateway=%s but request from gateway=%s",
-                reading.sensor_mac,
-                sensor.gateway_id,
-                gateway.id,
+            # Sensor moved to a different gateway (e.g. after factory reset).
+            # Migrate it to the current gateway to avoid data loss.
+            logger.info(
+                "Migrating sensor MAC=%s from gateway=%s to gateway=%s",
+                reading.sensor_mac, sensor.gateway_id, gateway.id,
             )
-            continue
+            sensor.gateway_id = gateway.id
 
         if not sensor:
             # Auto-create sensor under this gateway
