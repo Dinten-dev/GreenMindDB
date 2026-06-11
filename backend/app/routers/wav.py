@@ -6,6 +6,7 @@ from datetime import datetime
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -171,7 +172,12 @@ def download_wav(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get a presigned download URL for a WAV file (scoped to organization)."""
+    """Stream a WAV file download proxied through the backend.
+
+    MinIO is only accessible on the Docker network, so we proxy the
+    download instead of returning a presigned URL that the browser
+    cannot reach.
+    """
     if not current_user.organization_id:
         raise HTTPException(status_code=403, detail="No organization")
 
@@ -190,12 +196,14 @@ def download_wav(
     if not wav_file:
         raise HTTPException(status_code=404, detail="WAV file not found")
 
-    url = wav_service.generate_presigned_url(wav_file.s3_key)
+    body = wav_service.download_wav_bytes(wav_file.s3_key)
+    filename = wav_file.s3_key.rsplit("/", 1)[-1]
 
-    return {
-        "download_url": url,
-        "s3_key": wav_file.s3_key,
-        "sensor_mac": wav_file.sensor_mac,
-        "duration_seconds": wav_file.duration_seconds,
-        "started_at": wav_file.started_at.isoformat(),
-    }
+    return StreamingResponse(
+        iter([body]),
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(body)),
+        },
+    )
