@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced,
     apiExportSensorData, apiDeleteSensor, apiListWavFiles, apiDownloadWav,
-    createSensorWebSocket,
+    apiDownloadWavBundle, createSensorWebSocket,
     SensorInfo, SensorDataResponse, WavFileInfo,
 } from '@/lib/api';
 import {
@@ -41,6 +41,7 @@ export default function SensorsPage() {
     const [wavFiles, setWavFiles] = useState<WavFileInfo[]>([]);
     const [wavLoading, setWavLoading] = useState(false);
     const [downloadingWavId, setDownloadingWavId] = useState<string | null>(null);
+    const [bundleLoading, setBundleLoading] = useState(false);
     const wsCleanupRef = useRef<(() => void) | null>(null);
     const [realtimeActive, setRealtimeActive] = useState(false);
     const [realtimeRemaining, setRealtimeRemaining] = useState(0);
@@ -652,7 +653,43 @@ export default function SensorsPage() {
                                                 <span className="text-lg">🎵</span>
                                                 <span className="text-sm font-medium text-gray-700">WAV-Dateien (380 Hz Rohdaten)</span>
                                             </div>
-                                            <span className="text-xs text-gray-400">{wavFiles.length} Dateien</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-400">{wavFiles.length} Dateien</span>
+                                                {wavFiles.length > 1 && selectedSensor && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            setBundleLoading(true);
+                                                            try {
+                                                                const earliest = wavFiles[wavFiles.length - 1].started_at;
+                                                                const latest = wavFiles[0].ended_at;
+                                                                await apiDownloadWavBundle(selectedSensor, earliest, latest);
+                                                            } catch (err) {
+                                                                console.error('Bundle download failed:', err);
+                                                            } finally {
+                                                                setBundleLoading(false);
+                                                            }
+                                                        }}
+                                                        disabled={bundleLoading}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
+                                                    >
+                                                        {bundleLoading ? (
+                                                            <span className="flex items-center gap-1">
+                                                                <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
+                                                                ZIP…
+                                                            </span>
+                                                        ) : (
+                                                            <>
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                    <polyline points="7 10 12 15 17 10" />
+                                                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                                                </svg>
+                                                                Alle als ZIP
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="bg-white/40 rounded-2xl border border-black/[0.04] overflow-hidden">
                                             <table className="w-full text-sm">
