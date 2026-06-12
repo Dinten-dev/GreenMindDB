@@ -32,3 +32,4 @@ class WavFile(Base):
     started_at = Column(DateTime(timezone=True), nullable=False, index=True)
     ended_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    timestamp_source = Column(String(20), nullable=False, server_default="filename")
