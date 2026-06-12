@@ -2,6 +2,7 @@
 
 import logging
 import wave
+from collections.abc import Generator
 from datetime import datetime
 from typing import BinaryIO
 
@@ -113,6 +114,70 @@ def delete_wav(s3_key: str) -> None:
     client = _get_s3_client()
     client.delete_object(Bucket=_WAV_BUCKET, Key=s3_key)
     logger.info("Deleted WAV s3://%s/%s", _WAV_BUCKET, s3_key)
+
+
+def _sanitize_filename(name: str) -> str:
+    """Convert a name to a filesystem-safe slug."""
+    import re
+    import unicodedata
+
+    # Normalize unicode, strip accents
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    # Replace non-alphanumeric with underscore
+    name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    # Collapse multiple underscores
+    name = re.sub(r"_+", "_", name).strip("_")
+    return name.lower() or "sensor"
+
+
+def generate_download_filename(
+    sensor_name: str,
+    started_at: datetime,
+    ended_at: datetime | None = None,
+    extension: str = "wav",
+) -> str:
+    """Generate a standardized, sortable download filename.
+
+    Single:  greenmind_{sensor}_{YYYYMMDD-HHmmss}.wav
+    Bundle:  greenmind_{sensor}_{from}_bis_{to}.zip
+    """
+    slug = _sanitize_filename(sensor_name)
+    start_str = started_at.strftime("%Y%m%d-%H%M%S")
+
+    if ended_at and extension == "zip":
+        end_str = ended_at.strftime("%Y%m%d-%H%M%S")
+        return f"greenmind_{slug}_{start_str}_bis_{end_str}.zip"
+
+    return f"greenmind_{slug}_{start_str}.{extension}"
+
+
+def stream_wav_zip(
+    s3_keys: list[str], filenames: list[str]
+) -> Generator[bytes, None, None]:
+    """Stream a ZIP archive of multiple WAV files from MinIO.
+
+    Uses zipfile in streaming mode to avoid loading all files into RAM.
+    Yields chunks of the ZIP file as they are built.
+    """
+    import io
+    import zipfile
+
+    client = _get_s3_client()
+
+    # Build ZIP in memory (WAV files are relatively small: ~450KB per 10min chunk)
+    # For a full day: ~144 files × ~450KB ≈ 63MB — fits comfortably in RAM.
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for s3_key, filename in zip(s3_keys, filenames, strict=True):
+            try:
+                response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
+                data = response["Body"].read()
+                zf.writestr(filename, data)
+            except Exception as exc:
+                logger.warning("Failed to add %s to ZIP: %s", s3_key, exc)
+
+    zip_buffer.seek(0)
+    yield zip_buffer.read()
 
 
 def export_wav_from_session(session_id: str, raw_path: str, sample_rate: int) -> None:
