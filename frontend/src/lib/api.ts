@@ -307,6 +307,7 @@ export interface WavFileInfo {
     started_at: string;
     ended_at: string;
     created_at: string;
+    timestamp_source: string;
 }
 
 export async function apiListWavFiles(sensorId: string): Promise<WavFileInfo[]> {
@@ -325,6 +326,35 @@ export async function apiDownloadWav(wavId: string): Promise<void> {
     const disposition = res.headers.get('Content-Disposition') || '';
     const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
     const filename = filenameMatch ? filenameMatch[1] : `${wavId}.wav`;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
+export async function apiDownloadWavBundle(
+    sensorId: string, fromDt: string, toDt: string
+): Promise<void> {
+    const params = new URLSearchParams({
+        sensor_id: sensorId,
+        from_dt: fromDt,
+        to_dt: toDt,
+    });
+    const url = `${API_BASE}/wav/download-bundle?${params}`;
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail || `Bundle download failed ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : `greenmind_bundle.zip`;
 
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
