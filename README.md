@@ -5,6 +5,7 @@
 > **⚠️ R&D Status:** GreenMind is in active research and development. The platform is not commercially available. Partnership inquiries for field studies and controlled experiments are welcome at [info@galaxyadvisors.com](mailto:info@galaxyadvisors.com).
 
 [![CI](https://github.com/Dinten-dev/GreenMindDB/actions/workflows/ci.yml/badge.svg)](https://github.com/Dinten-dev/GreenMindDB/actions/workflows/ci.yml)
+![Coverage](https://img.shields.io/badge/coverage-60%25+-brightgreen)
 
 ---
 

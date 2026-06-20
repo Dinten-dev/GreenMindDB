@@ -19,6 +19,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -43,6 +44,36 @@ def _visit_uuid(self, type_, **kw):
 
 
 SQLiteTypeCompiler.visit_UUID = _visit_uuid
+
+# Patch the PostgreSQL UUID type's bind processor so it accepts both
+# uuid.UUID objects and plain string UUIDs when running against SQLite.
+# Without this, SQLAlchemy calls `value.hex` on raw strings and crashes.
+
+_original_bind_processor = PG_UUID.bind_processor
+
+
+def _patched_bind_processor(self, dialect):
+    """Return a processor that converts strings to UUID objects before binding."""
+    import uuid as _uuid_mod
+
+    orig = _original_bind_processor(self, dialect)
+
+    def process(value):
+        if value is None:
+            return value
+        if isinstance(value, str):
+            try:
+                value = _uuid_mod.UUID(value)
+            except ValueError:
+                pass
+        if orig is not None:
+            return orig(value)
+        return value
+
+    return process
+
+
+PG_UUID.bind_processor = _patched_bind_processor
 
 
 @event.listens_for(_sqlite_engine, "connect")
