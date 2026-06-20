@@ -93,7 +93,10 @@ _TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=_sqlite_e
 
 @pytest.fixture(autouse=True)
 def _reset_tables():
-    """Create all tables before each test, drop after."""
+    """Create all tables before each test, drop after.  Also reset rate limiter."""
+    from app.rate_limit import limiter
+
+    limiter.reset()
     Base.metadata.create_all(bind=_sqlite_engine)
     yield
     Base.metadata.drop_all(bind=_sqlite_engine)

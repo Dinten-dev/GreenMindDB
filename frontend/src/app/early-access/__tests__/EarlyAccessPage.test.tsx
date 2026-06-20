@@ -19,11 +19,10 @@ describe('EarlyAccessPage', () => {
     it('renders the early access form with required fields', () => {
         render(<EarlyAccessPage />);
 
-        expect(screen.getByText('Early Access anfragen')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /zugang anfragen/i })).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Ihr Name')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('sie@beispiel.com')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Gewächshaus GmbH')).toBeInTheDocument();
-        expect(screen.getByText('Early Access anfragen')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Unternehmen oder Betrieb')).toBeInTheDocument();
     });
 
     it('submits the form and shows success state', async () => {
@@ -34,12 +33,12 @@ describe('EarlyAccessPage', () => {
 
         await user.type(screen.getByPlaceholderText('Ihr Name'), 'Anna Test');
         await user.type(screen.getByPlaceholderText('sie@beispiel.com'), 'anna@example.com');
-        await user.type(screen.getByPlaceholderText('Gewächshaus GmbH'), 'TestCo');
+        await user.type(screen.getByPlaceholderText('Unternehmen oder Betrieb'), 'TestCo');
         await user.selectOptions(screen.getByRole('combobox'), 'Schweiz');
-        await user.click(screen.getByRole('button', { name: /early access anfragen/i }));
+        await user.click(screen.getByRole('button', { name: /zugang anfragen/i }));
 
         await waitFor(() => {
-            expect(screen.getByText('Anfrage empfangen!')).toBeInTheDocument();
+            expect(screen.getByText('Anfrage eingegangen!')).toBeInTheDocument();
         });
 
         expect(mockedSubmit).toHaveBeenCalledWith({
@@ -60,9 +59,9 @@ describe('EarlyAccessPage', () => {
 
         await user.type(screen.getByPlaceholderText('Ihr Name'), 'Test');
         await user.type(screen.getByPlaceholderText('sie@beispiel.com'), 'test@example.com');
-        await user.type(screen.getByPlaceholderText('Gewächshaus GmbH'), 'Co');
+        await user.type(screen.getByPlaceholderText('Unternehmen oder Betrieb'), 'Co');
         await user.selectOptions(screen.getByRole('combobox'), 'Deutschland');
-        await user.click(screen.getByRole('button', { name: /early access anfragen/i }));
+        await user.click(screen.getByRole('button', { name: /zugang anfragen/i }));
 
         await waitFor(() => {
             expect(screen.getByText('Network failure')).toBeInTheDocument();
