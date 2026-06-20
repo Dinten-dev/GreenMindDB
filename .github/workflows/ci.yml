@@ -53,8 +53,33 @@ jobs:
           name: backend-coverage
           path: backend/coverage.xml
 
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          COVERAGE=$(python -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          rate = float(tree.getroot().attrib['line-rate']) * 100
+          print(f'{rate:.0f}')
+          ")
+          echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
+          echo "Coverage: ${COVERAGE}%"
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && env.COVERAGE != ''
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: coverage.json
+          label: coverage
+          message: ${{ env.COVERAGE }}%
+          valColorRange: ${{ env.COVERAGE }}
+          minColorRange: 40
+          maxColorRange: 80
+
   # ──────────────────────────────────────────────────────────────────
-  # Frontend: lint + build
+  # Frontend: lint + build + test
   # ──────────────────────────────────────────────────────────────────
   frontend:
     name: Frontend (Next.js)
@@ -82,5 +107,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test
-        run: npx jest --ci --passWithNoTests
+      - name: Test with coverage
+        run: npx jest --ci --passWithNoTests --coverage
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/

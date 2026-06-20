@@ -231,3 +231,53 @@ class TestZoneBoundary:
             cookies={"access_token": admin_token},
         )
         assert response.status_code == 404
+
+
+# ── Ingest Idempotency ──────────────────────────────────────────────────
+
+
+class TestIngestIdempotency:
+    """Idempotency tests for duplicate measurement_id detection."""
+
+    def test_ingest_duplicate_measurement_id_returns_duplicate(
+        self, client: TestClient, setup_test_data: dict
+    ):
+        """Boundary: same measurement_id sent twice → idempotent response.
+
+        The ingest service stores a log entry on first success.
+        Repeating the same measurement_id returns status='duplicate'
+        with ingested=0 (idempotent design, not an error).
+        """
+        measurement_id = "00000000-0000-0000-0000-000000000099"
+        payload = {
+            "measurement_id": measurement_id,
+            "gateway_serial": "test-gw-ci",
+            "readings": [
+                {
+                    "sensor_mac": "AA:BB:CC:DD:EE:FF",
+                    "sensor_kind": "leaf_voltage",
+                    "value": 42.0,
+                    "unit": "mV",
+                }
+            ],
+        }
+
+        # First request → success
+        resp1 = client.post(
+            "/api/v1/ingest",
+            json=payload,
+            headers={"X-Api-Key": "ci-api-key"},
+        )
+        assert resp1.status_code == 201
+        assert resp1.json()["status"] == "success"
+        assert resp1.json()["ingested"] == 1
+
+        # Second request with same measurement_id → duplicate (idempotent)
+        resp2 = client.post(
+            "/api/v1/ingest",
+            json=payload,
+            headers={"X-Api-Key": "ci-api-key"},
+        )
+        assert resp2.status_code == 201
+        assert resp2.json()["status"] == "duplicate"
+        assert resp2.json()["ingested"] == 0  # Grenzwert: keine Daten doppelt gespeichert

@@ -3,27 +3,16 @@
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
-
-from app.database import get_db
-from app.main import app
+from sqlalchemy.orm import Session
 
 
-def _override_get_db():
-    """Yield a mock DB session so tests don't need a live database."""
-    db = MagicMock()
-    try:
-        yield db
-    finally:
-        pass
-
-
-app.dependency_overrides[get_db] = _override_get_db
-client = TestClient(app)
-
-
-def test_contact_form_submission(mocker):
+def test_contact_form_submission(client: TestClient, db: Session, mocker):
     """Test successful contact form submission uses mocked email sender."""
     mock_send = mocker.patch("app.routers.contact.send_notification_email")
+
+    # Mock db.add and db.commit to prevent FormSubmission writes
+    db.add = MagicMock()
+    db.commit = MagicMock()
 
     payload = {
         "name": "Test User",
@@ -48,7 +37,7 @@ def test_contact_form_submission(mocker):
     assert "This is a test message." in args[1]
 
 
-def test_contact_form_honeypot(mocker):
+def test_contact_form_honeypot(client: TestClient, mocker):
     """Test that honeypot field prevents actual email sending."""
     mock_send = mocker.patch("app.routers.contact.send_notification_email")
 
@@ -67,9 +56,13 @@ def test_contact_form_honeypot(mocker):
     mock_send.assert_not_called()
 
 
-def test_early_access_form_submission(mocker):
+def test_early_access_form_submission(client: TestClient, db: Session, mocker):
     """Test successful early access form submission uses mocked email sender."""
     mock_send = mocker.patch("app.routers.contact.send_notification_email")
+
+    # Mock db.add and db.commit to prevent FormSubmission writes
+    db.add = MagicMock()
+    db.commit = MagicMock()
 
     payload = {
         "name": "Early User",
