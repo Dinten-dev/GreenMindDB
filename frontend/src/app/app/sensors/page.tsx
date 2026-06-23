@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced,
     apiExportSensorData, apiDeleteSensor, apiListWavFiles, apiDownloadWav,
-    apiDownloadWavBundle, createSensorWebSocket,
-    SensorInfo, SensorDataResponse, WavFileInfo,
+    apiDownloadWavBundle, apiCountWavFiles, createSensorWebSocket,
+    SensorInfo, SensorDataResponse, WavFileInfo, WavCountInfo,
 } from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Brush
@@ -21,6 +21,17 @@ const KIND_CONFIG: Record<string, { label: string; unit: string; color: string; 
     bioelectric: { label: 'Bioelektrisches Signal', unit: 'mV', color: '#10b981', icon: '⚡' },
     bio_signal: { label: 'Bioelektrisches Signal', unit: 'mV', color: '#10b981', icon: '⚡' },
 };
+
+function formatDateStr(d: Date): string {
+    return d.toISOString().split('T')[0];
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
 
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
 
@@ -42,6 +53,9 @@ export default function SensorsPage() {
     const [wavLoading, setWavLoading] = useState(false);
     const [downloadingWavId, setDownloadingWavId] = useState<string | null>(null);
     const [bundleLoading, setBundleLoading] = useState(false);
+    const [wavFromDate, setWavFromDate] = useState(formatDateStr(new Date(Date.now() - 7 * 86400000)));
+    const [wavToDate, setWavToDate] = useState(formatDateStr(new Date()));
+    const [wavCount, setWavCount] = useState<WavCountInfo | null>(null);
     const wsCleanupRef = useRef<(() => void) | null>(null);
     const [realtimeActive, setRealtimeActive] = useState(false);
     const [realtimeRemaining, setRealtimeRemaining] = useState(0);
@@ -231,18 +245,34 @@ export default function SensorsPage() {
         return `${m}:${s.toString().padStart(2, '0')}`;
     };
 
-    // Load WAV files when a sensor is selected
+    // Load WAV files when a sensor is selected or date range changes
+    const loadWavFiles = useCallback(async (sensorId: string) => {
+        setWavLoading(true);
+        const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
+        const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+        try {
+            const [files, count] = await Promise.all([
+                apiListWavFiles(sensorId, { from_dt: fromIso, to_dt: toIso, limit: 10000 }),
+                apiCountWavFiles(sensorId, fromIso, toIso),
+            ]);
+            setWavFiles(files);
+            setWavCount(count);
+        } catch {
+            setWavFiles([]);
+            setWavCount(null);
+        } finally {
+            setWavLoading(false);
+        }
+    }, [wavFromDate, wavToDate]);
+
     useEffect(() => {
         if (!selectedSensor) {
             setWavFiles([]);
+            setWavCount(null);
             return;
         }
-        setWavLoading(true);
-        apiListWavFiles(selectedSensor)
-            .then(setWavFiles)
-            .catch(() => setWavFiles([]))
-            .finally(() => setWavLoading(false));
-    }, [selectedSensor]);
+        loadWavFiles(selectedSensor);
+    }, [selectedSensor, loadWavFiles]);
 
     const handleWavDownload = async (wavId: string) => {
         setDownloadingWavId(wavId);
@@ -646,51 +676,86 @@ export default function SensorsPage() {
                                 )}
 
                                 {/* WAV Files Section */}
-                                {wavFiles.length > 0 && (
-                                    <div className="mt-6 pt-6 border-t border-black/[0.04]">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-lg">🎵</span>
-                                                <span className="text-sm font-medium text-gray-700">WAV-Dateien (380 Hz Rohdaten)</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs text-gray-400">{wavFiles.length} Dateien</span>
-                                                {wavFiles.length > 1 && selectedSensor && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            setBundleLoading(true);
-                                                            try {
-                                                                const earliest = wavFiles[wavFiles.length - 1].started_at;
-                                                                const latest = wavFiles[0].ended_at;
-                                                                await apiDownloadWavBundle(selectedSensor, earliest, latest);
-                                                            } catch (err) {
-                                                                console.error('Bundle download failed:', err);
-                                                            } finally {
-                                                                setBundleLoading(false);
-                                                            }
-                                                        }}
-                                                        disabled={bundleLoading}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
-                                                    >
-                                                        {bundleLoading ? (
-                                                            <span className="flex items-center gap-1">
-                                                                <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                                                                ZIP…
-                                                            </span>
-                                                        ) : (
-                                                            <>
-                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                                    <polyline points="7 10 12 15 17 10" />
-                                                                    <line x1="12" y1="15" x2="12" y2="3" />
-                                                                </svg>
-                                                                Alle als ZIP
-                                                            </>
-                                                        )}
-                                                    </button>
-                                                )}
-                                            </div>
+                                <div className="mt-6 pt-6 border-t border-black/[0.04]">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="text-lg">🎵</span>
+                                        <span className="text-sm font-medium text-gray-700">WAV-Dateien (380 Hz Rohdaten)</span>
+                                    </div>
+
+                                    {/* Date Range Filter */}
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <label className="text-xs text-gray-500 font-medium">Von</label>
+                                            <input
+                                                type="date"
+                                                value={wavFromDate}
+                                                onChange={e => setWavFromDate(e.target.value)}
+                                                className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                            />
+                                            <label className="text-xs text-gray-500 font-medium">Bis</label>
+                                            <input
+                                                type="date"
+                                                value={wavToDate}
+                                                onChange={e => setWavToDate(e.target.value)}
+                                                max={formatDateStr(new Date())}
+                                                className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                            />
                                         </div>
+
+                                        <div className="flex items-center gap-2 ml-auto">
+                                            {wavCount && !wavLoading && (
+                                                <span className="text-xs text-gray-400">
+                                                    {wavCount.count.toLocaleString()} Datei{wavCount.count !== 1 ? 'en' : ''}
+                                                    {wavCount.total_bytes > 0 && (
+                                                        <> · {formatBytes(wavCount.total_bytes)}</>
+                                                    )}
+                                                </span>
+                                            )}
+
+                                            {wavFiles.length > 0 && selectedSensor && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setBundleLoading(true);
+                                                        try {
+                                                            const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
+                                                            const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+                                                            await apiDownloadWavBundle(selectedSensor, fromIso, toIso);
+                                                        } catch (err) {
+                                                            console.error('Bundle download failed:', err);
+                                                        } finally {
+                                                            setBundleLoading(false);
+                                                        }
+                                                    }}
+                                                    disabled={bundleLoading}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
+                                                >
+                                                    {bundleLoading ? (
+                                                        <span className="flex items-center gap-1">
+                                                            <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
+                                                            ZIP…
+                                                        </span>
+                                                    ) : (
+                                                        <>
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                <polyline points="7 10 12 15 17 10" />
+                                                                <line x1="12" y1="15" x2="12" y2="3" />
+                                                            </svg>
+                                                            Alle als ZIP
+                                                        </>
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {wavLoading ? (
+                                        <div className="animate-pulse h-24 bg-black/[0.03] rounded-2xl" />
+                                    ) : wavFiles.length === 0 ? (
+                                        <div className="py-6 text-center text-gray-400 text-sm">
+                                            Keine WAV-Dateien im gewählten Zeitraum
+                                        </div>
+                                    ) : (
                                         <div className="bg-white/40 rounded-2xl border border-black/[0.04] overflow-hidden">
                                             <table className="w-full text-sm">
                                                 <thead>
@@ -738,13 +803,8 @@ export default function SensorsPage() {
                                                 </tbody>
                                             </table>
                                         </div>
-                                    </div>
-                                )}
-                                {wavLoading && (
-                                    <div className="mt-6 pt-6 border-t border-black/[0.04]">
-                                        <div className="animate-pulse h-24 bg-black/[0.03] rounded-2xl" />
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
