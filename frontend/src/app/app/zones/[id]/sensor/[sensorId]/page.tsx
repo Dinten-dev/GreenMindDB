@@ -5,8 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
     apiListSensors, apiGetSensorDataAdvanced, apiExportSensorData,
-    apiListWavFiles, apiDownloadWav, apiDownloadWavBundle,
-    SensorInfo, SensorDataResponse, WavFileInfo,
+    apiListWavFiles, apiDownloadWav, apiDownloadWavBundle, apiCountWavFiles,
+    SensorInfo, SensorDataResponse, WavFileInfo, WavCountInfo,
 } from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -31,6 +31,13 @@ function friendlyDate(iso: string): string {
     return d.toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 type ExportStatus = 'idle' | 'loading' | 'done' | 'error';
 
 export default function SensorDetailPage() {
@@ -53,6 +60,26 @@ export default function SensorDetailPage() {
     const [bundleLoading, setBundleLoading] = useState(false);
     const [wavFromDate, setWavFromDate] = useState(formatDate(new Date(Date.now() - 7 * 86400000)));
     const [wavToDate, setWavToDate] = useState(formatDate(new Date()));
+    const [wavCount, setWavCount] = useState<WavCountInfo | null>(null);
+
+    const loadWavFiles = useCallback(async () => {
+        setWavLoading(true);
+        const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
+        const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+        try {
+            const [files, count] = await Promise.all([
+                apiListWavFiles(sensorId, { from_dt: fromIso, to_dt: toIso, limit: 10000 }),
+                apiCountWavFiles(sensorId, fromIso, toIso),
+            ]);
+            setWavFiles(files);
+            setWavCount(count);
+        } catch {
+            setWavFiles([]);
+            setWavCount(null);
+        } finally {
+            setWavLoading(false);
+        }
+    }, [sensorId, wavFromDate, wavToDate]);
 
     // Load sensor info
     useEffect(() => {
@@ -63,14 +90,12 @@ export default function SensorDetailPage() {
             })
             .catch(console.error)
             .finally(() => setLoading(false));
-
-        // Load WAV files
-        setWavLoading(true);
-        apiListWavFiles(sensorId)
-            .then(setWavFiles)
-            .catch(() => setWavFiles([]))
-            .finally(() => setWavLoading(false));
     }, [zoneId, sensorId]);
+
+    // Load WAV files when date range changes
+    useEffect(() => {
+        if (sensorId) loadWavFiles();
+    }, [sensorId, loadWavFiles]);
 
     // Load sensor data
     const loadData = useCallback(async () => {
@@ -348,18 +373,48 @@ export default function SensorDetailPage() {
                         <span className="text-lg">🎵</span>
                         <h2 className="text-sm font-semibold text-gray-700">WAV-Aufnahmen</h2>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">
-                            {wavFiles.length} Datei{wavFiles.length !== 1 ? 'en' : ''}
-                        </span>
-                        {wavFiles.length > 1 && (
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <label className="text-xs text-gray-500 font-medium">Von</label>
+                        <input
+                            type="date"
+                            value={wavFromDate}
+                            onChange={e => setWavFromDate(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                        />
+                        <label className="text-xs text-gray-500 font-medium">Bis</label>
+                        <input
+                            type="date"
+                            value={wavToDate}
+                            onChange={e => setWavToDate(e.target.value)}
+                            max={formatDate(new Date())}
+                            className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-auto">
+                        {/* Count + Size Info */}
+                        {wavCount && !wavLoading && (
+                            <span className="text-xs text-gray-400">
+                                {wavCount.count.toLocaleString()} Datei{wavCount.count !== 1 ? 'en' : ''}
+                                {wavCount.total_bytes > 0 && (
+                                    <> · {formatBytes(wavCount.total_bytes)}</>
+                                )}
+                            </span>
+                        )}
+
+                        {/* Bundle Download */}
+                        {wavFiles.length > 0 && (
                             <button
                                 onClick={async () => {
                                     setBundleLoading(true);
                                     try {
-                                        const earliest = wavFiles[wavFiles.length - 1].started_at;
-                                        const latest = wavFiles[0].ended_at;
-                                        await apiDownloadWavBundle(sensorId, earliest, latest);
+                                        const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
+                                        const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+                                        await apiDownloadWavBundle(sensorId, fromIso, toIso);
                                     } catch (err) {
                                         console.error('Bundle download failed:', err);
                                     } finally {
@@ -397,15 +452,13 @@ export default function SensorDetailPage() {
                     </div>
                 ) : wavFiles.length === 0 ? (
                     <div className="py-8 text-center text-gray-400 text-sm">
-                        Keine WAV-Dateien für diesen Sensor vorhanden
+                        Keine WAV-Dateien im gewählten Zeitraum
                     </div>
                 ) : (
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
                         {wavFiles.map(wav => {
                             const startDate = new Date(wav.started_at);
-                            const sizeKB = (wav.file_size_bytes / 1024).toFixed(0);
-                            const sizeMB = (wav.file_size_bytes / (1024 * 1024)).toFixed(1);
-                            const sizeLabel = wav.file_size_bytes > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
+                            const sizeLabel = formatBytes(wav.file_size_bytes);
                             const isDownloading = downloadingWavId === wav.id;
 
                             return (

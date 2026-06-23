@@ -7,7 +7,7 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, verify_password
@@ -155,7 +155,7 @@ def list_wav_files(
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid to_dt format") from e
 
-    files = query.order_by(desc(WavFile.started_at)).limit(min(limit, 500)).all()
+    files = query.order_by(desc(WavFile.started_at)).limit(min(limit, 10_000)).all()
 
     return [
         {
@@ -172,6 +172,51 @@ def list_wav_files(
         }
         for f in files
     ]
+
+
+@router.get("/count")
+def count_wav_files(
+    sensor_id: str,
+    from_dt: str | None = None,
+    to_dt: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return count and total size of WAV files matching filters.
+
+    Useful for the frontend to estimate ZIP download size before
+    triggering a potentially large bundle download.
+    """
+    if not current_user.organization_id:
+        return {"count": 0, "total_bytes": 0}
+
+    query = (
+        db.query(
+            func.count(WavFile.id).label("count"),
+            func.coalesce(func.sum(WavFile.file_size_bytes), 0).label("total_bytes"),
+        )
+        .join(Sensor, Sensor.id == WavFile.sensor_id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(
+            WavFile.sensor_id == sensor_id,
+            Zone.organization_id == current_user.organization_id,
+        )
+    )
+
+    if from_dt:
+        try:
+            query = query.filter(WavFile.started_at >= datetime.fromisoformat(from_dt))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid from_dt format") from e
+    if to_dt:
+        try:
+            query = query.filter(WavFile.ended_at <= datetime.fromisoformat(to_dt))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid to_dt format") from e
+
+    row = query.one()
+    return {"count": row.count, "total_bytes": row.total_bytes}
 
 
 def _resolve_sensor_name(sensor_id: uuid.UUID, db: Session) -> str:
@@ -266,7 +311,7 @@ def download_wav_bundle(
             Zone.organization_id == current_user.organization_id,
         )
         .order_by(WavFile.started_at)
-        .limit(500)
+        .limit(10_000)
         .all()
     )
 

@@ -310,8 +310,31 @@ export interface WavFileInfo {
     timestamp_source: string;
 }
 
-export async function apiListWavFiles(sensorId: string): Promise<WavFileInfo[]> {
-    return apiFetch<WavFileInfo[]>('/wav/files', { params: { sensor_id: sensorId } });
+export async function apiListWavFiles(
+    sensorId: string,
+    opts?: { from_dt?: string; to_dt?: string; limit?: number },
+): Promise<WavFileInfo[]> {
+    const params: Record<string, string> = { sensor_id: sensorId };
+    if (opts?.from_dt) params.from_dt = opts.from_dt;
+    if (opts?.to_dt) params.to_dt = opts.to_dt;
+    if (opts?.limit) params.limit = String(opts.limit);
+    return apiFetch<WavFileInfo[]>('/wav/files', { params });
+}
+
+export interface WavCountInfo {
+    count: number;
+    total_bytes: number;
+}
+
+export async function apiCountWavFiles(
+    sensorId: string,
+    fromDt?: string,
+    toDt?: string,
+): Promise<WavCountInfo> {
+    const params: Record<string, string> = { sensor_id: sensorId };
+    if (fromDt) params.from_dt = fromDt;
+    if (toDt) params.to_dt = toDt;
+    return apiFetch<WavCountInfo>('/wav/count', { params });
 }
 
 export async function apiDownloadWav(wavId: string): Promise<void> {
