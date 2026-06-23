@@ -156,28 +156,56 @@ def stream_wav_zip(
 ) -> Generator[bytes, None, None]:
     """Stream a ZIP archive of multiple WAV files from MinIO.
 
-    Uses zipfile in streaming mode to avoid loading all files into RAM.
-    Yields chunks of the ZIP file as they are built.
+    Uses a pipe-based approach: a background thread writes entries into
+    a zipfile, while the main thread yields chunks from the read-end
+    of the pipe.  This keeps RAM usage at ~1 file at a time regardless
+    of total bundle size.
     """
-    import io
+    import queue
+    import threading
     import zipfile
 
     client = _get_s3_client()
+    chunk_queue: queue.Queue[bytes | None] = queue.Queue(maxsize=32)
 
-    # Build ZIP in memory (WAV files are relatively small: ~450KB per 10min chunk)
-    # For a full day: ~144 files × ~450KB ≈ 63MB — fits comfortably in RAM.
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for s3_key, filename in zip(s3_keys, filenames, strict=True):
-            try:
-                response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
-                data = response["Body"].read()
-                zf.writestr(filename, data)
-            except Exception as exc:
-                logger.warning("Failed to add %s to ZIP: %s", s3_key, exc)
+    class QueueWriter:
+        """File-like object that pushes writes into a queue."""
 
-    zip_buffer.seek(0)
-    yield zip_buffer.read()
+        def write(self, data: bytes) -> int:
+            if data:
+                chunk_queue.put(data)
+            return len(data)
+
+        def flush(self) -> None:
+            pass
+
+    def _build_zip() -> None:
+        """Run in background thread: fetch files from S3 and write to ZIP."""
+        try:
+            writer = QueueWriter()
+            with zipfile.ZipFile(writer, "w", zipfile.ZIP_STORED) as zf:
+                for s3_key, filename in zip(s3_keys, filenames, strict=True):
+                    try:
+                        response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
+                        data = response["Body"].read()
+                        zf.writestr(filename, data)
+                    except Exception as exc:
+                        logger.warning("Failed to add %s to ZIP: %s", s3_key, exc)
+        except Exception as exc:
+            logger.error("ZIP build error: %s", exc)
+        finally:
+            chunk_queue.put(None)  # Sentinel: done
+
+    thread = threading.Thread(target=_build_zip, daemon=True)
+    thread.start()
+
+    while True:
+        chunk = chunk_queue.get()
+        if chunk is None:
+            break
+        yield chunk
+
+    thread.join(timeout=5.0)
 
 
 def export_wav_from_session(session_id: str, raw_path: str, sample_rate: int) -> None:
