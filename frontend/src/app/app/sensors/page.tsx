@@ -22,6 +22,21 @@ const KIND_CONFIG: Record<string, { label: string; unit: string; color: string; 
     bio_signal: { label: 'Bioelektrisches Signal', unit: 'mV', color: '#10b981', icon: '⚡' },
 };
 
+const BIO_SIGNAL_KINDS = new Set(['bioelectric', 'bio_signal']);
+const ELECTRODE_RAIL_HIGH = 3295;
+const ELECTRODE_RAIL_LOW = 5;
+const ELECTRODE_MIN_FLAT_POINTS = 10;
+
+type ElectrodeStatus = 'ok' | 'rail_high' | 'rail_low';
+
+function detectElectrodeDisconnect(kind: string, data: { value: number }[]): ElectrodeStatus {
+    if (!BIO_SIGNAL_KINDS.has(kind) || data.length < ELECTRODE_MIN_FLAT_POINTS) return 'ok';
+    const tail = data.slice(-ELECTRODE_MIN_FLAT_POINTS);
+    if (tail.every(p => p.value >= ELECTRODE_RAIL_HIGH)) return 'rail_high';
+    if (tail.every(p => p.value <= ELECTRODE_RAIL_LOW)) return 'rail_low';
+    return 'ok';
+}
+
 function formatDateStr(d: Date): string {
     return d.toISOString().split('T')[0];
 }
@@ -526,12 +541,33 @@ export default function SensorsPage() {
                                             const latestValue = series.data.length > 0
                                                 ? series.data[series.data.length - 1].value
                                                 : null;
+                                            const electrodeStatus = detectElectrodeDisconnect(series.kind, series.data);
 
                                             return (
                                                 <div
                                                     key={series.kind}
-                                                    className="bg-white/40 rounded-2xl p-4 border border-black/[0.04] backdrop-blur-sm"
+                                                    className={`bg-white/40 rounded-2xl p-4 border backdrop-blur-sm ${
+                                                        electrodeStatus !== 'ok'
+                                                            ? 'border-amber-400/40 shadow-amber-100'
+                                                            : 'border-black/[0.04]'
+                                                    }`}
                                                 >
+                                                    {/* Electrode Disconnect Warning */}
+                                                    {electrodeStatus !== 'ok' && (
+                                                        <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-50 border border-amber-200/60 rounded-xl animate-pulse">
+                                                            <span className="text-lg flex-shrink-0">⚠️</span>
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-amber-800">
+                                                                    Elektrode abgefallen?
+                                                                </p>
+                                                                <p className="text-xs text-amber-600 mt-0.5">
+                                                                    Signal konstant bei {electrodeStatus === 'rail_high' ? '~3300 mV (Sättigung)' : '~0 mV (kein Kontakt)'}.
+                                                                    Bitte Elektroden prüfen.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {/* Chart Header */}
                                                     <div className="flex items-center justify-between mb-3">
                                                         <div className="flex items-center gap-2">
