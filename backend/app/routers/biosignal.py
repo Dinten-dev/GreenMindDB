@@ -144,13 +144,32 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
 
     db.commit()
 
-    # 6. Broadcast live data to Frontend
+    # 6. Broadcast live data to Frontend (zone-level)
     frontend_readings = [{"t": now.isoformat(), "v": mv} for mv in mvs]
     room_id = str(gateway_id) if gateway_id else "biosignal"
     await manager.broadcast_to_zone(
         {"event": "bio_stream", "mac": payload.mac_address, "data": frontend_readings},
         room_id,
     )
+
+    # 7. Broadcast to per-sensor WebSocket (Realtime button in sensor detail view)
+    if sensor:
+        await manager.broadcast_to_sensor(
+            {
+                "event": "live_reading",
+                "sensor_id": str(sensor.id),
+                "sensor_mac": payload.mac_address,
+                "readings": [
+                    {
+                        "value": round(mean_mv, 2),
+                        "unit": "mV",
+                        "kind": "bio_signal",
+                        "timestamp": now.isoformat(),
+                    }
+                ],
+            },
+            str(sensor.id),
+        )
 
     return {"status": "ok", "session_id": str(session.id)}
 
