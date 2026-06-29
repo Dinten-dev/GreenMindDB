@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import {
     apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced,
     apiExportSensorData, apiDeleteSensor, apiListWavFiles, apiDownloadWav,
@@ -57,6 +57,7 @@ export default function SensorsPage() {
     const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
     const [loadingData, setLoadingData] = useState(false);
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+    const [electrodeStatuses, setElectrodeStatuses] = useState<Record<string, ElectrodeStatus>>({});
     const hasInitialData = useRef(false);
     const [brushRanges, setBrushRanges] = useState<Record<string, { startIndex: number; endIndex: number }>>({});
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
@@ -112,6 +113,31 @@ export default function SensorsPage() {
             if (!silent) setLoadingData(false);
         }
     }, []);
+
+    // Background fetch to check electrode status for all sensors
+    useEffect(() => {
+        if (sensors.length === 0) return;
+        
+        let isMounted = true;
+        const fetchStatuses = async () => {
+            for (const s of sensors) {
+                if (!isMounted) break;
+                try {
+                    const data = await apiGetSensorDataAdvanced(s.id, { range: '5m', resolution: 'raw' });
+                    const bioSeries = data.find(d => BIO_SIGNAL_KINDS.has(d.kind));
+                    if (bioSeries && isMounted) {
+                        const status = detectElectrodeDisconnect(bioSeries.kind, bioSeries.data);
+                        setElectrodeStatuses(prev => ({ ...prev, [s.id]: status }));
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch status for', s.id);
+                }
+                await new Promise(r => setTimeout(r, 200)); // Rate limit
+            }
+        };
+        fetchStatuses();
+        return () => { isMounted = false; };
+    }, [sensors]);
 
     const handleSensorClick = (sensorId: string) => {
         if (selectedSensor === sensorId) {
@@ -181,6 +207,11 @@ export default function SensorsPage() {
     }, []);
 
     const startRealtime = useCallback(() => {
+        if (timeRange !== 'live') {
+            setTimeRange('live');
+            setBrushRanges({});
+            if (selectedSensor) loadSensorData(selectedSensor, 'live');
+        }
         setRealtimeActive(true);
         const expiry = Date.now() + REALTIME_DURATION_S * 1000;
         realtimeExpiryRef.current = expiry;
@@ -335,6 +366,409 @@ export default function SensorsPage() {
 
     const selectedSensorInfo = sensors.find(s => s.id === selectedSensor);
 
+    const renderSensorDetailPanel = () => {
+        if (!selectedSensor || !selectedSensorInfo) return null;
+        return (
+            <div className="w-full">
+                {selectedSensor && selectedSensorInfo && (
+                    <div className="glass-card overflow-hidden">
+                        {/* Header */}
+                        <div className="px-4 sm:px-6 py-4 border-b border-black/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-800">
+                                    {selectedSensorInfo.name || selectedSensorInfo.mac_address}
+                                </h2>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                    {selectedSensorInfo.mac_address} · {selectedSensorInfo.gateway_name}
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {/* Time Range Segmented Control */}
+                                <div className="flex bg-black/[0.03] rounded-xl p-0.5">
+                                    {(['live', '1h', '24h', '7d', '30d'] as TimeRange[]).map((range) => (
+                                        <button
+                                            key={range}
+                                            onClick={() => handleRangeChange(range)}
+                                            className={`px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+                                                timeRange === range
+                                                    ? range === 'live'
+                                                        ? 'bg-emerald-500 text-white shadow-sm'
+                                                        : 'bg-white text-gray-800 shadow-sm'
+                                                    : 'text-gray-400 hover:text-gray-600'
+                                            }`}
+                                        >
+                                            {range === 'live' ? (
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${timeRange === 'live' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
+                                                    Live
+                                                </span>
+                                            ) : range}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Export Button */}
+                                <button
+                                    onClick={handleExport}
+                                    disabled={exportStatus !== 'idle'}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
+                                    title="Sensordaten als ZIP exportieren"
+                                >
+                                    {exportStatus === 'idle' && (
+                                        <>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                <polyline points="7 10 12 15 17 10" />
+                                                <line x1="12" y1="15" x2="12" y2="3" />
+                                            </svg>
+                                            Export
+                                        </>
+                                    )}
+                                    {exportStatus === 'loading' && 'Lade…'}
+                                    {exportStatus === 'zipping' && 'Zipping…'}
+                                    {exportStatus === 'done' && '✓ Fertig'}
+                                    {exportStatus === 'error' && '✗ Fehler'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Export Progress */}
+                        {(exportStatus === 'loading' || exportStatus === 'zipping') && (
+                            <div className="export-progress">
+                                <div
+                                    className="export-progress-bar"
+                                    style={{ width: exportStatus === 'loading' ? '40%' : '80%' }}
+                                />
+                            </div>
+                        )}
+
+                        {/* Charts */}
+                        <div className="p-4 sm:p-6">
+                            {loadingData ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {[1, 2, 3, 4].map(i => (
+                                        <div key={i} className="animate-pulse h-56 bg-black/[0.03] rounded-2xl" />
+                                    ))}
+                                </div>
+                            ) : sensorData.length === 0 ? (
+                                <div className="py-16 text-center text-gray-400 text-sm">
+                                    Keine Messdaten für diesen Zeitraum vorhanden
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {sensorData.filter(s => s.kind in KIND_CONFIG).map(series => {
+                                        const config = KIND_CONFIG[series.kind];
+                                        const latestValue = series.data.length > 0
+                                            ? series.data[series.data.length - 1].value
+                                            : null;
+                                        const electrodeStatus = detectElectrodeDisconnect(series.kind, series.data);
+
+                                        return (
+                                            <div
+                                                key={series.kind}
+                                                className={`bg-white/40 rounded-2xl p-4 border backdrop-blur-sm ${
+                                                    electrodeStatus !== 'ok'
+                                                        ? 'border-amber-400/40 shadow-amber-100'
+                                                        : 'border-black/[0.04]'
+                                                }`}
+                                            >
+                                                {/* Electrode Disconnect Warning */}
+                                                {electrodeStatus !== 'ok' && (
+                                                    <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-50 border border-amber-200/60 rounded-xl animate-pulse">
+                                                        <span className="text-lg flex-shrink-0">⚠️</span>
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-amber-800">
+                                                                Elektrode abgefallen?
+                                                            </p>
+                                                            <p className="text-xs text-amber-600 mt-0.5">
+                                                                Signal konstant bei {electrodeStatus === 'rail_high' ? '~3300 mV (Sättigung)' : '~0 mV (kein Kontakt)'}.
+                                                                Bitte Elektroden prüfen.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Chart Header */}
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-lg">{config.icon}</span>
+                                                        <span className="text-sm font-medium text-gray-700">{config.label}</span>
+                                                    </div>
+                                                    {latestValue !== null && (
+                                                        <div className="text-right">
+                                                            <span className="text-xl font-bold" style={{ color: config.color }}>
+                                                                {latestValue}
+                                                            </span>
+                                                            <span className="text-xs text-gray-400 ml-1">{config.unit}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Chart */}
+                                                {series.data.length > 0 ? (
+                                                    <ResponsiveContainer width="100%" height={220}>
+                                                        <LineChart data={series.data}>
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                                                            <XAxis
+                                                                dataKey="timestamp"
+                                                                tickFormatter={(t) => {
+                                                                    if (timeRange === '1h' || timeRange === '24h' || timeRange === 'live') {
+                                                                        return formatTime(t);
+                                                                    }
+                                                                    return formatDate(t);
+                                                                }}
+                                                                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                                                axisLine={{ stroke: 'rgba(0,0,0,0.04)' }}
+                                                                tickLine={false}
+                                                                interval="preserveStartEnd"
+                                                                minTickGap={40}
+                                                            />
+                                                            <YAxis
+                                                                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                                                axisLine={false}
+                                                                tickLine={false}
+                                                                width={40}
+                                                                domain={['auto', 'auto']}
+                                                            />
+                                                            <Tooltip
+                                                                contentStyle={{
+                                                                    borderRadius: '12px',
+                                                                    border: '1px solid rgba(0,0,0,0.06)',
+                                                                    boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+                                                                    fontSize: '11px',
+                                                                    padding: '8px 12px',
+                                                                    background: 'rgba(255,255,255,0.9)',
+                                                                    backdropFilter: 'blur(8px)',
+                                                                }}
+                                                                labelFormatter={(t) => new Date(t as string).toLocaleString('de-CH')}
+                                                                formatter={(value: number) => [`${value} ${config.unit}`, config.label]}
+                                                            />
+                                                            <Line
+                                                                type="monotone"
+                                                                dataKey="value"
+                                                                stroke={config.color}
+                                                                strokeWidth={2}
+                                                                dot={false}
+                                                                activeDot={{ r: 3, fill: config.color, stroke: '#fff', strokeWidth: 2 }}
+                                                                isAnimationActive={timeRange !== 'live'}
+                                                            />
+                                                            <Brush
+                                                                dataKey="timestamp"
+                                                                height={24}
+                                                                stroke={config.color}
+                                                                fill="rgba(0,0,0,0.02)"
+                                                                travellerWidth={8}
+                                                                startIndex={brushRanges[series.kind]?.startIndex}
+                                                                endIndex={brushRanges[series.kind]?.endIndex}
+                                                                onChange={(range) => {
+                                                                    if (range && typeof range.startIndex === 'number' && typeof range.endIndex === 'number') {
+                                                                        setBrushRanges(prev => ({
+                                                                            ...prev,
+                                                                            [series.kind]: { startIndex: range.startIndex!, endIndex: range.endIndex! },
+                                                                        }));
+                                                                    }
+                                                                }}
+                                                                tickFormatter={(t) => formatTime(t)}
+                                                            />
+                                                        </LineChart>
+                                                    </ResponsiveContainer>
+                                                ) : (
+                                                    <div className="h-40 flex items-center justify-center text-gray-300 text-xs">
+                                                        Keine Daten
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Live indicator + Realtime button */}
+                            {timeRange === 'live' && !loadingData && sensorData.length > 0 && (
+                                <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
+                                    {isZoomed ? (
+                                        <>
+                                            <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                            Zoom aktiv – Live-Aktualisierung pausiert
+                                            <button
+                                                onClick={() => setBrushRanges({})}
+                                                className="ml-2 px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-500 transition-colors"
+                                            >
+                                                Zoom zurücksetzen
+                                            </button>
+                                        </>
+                                    ) : realtimeActive ? (
+                                        <>
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                                            <span className="text-emerald-600 font-medium">
+                                                Realtime {wsConnected ? 'verbunden' : 'verbindet…'}
+                                            </span>
+                                            <span className="font-mono text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                                {formatCountdown(realtimeRemaining)}
+                                            </span>
+                                            <button
+                                                onClick={stopRealtime}
+                                                className="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium transition-colors border border-red-200/50"
+                                            >
+                                                Stop
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
+                                            Live – aktualisiert alle 5s
+                                            <button
+                                                onClick={startRealtime}
+                                                className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-all duration-200 border border-emerald-200/50 hover:shadow-sm"
+                                            >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                                                </svg>
+                                                Realtime
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* WAV Files Section */}
+                            <div className="mt-6 pt-6 border-t border-black/[0.04]">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-lg">🎵</span>
+                                    <span className="text-sm font-medium text-gray-700">WAV-Dateien (380 Hz Rohdaten)</span>
+                                </div>
+
+                                {/* Date Range Filter */}
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <label className="text-xs text-gray-500 font-medium">Von</label>
+                                        <input
+                                            type="date"
+                                            value={wavFromDate}
+                                            onChange={e => setWavFromDate(e.target.value)}
+                                            className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                        />
+                                        <label className="text-xs text-gray-500 font-medium">Bis</label>
+                                        <input
+                                            type="date"
+                                            value={wavToDate}
+                                            onChange={e => setWavToDate(e.target.value)}
+                                            max={formatDateStr(new Date())}
+                                            className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center gap-2 ml-auto">
+                                        {wavCount && !wavLoading && (
+                                            <span className="text-xs text-gray-400">
+                                                {wavCount.count.toLocaleString()} Datei{wavCount.count !== 1 ? 'en' : ''}
+                                                {wavCount.total_bytes > 0 && (
+                                                    <> · {formatBytes(wavCount.total_bytes)}</>
+                                                )}
+                                            </span>
+                                        )}
+
+                                        {wavFiles.length > 0 && selectedSensor && (
+                                            <button
+                                                onClick={async () => {
+                                                    setBundleLoading(true);
+                                                    try {
+                                                        const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
+                                                        const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+                                                        await apiDownloadWavBundle(selectedSensor, fromIso, toIso);
+                                                    } catch (err) {
+                                                        console.error('Bundle download failed:', err);
+                                                    } finally {
+                                                        setBundleLoading(false);
+                                                    }
+                                                }}
+                                                disabled={bundleLoading}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
+                                            >
+                                                {bundleLoading ? (
+                                                    <span className="flex items-center gap-1">
+                                                        <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
+                                                        ZIP…
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                            <polyline points="7 10 12 15 17 10" />
+                                                            <line x1="12" y1="15" x2="12" y2="3" />
+                                                        </svg>
+                                                        Alle als ZIP
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {wavLoading ? (
+                                    <div className="animate-pulse h-24 bg-black/[0.03] rounded-2xl" />
+                                ) : wavFiles.length === 0 ? (
+                                    <div className="py-6 text-center text-gray-400 text-sm">
+                                        Keine WAV-Dateien im gewählten Zeitraum
+                                    </div>
+                                ) : (
+                                    <div className="bg-white/40 rounded-2xl border border-black/[0.04] overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-black/[0.04]">
+                                                    <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Datum</th>
+                                                    <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Dauer</th>
+                                                    <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Grösse</th>
+                                                    <th className="text-right px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-24"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-black/[0.03]">
+                                                {wavFiles.map((wf) => (
+                                                    <tr key={wf.id} className="hover:bg-white/50 transition-colors">
+                                                        <td className="px-4 py-2.5 text-gray-700">
+                                                            {new Date(wf.started_at).toLocaleString('de-CH')}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-gray-500">
+                                                            {wf.duration_seconds.toFixed(0)}s
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-gray-500">
+                                                            {formatFileSize(wf.file_size_bytes)}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right">
+                                                            <button
+                                                                onClick={() => handleWavDownload(wf.id)}
+                                                                disabled={downloadingWavId === wf.id}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
+                                                            >
+                                                                {downloadingWavId === wf.id ? (
+                                                                    'Lade…'
+                                                                ) : (
+                                                                    <>
+                                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                            <polyline points="7 10 12 15 17 10" />
+                                                                            <line x1="12" y1="15" x2="12" y2="3" />
+                                                                        </svg>
+                                                                        WAV
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6 relative">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -378,8 +812,8 @@ export default function SensorsPage() {
                             </thead>
                             <tbody className="divide-y divide-black/[0.03]">
                                 {sensors.map(s => (
+                                    <Fragment key={s.id}>
                                     <tr
-                                        key={s.id}
                                         onClick={() => handleSensorClick(s.id)}
                                         className={`cursor-pointer transition-all duration-200 ${
                                             selectedSensor === s.id
@@ -391,6 +825,11 @@ export default function SensorsPage() {
                                             <div className="flex items-center gap-2">
                                                 <span className={`transition-transform duration-200 text-xs text-gray-300 ${selectedSensor === s.id ? 'rotate-90' : ''}`}>▶</span>
                                                 {s.name || s.mac_address}
+                                                {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-200/50" title={`Elektrode abgefallen (Signal ${electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})`}>
+                                                        ⚠️ Warnung
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5 font-mono text-gray-400 text-xs">{s.mac_address}</td>
@@ -420,6 +859,16 @@ export default function SensorsPage() {
                                             </button>
                                         </td>
                                     </tr>
+                                    {selectedSensor === s.id && (
+                                        <tr>
+                                            <td colSpan={6} className="p-0 border-b border-black/[0.04] bg-emerald-50/10">
+                                                <div className="p-0 sm:p-2 animate-in slide-in-from-top-2 duration-200">
+                                                    {renderSensorDetailPanel()}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </Fragment>
                                 ))}
                             </tbody>
                         </table>
@@ -428,422 +877,35 @@ export default function SensorsPage() {
                     {/* Sensor List — Mobile Cards */}
                     <div className="space-y-2 sm:hidden">
                         {sensors.map(s => (
+                            <Fragment key={s.id}>
                             <div
-                                key={s.id}
                                 onClick={() => handleSensorClick(s.id)}
                                 className={`glass-card p-4 cursor-pointer ${
                                     selectedSensor === s.id ? 'border-emerald-500/20' : ''
                                 }`}
                             >
-                                <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2 mb-1">
                                     <span className="text-sm font-medium text-gray-800">{s.name || s.mac_address}</span>
                                     <span className={`w-2 h-2 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
                                 </div>
-                                <div className="flex items-center gap-3 text-xs text-gray-400">
-                                    <span className="font-mono">{s.mac_address}</span>
-                                    <span>·</span>
-                                    <span>{s.gateway_name || '–'}</span>
+                                <div className="text-xs text-gray-400 font-mono">
+                                    {s.mac_address}
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Sensor Detail Panel */}
-                    {selectedSensor && selectedSensorInfo && (
-                        <div className="glass-card overflow-hidden">
-                            {/* Header */}
-                            <div className="px-4 sm:px-6 py-4 border-b border-black/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-gray-800">
-                                        {selectedSensorInfo.name || selectedSensorInfo.mac_address}
-                                    </h2>
-                                    <p className="text-xs text-gray-400 mt-0.5">
-                                        {selectedSensorInfo.mac_address} · {selectedSensorInfo.gateway_name}
-                                    </p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    {/* Time Range Segmented Control */}
-                                    <div className="flex bg-black/[0.03] rounded-xl p-0.5">
-                                        {(['live', '1h', '24h', '7d', '30d'] as TimeRange[]).map((range) => (
-                                            <button
-                                                key={range}
-                                                onClick={() => handleRangeChange(range)}
-                                                className={`px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                                                    timeRange === range
-                                                        ? range === 'live'
-                                                            ? 'bg-emerald-500 text-white shadow-sm'
-                                                            : 'bg-white text-gray-800 shadow-sm'
-                                                        : 'text-gray-400 hover:text-gray-600'
-                                                }`}
-                                            >
-                                                {range === 'live' ? (
-                                                    <span className="flex items-center gap-1.5">
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${timeRange === 'live' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
-                                                        Live
-                                                    </span>
-                                                ) : range}
-                                            </button>
-                                        ))}
+                                {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
+                                    <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200/50">
+                                        <span>⚠️</span>
+                                        Elektrode abgefallen (Signal {electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})
                                     </div>
-
-                                    {/* Export Button */}
-                                    <button
-                                        onClick={handleExport}
-                                        disabled={exportStatus !== 'idle'}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
-                                        title="Sensordaten als ZIP exportieren"
-                                    >
-                                        {exportStatus === 'idle' && (
-                                            <>
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                    <polyline points="7 10 12 15 17 10" />
-                                                    <line x1="12" y1="15" x2="12" y2="3" />
-                                                </svg>
-                                                Export
-                                            </>
-                                        )}
-                                        {exportStatus === 'loading' && 'Lade…'}
-                                        {exportStatus === 'zipping' && 'Zipping…'}
-                                        {exportStatus === 'done' && '✓ Fertig'}
-                                        {exportStatus === 'error' && '✗ Fehler'}
-                                    </button>
-                                </div>
+                                )}
                             </div>
-
-                            {/* Export Progress */}
-                            {(exportStatus === 'loading' || exportStatus === 'zipping') && (
-                                <div className="export-progress">
-                                    <div
-                                        className="export-progress-bar"
-                                        style={{ width: exportStatus === 'loading' ? '40%' : '80%' }}
-                                    />
+                            {selectedSensor === s.id && (
+                                <div className="mt-1 mb-2 animate-in slide-in-from-top-2 duration-200">
+                                    {renderSensorDetailPanel()}
                                 </div>
                             )}
-
-                            {/* Charts */}
-                            <div className="p-4 sm:p-6">
-                                {loadingData ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {[1, 2, 3, 4].map(i => (
-                                            <div key={i} className="animate-pulse h-56 bg-black/[0.03] rounded-2xl" />
-                                        ))}
-                                    </div>
-                                ) : sensorData.length === 0 ? (
-                                    <div className="py-16 text-center text-gray-400 text-sm">
-                                        Keine Messdaten für diesen Zeitraum vorhanden
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {sensorData.filter(s => s.kind in KIND_CONFIG).map(series => {
-                                            const config = KIND_CONFIG[series.kind];
-                                            const latestValue = series.data.length > 0
-                                                ? series.data[series.data.length - 1].value
-                                                : null;
-                                            const electrodeStatus = detectElectrodeDisconnect(series.kind, series.data);
-
-                                            return (
-                                                <div
-                                                    key={series.kind}
-                                                    className={`bg-white/40 rounded-2xl p-4 border backdrop-blur-sm ${
-                                                        electrodeStatus !== 'ok'
-                                                            ? 'border-amber-400/40 shadow-amber-100'
-                                                            : 'border-black/[0.04]'
-                                                    }`}
-                                                >
-                                                    {/* Electrode Disconnect Warning */}
-                                                    {electrodeStatus !== 'ok' && (
-                                                        <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-50 border border-amber-200/60 rounded-xl animate-pulse">
-                                                            <span className="text-lg flex-shrink-0">⚠️</span>
-                                                            <div>
-                                                                <p className="text-sm font-semibold text-amber-800">
-                                                                    Elektrode abgefallen?
-                                                                </p>
-                                                                <p className="text-xs text-amber-600 mt-0.5">
-                                                                    Signal konstant bei {electrodeStatus === 'rail_high' ? '~3300 mV (Sättigung)' : '~0 mV (kein Kontakt)'}.
-                                                                    Bitte Elektroden prüfen.
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Chart Header */}
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-lg">{config.icon}</span>
-                                                            <span className="text-sm font-medium text-gray-700">{config.label}</span>
-                                                        </div>
-                                                        {latestValue !== null && (
-                                                            <div className="text-right">
-                                                                <span className="text-xl font-bold" style={{ color: config.color }}>
-                                                                    {latestValue}
-                                                                </span>
-                                                                <span className="text-xs text-gray-400 ml-1">{config.unit}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Chart */}
-                                                    {series.data.length > 0 ? (
-                                                        <ResponsiveContainer width="100%" height={220}>
-                                                            <LineChart data={series.data}>
-                                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-                                                                <XAxis
-                                                                    dataKey="timestamp"
-                                                                    tickFormatter={(t) => {
-                                                                        if (timeRange === '1h' || timeRange === '24h' || timeRange === 'live') {
-                                                                            return formatTime(t);
-                                                                        }
-                                                                        return formatDate(t);
-                                                                    }}
-                                                                    tick={{ fontSize: 10, fill: '#94a3b8' }}
-                                                                    axisLine={{ stroke: 'rgba(0,0,0,0.04)' }}
-                                                                    tickLine={false}
-                                                                    interval="preserveStartEnd"
-                                                                    minTickGap={40}
-                                                                />
-                                                                <YAxis
-                                                                    tick={{ fontSize: 10, fill: '#94a3b8' }}
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    width={40}
-                                                                    domain={['auto', 'auto']}
-                                                                />
-                                                                <Tooltip
-                                                                    contentStyle={{
-                                                                        borderRadius: '12px',
-                                                                        border: '1px solid rgba(0,0,0,0.06)',
-                                                                        boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-                                                                        fontSize: '11px',
-                                                                        padding: '8px 12px',
-                                                                        background: 'rgba(255,255,255,0.9)',
-                                                                        backdropFilter: 'blur(8px)',
-                                                                    }}
-                                                                    labelFormatter={(t) => new Date(t as string).toLocaleString('de-CH')}
-                                                                    formatter={(value: number) => [`${value} ${config.unit}`, config.label]}
-                                                                />
-                                                                <Line
-                                                                    type="monotone"
-                                                                    dataKey="value"
-                                                                    stroke={config.color}
-                                                                    strokeWidth={2}
-                                                                    dot={false}
-                                                                    activeDot={{ r: 3, fill: config.color, stroke: '#fff', strokeWidth: 2 }}
-                                                                    isAnimationActive={timeRange !== 'live'}
-                                                                />
-                                                                <Brush
-                                                                    dataKey="timestamp"
-                                                                    height={24}
-                                                                    stroke={config.color}
-                                                                    fill="rgba(0,0,0,0.02)"
-                                                                    travellerWidth={8}
-                                                                    startIndex={brushRanges[series.kind]?.startIndex}
-                                                                    endIndex={brushRanges[series.kind]?.endIndex}
-                                                                    onChange={(range) => {
-                                                                        if (range && typeof range.startIndex === 'number' && typeof range.endIndex === 'number') {
-                                                                            setBrushRanges(prev => ({
-                                                                                ...prev,
-                                                                                [series.kind]: { startIndex: range.startIndex!, endIndex: range.endIndex! },
-                                                                            }));
-                                                                        }
-                                                                    }}
-                                                                    tickFormatter={(t) => formatTime(t)}
-                                                                />
-                                                            </LineChart>
-                                                        </ResponsiveContainer>
-                                                    ) : (
-                                                        <div className="h-40 flex items-center justify-center text-gray-300 text-xs">
-                                                            Keine Daten
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* Live indicator + Realtime button */}
-                                {timeRange === 'live' && !loadingData && sensorData.length > 0 && (
-                                    <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
-                                        {isZoomed ? (
-                                            <>
-                                                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                                Zoom aktiv – Live-Aktualisierung pausiert
-                                                <button
-                                                    onClick={() => setBrushRanges({})}
-                                                    className="ml-2 px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-500 transition-colors"
-                                                >
-                                                    Zoom zurücksetzen
-                                                </button>
-                                            </>
-                                        ) : realtimeActive ? (
-                                            <>
-                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                                                <span className="text-emerald-600 font-medium">
-                                                    Realtime {wsConnected ? 'verbunden' : 'verbindet…'}
-                                                </span>
-                                                <span className="font-mono text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                                    {formatCountdown(realtimeRemaining)}
-                                                </span>
-                                                <button
-                                                    onClick={stopRealtime}
-                                                    className="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium transition-colors border border-red-200/50"
-                                                >
-                                                    Stop
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
-                                                Live – aktualisiert alle 5s
-                                                <button
-                                                    onClick={startRealtime}
-                                                    className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-all duration-200 border border-emerald-200/50 hover:shadow-sm"
-                                                >
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                                                    </svg>
-                                                    Realtime
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* WAV Files Section */}
-                                <div className="mt-6 pt-6 border-t border-black/[0.04]">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="text-lg">🎵</span>
-                                        <span className="text-sm font-medium text-gray-700">WAV-Dateien (380 Hz Rohdaten)</span>
-                                    </div>
-
-                                    {/* Date Range Filter */}
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <label className="text-xs text-gray-500 font-medium">Von</label>
-                                            <input
-                                                type="date"
-                                                value={wavFromDate}
-                                                onChange={e => setWavFromDate(e.target.value)}
-                                                className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                                            />
-                                            <label className="text-xs text-gray-500 font-medium">Bis</label>
-                                            <input
-                                                type="date"
-                                                value={wavToDate}
-                                                onChange={e => setWavToDate(e.target.value)}
-                                                max={formatDateStr(new Date())}
-                                                className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                                            />
-                                        </div>
-
-                                        <div className="flex items-center gap-2 ml-auto">
-                                            {wavCount && !wavLoading && (
-                                                <span className="text-xs text-gray-400">
-                                                    {wavCount.count.toLocaleString()} Datei{wavCount.count !== 1 ? 'en' : ''}
-                                                    {wavCount.total_bytes > 0 && (
-                                                        <> · {formatBytes(wavCount.total_bytes)}</>
-                                                    )}
-                                                </span>
-                                            )}
-
-                                            {wavFiles.length > 0 && selectedSensor && (
-                                                <button
-                                                    onClick={async () => {
-                                                        setBundleLoading(true);
-                                                        try {
-                                                            const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
-                                                            const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
-                                                            await apiDownloadWavBundle(selectedSensor, fromIso, toIso);
-                                                        } catch (err) {
-                                                            console.error('Bundle download failed:', err);
-                                                        } finally {
-                                                            setBundleLoading(false);
-                                                        }
-                                                    }}
-                                                    disabled={bundleLoading}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
-                                                >
-                                                    {bundleLoading ? (
-                                                        <span className="flex items-center gap-1">
-                                                            <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                                                            ZIP…
-                                                        </span>
-                                                    ) : (
-                                                        <>
-                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                                <polyline points="7 10 12 15 17 10" />
-                                                                <line x1="12" y1="15" x2="12" y2="3" />
-                                                            </svg>
-                                                            Alle als ZIP
-                                                        </>
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {wavLoading ? (
-                                        <div className="animate-pulse h-24 bg-black/[0.03] rounded-2xl" />
-                                    ) : wavFiles.length === 0 ? (
-                                        <div className="py-6 text-center text-gray-400 text-sm">
-                                            Keine WAV-Dateien im gewählten Zeitraum
-                                        </div>
-                                    ) : (
-                                        <div className="bg-white/40 rounded-2xl border border-black/[0.04] overflow-hidden">
-                                            <table className="w-full text-sm">
-                                                <thead>
-                                                    <tr className="border-b border-black/[0.04]">
-                                                        <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Datum</th>
-                                                        <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Dauer</th>
-                                                        <th className="text-left px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Grösse</th>
-                                                        <th className="text-right px-4 py-2.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-24"></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-black/[0.03]">
-                                                    {wavFiles.map((wf) => (
-                                                        <tr key={wf.id} className="hover:bg-white/50 transition-colors">
-                                                            <td className="px-4 py-2.5 text-gray-700">
-                                                                {new Date(wf.started_at).toLocaleString('de-CH')}
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-gray-500">
-                                                                {wf.duration_seconds.toFixed(0)}s
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-gray-500">
-                                                                {formatFileSize(wf.file_size_bytes)}
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-right">
-                                                                <button
-                                                                    onClick={() => handleWavDownload(wf.id)}
-                                                                    disabled={downloadingWavId === wf.id}
-                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
-                                                                >
-                                                                    {downloadingWavId === wf.id ? (
-                                                                        'Lade…'
-                                                                    ) : (
-                                                                        <>
-                                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                                                <polyline points="7 10 12 15 17 10" />
-                                                                                <line x1="12" y1="15" x2="12" y2="3" />
-                                                                            </svg>
-                                                                            WAV
-                                                                        </>
-                                                                    )}
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                            </Fragment>
+                        ))}
+                    </div>
                 </div>
             )}
 
