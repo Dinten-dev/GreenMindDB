@@ -1,0 +1,116 @@
+{
+  "LandingPage": {
+    "hero": {
+      "inDevelopment": "En développement",
+      "titlePart1": "Donner une voix",
+      "titlePart2": "aux plantes.",
+      "subtitle": "GreenMind analyse les signaux bioélectriques des plantes pour détecter le stress plus tôt et améliorer spécifiquement les stratégies de culture.",
+      "requestAccess": "Demander l'accès",
+      "howItWorks": "Comment ça marche →"
+    },
+    "problem": {
+      "tag": "Le Problème",
+      "title1": "Le stress des plantes est détecté,",
+      "title2": "lorsque les dégâts sont déjà visibles.",
+      "description": "Aujourd'hui, les capteurs surveillent l'environnement — température, humidité, humidité du sol. Mais pas la plante elle-même. Pourtant, les plantes envoient des signaux bioélectriques indiquant un stress — souvent avant que les symptômes externes ne deviennent visibles."
+    },
+    "solution": {
+      "tag": "Notre Approche",
+      "title": "Comprendre les signaux des plantes. Agir plus spécifiquement.",
+      "description": "GreenMind enregistre les signaux bioélectriques directement sur la plante et les rend utilisables pour des décisions de culture basées sur les données.",
+      "features": {
+        "earlyStress": {
+          "title": "Détection précoce du stress",
+          "description": "Les signaux bioélectriques peuvent indiquer un stress dû à la sécheresse, aux ravageurs et aux nutriments — dans le but d'identifier les problèmes avant l'apparition de dommages visibles."
+        },
+        "dataPlanning": {
+          "title": "Planification du rendement basée sur les données",
+          "description": "Les signaux des plantes combinés aux données environnementales ouvrent de nouvelles approches pour la planification des rendements — basées sur des données plutôt que sur la seule expérience."
+        },
+        "resources": {
+          "title": "Utilisation ciblée des ressources",
+          "description": "Lorsque la plante signale ce dont elle a besoin, l'eau et les nutriments peuvent être utilisés selon les besoins — une consommation moindre, de meilleurs résultats."
+        }
+      }
+    },
+    "howItWorks": {
+      "tag": "Comment ça marche",
+      "title": "Du signal à la recommandation.",
+      "description": "Les plantes réagissent à leur environnement par des signaux électriques mesurables. GreenMind rend ces signaux visibles et analysables.",
+      "steps": {
+        "s1": {
+          "title": "Signal de la plante",
+          "description": "Les plantes génèrent des signaux électriques en réponse aux changements de leur environnement — lumière, eau, température, nutriments."
+        },
+        "s2": {
+          "title": "Capteurs",
+          "description": "Des capteurs sur la plante capturent ces signaux de manière non invasive et les combinent avec des données environnementales telles que la température et l'humidité du sol."
+        },
+        "s3": {
+          "title": "Analyse",
+          "description": "Les données sont automatiquement traitées, filtrées et examinées pour trouver des modèles — quels signaux indiquent quel stress ?"
+        },
+        "s4": {
+          "title": "Recommandation",
+          "description": "Les informations sont traduites en recommandations d'action concrètes — quand arroser, quand fertiliser, quand intervenir."
+        }
+      }
+    },
+    "foundation": {
+      "tag": "Fondation",
+      "title": "Fondement scientifique. Testé sur le terrain.",
+      "description": "Développé en collaboration avec la FHNW et s'appuyant sur des recherches évaluées par des pairs en électrophysiologie végétale.",
+      "f1": "Haute école spécialisée du Nord-Ouest de la Suisse",
+      "f2": "Acquisition de données en continu",
+      "f3": "Site de développement Suisse"
+    },
+    "potentials": {
+      "tag": "Potentiels",
+      "title": "Ce que GreenMind rend possible.",
+      "items": {
+        "i1": {
+          "title": "Détection précoce du stress",
+          "description": "Détectez le stress des plantes avant qu'il ne devienne visible — grâce à l'analyse des modèles de signaux bioélectriques."
+        },
+        "i2": {
+          "title": "Meilleure planification des rendements",
+          "description": "Les signaux des plantes combinés aux données environnementales permettent des prévisions plus éclairées pour la préparation de la récolte."
+        },
+        "i3": {
+          "title": "Arrosage et fertilisation ciblés",
+          "description": "Appliquez l'eau et les nutriments exactement quand la plante en a besoin — pas selon un calendrier rigide."
+        },
+        "i4": {
+          "title": "Détection plus rapide des risques",
+          "description": "Identifiez rapidement les infestations de ravageurs ou les maladies et prenez des contre-mesures ciblées."
+        },
+        "i5": {
+          "title": "Moindre consommation de ressources",
+          "description": "Réduisez l'empreinte écologique grâce à l'utilisation ciblée de l'eau et de l'énergie."
+        },
+        "i6": {
+          "title": "Décisions basées sur les données",
+          "description": "De l'intuition à l'évidence — prenez des décisions de culture basées sur des données réelles des plantes."
+        }
+      }
+    },
+    "cta": {
+      "tag": "Participer",
+      "title1": "L'avenir des diagnostics agricoles",
+      "title2": "sera basé sur les données.",
+      "description": "Vous exploitez un environnement de culture et souhaitez faire partie du projet ? Nous recherchons des partenaires pour des tests sur le terrain et un développement conjoint.",
+      "button": "Demander l'accès"
+    }
+  },
+  "Navigation": {
+    "platform": "Plate-forme",
+    "technology": "Technologie",
+    "science": "Science",
+    "about": "À propos de nous",
+    "contact": "Contact",
+    "impressum": "Mentions légales",
+    "rights": "Tous droits réservés.",
+    "dashboard": "Tableau de bord",
+    "language": "Langue"
+  }
+}

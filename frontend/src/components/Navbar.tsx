@@ -2,13 +2,17 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { apiGetMe, AuthUser } from '@/lib/api';
+import { useTranslations, useLocale } from 'next-intl';
 
 export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [user, setUser] = useState<AuthUser | null>(null);
     const pathname = usePathname();
+    const router = useRouter();
+    const t = useTranslations('Navigation');
+    const locale = useLocale();
 
     // Check if user is logged in
     useEffect(() => {
@@ -35,12 +39,17 @@ export default function Navbar() {
     }, [isMenuOpen]);
 
     const navLinks = [
-        { name: 'Plattform', href: '/product' },
-        { name: 'Technologie', href: '/technology' },
-        { name: 'Science', href: '/science' },
-        { name: 'Über uns', href: '/about' },
-        { name: 'Kontakt', href: '/contact' }
+        { name: t('platform'), href: `/${locale}/product` },
+        { name: t('technology'), href: `/${locale}/technology` },
+        { name: t('science'), href: `/${locale}/science` },
+        { name: t('about'), href: `/${locale}/about` },
+        { name: t('contact'), href: `/${locale}/contact` }
     ];
+
+    const switchLocale = (newLocale: string) => {
+        const newPath = pathname.replace(`/${locale}`, `/${newLocale}`);
+        router.push(newPath);
+    };
 
     // Hide public navbar on dashboard routes (dashboard has its own sidebar)
     if (pathname.startsWith('/app')) return null;
@@ -64,7 +73,7 @@ export default function Navbar() {
                             <Link
                                 key={link.href}
                                 href={link.href}
-                                className={`transition-colors duration-200 ${pathname === link.href ? 'text-apple-gray-800 font-medium' : 'hover:text-apple-gray-800'}`}
+                                className={`transition-colors duration-200 ${pathname.includes(link.href) ? 'text-apple-gray-800 font-medium' : 'hover:text-apple-gray-800'}`}
                             >
                                 {link.name}
                             </Link>
@@ -85,11 +94,26 @@ export default function Navbar() {
                             </Link>
                         ) : (
                             <>
-                                <Link href="/login" className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200">
+                                <select
+                                    value={locale}
+                                    onChange={(e) => switchLocale(e.target.value)}
+                                    className="bg-transparent text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
+                                    style={{
+                                        backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                                        backgroundRepeat: 'no-repeat',
+                                        backgroundPosition: 'right center',
+                                        backgroundSize: '1em'
+                                    }}
+                                >
+                                    <option value="de">DE</option>
+                                    <option value="en">EN</option>
+                                    <option value="fr">FR</option>
+                                </select>
+                                <Link href={`/${locale}/login`} className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 ml-2">
                                     Anmelden
                                 </Link>
                                 <Link
-                                    href="/early-access"
+                                    href={`/${locale}/early-access`}
                                     className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
                                 >
                                     Zugang anfragen
@@ -122,11 +146,23 @@ export default function Navbar() {
                         <Link
                             key={link.href}
                             href={link.href}
-                            className={`pb-4 border-b border-apple-gray-100 ${pathname === link.href ? 'text-gm-green-600' : ''}`}
+                            className={`pb-4 border-b border-apple-gray-100 ${pathname.includes(link.href) ? 'text-gm-green-600' : ''}`}
+                            onClick={() => setIsMenuOpen(false)}
                         >
                             {link.name}
                         </Link>
                     ))}
+                    <div className="flex gap-4 pb-4 border-b border-apple-gray-100">
+                        {['de', 'en', 'fr'].map((l) => (
+                            <button
+                                key={l}
+                                onClick={() => { switchLocale(l); setIsMenuOpen(false); }}
+                                className={`uppercase text-sm font-bold ${locale === l ? 'text-gm-green-600' : 'text-apple-gray-400'}`}
+                            >
+                                {l}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="mt-auto flex flex-col gap-4">

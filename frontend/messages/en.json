@@ -1,0 +1,116 @@
+{
+  "LandingPage": {
+    "hero": {
+      "inDevelopment": "In development",
+      "titlePart1": "Giving plants",
+      "titlePart2": "a voice.",
+      "subtitle": "GreenMind analyzes plant bioelectrical signals to detect stress earlier and specifically improve cultivation strategies.",
+      "requestAccess": "Request access",
+      "howItWorks": "How it works →"
+    },
+    "problem": {
+      "tag": "The Problem",
+      "title1": "Plant stress is detected,",
+      "title2": "when the damage is already visible.",
+      "description": "Today, sensors monitor the environment — temperature, humidity, soil moisture. But not the plant itself. However, plants send out bioelectrical signals that indicate stress — often before external symptoms become visible."
+    },
+    "solution": {
+      "tag": "Our Approach",
+      "title": "Understanding plant signals. Acting more specifically.",
+      "description": "GreenMind records bioelectrical signals directly on the plant and makes them usable for data-driven cultivation decisions.",
+      "features": {
+        "earlyStress": {
+          "title": "Early stress detection",
+          "description": "Bioelectrical signals can indicate drought, pest, and nutrient stress — aiming to identify problems before visible damage occurs."
+        },
+        "dataPlanning": {
+          "title": "Data-driven yield planning",
+          "description": "Plant signals combined with environmental data enable new approaches for yield planning — data-driven instead of purely experience-based."
+        },
+        "resources": {
+          "title": "Targeted resource usage",
+          "description": "When the plant signals what it needs, water and nutrients can be used as needed — lower consumption, better results."
+        }
+      }
+    },
+    "howItWorks": {
+      "tag": "How it works",
+      "title": "From signal to recommendation.",
+      "description": "Plants react to their environment with measurable electrical signals. GreenMind makes these signals visible and analyzable.",
+      "steps": {
+        "s1": {
+          "title": "Plant signal",
+          "description": "Plants generate electrical signals in response to changes in their environment — light, water, temperature, nutrients."
+        },
+        "s2": {
+          "title": "Sensors",
+          "description": "Sensors on the plant capture these signals non-invasively and combine them with environmental data like temperature and soil moisture."
+        },
+        "s3": {
+          "title": "Analysis",
+          "description": "The data is automatically processed, filtered, and examined for patterns — which signals indicate which stress?"
+        },
+        "s4": {
+          "title": "Recommendation",
+          "description": "Insights are translated into concrete action recommendations — when to water, when to fertilize, when to intervene."
+        }
+      }
+    },
+    "foundation": {
+      "tag": "Foundation",
+      "title": "Scientifically founded. Field-tested.",
+      "description": "Developed in collaboration with FHNW and building on peer-reviewed research in plant electrophysiology.",
+      "f1": "University of Applied Sciences Northwestern Switzerland",
+      "f2": "Continuous data acquisition",
+      "f3": "Development site Switzerland"
+    },
+    "potentials": {
+      "tag": "Potentials",
+      "title": "What GreenMind makes possible.",
+      "items": {
+        "i1": {
+          "title": "Early stress detection",
+          "description": "Detect plant stress before it becomes visible — through the analysis of bioelectrical signal patterns."
+        },
+        "i2": {
+          "title": "Better yield planning",
+          "description": "Plant signals and environmental data combined allow for more informed forecasts for harvest preparation."
+        },
+        "i3": {
+          "title": "Targeted watering and fertilizing",
+          "description": "Apply water and nutrients exactly when the plant needs them — not according to a rigid schedule."
+        },
+        "i4": {
+          "title": "Faster risk detection",
+          "description": "Identify pest infestations or diseases early and take targeted countermeasures."
+        },
+        "i5": {
+          "title": "Lower resource consumption",
+          "description": "Reduce the ecological footprint through the demand-driven use of water and energy."
+        },
+        "i6": {
+          "title": "Data-driven decisions",
+          "description": "From gut feeling to evidence — make cultivation decisions based on real plant data."
+        }
+      }
+    },
+    "cta": {
+      "tag": "Join us",
+      "title1": "The future of agricultural diagnostics",
+      "title2": "will be data-driven.",
+      "description": "Do you operate a cultivation environment and want to become part of the project? We are looking for partners for field tests and joint development.",
+      "button": "Request access"
+    }
+  },
+  "Navigation": {
+    "platform": "Platform",
+    "technology": "Technology",
+    "science": "Science",
+    "about": "About us",
+    "contact": "Contact",
+    "impressum": "Imprint",
+    "rights": "All rights reserved.",
+    "dashboard": "Dashboard",
+    "language": "Language"
+  }
+}
