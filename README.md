@@ -1,5 +1,6 @@
 # GreenMind — R&D Framework
 
+🎥 **Video Presentation:** [Watch our showcase at the Science Exhibition](https://youtu.be/OdKqk1Vc4Uo?si=9BqRJsJWqswzQC3o) — A short introduction to what we have discovered so far.
 > Research & development platform for bioelectrical plant signal analysis — a project of **Galaxyadvisors AG** (Aarau, Switzerland) in collaboration with FHNW. Captures, aggregates, and analyzes electrophysiological plant data from ESP32 sensors via Raspberry Pi gateways, stored in TimescaleDB and visualized on a modern Next.js frontend.
 
 > **⚠️ R&D Status:** GreenMind is in active research and development. The platform is not commercially available. Partnership inquiries for field studies and controlled experiments are welcome at [info@galaxyadvisors.com](mailto:info@galaxyadvisors.com).
