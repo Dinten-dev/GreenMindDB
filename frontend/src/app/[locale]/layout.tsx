@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import './globals.css'
+import '../globals.css'
 import GlobalBackground from '@/components/GlobalBackground'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import { NextIntlClientProvider } from 'next-intl';
+import { getMessages } from 'next-intl/server';
 
 const inter = Inter({
     subsets: ['latin'],
@@ -42,13 +44,17 @@ const jsonLd = {
   }
 };
 
-export default function RootLayout({
+export default async function RootLayout({
     children,
+    params: { locale }
 }: {
-    children: React.ReactNode
+    children: React.ReactNode,
+    params: { locale: string }
 }) {
+    const messages = await getMessages();
+
     return (
-        <html lang="de" className={inter.variable}>
+        <html lang={locale} className={inter.variable}>
             <head>
                 <script
                   type="application/ld+json"
@@ -56,12 +62,14 @@ export default function RootLayout({
                 />
             </head>
             <body className={`${inter.className} min-h-screen flex flex-col bg-apple-gray-50 text-apple-gray-800`}>
-                <GlobalBackground />
-                <Navbar />
-                <main className="flex-1">
-                    {children}
-                </main>
-                <Footer />
+                <NextIntlClientProvider messages={messages}>
+                    <GlobalBackground />
+                    <Navbar />
+                    <main className="flex-1">
+                        {children}
+                    </main>
+                    <Footer />
+                </NextIntlClientProvider>
             </body>
         </html>
     )
