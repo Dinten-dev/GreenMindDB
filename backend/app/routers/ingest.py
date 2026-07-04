@@ -61,7 +61,7 @@ async def ingest_data(
                 "sensor_kind": r.sensor_kind,
                 "value": r.value,
                 "unit": r.unit,
-                "timestamp": r.timestamp or now.isoformat(),
+                "timestamp": r.timestamp.isoformat() if r.timestamp else now.isoformat(),
             }
             for r in data.readings
         ]
@@ -92,7 +92,7 @@ async def ingest_data(
                 "value": rd.value,
                 "unit": rd.unit,
                 "kind": rd.sensor_kind,
-                "timestamp": rd.timestamp or now.isoformat(),
+                "timestamp": rd.timestamp.isoformat() if rd.timestamp else now.isoformat(),
             }
             for rd in data.readings
             if rd.sensor_mac == r.sensor_mac
