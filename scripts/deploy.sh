@@ -139,6 +139,7 @@ if [[ "$SKIP_BUILD" == "false" ]]; then
 fi
 
 ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "
+    set -e
     export PATH=\$PATH:/usr/local/bin
     cd ${REMOTE_DIR}
     docker builder prune -f 2>/dev/null || true
@@ -157,10 +158,19 @@ elif [[ "$ENVIRONMENT" == "staging" ]]; then
 fi
 
 ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "
+    set -e
     if ! diff -q ${NGINX_SRC} ${NGINX_DST} > /dev/null 2>&1; then
-        sudo cp ${NGINX_SRC} ${NGINX_DST}
-        sudo nginx -t && sudo systemctl reload nginx
-        echo '✅ Nginx config updated and reloaded'
+        echo '⚠️ Nginx config changed. Attempting to sync...'
+        if sudo -n true 2>/dev/null; then
+            sudo cp ${NGINX_SRC} ${NGINX_DST}
+            sudo nginx -t && sudo systemctl reload nginx
+            echo '✅ Nginx config updated and reloaded'
+        else
+            echo '❌ Passwordless sudo is not available.'
+            echo '⚠️ Please SSH into the server and run manually:'
+            echo '   sudo cp ${NGINX_SRC} ${NGINX_DST}'
+            echo '   sudo nginx -t && sudo systemctl reload nginx'
+        fi
     else
         echo '✅ Nginx config unchanged — skipping reload'
     fi
