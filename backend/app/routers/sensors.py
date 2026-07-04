@@ -352,6 +352,7 @@ async def get_sensor_data(
             ]
         else:
             bucket_size = RESOLUTION_BUCKET_MAP[resolution]
+            # Safe use of f-string: bucket_size is mapped from enum/dict, not user input
             rows = db.execute(
                 text(f"""
                     SELECT time_bucket('{bucket_size}', timestamp) AS bucket,

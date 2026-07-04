@@ -103,10 +103,20 @@ async def login(
 ):
     """Login and get access token (also set as httpOnly cookie)."""
     user = db.query(User).filter(User.email == data.email.lower()).first()
-    if not user or not verify_password(data.password, user.password_hash):
+    
+    # Use dummy verify if user doesn't exist to prevent timing attacks (user enumeration)
+    from app.auth import pwd_context
+    if not user:
+        pwd_context.dummy_verify()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
+        
+    if not verify_password(data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
+        
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     if not user.is_verified:
