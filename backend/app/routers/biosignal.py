@@ -19,7 +19,7 @@ from app.services.notification_service import notification_service
 
 # Debounce state for alerts: {sensor_mac: last_alert_time}
 _last_alert_times: dict[str, datetime] = {}
-ALERT_COOLDOWN_MINUTES = 30
+ALERT_COOLDOWN_MINUTES = 720
 
 router = APIRouter(prefix="/biosignal", tags=["biosignal"])
 
@@ -130,7 +130,7 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
     db.add(agg)
 
     # Trigger Electrode Disconnect Alert
-    if invalid_count / total_count > 0.8:
+    if getattr(sensor, "sms_alerts_enabled", True) and invalid_count / total_count > 0.8:
         last_alert = _last_alert_times.get(payload.mac_address)
         if not last_alert or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60:
             import asyncio

@@ -99,6 +99,8 @@ class Sensor(Base):
     name = Column(String(200), nullable=True)
     sensor_type = Column(String(50), nullable=False, default="generic")
     status = Column(String(20), nullable=False, default="offline")
+    sms_alerts_enabled = Column(Boolean, nullable=False, default=True)
+    
     last_seen = Column(DateTime(timezone=True), nullable=True)
     claimed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

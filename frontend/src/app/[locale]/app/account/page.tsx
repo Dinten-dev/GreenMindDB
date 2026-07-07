@@ -1,11 +1,29 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiUpdateMe } from '@/lib/api';
 
 export default function AccountPage() {
     const { user } = useAuth();
+    const [phone, setPhone] = useState(user?.phone_number || '');
+    const [isSaving, setIsSaving] = useState(false);
+    const [message, setMessage] = useState('');
 
     if (!user) return null;
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setMessage('');
+        try {
+            await apiUpdateMe({ phone_number: phone });
+            setMessage('Profile updated successfully');
+        } catch (err: any) {
+            setMessage(err.message || 'Failed to update profile');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     return (
         <div className="space-y-6 max-w-2xl">
@@ -44,6 +62,36 @@ export default function AccountPage() {
 
                     <span className="text-apple-gray-400">User ID</span>
                     <span className="text-apple-gray-400 font-mono text-xs">{user.id}</span>
+                </div>
+                
+                <hr className="border-apple-gray-200" />
+
+                <div>
+                    <h3 className="text-md font-semibold text-apple-gray-800 mb-2">Notification Settings</h3>
+                    <p className="text-sm text-apple-gray-400 mb-4">
+                        Enter your phone number (e.g. +41791234567) to receive SMS alerts for electrode disconnects.
+                    </p>
+                    <div className="flex gap-4 items-center">
+                        <input
+                            type="text"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="+41700000000"
+                            className="border border-apple-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gm-green-500"
+                        />
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="bg-gm-green-500 hover:bg-gm-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            {isSaving ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+                    {message && (
+                        <p className={`text-sm mt-2 ${message.includes('successfully') ? 'text-gm-green-600' : 'text-red-500'}`}>
+                            {message}
+                        </p>
+                    )}
                 </div>
             </div>
         </div>

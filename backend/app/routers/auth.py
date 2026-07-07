@@ -22,6 +22,7 @@ from app.schemas.auth import (
     LoginRequest,
     SignupRequest,
     UserResponse,
+    UserUpdateRequest,
     VerifyEmailRequest,
 )
 from app.services.email_service import EmailService
@@ -138,6 +139,23 @@ async def logout(response: Response):
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     """Get current authenticated user."""
+    return _user_response(current_user)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    data: UserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update current user profile (name, phone_number)."""
+    if data.name is not None:
+        current_user.name = data.name
+    if data.phone_number is not None:
+        current_user.phone_number = data.phone_number
+
+    db.commit()
+    db.refresh(current_user)
     return _user_response(current_user)
 
 

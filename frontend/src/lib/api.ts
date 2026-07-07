@@ -42,6 +42,7 @@ export interface AuthUser {
     organization_id: string | null;
     organization_name: string | null;
     is_active: boolean;
+    phone_number: string | null;
 }
 
 interface AuthResponse {
@@ -69,6 +70,13 @@ export async function apiLogout(): Promise<void> {
 
 export async function apiGetMe(): Promise<AuthUser> {
     return apiFetch<AuthUser>('/auth/me');
+}
+
+export async function apiUpdateMe(data: { name?: string; phone_number?: string }): Promise<AuthUser> {
+    return apiFetch<AuthUser>('/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    });
 }
 
 // ── Organizations ────────────────────────────
@@ -195,6 +203,7 @@ export interface SensorInfo {
     claimed_at: string | null;
     gateway_name: string | null;
     gateway_hardware_id: string | null;
+    sms_alerts_enabled: boolean;
 }
 
 export async function apiListSensors(zone_id?: string, gateway_id?: string): Promise<SensorInfo[]> {
@@ -222,6 +231,16 @@ export async function apiGetSensorData(sensorId: string, range: string = '24h'):
 
 export async function apiDeleteSensor(sensorId: string): Promise<void> {
     return apiFetch<void>(`/sensors/${sensorId}`, { method: 'DELETE' });
+}
+
+export async function apiUpdateSensor(
+    sensorId: string,
+    data: { name?: string; sms_alerts_enabled?: boolean }
+): Promise<SensorInfo> {
+    return apiFetch<SensorInfo>(`/sensors/${sensorId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    });
 }
 
 export async function apiGetSensorDataAdvanced(

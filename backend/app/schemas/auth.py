@@ -44,6 +44,11 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserUpdateRequest(BaseModel):
+    name: str | None = None
+    phone_number: str | None = None
+
+
 class AuthResponse(BaseModel):
     detail: str = "ok"
     user: UserResponse
