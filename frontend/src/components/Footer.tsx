@@ -1,10 +1,16 @@
+'use client';
+
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
+import { usePathname } from 'next/navigation';
 
 export default function Footer() {
     const currentYear = new Date().getFullYear();
     const t = useTranslations('Navigation');
     const locale = useLocale();
+    const pathname = usePathname();
+    
+    if (pathname.startsWith(`/${locale}/app`)) return null;
     
     return (
         <footer className="w-full border-t border-apple-gray-200/50 bg-white/50 backdrop-blur-md py-8 mt-auto">
