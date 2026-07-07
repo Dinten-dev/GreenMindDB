@@ -112,6 +112,7 @@ rsync -az --delete \
     --exclude '.pytest_cache' \
     --exclude '.ruff_cache' \
     --exclude 'data' \
+    --exclude '.next' \
     "${LOCAL_DIR}/" \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 echo "✅ Code synced"
