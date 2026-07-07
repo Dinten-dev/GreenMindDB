@@ -221,7 +221,7 @@ export default function DashboardPage() {
             <PairSensorDialog 
                 isOpen={isPairDialogOpen} 
                 onClose={() => setIsPairDialogOpen(false)} 
-                onPaired={() => loadData()} 
+                onSuccess={() => loadData()} 
             />
         </div>
     );

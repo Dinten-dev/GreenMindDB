@@ -82,7 +82,19 @@ export default function SensorsPage() {
 
     const refreshSensors = useCallback(() => {
         apiListSensors()
-            .then(setSensors)
+            .then((data) => {
+                setSensors(data);
+                if (typeof window !== 'undefined') {
+                    const params = new URLSearchParams(window.location.search);
+                    const sensorId = params.get('sensor');
+                    if (sensorId && data.some(s => s.id === sensorId)) {
+                        setSelectedSensor(sensorId);
+                        // Clean up the URL
+                        const newUrl = window.location.pathname;
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                }
+            })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);

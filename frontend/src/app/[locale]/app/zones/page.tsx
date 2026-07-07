@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { apiListZones, apiCreateZone, apiDeleteZone, Zone, ZONE_TYPES } from '@/lib/api';
 
 export default function ZonesPage() {
@@ -213,11 +212,7 @@ export default function ZonesPage() {
             ) : (
                 <div className="space-y-4">
                     {zones.map(z => (
-                        <Link
-                            key={z.id}
-                            href={`/app/zones/${z.id}`}
-                            className="block glass-card p-6 transition-all duration-300 hover:shadow-lg"
-                        >
+                        <div key={z.id} className="block glass-card p-6 transition-all duration-300">
                             <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="text-2xl">{getZoneIcon(z.zone_type)}</div>
@@ -233,7 +228,7 @@ export default function ZonesPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button
-                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeletingZoneId(z.id); }}
+                                        onClick={() => { setDeletingZoneId(z.id); }}
                                         className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
                                         title="Zone löschen"
                                     >
@@ -241,7 +236,7 @@ export default function ZonesPage() {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
-                                    <span className="text-gray-400 text-lg">›</span>
+                                    
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mt-4 pointer-events-none">
@@ -260,7 +255,7 @@ export default function ZonesPage() {
                                     </div>
                                 )}
                             </div>
-                        </Link>
+                        </div>
                     ))}
                 </div>
             )}
