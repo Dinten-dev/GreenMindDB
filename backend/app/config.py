@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     s3_access_key_id: str = "minioadmin"
     s3_secret_access_key: str = "change-me-minio-root-password"
 
+    # ASPSMS (Electrode alerts)
+    aspsms_userkey: str = ""
+    aspsms_password: str = ""
+    aspsms_sender_id: str = "GreenMind"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value):
