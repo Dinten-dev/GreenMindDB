@@ -129,7 +129,7 @@ export default function SensorsPage() {
                         const status = detectElectrodeDisconnect(bioSeries.kind, bioSeries.data);
                         setElectrodeStatuses(prev => ({ ...prev, [s.id]: status }));
                     }
-                } catch (err) {
+                } catch {
                     console.error('Failed to fetch status for', s.id);
                 }
                 await new Promise(r => setTimeout(r, 200)); // Rate limit
@@ -226,7 +226,7 @@ export default function SensorsPage() {
                 stopRealtime();
             }
         }, 1000);
-    }, [stopRealtime]);
+    }, [stopRealtime, timeRange, selectedSensor, loadSensorData]);
 
     // Stop realtime when leaving live mode or deselecting sensor
     useEffect(() => {

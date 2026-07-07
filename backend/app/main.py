@@ -32,6 +32,7 @@ from app.routers import (  # noqa: E402
     ingest_router,
     organizations_router,
     plants_router,
+    provisioning_router,
     public_evaluate_router,
     public_observe_router,
     sensors_router,
@@ -134,6 +135,7 @@ api_v1_router.include_router(gateway_admin_router)
 api_v1_router.include_router(plants_router)
 api_v1_router.include_router(public_observe_router)
 api_v1_router.include_router(public_evaluate_router)
+api_v1_router.include_router(provisioning_router)
 
 app.include_router(api_v1_router)
 

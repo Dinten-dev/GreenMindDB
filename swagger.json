@@ -1,0 +1,5080 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "ASPSMS WebAPI",
+    "description": "<div>The ASPSMS WebAPI enables sending and managing SMS messages. It offers balance inquiries, send/receive statistics, contact management, and more. The API supports basic and advanced SMS operations with extensive management for groups, templates, and jobs.</div>",
+    "version": "v1"
+  },
+  "paths": {
+    "/CheckUserCredentials": {
+      "get": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Checks if User Credentials are valid",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ASPSMSCredits": {
+      "get": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Returns the available Creditbalance from the current Account",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ASPSMSEstimateCreditConsumption": {
+      "post": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Calculates the estimated Credits, used prior a sending Operation",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "description": "Userkey of the account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "description": "API-Password of the account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of MSISDNs, use ',' to specify mulitple occurences of one MSISDN, e.g. \"0041791111111,5\"",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "example": [
+                "0041791111111,5",
+                "0041792222222",
+                "004179333333"
+              ]
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "example": [
+                "0041791111111,5",
+                "0041792222222",
+                "004179333333"
+              ]
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "example": [
+                "0041791111111,5",
+                "0041792222222",
+                "004179333333"
+              ]
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "number",
+                  "format": "double"
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/SendSimpleSMS": {
+      "get": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Sends out one SMS with the used settings. For more advanced functionalities use the operation 'ASPSMSSendSMS'",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "description": "Userkey of the account",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "description": "API-Password of the account",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "MSISDN",
+            "in": "query",
+            "description": "Mobile Number to which the SMS is sent.",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "Operation",
+            "in": "query",
+            "description": "Operation which should be invoked. Use \"SendTextSMS\", otherwise it will not work",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "MessageData",
+            "in": "query",
+            "description": "MessageBody of the SMS",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "Originator",
+            "in": "query",
+            "description": "Originator of the SMS. Originator can be either numeric or alphanumeric (11 chars)",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "LifeTime",
+            "in": "query",
+            "description": "Validityperiod in minutes",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "DeferredDeliveryTime",
+            "in": "query",
+            "description": "If empty, SMS will be sent immediately. If specified, SMS will be sent on particular Date/Time. Example: 06/30/2019 18:32:00",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "TransactionReferenceNumber",
+            "in": "query",
+            "description": "TransactionReferenceNumber, if specified with this parameter can be queried about the delivery result of the SMS",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ASPSMSSendSMS": {
+      "post": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Sends out one SMS immediately or with deferred delivery time with advanced settings. Please check Properties of the abstract Datatype 'SMSData'. Important: For 'Operation', use the value 'SendTextSMS', otherwise it will not work",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "description": "Userkey of the account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "description": "API-Password of the account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "SMSData, Holds all data related to the SMS Sending",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SMSData"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SMSData"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SMSData"
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ASPSMSDeactivatePendingSMSWithMSISDN": {
+      "post": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Deactivate pending SMS with MSISDNs. Submitted, but not yet sent SMS can be deactivated",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "description": "Userkey of the account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "description": "API-Password of the account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of MSISDNs",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "If there is an internal server error"
+          },
+          "200": {
+            "description": "Returns the number of SMS deactivated successfully"
+          },
+          "400": {
+            "description": "If the request is invalid"
+          }
+        }
+      }
+    },
+    "/ASPSMSDeactivatePendingSMSWithTransactionReferenceNumber": {
+      "post": {
+        "tags": [
+          "Sending SMS with ASPSMS"
+        ],
+        "summary": "Deactivate pending SMS with TransactionReferenceNumber. Submitted, but not yet sent SMS can be deactivated",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "description": "Userkey of the account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "description": "API-Password of the account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of TransactionReferenceNumbers",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "example": [
+                "1234",
+                "1235",
+                "1236"
+              ]
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "example": [
+                "1234",
+                "1235",
+                "1236"
+              ]
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "example": [
+                "1234",
+                "1235",
+                "1236"
+              ]
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "If there is an internal server error"
+          },
+          "200": {
+            "description": "Returns the number of SMS deactivated successfully"
+          },
+          "400": {
+            "description": "If the request is invalid"
+          }
+        }
+      }
+    },
+    "/TrafficStat01/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets statistical information about how many SMS at what days have been submitted\r\nThis information can be used to e.g. create a navigation bar which includes the number of SMS for every single day.",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CalculateCredits",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrafficStat01"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrafficStat01"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrafficStat01"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/SendingStat01/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets detailed Sendlog information for all SMS that have been submitted on a specific date. If Month or Day are ommited, Query returns data for complete Year, resp. Month (Max. 50000 records)",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "Month",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "Day",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/SendingStat02/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets detailed Sendlog information for all SMS to one specific MSISDN",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MSISDN",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/SendingStat03/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets detailed Sendlog information for all SMS with a specific TransactionReferenceNumber.\r\nThe TransactionReferenceNumber has to be specified when sending the SMS",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "TransactionReferenceNumber",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/SendingStat04/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets detailed Sendlog information for all SMS with a specific JobID.\r\nThe JobID has to be specified when sending the SMS",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "JobID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SMSMessagesWebAPI"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ReceivingStat01/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets detailed Inbox information for all SMS that have been received. Any combination of the Filter criterias Year, Month, Day, MSISDN and Originator is allowed. Max Number of Records can be specified but is limited to 5000 Records per Query",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "Month",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "Day",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "MSISDN",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "Originator",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "MaxRecords",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivedSMSMessagesWebAPI"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivedSMSMessagesWebAPI"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivedSMSMessagesWebAPI"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ReceivingStat02/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets statistical information about how many SMS at what days have been received\r\nThis information can be used to e.g. create a navigation bar which includes the number of SMS received for every single day.",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ReceiveURL/Get": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets statistical information about how many SMS at what days have been received\r\nThis information can be used to e.g. create a navigation bar which includes the number of SMS received for every single day.",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MONumber",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ReceiveURL/Set": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets statistical information about how many SMS at what days have been received\r\nThis information can be used to e.g. create a navigation bar which includes the number of SMS received for every single day.",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MONumber",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "URL",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/ReceiveURL/Delete": {
+      "get": {
+        "tags": [
+          "Sendlog, Statistics and Two-Way Incoming Traffic"
+        ],
+        "summary": "Gets statistical information about how many SMS at what days have been received\r\nThis information can be used to e.g. create a navigation bar which includes the number of SMS received for every single day.",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MONumber",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReceivingStat02"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/MSISDNDLRStat/Get": {
+      "get": {
+        "tags": [
+          "Delivery Statistics for each Recipient"
+        ],
+        "summary": "Gets statistical information (number of delivered, failed, etc.) for all MSISDNs",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MSISDNDLRStat"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MSISDNDLRStat"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MSISDNDLRStat"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/IgnoreList/Get": {
+      "get": {
+        "tags": [
+          "Delivery Statistics for each Recipient"
+        ],
+        "summary": "Gets the Ignorelist, SMS to these MSISDNs will be ignored and not processed",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IgnoreList"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IgnoreList"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IgnoreList"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/MSISDNDLRStatIgnoreListAdd/Post": {
+      "post": {
+        "tags": [
+          "Delivery Statistics for each Recipient"
+        ],
+        "summary": "Does add one or more MSISDNs to Ignorelist",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of MSISDNs",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNs"
+                }
+              },
+              "example": [
+                "0041791111111",
+                "0041792222222",
+                "004179333333"
+              ]
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNs"
+                }
+              },
+              "example": [
+                "0041791111111",
+                "0041792222222",
+                "004179333333"
+              ]
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNs"
+                }
+              },
+              "example": [
+                "0041791111111",
+                "0041792222222",
+                "004179333333"
+              ]
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/MSISDNDLRStatIgnoreListRemove/Post": {
+      "post": {
+        "tags": [
+          "Delivery Statistics for each Recipient"
+        ],
+        "summary": "Does remove one or more MSISDNs from Ignorelist",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of MSISDNs",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNs"
+                }
+              },
+              "example": [
+                "0041791111111",
+                "0041792222222",
+                "004179333333"
+              ]
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNs"
+                }
+              },
+              "example": [
+                "0041791111111",
+                "0041792222222",
+                "004179333333"
+              ]
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNs"
+                }
+              },
+              "example": [
+                "0041791111111",
+                "0041792222222",
+                "004179333333"
+              ]
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/PhoneNumbers/Read": {
+      "get": {
+        "tags": [
+          "Phonebook: Phonenumbers"
+        ],
+        "summary": "Reads the Phonebook. If MSISDN is specified, only the corresponding records will be returned",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MSISDN",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PhoneNumbers"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PhoneNumbers"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PhoneNumbers"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/PhoneNumbers/Update": {
+      "post": {
+        "tags": [
+          "Phonebook: Phonenumbers"
+        ],
+        "summary": "Updates one or more Phonebook Entrys",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbers"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbers"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbers"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/PhoneNumbers/Add": {
+      "post": {
+        "tags": [
+          "Phonebook: Phonenumbers"
+        ],
+        "summary": "Adds one or more Phonebook Entrys",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Group",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbers"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbers"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbers"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/PhoneNumbers/Upsert": {
+      "post": {
+        "tags": [
+          "Phonebook: Phonenumbers"
+        ],
+        "summary": "Upserts one or more Phonebook Entrys",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbersWithGroupIDs"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbersWithGroupIDs"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PhoneNumbersWithGroupIDs"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/PhoneNumbers/UpsertEx": {
+      "post": {
+        "tags": [
+          "Phonebook: Phonenumbers"
+        ],
+        "summary": "Upserts one or more Phonebook Entrys. Additional information is assigning the Phonebook Entrys to specific groups",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNsWithGroupIDs"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNsWithGroupIDs"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MSISDNsWithGroupIDs"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/PhoneNumbers/Delete": {
+      "post": {
+        "tags": [
+          "Phonebook: Phonenumbers"
+        ],
+        "summary": "Deletes one or more Phonebook Entrys",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of Phonebook IDs to be deleted",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "example": [
+                62489,
+                85470,
+                93650
+              ]
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "example": [
+                62489,
+                85470,
+                93650
+              ]
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "example": [
+                62489,
+                85470,
+                93650
+              ]
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Groups/Get": {
+      "get": {
+        "tags": [
+          "Phonebook: Groups"
+        ],
+        "summary": "Reads the Phonebook Groups",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AddressGroups"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AddressGroups"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AddressGroups"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Groups/Upsert": {
+      "post": {
+        "tags": [
+          "Phonebook: Groups"
+        ],
+        "summary": "Upserts one or more Phonebook Group Entrys",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddressGroups"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddressGroups"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddressGroups"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Groups/Delete": {
+      "post": {
+        "tags": [
+          "Phonebook: Groups"
+        ],
+        "summary": "Deletes one or more Phonebook Group Entrys",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "List of Phonebook Group IDs to be deleted",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "example": [
+                62489,
+                85470,
+                93650
+              ]
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "example": [
+                62489,
+                85470,
+                93650
+              ]
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "example": [
+                62489,
+                85470,
+                93650
+              ]
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/GroupRelationsAll/Get": {
+      "get": {
+        "tags": [
+          "Phonebook: Grouprelations"
+        ],
+        "summary": "Get all Grouprelations",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupRelations"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupRelations"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupRelations"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/GroupRelationsPhoneNumber/Get": {
+      "get": {
+        "tags": [
+          "Phonebook: Grouprelations"
+        ],
+        "summary": "Get all Grouprelations for one specific MSISDN",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "IDPhoneNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupRelations"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupRelations"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroupRelations"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/GroupRelations/Update": {
+      "post": {
+        "tags": [
+          "Phonebook: Grouprelations"
+        ],
+        "summary": "Updates Grouprelations",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/GroupRelations/AddNewGroupRelations": {
+      "post": {
+        "tags": [
+          "Phonebook: Grouprelations"
+        ],
+        "summary": "Adds new Grouprelations",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/GroupRelations/Delete": {
+      "post": {
+        "tags": [
+          "Phonebook: Grouprelations"
+        ],
+        "summary": "Deletes Grouprelations",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroupRelations"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/GroupRelations/DeleteWithPhoneBookID": {
+      "post": {
+        "tags": [
+          "Phonebook: Grouprelations"
+        ],
+        "summary": "Deletes all Grouprelations of one specific Phonebook ID",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Jobs/Get": {
+      "get": {
+        "tags": [
+          "Documentation of Sending Actions: Jobs"
+        ],
+        "summary": "Get all Jobs",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Jobs"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Jobs"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Jobs"
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Jobs/Upsert": {
+      "post": {
+        "tags": [
+          "Documentation of Sending Actions: Jobs"
+        ],
+        "summary": "Upserts Jobs",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Jobs"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Jobs"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Jobs"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Jobs/Delete": {
+      "post": {
+        "tags": [
+          "Documentation of Sending Actions: Jobs"
+        ],
+        "summary": "Deletes Jobs",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Templates/Get": {
+      "get": {
+        "tags": [
+          "Preparation of SMS Texts: Templates"
+        ],
+        "summary": "Get all Templates",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Templates"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Templates"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Templates"
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Templates/Upsert": {
+      "post": {
+        "tags": [
+          "Preparation of SMS Texts: Templates"
+        ],
+        "summary": "Upserts Templates",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Templates"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Templates"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Templates"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Templates/Delete": {
+      "post": {
+        "tags": [
+          "Preparation of SMS Texts: Templates"
+        ],
+        "summary": "Deletes Templates",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Operators/Get": {
+      "get": {
+        "tags": [
+          "List of Operators"
+        ],
+        "summary": "Gets a list of all possible Operators",
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Operators"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Operators"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Operators"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/UserSetting/Get": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserSettings"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserSettings"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserSettings"
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/UserSetting/Set": {
+      "post": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UserSettings"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UserSettings"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UserSettings"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/SupportedFunctions/Get": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportedFunction"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportedFunction"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportedFunction"
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/MostRecentlyUsedNumbers/Get": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Numbers",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MostRecentlyUsedNumbers"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MostRecentlyUsedNumbers"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MostRecentlyUsedNumbers"
+                  }
+                }
+              }
+            }
+          },
+          "2": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    },
+    "/Internal/InitRoutingTable": {
+      "get": {
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "name": "Userkey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Password",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "IncludeMNP",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "1": {
+            "description": null,
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ASPSMSServerResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ASPSMSServerResult": {
+        "type": "object",
+        "properties": {
+          "ErrorCode": {
+            "type": "integer",
+            "format": "int32",
+            "example": 3
+          },
+          "ErrorDescription": {
+            "type": "string",
+            "nullable": true,
+            "example": "Autorisation failed"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddressGroups": {
+        "type": "object",
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "GroupName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Clubmembers 2020/5"
+          },
+          "Counter": {
+            "type": "integer",
+            "format": "int32",
+            "example": 682
+          }
+        },
+        "additionalProperties": false
+      },
+      "GroupRelations": {
+        "type": "object",
+        "properties": {
+          "IDPhoneNumber": {
+            "type": "integer",
+            "format": "int32",
+            "example": 3256
+          },
+          "IDGroup": {
+            "type": "integer",
+            "format": "int32",
+            "example": 635
+          }
+        },
+        "additionalProperties": false
+      },
+      "IgnoreList": {
+        "type": "object",
+        "properties": {
+          "MSISDN": {
+            "type": "string",
+            "nullable": true,
+            "example": "0041791111111"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Jobs": {
+        "type": "object",
+        "properties": {
+          "JobID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "JobRemarksText01": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText02": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText03": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText04": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText05": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText06": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText07": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText08": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText09": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksText10": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksMemo01": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksMemo02": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksMemo03": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksInt01": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "JobRemarksInt02": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "JobRemarksInt03": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "JobRemarksFloat01": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "JobRemarksFloat02": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "JobRemarksFloat03": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "JobRemarksDate01": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksDate02": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "JobRemarksDate03": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          }
+        },
+        "additionalProperties": false
+      },
+      "MSISDNDLRStat": {
+        "type": "object",
+        "properties": {
+          "Operatorkey": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 804
+          },
+          "MSISDN": {
+            "type": "string",
+            "nullable": true,
+            "example": "0041791111111"
+          },
+          "CurrentDST": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 0
+          },
+          "CounterSuccess": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 152
+          },
+          "CounterFailure": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 2
+          },
+          "CounterIgnore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 0
+          },
+          "DateCreated": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "DateLastSuccess": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "DateLastFailure": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "DateLastTransaction": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "DateStatusChange": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "Ignore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "MSISDNIgnoreList": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "DateLastIgnore": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          }
+        },
+        "additionalProperties": false
+      },
+      "MSISDNs": {
+        "type": "object",
+        "properties": {
+          "MSISDN": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MSISDNsWithGroupIDs": {
+        "type": "object",
+        "properties": {
+          "MSISDN": {
+            "type": "string",
+            "nullable": true,
+            "example": "0041791111111"
+          },
+          "GroupIDs": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true,
+            "example": [
+              518,
+              431,
+              1058
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "MostRecentlyUsedNumbers": {
+        "type": "object",
+        "properties": {
+          "Number": {
+            "type": "string",
+            "nullable": true
+          },
+          "LastTransaction": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "Count": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operators": {
+        "type": "object",
+        "properties": {
+          "OperatorKey": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "Country": {
+            "type": "string",
+            "nullable": true
+          },
+          "Operator": {
+            "type": "string",
+            "nullable": true
+          },
+          "PriceListStatus": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PhoneNumbers": {
+        "type": "object",
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "LastName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Mueller"
+          },
+          "FirstName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Amanda"
+          },
+          "VariableData01": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData02": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData03": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData04": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData05": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData06": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData07": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData08": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData09": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData10": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData11": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData12": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData13": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "VariableData14": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "MSISDN": {
+            "type": "string",
+            "nullable": true,
+            "example": "0041791111111"
+          },
+          "DateUpdated": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          }
+        },
+        "additionalProperties": false
+      },
+      "PhoneNumbersWithGroupIDs": {
+        "type": "object",
+        "properties": {
+          "PhoneNumber": {
+            "$ref": "#/components/schemas/PhoneNumbers"
+          },
+          "GroupIDs": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true,
+            "example": [
+              518,
+              431,
+              1058
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReceivedSMSMessagesWebAPI": {
+        "type": "object",
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "UserID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "Operatorkey": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "Date": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "ReceivedForFree": {
+            "type": "boolean"
+          },
+          "Originator": {
+            "type": "string",
+            "nullable": true
+          },
+          "MSISDN": {
+            "type": "string",
+            "nullable": true
+          },
+          "MessageData": {
+            "type": "string",
+            "nullable": true
+          },
+          "MessageDataHex": {
+            "type": "string",
+            "nullable": true
+          },
+          "Service01": {
+            "type": "string",
+            "nullable": true
+          },
+          "Service02": {
+            "type": "string",
+            "nullable": true
+          },
+          "Service03": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReceivingStat02": {
+        "type": "object",
+        "properties": {
+          "Year": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 2023
+          },
+          "Month": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "Day": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 15
+          },
+          "TotalSMS": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 1263
+          }
+        },
+        "additionalProperties": false,
+        "description": "The name of the product"
+      },
+      "Recipient": {
+        "type": "object",
+        "properties": {
+          "PhoneNumber": {
+            "type": "string",
+            "nullable": true,
+            "example": "+41791234567"
+          },
+          "TransactionReferenceNumber": {
+            "type": "string",
+            "description": "Optional TransactionReferenceNumber, should be unique. For later inquiry of e.g. Delivery Notifications",
+            "nullable": true,
+            "example": "1234567"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RecipientEx": {
+        "type": "object",
+        "properties": {
+          "PhoneNumber": {
+            "type": "string",
+            "nullable": true,
+            "example": "+41791234567"
+          },
+          "TransactionReferenceNumber": {
+            "type": "string",
+            "description": "Optional TransactionReferenceNumber, should be unique. For later inquiry of e.g. Delivery Notifications",
+            "nullable": true,
+            "example": "1234567"
+          },
+          "MessageData": {
+            "type": "string",
+            "nullable": true,
+            "example": "Hello World!, Use this for a personalized Message"
+          },
+          "DeferredDeliveryTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          }
+        },
+        "additionalProperties": false
+      },
+      "SMSData": {
+        "type": "object",
+        "properties": {
+          "Operation": {
+            "type": "string",
+            "nullable": true,
+            "example": "SendTextSMS"
+          },
+          "AffiliateID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": null
+          },
+          "JobID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": null
+          },
+          "DeferredDeliveryTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          },
+          "DeferredDeliveryTimeRangeBegin": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          },
+          "DeferredDeliveryTimeRangeEnd": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          },
+          "FlashingSMS": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "IP": {
+            "type": "string",
+            "nullable": true
+          },
+          "LifeTime": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "MessageData": {
+            "type": "string",
+            "description": "Text of the message",
+            "nullable": true,
+            "example": "Hello World!"
+          },
+          "Originator": {
+            "type": "string",
+            "description": "Originator or SenderID of the Message. Can be alphanumeric (max. 11 Chars) or numeric",
+            "nullable": true,
+            "example": "ASPSMS"
+          },
+          "ReplaceMessage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "URLBufferedMessageNotification": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "URLDeliveryNotification": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "URLNonDeliveryNotification": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "XSer": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "Recipients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Recipient"
+            },
+            "nullable": true
+          },
+          "RecipientsEx": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecipientEx"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SMSMessagesWebAPI": {
+        "type": "object",
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "UserID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "JobID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "Method": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "Operatorkey": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 804
+          },
+          "Originator": {
+            "type": "string",
+            "nullable": true,
+            "example": "ASPSMS"
+          },
+          "MSISDN": {
+            "type": "string",
+            "nullable": true,
+            "example": "0041791111111"
+          },
+          "Date": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "DateSent": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "MessageData": {
+            "type": "string",
+            "nullable": true,
+            "example": "Hello World!"
+          },
+          "DeferredDeliveryTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "TransactionReferenceNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "IP": {
+            "type": "string",
+            "nullable": true
+          },
+          "MAC": {
+            "type": "string",
+            "nullable": true
+          },
+          "SCTS": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "RSNBuffered": {
+            "type": "string",
+            "nullable": true
+          },
+          "DSCTS": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "DST": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 0
+          },
+          "RSN": {
+            "type": "string",
+            "nullable": true,
+            "example": "000"
+          },
+          "Processed": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 1
+          },
+          "SMSCredits": {
+            "type": "number",
+            "format": "float",
+            "nullable": true,
+            "example": 1
+          },
+          "RawData": {
+            "type": "string",
+            "nullable": true,
+            "example": ""
+          },
+          "MultiPartRef": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 47
+          },
+          "PartOfTotalParts": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 2
+          },
+          "TotalParts": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 4
+          }
+        },
+        "additionalProperties": false
+      },
+      "SupportedFunction": {
+        "type": "object",
+        "properties": {
+          "DescriptionDE": {
+            "type": "string",
+            "nullable": true
+          },
+          "DescriptionEN": {
+            "type": "string",
+            "nullable": true
+          },
+          "Enabled": {
+            "type": "boolean"
+          },
+          "ListSupportedFunctionItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportedFunctionItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SupportedFunctionItem": {
+        "type": "object",
+        "properties": {
+          "SortID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "Operation": {
+            "type": "string",
+            "nullable": true
+          },
+          "MethodIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "FunctionDescriptionDE": {
+            "type": "string",
+            "nullable": true
+          },
+          "FunctionDescriptionEN": {
+            "type": "string",
+            "nullable": true
+          },
+          "ToolTipTextDE": {
+            "type": "string",
+            "nullable": true
+          },
+          "ToolTipTextEN": {
+            "type": "string",
+            "nullable": true
+          },
+          "Enabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Templates": {
+        "type": "object",
+        "properties": {
+          "ID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "Originator": {
+            "type": "string",
+            "nullable": true,
+            "example": "SMS"
+          },
+          "MessageData": {
+            "type": "string",
+            "nullable": true,
+            "example": "Hello World!"
+          },
+          "DateAdded": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          },
+          "DateUpdated": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": ""
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrafficStat01": {
+        "type": "object",
+        "properties": {
+          "Year": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 2023
+          },
+          "Month": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "Day": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 15
+          },
+          "TotalSMS": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "example": 1263
+          },
+          "TotalCredits": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "example": 1263
+          }
+        },
+        "additionalProperties": false
+      },
+      "UserSettings": {
+        "type": "object",
+        "properties": {
+          "SettingName": {
+            "type": "string",
+            "nullable": true
+          },
+          "SettingValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "LastUpdate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

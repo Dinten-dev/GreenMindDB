@@ -7,11 +7,11 @@ psycopg2-binary==2.9.9
 pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
-python-multipart==0.0.6
+python-multipart>=0.0.9
 httpx==0.28.1
 passlib==1.7.4
 bcrypt==4.0.1
-python-jose[cryptography]==3.3.0
+PyJWT>=2.8.0
 slowapi==0.1.9
 prometheus-fastapi-instrumentator==7.0.0
 resend==2.1.0

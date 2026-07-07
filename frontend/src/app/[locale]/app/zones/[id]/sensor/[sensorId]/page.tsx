@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
     apiListSensors, apiGetSensorDataAdvanced, apiExportSensorData,
     apiListWavFiles, apiDownloadWav, apiDownloadWavBundle, apiCountWavFiles,
-    SensorInfo, SensorDataResponse, WavFileInfo, WavCountInfo,
+    apiUpdateSensor, SensorInfo, SensorDataResponse, WavFileInfo, WavCountInfo,
 } from '@/lib/api';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -146,6 +146,18 @@ export default function SensorDetailPage() {
         }
     };
 
+    const toggleSmsAlerts = async () => {
+        if (!sensor) return;
+        const newValue = !sensor.sms_alerts_enabled;
+        try {
+            const updated = await apiUpdateSensor(sensor.id, { sms_alerts_enabled: newValue });
+            setSensor(updated);
+        } catch (err) {
+            console.error('Failed to update SMS alerts:', err);
+            alert('Failed to update settings');
+        }
+    };
+
     if (loading) {
         return (
             <div className="animate-pulse space-y-4">
@@ -194,18 +206,35 @@ export default function SensorDetailPage() {
                     </p>
                 </div>
 
-                {/* Export Button */}
-                <button
-                    onClick={() => setShowExportModal(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-[0.97] transition-all border border-emerald-200/50 shadow-sm shrink-0"
-                >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Forschungsdaten-Sicherung
-                </button>
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    {/* SMS Alerts Toggle */}
+                    <button
+                        onClick={toggleSmsAlerts}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-2xl transition-all border shrink-0 ${
+                            sensor.sms_alerts_enabled
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                        title="SMS Warnungen bei Elektroden-Abfall"
+                    >
+                        <span className="text-base">📱</span>
+                        {sensor.sms_alerts_enabled ? 'SMS aktiv' : 'SMS stumm'}
+                    </button>
+
+                    {/* Export Button */}
+                    <button
+                        onClick={() => setShowExportModal(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-[0.97] transition-all border border-emerald-200/50 shadow-sm shrink-0"
+                    >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Forschungsdaten-Sicherung
+                    </button>
+                </div>
             </div>
 
             {/* Controls Bar */}

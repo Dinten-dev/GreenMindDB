@@ -15,8 +15,14 @@ class SensorResponse(BaseModel):
     claimed_at: str | None = None
     gateway_name: str | None = None
     gateway_hardware_id: str | None = None
+    sms_alerts_enabled: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SensorUpdateRequest(BaseModel):
+    name: str | None = None
+    sms_alerts_enabled: bool | None = None
 
 
 class ClaimSensorRequest(BaseModel):

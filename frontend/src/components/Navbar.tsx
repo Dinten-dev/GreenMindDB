@@ -52,7 +52,7 @@ export default function Navbar() {
     };
 
     // Hide public navbar on dashboard routes (dashboard has its own sidebar)
-    if (pathname.startsWith('/app')) return null;
+    if (pathname.startsWith(`/${locale}/app`)) return null;
 
     return (
         <>

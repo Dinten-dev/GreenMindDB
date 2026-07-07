@@ -9,9 +9,11 @@ import Footer from '../Footer';
 
 // Mock next/link to render a plain <a> tag in tests
 jest.mock('next/link', () => {
-    return ({ children, href }: { children: React.ReactNode; href: string }) => (
+    const MockLink = ({ children, href }: { children: React.ReactNode; href: string }) => (
         <a href={href}>{children}</a>
     );
+    MockLink.displayName = 'MockLink';
+    return MockLink;
 });
 
 describe('Footer', () => {
@@ -30,10 +32,10 @@ describe('Footer', () => {
     it('renders navigation links with correct hrefs', () => {
         render(<Footer />);
 
-        const kontaktLink = screen.getByRole('link', { name: /kontakt/i });
-        expect(kontaktLink).toHaveAttribute('href', '/contact');
+        const kontaktLink = screen.getByRole('link', { name: /contact/i });
+        expect(kontaktLink).toHaveAttribute('href', '/de/contact');
 
         const impressumLink = screen.getByRole('link', { name: /impressum/i });
-        expect(impressumLink).toHaveAttribute('href', '/impressum');
+        expect(impressumLink).toHaveAttribute('href', '/de/impressum');
     });
 });

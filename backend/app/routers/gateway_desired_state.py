@@ -28,11 +28,24 @@ from app.services.gateway_remote_service import (
 router = APIRouter(prefix="/gateway", tags=["gateway-agent"])
 
 
+
+# In-memory cache for API keys to avoid O(N) bcrypt loop on every request
+_api_key_cache: dict[str, str] = {}
+
 def _auth_gateway_by_key(db: Session, api_key: str) -> Gateway:
-    """Authenticate a gateway by its API key."""
+    """Authenticate a gateway by its API key with in-memory caching."""
+    if api_key in _api_key_cache:
+        cached_gw_id = _api_key_cache[api_key]
+        gw = db.query(Gateway).filter(Gateway.id == cached_gw_id, Gateway.is_active.is_(True)).first()
+        if gw:
+            return gw
+        else:
+            del _api_key_cache[api_key]
+
     gateways = db.query(Gateway).filter(Gateway.is_active.is_(True)).all()
     for gw in gateways:
         if gw.api_key_hash and verify_password(api_key, gw.api_key_hash):
+            _api_key_cache[api_key] = str(gw.id)
             return gw
     raise HTTPException(status_code=401, detail="Invalid API key")
 

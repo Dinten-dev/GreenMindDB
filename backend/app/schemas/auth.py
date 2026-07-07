@@ -35,12 +35,18 @@ class UserResponse(BaseModel):
     id: str
     email: str
     name: str | None = None
+    phone_number: str | None = None
     role: str
     organization_id: str | None = None
     organization_name: str | None = None
     is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserUpdateRequest(BaseModel):
+    name: str | None = None
+    phone_number: str | None = None
 
 
 class AuthResponse(BaseModel):

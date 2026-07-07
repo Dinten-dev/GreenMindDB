@@ -23,6 +23,7 @@ from app.schemas.sensor import (
     MoveSensorRequest,
     SensorDataResponse,
     SensorResponse,
+    SensorUpdateRequest,
 )
 from app.services.gateway_service import gateway_commands_cache, generate_pairing_code
 
@@ -81,6 +82,7 @@ async def list_sensors(
                 claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
                 gateway_name=gw.name,
                 gateway_hardware_id=gw.hardware_id,
+                sms_alerts_enabled=sensor.sms_alerts_enabled,
             )
         )
     return results
@@ -138,7 +140,57 @@ async def handle_generate_pairing_code(
     return generate_pairing_code(db, current_user, data.zone_id)
 
 
-# ── Move Sensor ─────────────────────────────────────
+# ── Move / Update Sensor ─────────────────────────────────────
+
+
+@router.patch("/{sensor_id}", response_model=SensorResponse)
+async def update_sensor(
+    sensor_id: str,
+    data: SensorUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update sensor settings (name, sms_alerts_enabled)."""
+    if not current_user.organization_id:
+        raise HTTPException(status_code=403, detail="No organization")
+
+    result = (
+        db.query(Sensor, Gateway)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(
+            Sensor.id == sensor_id,
+            Zone.organization_id == current_user.organization_id,
+        )
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    sensor, gw = result
+
+    if data.name is not None:
+        sensor.name = data.name
+    if data.sms_alerts_enabled is not None:
+        sensor.sms_alerts_enabled = data.sms_alerts_enabled
+
+    db.commit()
+    db.refresh(sensor)
+
+    return SensorResponse(
+        id=str(sensor.id),
+        gateway_id=str(sensor.gateway_id),
+        zone_id=str(gw.zone_id),
+        mac_address=sensor.mac_address,
+        name=sensor.name,
+        sensor_type=sensor.sensor_type,
+        status=sensor.status,
+        last_seen=sensor.last_seen.isoformat() if sensor.last_seen else None,
+        claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
+        gateway_name=gw.name,
+        gateway_hardware_id=gw.hardware_id,
+        sms_alerts_enabled=sensor.sms_alerts_enabled,
+    )
 
 
 @router.patch("/{sensor_id}/move", response_model=SensorResponse)
@@ -198,6 +250,7 @@ async def move_sensor(
         claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
         gateway_name=target_gw.name,
         gateway_hardware_id=target_gw.hardware_id,
+        sms_alerts_enabled=sensor.sms_alerts_enabled,
     )
 
 
@@ -352,6 +405,7 @@ async def get_sensor_data(
             ]
         else:
             bucket_size = RESOLUTION_BUCKET_MAP[resolution]
+            # Safe use of f-string: bucket_size is mapped from enum/dict, not user input
             rows = db.execute(
                 text(f"""
                     SELECT time_bucket('{bucket_size}', timestamp) AS bucket,

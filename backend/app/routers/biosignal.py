@@ -15,6 +15,11 @@ from app.models.master import Gateway, Sensor
 from app.models.timeseries import SensorReading
 from app.routers.ws import manager
 from app.services.wav_service import export_wav_from_session
+from app.services.notification_service import notification_service
+
+# Debounce state for alerts: {sensor_mac: last_alert_time}
+_last_alert_times: dict[str, datetime] = {}
+ALERT_COOLDOWN_MINUTES = 720
 
 router = APIRouter(prefix="/biosignal", tags=["biosignal"])
 
@@ -123,6 +128,35 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
         samples_invalid=invalid_count,
     )
     db.add(agg)
+
+    # Trigger Electrode Disconnect Alert
+    if getattr(sensor, "sms_alerts_enabled", True) and invalid_count / total_count > 0.8:
+        last_alert = _last_alert_times.get(payload.mac_address)
+        if not last_alert or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60:
+            import asyncio
+            from app.models.user import User
+
+            # Mark alert time
+            _last_alert_times[payload.mac_address] = now
+            
+            # Find users to notify
+            if sensor and sensor.gateway and sensor.gateway.zone:
+                zone = sensor.gateway.zone
+                users = db.query(User).filter(
+                    User.organization_id == zone.organization_id,
+                    User.phone_number.isnot(None),
+                    User.phone_number != ""
+                ).all()
+                
+                for user in users:
+                    if user.phone_number:
+                        asyncio.create_task(
+                            notification_service.send_electrode_disconnect_alert(
+                                phone_number=user.phone_number,
+                                sensor_mac=payload.mac_address,
+                                zone_name=zone.name
+                            )
+                        )
 
     # Update session tally
     session.total_samples += total_count

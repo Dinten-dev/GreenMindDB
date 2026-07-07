@@ -23,6 +23,7 @@ from app.models.observation import (
 )
 from app.models.pairing import PairingCode
 from app.models.plant import Plant, PlantSensorAssignment
+from app.models.provisioning import ProvisioningJob, ProvisioningStatus
 from app.models.timeseries import SensorReading
 from app.models.user import EmailVerification, Organization, Role, User
 from app.models.wav_file import WavFile
@@ -59,4 +60,6 @@ __all__ = [
     "PlantObservation",
     "PlantObservationPhoto",
     "PlantEvaluation",
+    "ProvisioningJob",
+    "ProvisioningStatus",
 ]
