@@ -13,6 +13,9 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/index.ts',
   ],
+  transformIgnorePatterns: [
+    '/node_modules/(?!(next-intl|use-intl)/)'
+  ],
   coverageReporters: ['text', 'text-summary', 'lcov'],
   coverageDirectory: 'coverage',
 };

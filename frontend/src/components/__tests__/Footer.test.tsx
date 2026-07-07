@@ -32,10 +32,10 @@ describe('Footer', () => {
     it('renders navigation links with correct hrefs', () => {
         render(<Footer />);
 
-        const kontaktLink = screen.getByRole('link', { name: /kontakt/i });
-        expect(kontaktLink).toHaveAttribute('href', '/contact');
+        const kontaktLink = screen.getByRole('link', { name: /contact/i });
+        expect(kontaktLink).toHaveAttribute('href', '/de/contact');
 
         const impressumLink = screen.getByRole('link', { name: /impressum/i });
-        expect(impressumLink).toHaveAttribute('href', '/impressum');
+        expect(impressumLink).toHaveAttribute('href', '/de/impressum');
     });
 });
