@@ -18,8 +18,12 @@ export default function AccountPage() {
         try {
             await apiUpdateMe({ phone_number: phone });
             setMessage('Profile updated successfully');
-        } catch (err: any) {
-            setMessage(err.message || 'Failed to update profile');
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setMessage(err.message);
+            } else {
+                setMessage('Failed to update profile');
+            }
         } finally {
             setIsSaving(false);
         }
