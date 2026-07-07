@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("ssid", sa.String(), nullable=False),
         sa.Column("password", sa.String(), nullable=False),
         sa.Column("pairing_code", sa.String(length=6), nullable=False),
-        sa.Column("status", sa.Enum('pending', 'in_progress', 'completed', 'failed', name='provisioningstatus'), server_default='pending', nullable=False),
+        sa.Column("status", postgresql.ENUM('pending', 'in_progress', 'completed', 'failed', name='provisioningstatus', create_type=False), server_default='pending', nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
