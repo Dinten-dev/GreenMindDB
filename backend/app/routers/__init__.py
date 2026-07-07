@@ -8,6 +8,7 @@ from app.routers.gateways import router as gateways_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as organizations_router
 from app.routers.plants import router as plants_router
+from app.routers.provisioning import router as provisioning_router
 from app.routers.public_evaluate import router as public_evaluate_router
 from app.routers.public_observe import router as public_observe_router
 from app.routers.sensors import router as sensors_router
@@ -32,4 +33,5 @@ __all__ = [
     "plants_router",
     "public_observe_router",
     "public_evaluate_router",
+    "provisioning_router",
 ]

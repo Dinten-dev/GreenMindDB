@@ -28,7 +28,6 @@ from app.services.gateway_remote_service import (
 router = APIRouter(prefix="/gateway", tags=["gateway-agent"])
 
 
-from functools import lru_cache
 
 # In-memory cache for API keys to avoid O(N) bcrypt loop on every request
 _api_key_cache: dict[str, str] = {}

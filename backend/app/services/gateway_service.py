@@ -1,7 +1,6 @@
 """Business logic for gateways and pairing."""
 
 import logging
-
 import secrets
 import string
 from datetime import UTC, datetime, timedelta

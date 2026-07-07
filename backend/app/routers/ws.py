@@ -1,9 +1,10 @@
 """WebSocket routes for live data streaming."""
 
 import asyncio
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
-from app.auth import decode_token, COOKIE_NAME
+from app.auth import COOKIE_NAME, decode_token
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
 
@@ -21,7 +22,7 @@ class ConnectionManager:
         if self.total_connections >= MAX_CONNECTIONS:
             await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
             return False
-            
+
         await websocket.accept()
         if zone_id not in self.active_connections:
             self.active_connections[zone_id] = []
@@ -100,7 +101,7 @@ async def websocket_endpoint(websocket: WebSocket, zone_id: str):
         while True:
             # Keep connection open waiting for ping/messages from client, with timeout
             await asyncio.wait_for(websocket.receive_text(), timeout=IDLE_TIMEOUT_SECONDS)
-    except (WebSocketDisconnect, asyncio.TimeoutError):
+    except (TimeoutError, WebSocketDisconnect):
         manager.disconnect(websocket, zone_id)
 
 
@@ -117,6 +118,6 @@ async def sensor_websocket_endpoint(websocket: WebSocket, sensor_id: str):
     try:
         while True:
             await asyncio.wait_for(websocket.receive_text(), timeout=IDLE_TIMEOUT_SECONDS)
-    except (WebSocketDisconnect, asyncio.TimeoutError):
+    except (TimeoutError, WebSocketDisconnect):
         manager.disconnect_sensor(websocket, sensor_id)
 

@@ -41,6 +41,11 @@ from app.schemas.plant import (
     PlantSensorAssignmentResponse,
     PlantUpdate,
 )
+from app.schemas.provisioning import (
+    ProvisioningJobCreate,
+    ProvisioningJobResponse,
+    ProvisioningJobUpdate,
+)
 from app.schemas.sensor import (
     ClaimSensorRequest,
     ClaimSensorResponse,
@@ -96,4 +101,7 @@ __all__ = [
     "PlantObservationPhotoResponse",
     "PlantEvaluationCreate",
     "PlantEvaluationResponse",
+    "ProvisioningJobCreate",
+    "ProvisioningJobUpdate",
+    "ProvisioningJobResponse",
 ]

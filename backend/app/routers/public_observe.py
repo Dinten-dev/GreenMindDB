@@ -71,7 +71,7 @@ def handle_upload_photo(
 ):
     if not file.content_type:
         raise HTTPException(status_code=400, detail="Missing content type")
-    
+
     allowed_types = ["image/jpeg", "image/png", "image/webp"]
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="File must be a JPEG, PNG, or WebP image")
