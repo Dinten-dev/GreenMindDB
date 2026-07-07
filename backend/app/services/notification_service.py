@@ -19,7 +19,7 @@ class SMSAdapter(ABC):
 
 class ASPSMSAdapter(SMSAdapter):
     def __init__(self):
-        self.url = "https://json.aspsms.com/SendSimpleTextSMS"
+        self.base_url = "https://webapi.aspsms.com/api"
         self.userkey = settings.aspsms_userkey
         self.password = settings.aspsms_password
         self.sender_id = settings.aspsms_sender_id
@@ -29,17 +29,17 @@ class ASPSMSAdapter(SMSAdapter):
             logger.warning("ASPSMS not configured, skipping SMS to %s", phone_number)
             return False
 
+        url = f"{self.base_url}/ASPSMSSendSMS?Userkey={self.userkey}&Password={self.password}"
         payload = {
-            "UserName": self.userkey,
-            "Password": self.password,
+            "Operation": "SendTextSMS",
             "Originator": self.sender_id,
-            "Recipients": [phone_number],
-            "MessageText": message
+            "MessageData": message,
+            "Recipients": [{"PhoneNumber": phone_number}]
         }
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(self.url, json=payload, timeout=10.0)
+                response = await client.post(url, json=payload, timeout=10.0)
                 response.raise_for_status()
                 data = response.json()
                 

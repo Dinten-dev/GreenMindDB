@@ -19,8 +19,8 @@ async def test_aspsms_adapter_send_success():
         assert result is True
         mock_post.assert_called_once()
         _, kwargs = mock_post.call_args
-        assert kwargs["json"]["Recipients"] == ["+41791234567"]
-        assert kwargs["json"]["MessageText"] == "Test message"
+        assert kwargs["json"]["Recipients"] == [{"PhoneNumber": "+41791234567"}]
+        assert kwargs["json"]["MessageData"] == "Test message"
 
 @pytest.mark.asyncio
 async def test_aspsms_adapter_send_failure():
