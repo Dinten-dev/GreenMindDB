@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Enum, String
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.db.base_class import Base
+from app.database import Base
 
 
 class ProvisioningStatus(enum.StrEnum):
