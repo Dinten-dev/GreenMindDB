@@ -6,6 +6,7 @@ import {
     apiListZones, apiListGateways, apiListSensors, apiDeleteGateway,
     Zone, GatewayInfo, SensorInfo,
 } from '@/lib/api';
+import PairSensorDialog from '../sensors/PairSensorDialog';
 
 export default function DashboardPage() {
     const { user, createOrg, refresh } = useAuth();
@@ -19,6 +20,7 @@ export default function DashboardPage() {
     // Deletion states
     const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
@@ -118,11 +120,22 @@ export default function DashboardPage() {
     return (
         <div className="space-y-8">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
-                <p className="text-sm text-gray-400 mt-1">
-                    {user?.organization_name || 'Deine Organisation'} – Überblick
-                </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
+                    <p className="text-sm text-gray-400 mt-1">
+                        {user?.organization_name || 'Deine Organisation'} – Überblick
+                    </p>
+                </div>
+                <button
+                    onClick={() => setIsPairDialogOpen(true)}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-2xl hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md active:scale-95 text-center whitespace-nowrap"
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Sensor Koppeln
+                </button>
             </div>
 
             {/* Stat Cards */}
@@ -203,6 +216,13 @@ export default function DashboardPage() {
                     </div>
                 </div>
             )}
+
+            {/* Pair Sensor Dialog */}
+            <PairSensorDialog 
+                isOpen={isPairDialogOpen} 
+                onClose={() => setIsPairDialogOpen(false)} 
+                onSuccess={() => loadData()} 
+            />
         </div>
     );
 }

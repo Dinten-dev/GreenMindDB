@@ -17,6 +17,7 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV INTERNAL_API_URL http://backend:8000
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 RUN npm run build
 

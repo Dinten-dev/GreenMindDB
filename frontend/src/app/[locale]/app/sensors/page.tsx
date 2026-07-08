@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import {
     apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced,
     apiExportSensorData, apiDeleteSensor,
-    apiDownloadWavBundle, apiCountWavFiles, createSensorWebSocket,
+    apiDownloadWavBundle, apiCountWavFiles, createSensorWebSocket, apiUpdateSensor,
     SensorInfo, SensorDataResponse, WavCountInfo,
 } from '@/lib/api';
 import {
@@ -82,7 +82,19 @@ export default function SensorsPage() {
 
     const refreshSensors = useCallback(() => {
         apiListSensors()
-            .then(setSensors)
+            .then((data) => {
+                setSensors(data);
+                if (typeof window !== 'undefined') {
+                    const params = new URLSearchParams(window.location.search);
+                    const sensorId = params.get('sensor');
+                    if (sensorId && data.some(s => s.id === sensorId)) {
+                        setSelectedSensor(sensorId);
+                        // Clean up the URL
+                        const newUrl = window.location.pathname;
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                }
+            })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
@@ -334,6 +346,18 @@ export default function SensorsPage() {
         }
     };
 
+    const toggleSmsAlerts = async () => {
+        if (!selectedSensorInfo) return;
+        const newValue = !selectedSensorInfo.sms_alerts_enabled;
+        try {
+            const updated = await apiUpdateSensor(selectedSensorInfo.id, { sms_alerts_enabled: newValue });
+            setSensors(prev => prev.map(s => s.id === updated.id ? updated : s));
+        } catch (err) {
+            console.error('Failed to update SMS alerts:', err);
+            alert('Failed to update settings');
+        }
+    };
+
     if (loading) {
         return (
             <div className="animate-pulse space-y-4">
@@ -362,7 +386,21 @@ export default function SensorsPage() {
                                 </p>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                {/* SMS Alerts Toggle */}
+                                <button
+                                    onClick={toggleSmsAlerts}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all border shrink-0 ${
+                                        selectedSensorInfo.sms_alerts_enabled
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                    title="SMS Warnungen bei Elektroden-Abfall"
+                                >
+                                    <span className="text-sm">📱</span>
+                                    {selectedSensorInfo.sms_alerts_enabled ? 'SMS aktiv' : 'SMS stumm'}
+                                </button>
+
                                 {/* Time Range Segmented Control */}
                                 <div className="flex bg-black/[0.03] rounded-xl p-0.5">
                                     {(['live', '1h', '24h', '7d', '30d'] as TimeRange[]).map((range) => (
