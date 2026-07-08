@@ -29,11 +29,14 @@ const ELECTRODE_MIN_FLAT_POINTS = 10;
 
 type ElectrodeStatus = 'ok' | 'rail_high' | 'rail_low';
 
-function detectElectrodeDisconnect(kind: string, data: { value: number }[]): ElectrodeStatus {
+function detectElectrodeDisconnect(kind: string, unit: string, data: { value: number }[]): ElectrodeStatus {
     if (!BIO_SIGNAL_KINDS.has(kind) || data.length < ELECTRODE_MIN_FLAT_POINTS) return 'ok';
+    
+    const multiplier = unit === 'V' ? 1000 : 1;
+    
     const tail = data.slice(-ELECTRODE_MIN_FLAT_POINTS);
-    if (tail.every(p => p.value >= ELECTRODE_RAIL_HIGH)) return 'rail_high';
-    if (tail.every(p => p.value <= ELECTRODE_RAIL_LOW)) return 'rail_low';
+    if (tail.every(p => p.value * multiplier >= ELECTRODE_RAIL_HIGH)) return 'rail_high';
+    if (tail.every(p => p.value * multiplier <= ELECTRODE_RAIL_LOW)) return 'rail_low';
     return 'ok';
 }
 
@@ -137,9 +140,13 @@ export default function SensorsPage() {
                 try {
                     const data = await apiGetSensorDataAdvanced(s.id, { range: '5m', resolution: 'raw' });
                     const bioSeries = data.find(d => BIO_SIGNAL_KINDS.has(d.kind));
-                    if (bioSeries && isMounted) {
-                        const status = detectElectrodeDisconnect(bioSeries.kind, bioSeries.data);
-                        setElectrodeStatuses(prev => ({ ...prev, [s.id]: status }));
+                    if (isMounted) {
+                        if (bioSeries) {
+                            const status = detectElectrodeDisconnect(bioSeries.kind, bioSeries.unit, bioSeries.data);
+                            setElectrodeStatuses(prev => ({ ...prev, [s.id]: status }));
+                        } else {
+                            setElectrodeStatuses(prev => ({ ...prev, [s.id]: 'ok' }));
+                        }
                     }
                 } catch {
                     console.error('Failed to fetch status for', s.id);
@@ -175,6 +182,14 @@ export default function SensorsPage() {
         const h = d.getHours().toString().padStart(2, '0');
         const m = d.getMinutes().toString().padStart(2, '0');
         return `${h}:${m}`;
+    };
+
+    const formatTimeWithSeconds = (t: string) => {
+        const d = new Date(t);
+        const h = d.getHours().toString().padStart(2, '0');
+        const m = d.getMinutes().toString().padStart(2, '0');
+        const s = d.getSeconds().toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
     };
 
     const formatDate = (t: string) => {
@@ -463,7 +478,7 @@ export default function SensorsPage() {
                         {/* Charts */}
                         <div className="p-4 sm:p-6">
                             {loadingData ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 gap-6">
                                     {[1, 2, 3, 4].map(i => (
                                         <div key={i} className="animate-pulse h-56 bg-black/[0.03] rounded-2xl" />
                                     ))}
@@ -473,13 +488,13 @@ export default function SensorsPage() {
                                     Keine Messdaten für diesen Zeitraum vorhanden
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 gap-6">
                                     {sensorData.filter(s => s.kind in KIND_CONFIG).map(series => {
                                         const config = KIND_CONFIG[series.kind];
                                         const latestValue = series.data.length > 0
                                             ? series.data[series.data.length - 1].value
                                             : null;
-                                        const electrodeStatus = detectElectrodeDisconnect(series.kind, series.data);
+                                        const electrodeStatus = detectElectrodeDisconnect(series.kind, series.unit, series.data);
 
                                         return (
                                             <div
@@ -530,9 +545,8 @@ export default function SensorsPage() {
                                                             <XAxis
                                                                 dataKey="timestamp"
                                                                 tickFormatter={(t) => {
-                                                                    if (timeRange === '1h' || timeRange === '24h' || timeRange === 'live') {
-                                                                        return formatTime(t);
-                                                                    }
+                                                                    if (timeRange === 'live') return formatTimeWithSeconds(t);
+                                                                    if (timeRange === '1h' || timeRange === '24h') return formatTime(t);
                                                                     return formatDate(t);
                                                                 }}
                                                                 tick={{ fontSize: 10, fill: '#94a3b8' }}
@@ -570,24 +584,6 @@ export default function SensorsPage() {
                                                                 activeDot={{ r: 3, fill: config.color, stroke: '#fff', strokeWidth: 2 }}
                                                                 isAnimationActive={timeRange !== 'live'}
                                                             />
-                                                            <Brush
-                                                                dataKey="timestamp"
-                                                                height={24}
-                                                                stroke={config.color}
-                                                                fill="rgba(0,0,0,0.02)"
-                                                                travellerWidth={8}
-                                                                startIndex={brushRanges[series.kind]?.startIndex}
-                                                                endIndex={brushRanges[series.kind]?.endIndex}
-                                                                onChange={(range) => {
-                                                                    if (range && typeof range.startIndex === 'number' && typeof range.endIndex === 'number') {
-                                                                        setBrushRanges(prev => ({
-                                                                            ...prev,
-                                                                            [series.kind]: { startIndex: range.startIndex!, endIndex: range.endIndex! },
-                                                                        }));
-                                                                    }
-                                                                }}
-                                                                tickFormatter={(t) => formatTime(t)}
-                                                            />
                                                         </LineChart>
                                                     </ResponsiveContainer>
                                                 ) : (
@@ -604,18 +600,7 @@ export default function SensorsPage() {
                             {/* Live indicator + Realtime button */}
                             {timeRange === 'live' && !loadingData && sensorData.length > 0 && (
                                 <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
-                                    {isZoomed ? (
-                                        <>
-                                            <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                            Zoom aktiv – Live-Aktualisierung pausiert
-                                            <button
-                                                onClick={() => setBrushRanges({})}
-                                                className="ml-2 px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-500 transition-colors"
-                                            >
-                                                Zoom zurücksetzen
-                                            </button>
-                                        </>
-                                    ) : realtimeActive ? (
+                                    {realtimeActive ? (
                                         <>
                                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                                             <span className="text-emerald-600 font-medium">

@@ -36,6 +36,10 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-onboarding@biolingo.org}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
+      # ASPSMS
+      ASPSMS_USERKEY: ${ASPSMS_USERKEY:-}
+      ASPSMS_PASSWORD: ${ASPSMS_PASSWORD:-}
+      ASPSMS_SENDER_ID: ${ASPSMS_SENDER_ID:-GreenMind}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:

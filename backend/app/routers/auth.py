@@ -164,6 +164,7 @@ def _user_response(user: User) -> UserResponse:
         id=str(user.id),
         email=user.email,
         name=user.name,
+        phone_number=user.phone_number,
         role=user.role.value if isinstance(user.role, Role) else user.role,
         organization_id=str(user.organization_id) if user.organization_id else None,
         organization_name=user.organization.name if user.organization else None,
