@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiUpdateMe } from '@/lib/api';
 
 export default function AccountPage() {
-    const { user } = useAuth();
+    const { user, refresh } = useAuth();
     const [phone, setPhone] = useState(user?.phone_number || '');
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
@@ -17,6 +17,7 @@ export default function AccountPage() {
         setMessage('');
         try {
             await apiUpdateMe({ phone_number: phone });
+            await refresh();
             setMessage('Profile updated successfully');
         } catch (err: unknown) {
             if (err instanceof Error) {
