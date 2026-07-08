@@ -19,7 +19,7 @@ class SMSAdapter(ABC):
 
 class ASPSMSAdapter(SMSAdapter):
     def __init__(self):
-        self.base_url = "https://webapi.aspsms.com/api"
+        self.base_url = "https://json.aspsms.com"
         self.userkey = settings.aspsms_userkey
         self.password = settings.aspsms_password
         self.sender_id = settings.aspsms_sender_id
@@ -29,12 +29,13 @@ class ASPSMSAdapter(SMSAdapter):
             logger.warning("ASPSMS not configured, skipping SMS to %s", phone_number)
             return False
 
-        url = f"{self.base_url}/ASPSMSSendSMS?Userkey={self.userkey}&Password={self.password}"
+        url = f"{self.base_url}/SendTextSMS"
         payload = {
-            "Operation": "SendTextSMS",
+            "UserName": self.userkey,
+            "Password": self.password,
             "Originator": self.sender_id,
-            "MessageData": message,
-            "Recipients": [{"PhoneNumber": phone_number}]
+            "MessageText": message,
+            "Recipients": [phone_number]
         }
 
         try:
