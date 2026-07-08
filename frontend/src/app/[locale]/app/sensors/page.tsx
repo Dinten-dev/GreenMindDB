@@ -29,11 +29,14 @@ const ELECTRODE_MIN_FLAT_POINTS = 10;
 
 type ElectrodeStatus = 'ok' | 'rail_high' | 'rail_low';
 
-function detectElectrodeDisconnect(kind: string, data: { value: number }[]): ElectrodeStatus {
+function detectElectrodeDisconnect(kind: string, unit: string, data: { value: number }[]): ElectrodeStatus {
     if (!BIO_SIGNAL_KINDS.has(kind) || data.length < ELECTRODE_MIN_FLAT_POINTS) return 'ok';
+    
+    const multiplier = unit === 'V' ? 1000 : 1;
+    
     const tail = data.slice(-ELECTRODE_MIN_FLAT_POINTS);
-    if (tail.every(p => p.value >= ELECTRODE_RAIL_HIGH)) return 'rail_high';
-    if (tail.every(p => p.value <= ELECTRODE_RAIL_LOW)) return 'rail_low';
+    if (tail.every(p => p.value * multiplier >= ELECTRODE_RAIL_HIGH)) return 'rail_high';
+    if (tail.every(p => p.value * multiplier <= ELECTRODE_RAIL_LOW)) return 'rail_low';
     return 'ok';
 }
 
@@ -137,9 +140,13 @@ export default function SensorsPage() {
                 try {
                     const data = await apiGetSensorDataAdvanced(s.id, { range: '5m', resolution: 'raw' });
                     const bioSeries = data.find(d => BIO_SIGNAL_KINDS.has(d.kind));
-                    if (bioSeries && isMounted) {
-                        const status = detectElectrodeDisconnect(bioSeries.kind, bioSeries.data);
-                        setElectrodeStatuses(prev => ({ ...prev, [s.id]: status }));
+                    if (isMounted) {
+                        if (bioSeries) {
+                            const status = detectElectrodeDisconnect(bioSeries.kind, bioSeries.unit, bioSeries.data);
+                            setElectrodeStatuses(prev => ({ ...prev, [s.id]: status }));
+                        } else {
+                            setElectrodeStatuses(prev => ({ ...prev, [s.id]: 'ok' }));
+                        }
                     }
                 } catch {
                     console.error('Failed to fetch status for', s.id);
@@ -487,7 +494,7 @@ export default function SensorsPage() {
                                         const latestValue = series.data.length > 0
                                             ? series.data[series.data.length - 1].value
                                             : null;
-                                        const electrodeStatus = detectElectrodeDisconnect(series.kind, series.data);
+                                        const electrodeStatus = detectElectrodeDisconnect(series.kind, series.unit, series.data);
 
                                         return (
                                             <div
