@@ -3,7 +3,7 @@ name = "greenmind-backend"
 version = "3.0.0"
 description = "GreenMind — FastAPI backend for plant bioelectrical sensing"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {text = "Proprietary"}
 authors = [{name = "Traver Dinten"}]
 readme = "../README.md"
 
