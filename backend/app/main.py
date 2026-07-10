@@ -143,7 +143,7 @@ app.include_router(api_v1_router)
 _firmware_dir = os.getenv("FIRMWARE_STORAGE_DIR", "/app/firmware_data")
 try:
     os.makedirs(_firmware_dir, exist_ok=True)
-except PermissionError:
+except (PermissionError, OSError):
     import tempfile
 
     _firmware_dir = os.path.join(tempfile.gettempdir(), "greenmind_firmware")

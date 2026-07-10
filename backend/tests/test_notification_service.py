@@ -10,8 +10,9 @@ async def test_aspsms_adapter_send_success():
     
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_response = AsyncMock()
-        mock_response.json.return_value = {"StatusCode": "1", "StatusInfo": "OK"}
-        mock_response.raise_for_status.return_value = None
+        from unittest.mock import MagicMock
+        mock_response.json = MagicMock(return_value={"StatusCode": "1", "StatusInfo": "OK"})
+        mock_response.raise_for_status = MagicMock(return_value=None)
         mock_post.return_value = mock_response
         
         result = await adapter.send_sms("+41791234567", "Test message")
@@ -30,8 +31,9 @@ async def test_aspsms_adapter_send_failure():
     
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_response = AsyncMock()
-        mock_response.json.return_value = {"StatusCode": "0", "StatusInfo": "Auth failed"}
-        mock_response.raise_for_status.return_value = None
+        from unittest.mock import MagicMock
+        mock_response.json = MagicMock(return_value={"StatusCode": "0", "StatusInfo": "Auth failed"})
+        mock_response.raise_for_status = MagicMock(return_value=None)
         mock_post.return_value = mock_response
         
         result = await adapter.send_sms("+41791234567", "Test message")
