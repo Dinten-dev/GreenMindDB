@@ -475,3 +475,40 @@ def test_pending_commands_delivered(db, gateway, admin_user):
 
     db.refresh(cmd)
     assert cmd.status == "delivered"
+
+def test_command_result_success(client: TestClient, db: Session, gateway: Gateway):
+    import uuid
+    cmd_id = uuid.uuid4()
+    from datetime import datetime, UTC, timedelta
+    cmd = GatewayCommand(
+        id=cmd_id,
+        gateway_id=gateway.id,
+        command_type="controlled_reboot",
+        status="pending",
+        created_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    db.add(cmd)
+    db.commit()
+
+    response = client.post(
+        "/api/v1/gateway/command-result",
+        headers={"X-Api-Key": "test-api-key-secret"},
+        json={
+            "command_id": str(cmd_id),
+            "result": "success",
+            "message": "Reboot initiated",
+        },
+    )
+    
+    assert response.status_code == 200
+    db.refresh(cmd)
+    assert cmd.status == "success"
+
+def test_command_result_missing_auth(client: TestClient):
+    import uuid
+    response = client.post(
+        "/api/v1/gateway/command-result",
+        json={"command_id": str(uuid.uuid4()), "result": "success"},
+    )
+    assert response.status_code == 401
