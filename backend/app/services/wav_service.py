@@ -54,8 +54,14 @@ def upload_wav(
 
     Key format: wav/{sensor_mac}/{YYYYMMDD}/{HHmmss}.wav
     """
-    date_str = started_at.strftime("%Y%m%d")
-    time_str = started_at.strftime("%H%M%S")
+    import zoneinfo
+    switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    local_start = started_at.astimezone(switzerland_tz)
+    
+    date_str = local_start.strftime("%Y%m%d")
+    time_str = local_start.strftime("%H%M%S")
     mac_clean = sensor_mac.replace(":", "").upper()
     s3_key = f"wav/{mac_clean}/{date_str}/{time_str}.wav"
 
@@ -141,11 +147,22 @@ def generate_download_filename(
     Single:  greenmind_{sensor}_{YYYYMMDD-HHmmss}.wav
     Bundle:  greenmind_{sensor}_{from}_bis_{to}.zip
     """
+    import zoneinfo
+    from datetime import timezone
+    switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
+    
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    local_start = started_at.astimezone(switzerland_tz)
+    
     slug = _sanitize_filename(sensor_name)
-    start_str = started_at.strftime("%Y%m%d-%H%M%S")
+    start_str = local_start.strftime("%Y%m%d-%H%M%S")
 
     if ended_at and extension == "zip":
-        end_str = ended_at.strftime("%Y%m%d-%H%M%S")
+        if ended_at.tzinfo is None:
+            ended_at = ended_at.replace(tzinfo=timezone.utc)
+        local_end = ended_at.astimezone(switzerland_tz)
+        end_str = local_end.strftime("%Y%m%d-%H%M%S")
         return f"greenmind_{slug}_{start_str}_bis_{end_str}.zip"
 
     return f"greenmind_{slug}_{start_str}.{extension}"

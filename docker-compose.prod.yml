@@ -67,6 +67,10 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-onboarding@biolingo.org}
       FRONTEND_URL: ${FRONTEND_URL:-https://biolingo.org}
       CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
+      # ASPSMS
+      ASPSMS_USERKEY: ${ASPSMS_USERKEY:-}
+      ASPSMS_PASSWORD: ${ASPSMS_PASSWORD:-}
+      ASPSMS_SENDER_ID: ${ASPSMS_SENDER_ID:-GreenMind}
       # Gunicorn/Uvicorn settings
       API_PORT: 8000
       GUNICORN_WORKERS: 4
