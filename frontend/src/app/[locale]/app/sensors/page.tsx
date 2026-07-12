@@ -49,6 +49,13 @@ function formatDateTimeStr(d: Date): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function round10Min(dateStr: string, isFrom: boolean): string {
+    const d = new Date(dateStr);
+    const ms = d.getTime();
+    const tenMin = 10 * 60 * 1000;
+    return new Date(isFrom ? Math.floor(ms / tenMin) * tenMin : Math.ceil(ms / tenMin) * tenMin).toISOString();
+}
+
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -326,8 +333,8 @@ export default function SensorsPage() {
     // Load WAV count when a sensor is selected or date range changes
     const loadWavFiles = useCallback(async (sensorId: string) => {
         setWavLoading(true);
-        const fromIso = new Date(wavFromDate).toISOString();
-        const toIso = new Date(wavToDate).toISOString();
+        const fromIso = round10Min(wavFromDate, true);
+        const toIso = round10Min(wavToDate, false);
         try {
             const count = await apiCountWavFiles(sensorId, fromIso, toIso);
             setWavCount(count);
@@ -685,8 +692,8 @@ export default function SensorsPage() {
                                                         onClick={async () => {
                                                             setBundleLoading(true);
                                                             try {
-                                                                const fromIso = new Date(wavFromDate).toISOString();
-                                                                const toIso = new Date(wavToDate).toISOString();
+                                                                const fromIso = round10Min(wavFromDate, true);
+                                                                const toIso = round10Min(wavToDate, false);
                                                                 await apiDownloadWavBundle(selectedSensor, fromIso, toIso);
                                                             } catch (err) {
                                                                 console.error('Bundle download failed:', err);
