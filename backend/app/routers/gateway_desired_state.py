@@ -95,9 +95,9 @@ async def handle_command_result(
     """Agent reports the result of a remote command execution."""
     if not x_api_key:
         raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-    _auth_gateway_by_key(db, x_api_key)
+    gateway = _auth_gateway_by_key(db, x_api_key)
 
-    process_command_result(db, None, data.command_id, data.result, data.message)
+    process_command_result(db, gateway, data.command_id, data.result, data.message)
     return {"status": "ok"}
 
 

@@ -44,6 +44,18 @@ function formatDateStr(d: Date): string {
     return d.toISOString().split('T')[0];
 }
 
+function formatDateTimeStr(d: Date): string {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function round10Min(dateStr: string, isFrom: boolean): string {
+    const d = new Date(dateStr);
+    const ms = d.getTime();
+    const tenMin = 10 * 60 * 1000;
+    return new Date(isFrom ? Math.floor(ms / tenMin) * tenMin : Math.ceil(ms / tenMin) * tenMin).toISOString();
+}
+
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -72,8 +84,8 @@ export default function SensorsPage() {
     const [wavLoading, setWavLoading] = useState(false);
 
     const [bundleLoading, setBundleLoading] = useState(false);
-    const [wavFromDate, setWavFromDate] = useState(formatDateStr(new Date(Date.now() - 7 * 86400000)));
-    const [wavToDate, setWavToDate] = useState(formatDateStr(new Date()));
+    const [wavFromDate, setWavFromDate] = useState(formatDateTimeStr(new Date(Date.now() - 7 * 86400000)));
+    const [wavToDate, setWavToDate] = useState(formatDateTimeStr(new Date()));
     const [wavCount, setWavCount] = useState<WavCountInfo | null>(null);
     const wsCleanupRef = useRef<(() => void) | null>(null);
     const [realtimeActive, setRealtimeActive] = useState(false);
@@ -321,8 +333,8 @@ export default function SensorsPage() {
     // Load WAV count when a sensor is selected or date range changes
     const loadWavFiles = useCallback(async (sensorId: string) => {
         setWavLoading(true);
-        const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
-        const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+        const fromIso = round10Min(wavFromDate, true);
+        const toIso = round10Min(wavToDate, false);
         try {
             const count = await apiCountWavFiles(sensorId, fromIso, toIso);
             setWavCount(count);
@@ -646,17 +658,17 @@ export default function SensorsPage() {
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <label className="text-xs text-gray-500 font-medium">Von</label>
                                         <input
-                                            type="date"
+                                            type="datetime-local"
                                             value={wavFromDate}
                                             onChange={e => setWavFromDate(e.target.value)}
                                             className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                                         />
                                         <label className="text-xs text-gray-500 font-medium">Bis</label>
                                         <input
-                                            type="date"
+                                            type="datetime-local"
                                             value={wavToDate}
                                             onChange={e => setWavToDate(e.target.value)}
-                                            max={formatDateStr(new Date())}
+                                            max={formatDateTimeStr(new Date())}
                                             className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                                         />
                                     </div>
@@ -680,8 +692,8 @@ export default function SensorsPage() {
                                                         onClick={async () => {
                                                             setBundleLoading(true);
                                                             try {
-                                                                const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
-                                                                const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
+                                                                const fromIso = round10Min(wavFromDate, true);
+                                                                const toIso = round10Min(wavToDate, false);
                                                                 await apiDownloadWavBundle(selectedSensor, fromIso, toIso);
                                                             } catch (err) {
                                                                 console.error('Bundle download failed:', err);

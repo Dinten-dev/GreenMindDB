@@ -17,10 +17,14 @@ class DuplicateIngestionError(Exception):
     pass
 
 
-def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> int:
+_last_alert_times = {}
+ALERT_COOLDOWN_MINUTES = 720
+
+
+def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tuple[int, list[dict]]:
     """
     Store IoT data, applying idempotency checks.
-    Returns the number of ingested sensor readings.
+    Returns a tuple of (ingested_count, list_of_alerts_to_trigger).
     """
     # 1. Idempotency Check
     existing_log = (
@@ -38,6 +42,7 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> int
 
     now = datetime.now(UTC)
     ingested_count = 0
+    alerts_to_trigger = []
 
     # 3. Store Readings
     for reading in data.readings:
@@ -81,6 +86,29 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> int
         db.add(sr)
         ingested_count += 1
 
+        # Check for electrode alert condition
+        if reading.sensor_kind == "bio_signal" and getattr(sensor, "sms_alerts_enabled", True):
+            is_flatline = reading.value <= 10.0
+            is_saturated = reading.value >= 3200.0
+            if is_flatline or is_saturated:
+                last_alert = _last_alert_times.get(reading.sensor_mac)
+                if not last_alert or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60:
+                    _last_alert_times[reading.sensor_mac] = now
+                    from app.models.user import User
+                    if sensor.gateway and sensor.gateway.zone:
+                        zone = sensor.gateway.zone
+                        users = db.query(User).filter(
+                            User.organization_id == zone.organization_id,
+                            User.phone_number.isnot(None),
+                            User.phone_number != ""
+                        ).all()
+                        for u in users:
+                            alerts_to_trigger.append({
+                                "phone_number": u.phone_number,
+                                "sensor_mac": reading.sensor_mac,
+                                "zone_name": zone.name
+                            })
+
         # Update sensor last_seen
         sensor.last_seen = now
         sensor.status = "online"
@@ -94,4 +122,4 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> int
     log.raw_file_reference = data.raw_file_reference
     db.commit()
 
-    return ingested_count
+    return ingested_count, alerts_to_trigger

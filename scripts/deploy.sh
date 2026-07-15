@@ -144,7 +144,7 @@ ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "
     export PATH=\$PATH:/usr/local/bin
     cd ${REMOTE_DIR}
     docker builder prune -f 2>/dev/null || true
-    COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} build --no-cache
+    COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} build --no-cache backend
     COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} up -d --remove-orphans
 "
 

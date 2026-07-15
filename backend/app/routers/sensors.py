@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+import zoneinfo
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -532,8 +533,16 @@ async def export_sensor_data(
                 .yield_per(5000)
             )
 
+            switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
+
             for ts, val, unit in readings:
-                csv_buffer.write(f"{ts.isoformat()},{round(val, 4)},{unit}\n")
+                # convert to Switzerland time
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=UTC)
+                ts_local = ts.astimezone(switzerland_tz)
+                # Format as YYYY-MM-DD HH:MM:SS for easy Excel reading
+                ts_str = ts_local.strftime('%Y-%m-%d %H:%M:%S')
+                csv_buffer.write(f"{ts_str},{round(val, 4)},{unit}\n")
 
             zf.writestr(f"{kind}.csv", csv_buffer.getvalue())
             csv_buffer.close()

@@ -68,11 +68,11 @@ class TestIngestBoundary:
         assert response.status_code == 401
         assert "Missing X-Api-Key" in response.json()["detail"]
 
-    def test_ingest_unknown_gateway_serial_returns_410(self, client: TestClient):
+    def test_ingest_unknown_gateway_serial_returns_404(self, client: TestClient):
         """Boundary: valid API key format but gateway_serial does not exist in DB.
 
-        The endpoint returns 410 (Gone) with a RESET_TO_SETUP_MODE action
-        so the gateway knows it must re-pair.
+        The endpoint returns 404 (Not Found) with an error detail
+        so the gateway knows it is unauthorized/unknown but doesn't hard-reset.
         """
         payload = {
             "measurement_id": "00000000-0000-0000-0000-000000000002",
@@ -84,7 +84,7 @@ class TestIngestBoundary:
             json=payload,
             headers={"X-Api-Key": "any-key"},
         )
-        assert response.status_code == 410
+        assert response.status_code == 404
 
     def test_ingest_empty_readings_list(self, client: TestClient, setup_test_data: dict):
         """Boundary: readings list is empty (length = 0).
@@ -281,3 +281,53 @@ class TestIngestIdempotency:
         assert resp2.status_code == 201
         assert resp2.json()["status"] == "duplicate"
         assert resp2.json()["ingested"] == 0  # Grenzwert: keine Daten doppelt gespeichert
+
+    def test_ingest_electrode_disconnect_triggers_sms(
+        self, client: TestClient, db: Session, setup_test_data: dict, mocker
+    ):
+        """Boundary: bio_signal value <= 10.0 mV triggers SMS alert."""
+        # 1. Create a user in the same organization with a phone number
+        from app.models.user import User
+        org = setup_test_data["org"]
+        user = User(
+            email="test-alert-user@example.com",
+            password_hash="foo",
+            organization_id=org.id,
+            phone_number="+41760000000",
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+
+        # Mock notification service
+        mock_send = mocker.patch("app.routers.ingest.notification_service.send_electrode_disconnect_alert", return_value=True)
+
+        # 2. Ingest low value (flatline) for bio_signal
+        sensor = setup_test_data["sensor"]
+        measurement_id = "00000000-0000-0000-0000-000000009999"
+        payload = {
+            "measurement_id": measurement_id,
+            "gateway_serial": "test-gw-ci",
+            "readings": [
+                {
+                    "sensor_mac": sensor.mac_address,
+                    "sensor_kind": "bio_signal",
+                    "value": 0.0,
+                    "unit": "mV",
+                }
+            ],
+        }
+
+        resp = client.post(
+            "/api/v1/ingest",
+            json=payload,
+            headers={"X-Api-Key": "ci-api-key"},
+        )
+        assert resp.status_code == 201
+        
+        # Verify alert was sent
+        mock_send.assert_called_once_with(
+            phone_number="+41760000000",
+            sensor_mac=sensor.mac_address,
+            zone_name="Test Zone",
+        )

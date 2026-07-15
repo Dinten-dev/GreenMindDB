@@ -29,12 +29,13 @@ class ASPSMSAdapter(SMSAdapter):
             logger.warning("ASPSMS not configured, skipping SMS to %s", phone_number)
             return False
 
-        url = f"{self.base_url}/ASPSMSSendSMS?Userkey={self.userkey}&Password={self.password}"
+        url = "https://json.aspsms.com/SendTextSMS"
         payload = {
-            "Operation": "SendTextSMS",
+            "UserName": self.userkey,
+            "Password": self.password,
             "Originator": self.sender_id,
-            "MessageData": message,
-            "Recipients": [{"PhoneNumber": phone_number}]
+            "Recipients": [phone_number],
+            "MessageText": message
         }
 
         try:
