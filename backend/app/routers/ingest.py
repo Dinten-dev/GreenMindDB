@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import verify_password
@@ -11,6 +11,7 @@ from app.models.master import Gateway, Sensor
 from app.routers.ws import manager
 from app.schemas.ingest import IngestRequest, IngestResponse
 from app.services.ingest_service import DuplicateIngestionError, process_ingestion
+from app.services.notification_service import notification_service
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -18,6 +19,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 @router.post("", response_model=IngestResponse, status_code=201)
 async def ingest_data(
     data: IngestRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     x_api_key: str | None = Header(None),
 ):
@@ -31,7 +33,7 @@ async def ingest_data(
     gateway = db.query(Gateway).filter(Gateway.hardware_id == data.gateway_serial).first()
     if not gateway:
         raise HTTPException(
-            status_code=410, detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
+            status_code=404, detail="Gateway not found"
         )
     if not gateway.is_active:
         raise HTTPException(status_code=403, detail="Gateway is deactivated")
@@ -43,7 +45,14 @@ async def ingest_data(
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     try:
-        ingested = process_ingestion(data, gateway, db)
+        ingested, alerts = process_ingestion(data, gateway, db)
+        for alert in alerts:
+            background_tasks.add_task(
+                notification_service.send_electrode_disconnect_alert,
+                phone_number=alert["phone_number"],
+                sensor_mac=alert["sensor_mac"],
+                zone_name=alert["zone_name"]
+            )
     except DuplicateIngestionError:
         return IngestResponse(
             status="duplicate",

@@ -85,7 +85,7 @@ async def handle_heartbeat(
     gateway = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
     if not gateway:
         raise HTTPException(
-            status_code=410, detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
+            status_code=404, detail="Gateway not found"
         )
     if not gateway.is_active:
         raise HTTPException(status_code=403, detail="Gateway deactivated")

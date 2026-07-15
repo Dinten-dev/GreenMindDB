@@ -495,6 +495,7 @@ def test_command_result_success(client: TestClient, db: Session, gateway: Gatewa
         "/api/v1/gateway/command-result",
         headers={"X-Api-Key": "test-api-key-secret"},
         json={
+            "gateway_id": str(gateway.id),
             "command_id": str(cmd_id),
             "result": "success",
             "message": "Reboot initiated",
@@ -509,6 +510,10 @@ def test_command_result_missing_auth(client: TestClient):
     import uuid
     response = client.post(
         "/api/v1/gateway/command-result",
-        json={"command_id": str(uuid.uuid4()), "result": "success"},
+        json={
+            "gateway_id": "test-gateway-id",
+            "command_id": str(uuid.uuid4()),
+            "result": "success",
+        },
     )
     assert response.status_code == 401
