@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-    apiListZones, apiListGateways, apiListSensors, apiDeleteGateway,
+    apiListZones, apiListGateways, apiListSensors, apiDeleteGateway, apiUpdateSensor,
     Zone, GatewayInfo, SensorInfo,
 } from '@/lib/api';
 import PairSensorDialog from '../sensors/PairSensorDialog';
@@ -21,6 +21,7 @@ export default function DashboardPage() {
     const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
+    const [updatingSmsSensorId, setUpdatingSmsSensorId] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -71,6 +72,20 @@ export default function DashboardPage() {
             console.error('Failed to delete gateway:', err);
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const toggleSmsAlerts = async (sensor: SensorInfo) => {
+        setUpdatingSmsSensorId(sensor.id);
+        const newValue = !sensor.sms_alerts_enabled;
+        try {
+            const updated = await apiUpdateSensor(sensor.id, { sms_alerts_enabled: newValue });
+            setSensors(prev => prev.map(s => s.id === updated.id ? updated : s));
+        } catch (err) {
+            console.error('Failed to update SMS alerts:', err);
+            alert('Fehler beim Aktualisieren der SMS-Einstellungen.');
+        } finally {
+            setUpdatingSmsSensorId(null);
         }
     };
 
@@ -181,6 +196,39 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-400">
                         Erstelle eine Zone und paire ein Raspberry Pi Gateway, um Sensordaten zu empfangen.
                     </p>
+                </div>
+            )}
+
+            {/* Sensor Status & SMS Alerts */}
+            {sensors.length > 0 && (
+                <div className="glass-card p-6">
+                    <h2 className="text-lg font-semibold text-gray-800 mb-4">Sensoren & SMS-Warnungen</h2>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {sensors.map(sensor => (
+                            <div key={sensor.id} className="flex items-center justify-between gap-3 px-4 py-3 bg-white/40 rounded-xl border border-black/[0.03]">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${sensor.status === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-gray-800 truncate">{sensor.name || sensor.mac_address}</p>
+                                        <p className="text-xs text-gray-400 truncate">{sensor.mac_address}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => toggleSmsAlerts(sensor)}
+                                    disabled={updatingSmsSensorId === sensor.id}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all border shrink-0 disabled:opacity-50 ${
+                                        sensor.sms_alerts_enabled
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                    title="SMS Warnungen bei Elektroden-Abfall"
+                                >
+                                    <span className="text-sm">📱</span>
+                                    {updatingSmsSensorId === sensor.id ? '...' : sensor.sms_alerts_enabled ? 'SMS aktiv' : 'SMS stumm'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 

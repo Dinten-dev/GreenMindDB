@@ -78,6 +78,7 @@ export default function SensorsPage() {
     const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
     const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isUpdatingSms, setIsUpdatingSms] = useState(false);
     const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
     const [wsConnected, setWsConnected] = useState(false);
 
@@ -374,14 +375,17 @@ export default function SensorsPage() {
     };
 
     const toggleSmsAlerts = async () => {
-        if (!selectedSensorInfo) return;
+        if (!selectedSensorInfo || isUpdatingSms) return;
+        setIsUpdatingSms(true);
         const newValue = !selectedSensorInfo.sms_alerts_enabled;
         try {
             const updated = await apiUpdateSensor(selectedSensorInfo.id, { sms_alerts_enabled: newValue });
             setSensors(prev => prev.map(s => s.id === updated.id ? updated : s));
         } catch (err) {
             console.error('Failed to update SMS alerts:', err);
-            alert('Failed to update settings');
+            alert('Fehler beim Aktualisieren der SMS-Einstellungen.');
+        } finally {
+            setIsUpdatingSms(false);
         }
     };
 
@@ -417,7 +421,8 @@ export default function SensorsPage() {
                                 {/* SMS Alerts Toggle */}
                                 <button
                                     onClick={toggleSmsAlerts}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all border shrink-0 ${
+                                    disabled={isUpdatingSms}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all border shrink-0 disabled:opacity-50 ${
                                         selectedSensorInfo.sms_alerts_enabled
                                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                                             : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
@@ -425,7 +430,7 @@ export default function SensorsPage() {
                                     title="SMS Warnungen bei Elektroden-Abfall"
                                 >
                                     <span className="text-sm">📱</span>
-                                    {selectedSensorInfo.sms_alerts_enabled ? 'SMS aktiv' : 'SMS stumm'}
+                                    {isUpdatingSms ? 'Speichere...' : selectedSensorInfo.sms_alerts_enabled ? 'SMS aktiv' : 'SMS stumm'}
                                 </button>
 
                                 {/* Time Range Segmented Control */}

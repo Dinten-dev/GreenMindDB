@@ -87,7 +87,7 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
         ingested_count += 1
 
         # Check for electrode alert condition
-        if reading.sensor_kind == "bio_signal" and getattr(sensor, "sms_alerts_enabled", True):
+        if reading.sensor_kind in ("bio_signal", "bioelectric") and getattr(sensor, "sms_alerts_enabled", True):
             is_flatline = reading.value <= 10.0
             is_saturated = reading.value >= 3200.0
             if is_flatline or is_saturated:
