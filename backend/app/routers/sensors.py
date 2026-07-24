@@ -178,6 +178,10 @@ async def update_sensor(
     db.commit()
     db.refresh(sensor)
 
+    now = datetime.now(UTC)
+    last_seen = sensor.last_seen.replace(tzinfo=UTC) if sensor.last_seen and sensor.last_seen.tzinfo is None else sensor.last_seen
+    is_online = bool(last_seen and (now - last_seen) < LIVENESS_THRESHOLD)
+
     return SensorResponse(
         id=str(sensor.id),
         gateway_id=str(sensor.gateway_id),
@@ -185,7 +189,7 @@ async def update_sensor(
         mac_address=sensor.mac_address,
         name=sensor.name,
         sensor_type=sensor.sensor_type,
-        status=sensor.status,
+        status="online" if is_online else "offline",
         last_seen=sensor.last_seen.isoformat() if sensor.last_seen else None,
         claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
         gateway_name=gw.name,
