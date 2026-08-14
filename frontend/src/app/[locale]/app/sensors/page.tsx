@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import {
     apiListSensors, apiGetSensorData, apiGetSensorDataAdvanced,
     apiExportSensorData, apiDeleteSensor,
@@ -51,12 +51,24 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+function isSensorArchived(s: SensorInfo): boolean {
+    if (!s.last_seen) return true;
+    const lastSeenTime = new Date(s.last_seen).getTime();
+    return isNaN(lastSeenTime) || (Date.now() - lastSeenTime) > THREE_DAYS_MS;
+}
+
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
 
 export default function SensorsPage() {
     const [sensors, setSensors] = useState<SensorInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
+    const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+
+    const activeSensors = useMemo(() => sensors.filter(s => !isSensorArchived(s)), [sensors]);
+    const archivedSensors = useMemo(() => sensors.filter(s => isSensorArchived(s)), [sensors]);
     const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
     const [loadingData, setLoadingData] = useState(false);
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
@@ -728,6 +740,130 @@ export default function SensorsPage() {
         );
     };
 
+    const renderSensorTable = (sensorList: SensorInfo[], isArchivedGroup = false) => (
+        <div className="glass-table hidden sm:block">
+            <table className="w-full text-sm">
+                <thead>
+                    <tr className="border-b border-black/[0.04]">
+                        <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Name</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">MAC</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Gateway</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Zuletzt</th>
+                        <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-12"></th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-black/[0.03]">
+                    {sensorList.map(s => (
+                        <Fragment key={s.id}>
+                        <tr
+                            onClick={() => handleSensorClick(s.id)}
+                            className={`cursor-pointer transition-all duration-200 ${
+                                selectedSensor === s.id
+                                    ? 'bg-emerald-50/60'
+                                    : 'hover:bg-white/50'
+                            }`}
+                        >
+                            <td className="px-5 py-3.5 font-medium text-gray-800">
+                                <div className="flex items-center gap-2">
+                                    <span className={`transition-transform duration-200 text-xs text-gray-300 ${selectedSensor === s.id ? 'rotate-90' : ''}`}>▶</span>
+                                    {s.name || s.mac_address}
+                                    {isArchivedGroup && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
+                                            Archiviert
+                                        </span>
+                                    )}
+                                    {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-200/50" title={`Elektrode abgefallen (Signal ${electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})`}>
+                                            ⚠️ Warnung
+                                        </span>
+                                    )}
+                                </div>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-gray-400 text-xs">{s.mac_address}</td>
+                            <td className="px-5 py-3.5 text-gray-500">{s.gateway_name || '–'}</td>
+                            <td className="px-5 py-3.5">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    s.status === 'online'
+                                        ? 'bg-emerald-50 text-emerald-600'
+                                        : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
+                                    {isArchivedGroup ? 'inaktiv (>3d)' : s.status}
+                                </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-xs text-gray-400">
+                                {s.last_seen ? new Date(s.last_seen).toLocaleString('de-CH') : '–'}
+                            </td>
+                            <td className="px-5 py-3.5">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setDeletingSensorId(s.id); }}
+                                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                    title="Sensor entfernen"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {selectedSensor === s.id && (
+                            <tr>
+                                <td colSpan={6} className="p-0 border-b border-black/[0.04] bg-emerald-50/10">
+                                    <div className="p-0 sm:p-2 animate-in slide-in-from-top-2 duration-200">
+                                        {renderSensorDetailPanel()}
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+                        </Fragment>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+
+    const renderSensorMobileCards = (sensorList: SensorInfo[], isArchivedGroup = false) => (
+        <div className="space-y-2 sm:hidden">
+            {sensorList.map(s => (
+                <Fragment key={s.id}>
+                <div
+                    onClick={() => handleSensorClick(s.id)}
+                    className={`glass-card p-4 cursor-pointer ${
+                        selectedSensor === s.id ? 'border-emerald-500/20' : ''
+                    } ${isArchivedGroup ? 'opacity-80 bg-gray-50/40' : ''}`}
+                >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-800">{s.name || s.mac_address}</span>
+                            <span className={`w-2 h-2 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
+                        </div>
+                        {isArchivedGroup && (
+                            <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
+                                Archiviert
+                            </span>
+                        )}
+                    </div>
+                    <div className="text-xs text-gray-400 font-mono">
+                        {s.mac_address}
+                    </div>
+                    {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200/50">
+                            <span>⚠️</span>
+                            Elektrode abgefallen (Signal {electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})
+                        </div>
+                    )}
+                </div>
+                {selectedSensor === s.id && (
+                    <div className="mt-1 mb-2 animate-in slide-in-from-top-2 duration-200">
+                        {renderSensorDetailPanel()}
+                    </div>
+                )}
+                </Fragment>
+            ))}
+        </div>
+    );
+
     return (
         <div className="space-y-6 relative">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -755,116 +891,56 @@ export default function SensorsPage() {
                     </p>
                 </div>
             ) : (
-                <div className="space-y-4">
-                    {/* Sensor List — Desktop Table */}
-                    <div className="glass-table hidden sm:block">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-black/[0.04]">
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Name</th>
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">MAC</th>
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Gateway</th>
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">Zuletzt</th>
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-12"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-black/[0.03]">
-                                {sensors.map(s => (
-                                    <Fragment key={s.id}>
-                                    <tr
-                                        onClick={() => handleSensorClick(s.id)}
-                                        className={`cursor-pointer transition-all duration-200 ${
-                                            selectedSensor === s.id
-                                                ? 'bg-emerald-50/60'
-                                                : 'hover:bg-white/50'
-                                        }`}
-                                    >
-                                        <td className="px-5 py-3.5 font-medium text-gray-800">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`transition-transform duration-200 text-xs text-gray-300 ${selectedSensor === s.id ? 'rotate-90' : ''}`}>▶</span>
-                                                {s.name || s.mac_address}
-                                                {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
-                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-200/50" title={`Elektrode abgefallen (Signal ${electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})`}>
-                                                        ⚠️ Warnung
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-3.5 font-mono text-gray-400 text-xs">{s.mac_address}</td>
-                                        <td className="px-5 py-3.5 text-gray-500">{s.gateway_name || '–'}</td>
-                                        <td className="px-5 py-3.5">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                                                s.status === 'online'
-                                                    ? 'bg-emerald-50 text-emerald-600'
-                                                    : 'bg-gray-100 text-gray-400'
-                                            }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
-                                                {s.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-3.5 text-xs text-gray-400">
-                                            {s.last_seen ? new Date(s.last_seen).toLocaleString('de-CH') : '–'}
-                                        </td>
-                                        <td className="px-5 py-3.5">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setDeletingSensorId(s.id); }}
-                                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                                title="Sensor entfernen"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    {selectedSensor === s.id && (
-                                        <tr>
-                                            <td colSpan={6} className="p-0 border-b border-black/[0.04] bg-emerald-50/10">
-                                                <div className="p-0 sm:p-2 animate-in slide-in-from-top-2 duration-200">
-                                                    {renderSensorDetailPanel()}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                    </Fragment>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                <div className="space-y-6">
+                    {/* Active Sensors Section */}
+                    {activeSensors.length > 0 ? (
+                        <div className="space-y-4">
+                            {renderSensorTable(activeSensors, false)}
+                            {renderSensorMobileCards(activeSensors, false)}
+                        </div>
+                    ) : (
+                        <div className="glass-card p-6 text-center text-sm text-gray-400">
+                            Keine aktiven Sensoren (alle Sensoren befinden sich im Archiv).
+                        </div>
+                    )}
 
-                    {/* Sensor List — Mobile Cards */}
-                    <div className="space-y-2 sm:hidden">
-                        {sensors.map(s => (
-                            <Fragment key={s.id}>
-                            <div
-                                onClick={() => handleSensorClick(s.id)}
-                                className={`glass-card p-4 cursor-pointer ${
-                                    selectedSensor === s.id ? 'border-emerald-500/20' : ''
-                                }`}
+                    {/* Archived Sensors Section (> 3 Days Inactive) */}
+                    {archivedSensors.length > 0 && (
+                        <div className="border border-black/[0.06] rounded-2xl bg-gray-50/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
+                            <button
+                                onClick={() => setIsArchiveOpen(prev => !prev)}
+                                className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-black/[0.02] transition-colors"
                             >
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm font-medium text-gray-800">{s.name || s.mac_address}</span>
-                                    <span className={`w-2 h-2 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`} />
-                                </div>
-                                <div className="text-xs text-gray-400 font-mono">
-                                    {s.mac_address}
-                                </div>
-                                {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
-                                    <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200/50">
-                                        <span>⚠️</span>
-                                        Elektrode abgefallen (Signal {electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xl">📁</span>
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                                            Archiv (Inaktive Sensoren)
+                                            <span className="px-2 py-0.5 rounded-full bg-gray-200/80 text-gray-600 text-xs font-semibold">
+                                                {archivedSensors.length}
+                                            </span>
+                                        </h3>
+                                        <p className="text-xs text-gray-400 mt-0.5">
+                                            Seit mehr als 3 Tagen (72h) keine Daten empfangen
+                                        </p>
                                     </div>
-                                )}
-                            </div>
-                            {selectedSensor === s.id && (
-                                <div className="mt-1 mb-2 animate-in slide-in-from-top-2 duration-200">
-                                    {renderSensorDetailPanel()}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
+                                    <span>{isArchiveOpen ? 'Einklappen' : 'Anzeigen'}</span>
+                                    <span className={`transform transition-transform duration-200 text-[10px] ${isArchiveOpen ? 'rotate-180' : ''}`}>
+                                        ▼
+                                    </span>
+                                </div>
+                            </button>
+
+                            {isArchiveOpen && (
+                                <div className="p-3 border-t border-black/[0.04] bg-white/40 space-y-4 animate-in fade-in duration-200">
+                                    {renderSensorTable(archivedSensors, true)}
+                                    {renderSensorMobileCards(archivedSensors, true)}
                                 </div>
                             )}
-                            </Fragment>
-                        ))}
-                    </div>
+                        </div>
+                    )}
                 </div>
             )}
 
