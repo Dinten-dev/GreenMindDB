@@ -1,9 +1,10 @@
 """Authentication API endpoints: signup, login, logout, me."""
 
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -12,7 +13,7 @@ from app.auth import (
     get_current_user,
     get_password_hash,
     set_auth_cookie,
-    verify_password,
+    verify_password_and_update,
 )
 from app.database import get_db
 from app.models.user import EmailVerification, Role, User
@@ -20,6 +21,7 @@ from app.rate_limit import limiter
 from app.schemas.auth import (
     AuthResponse,
     LoginRequest,
+    ResendVerificationRequest,
     SignupRequest,
     UserResponse,
     UserUpdateRequest,
@@ -30,15 +32,17 @@ from app.services.email_service import EmailService
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _verification_token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 # ── Endpoints ────────────────────────────────────
 
 
 @router.post("/signup", response_model=AuthResponse, status_code=201)
 @limiter.limit("5/minute")
-async def signup(
-    request: Request, data: SignupRequest, response: Response, db: Session = Depends(get_db)
-):
-    """Create a new user account and auto-login."""
+async def signup(request: Request, data: SignupRequest, db: Session = Depends(get_db)):
+    """Create a new user account pending email verification."""
     existing = db.query(User).filter(User.email == data.email.lower()).first()
     if existing:
         raise HTTPException(
@@ -58,7 +62,9 @@ async def signup(
     # Create email verification token
     token_str = secrets.token_hex(16)
     verification = EmailVerification(
-        user_id=user.id, token=token_str, expires_at=datetime.now(UTC) + timedelta(hours=24)
+        user_id=user.id,
+        token=_verification_token_digest(token_str),
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
     )
     db.add(verification)
     db.commit()
@@ -67,10 +73,10 @@ async def signup(
     # Dispatch Verification Email
     EmailService.send_verification_email(to_email=user.email, token=token_str)
 
-    token = create_access_token(data={"sub": str(user.id)})
-    set_auth_cookie(response, token)
-
-    return AuthResponse(user=_user_response(user))
+    return AuthResponse(
+        detail="Account created. Verify your email before signing in.",
+        user=_user_response(user),
+    )
 
 
 @router.post("/verify-email", status_code=200)
@@ -79,11 +85,17 @@ async def verify_email(request: Request, data: VerifyEmailRequest, db: Session =
     """Verify a user's email using the token."""
     verification = (
         db.query(EmailVerification)
-        .filter(EmailVerification.token == data.token, EmailVerification.used_at.is_(None))
+        .filter(
+            EmailVerification.token.in_((_verification_token_digest(data.token), data.token)),
+            EmailVerification.used_at.is_(None),
+        )
         .first()
     )
 
-    if not verification or verification.expires_at < datetime.now(UTC):
+    expires_at = verification.expires_at if verification else None
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if not verification or not expires_at or expires_at < datetime.now(UTC):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
         )
@@ -97,6 +109,45 @@ async def verify_email(request: Request, data: VerifyEmailRequest, db: Session =
     return {"detail": "Email successfully verified"}
 
 
+@router.post("/resend-verification", status_code=200)
+@limiter.limit("3/hour")
+async def resend_verification(
+    request: Request,
+    data: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Issue a fresh verification token without revealing account existence."""
+    generic_detail = (
+        "If an unverified account exists for that email, a verification message has been sent."
+    )
+    user = db.query(User).filter(User.email == data.email.lower()).first()
+    if not user or not user.is_active or user.is_verified:
+        return {"detail": generic_detail}
+
+    now = datetime.now(UTC)
+    db.query(EmailVerification).filter(
+        EmailVerification.user_id == user.id,
+        EmailVerification.used_at.is_(None),
+    ).update({EmailVerification.used_at: now}, synchronize_session=False)
+    token_str = secrets.token_hex(16)
+    db.add(
+        EmailVerification(
+            user_id=user.id,
+            token=_verification_token_digest(token_str),
+            expires_at=now + timedelta(hours=24),
+        )
+    )
+    db.commit()
+
+    background_tasks.add_task(
+        EmailService.send_verification_email,
+        to_email=user.email,
+        token=token_str,
+    )
+    return {"detail": generic_detail}
+
+
 @router.post("/login", response_model=AuthResponse)
 @limiter.limit("5/minute")
 async def login(
@@ -107,13 +158,15 @@ async def login(
 
     # Use dummy verify if user doesn't exist to prevent timing attacks (user enumeration)
     from app.auth import pwd_context
+
     if not user:
         pwd_context.dummy_verify()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
 
-    if not verify_password(data.password, user.password_hash):
+    password_valid, replacement_hash = verify_password_and_update(data.password, user.password_hash)
+    if not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
@@ -122,6 +175,10 @@ async def login(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     if not user.is_verified:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
+
+    if replacement_hash:
+        user.password_hash = replacement_hash
+        db.commit()
 
     token = create_access_token(data={"sub": str(user.id)})
     set_auth_cookie(response, token)

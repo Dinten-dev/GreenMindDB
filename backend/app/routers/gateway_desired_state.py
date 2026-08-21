@@ -3,15 +3,19 @@
 All endpoints authenticate via X-Api-Key header (per-gateway bcrypt key).
 """
 
-import os
-
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.auth import verify_password
+from app.config import settings
 from app.database import get_db
-from app.models.gateway_remote import GatewayAppRelease, GatewayConfigRelease
+from app.file_security import resolve_contained_path, verify_signed_file
+from app.gateway_auth import get_current_gateway
+from app.models.gateway_remote import (
+    GatewayAppRelease,
+    GatewayConfigRelease,
+    GatewayDesiredState,
+)
 from app.models.master import Gateway
 from app.schemas.gateway_remote import (
     CommandResultRequest,
@@ -28,41 +32,15 @@ from app.services.gateway_remote_service import (
 router = APIRouter(prefix="/gateway", tags=["gateway-agent"])
 
 
-
-# In-memory cache for API keys to avoid O(N) bcrypt loop on every request
-_api_key_cache: dict[str, str] = {}
-
-def _auth_gateway_by_key(db: Session, api_key: str) -> Gateway:
-    """Authenticate a gateway by its API key with in-memory caching."""
-    if api_key in _api_key_cache:
-        cached_gw_id = _api_key_cache[api_key]
-        gw = db.query(Gateway).filter(Gateway.id == cached_gw_id, Gateway.is_active.is_(True)).first()
-        if gw:
-            return gw
-        else:
-            del _api_key_cache[api_key]
-
-    gateways = db.query(Gateway).filter(Gateway.is_active.is_(True)).all()
-    for gw in gateways:
-        if gw.api_key_hash and verify_password(api_key, gw.api_key_hash):
-            _api_key_cache[api_key] = str(gw.id)
-            return gw
-    raise HTTPException(status_code=401, detail="Invalid API key")
-
-
 @router.get("/desired-state", response_model=DesiredStateResponse)
 async def handle_desired_state(
-    current_app_version: str | None = None,
-    current_config_version: str | None = None,
-    current_agent_version: str | None = None,
+    current_app_version: str | None = Query(None, max_length=50),
+    current_config_version: str | None = Query(None, max_length=50),
+    current_agent_version: str | None = Query(None, max_length=50),
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Agent polls this endpoint to get the desired target state."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-    gateway = _auth_gateway_by_key(db, x_api_key)
-
     return get_desired_state(
         db,
         gateway,
@@ -74,13 +52,12 @@ async def handle_desired_state(
 @router.post("/state-report", status_code=200)
 async def handle_state_report(
     data: StateReportRequest,
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Agent reports its current state, versions, and health."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-    gateway = _auth_gateway_by_key(db, x_api_key)
+    if data.gateway_id != gateway.id:
+        raise HTTPException(status_code=403, detail="Gateway ID mismatch")
 
     process_state_report(db, gateway, data.model_dump())
     return {"status": "ok"}
@@ -89,63 +66,79 @@ async def handle_state_report(
 @router.post("/command-result", status_code=200)
 async def handle_command_result(
     data: CommandResultRequest,
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Agent reports the result of a remote command execution."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-    _auth_gateway_by_key(db, x_api_key)
-
-    process_command_result(db, None, data.command_id, data.result, data.message)
+    if data.gateway_id != gateway.id:
+        raise HTTPException(status_code=403, detail="Gateway ID mismatch")
+    process_command_result(db, gateway, data.command_id, data.result, data.message)
     return {"status": "ok"}
 
 
 @router.get("/app-release/{version}/download")
 async def handle_app_release_download(
-    version: str,
+    version: str = Path(
+        max_length=50,
+        pattern=(
+            r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+        ),
+    ),
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Download a gateway app release tarball."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-    _auth_gateway_by_key(db, x_api_key)
-
     release = (
         db.query(GatewayAppRelease)
+        .join(
+            GatewayDesiredState,
+            GatewayDesiredState.desired_app_version == GatewayAppRelease.version,
+        )
         .filter(GatewayAppRelease.version == version, GatewayAppRelease.is_active.is_(True))
+        .filter(GatewayDesiredState.gateway_id == gateway.id)
         .first()
     )
     if not release:
         raise HTTPException(status_code=404, detail="Release not found or inactive")
 
-    file_path = os.path.join(GATEWAY_RELEASE_DIR, release.artifact_path)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Release artifact missing on disk")
+    try:
+        file_path = resolve_contained_path(GATEWAY_RELEASE_DIR, release.artifact_path)
+        if not file_path.is_file():
+            raise ValueError("Release artifact is missing")
+        verify_signed_file(
+            file_path,
+            release.sha256,
+            release.signature,
+            settings.gateway_release_signing_public_key_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Release artifact verification failed") from exc
 
     return FileResponse(
         path=file_path,
         media_type="application/gzip",
-        filename=release.artifact_path,
+        filename=file_path.name,
         headers={"X-Checksum-SHA256": release.sha256},
     )
 
 
 @router.get("/config-release/{version}/download")
 async def handle_config_release_download(
-    version: str,
+    version: str = Path(max_length=50, pattern=r"^[A-Za-z0-9._+-]+$"),
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Download a gateway config release as JSON."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-    _auth_gateway_by_key(db, x_api_key)
-
     config = (
         db.query(GatewayConfigRelease)
+        .join(
+            GatewayDesiredState,
+            GatewayDesiredState.desired_config_version == GatewayConfigRelease.version,
+        )
         .filter(GatewayConfigRelease.version == version, GatewayConfigRelease.is_active.is_(True))
+        .filter(GatewayDesiredState.gateway_id == gateway.id)
         .first()
     )
     if not config:

@@ -1,5 +1,4 @@
 from app.routers.auth import router as auth_router
-from app.routers.biosignal import router as biosignal_router
 from app.routers.contact import router as contact_router
 from app.routers.firmware import router as firmware_router
 from app.routers.gateway_admin import router as gateway_admin_router
@@ -8,7 +7,6 @@ from app.routers.gateways import router as gateways_router
 from app.routers.ingest import router as ingest_router
 from app.routers.organizations import router as organizations_router
 from app.routers.plants import router as plants_router
-from app.routers.provisioning import router as provisioning_router
 from app.routers.public_evaluate import router as public_evaluate_router
 from app.routers.public_observe import router as public_observe_router
 from app.routers.sensors import router as sensors_router
@@ -26,12 +24,10 @@ __all__ = [
     "wav_router",
     "ws_router",
     "zones_router",
-    "biosignal_router",
     "firmware_router",
     "gateway_desired_state_router",
     "gateway_admin_router",
     "plants_router",
     "public_observe_router",
     "public_evaluate_router",
-    "provisioning_router",
 ]

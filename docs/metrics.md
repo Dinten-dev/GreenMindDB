@@ -48,7 +48,9 @@ Der [`prometheus-fastapi-instrumentator`](https://github.com/trallnag/prometheus
 Die 60 %-Schwelle ist ein pragmatischer Kompromiss für ein R&D-Projekt:
 - **40 %** war der vorherige Wert – zu niedrig, um Regressionssicherheit zu gewährleisten.
 - **80 %+** wäre ideal, ist aber bei aktiver Feature-Entwicklung schwer durchzusetzen, besonders für Routers und Services mit externen Abhängigkeiten (MinIO, WebSocket, OTA).
-- **60 %** (aktuell ~61 %) sichert die Kernlogik (Auth, Ingest, Zone CRUD) ab, ohne unrealistisch zu sein.
+- **60 %** sichert einen Mindestumfang ab, ohne die Auswahl risikobasierter Tests durch ein
+  unrealistisches Prozentziel zu ersetzen. Den aktuellen Wert liefert ausschließlich der letzte
+  tatsächlich ausgeführte CI-Lauf.
 
 ### CI-Integration
 
@@ -70,7 +72,9 @@ Der Coverage-Report wird als GitHub Actions Artefakt gespeichert und kann nach j
 
 1. **Coverage ≠ Qualität:** 100 % Line-Coverage garantiert nicht, dass alle Grenzfälle getestet sind. Branch-Coverage oder Mutation-Testing wären genauer, aber aufwändiger.
 2. **Keine Produktionsdaten-Abdeckung:** Tests laufen gegen SQLite mit synthetischen Daten. Edge-Cases, die nur mit realen Sensor-Datenströmen auftreten (z. B. NaN-Werte, Zeitstempel-Sprünge), werden nicht abgedeckt.
-3. **Ausschlüsse:** `app/seed/*` und `__pycache__` werden aus gutem Grund exkludiert, aber auch Alembic-Migrationen und WebSocket-Handler sind schwer testbar und drücken die Coverage.
+3. **Ausschlüsse und Grenzen:** Generierte `__pycache__`-Dateien werden ausgeschlossen. Alembic-
+   Migrationen, TimescaleDB-Verhalten, MinIO und WebSocket-Mehrclientverhalten benötigen eigene
+   Integrationstests; ein SQLite-Coveragewert belegt diese Pfade nicht.
 
 ---
 

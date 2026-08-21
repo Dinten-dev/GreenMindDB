@@ -1,10 +1,10 @@
 """Organization request/response schemas."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OrgCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=200)
 
 
 class OrgResponse(BaseModel):

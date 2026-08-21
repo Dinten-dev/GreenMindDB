@@ -14,8 +14,8 @@ from app.models.biosignal import BioAggregate, BioSession
 from app.models.master import Gateway, Sensor
 from app.models.timeseries import SensorReading
 from app.routers.ws import manager
-from app.services.wav_service import export_wav_from_session
 from app.services.notification_service import notification_service
+from app.services.wav_service import export_wav_from_session
 
 # Debounce state for alerts: {sensor_mac: last_alert_time}
 _last_alert_times: dict[str, datetime] = {}
@@ -41,6 +41,7 @@ class BioIngestPayload(BaseModel):
 def _resolve_sensor(db: Session, mac_address: str, gateway_serial: str | None) -> Sensor | None:
     """Find or auto-register a sensor for the given MAC, linking it to the gateway."""
     import logging
+
     _logger = logging.getLogger(__name__)
 
     gateway = None
@@ -53,7 +54,9 @@ def _resolve_sensor(db: Session, mac_address: str, gateway_serial: str | None) -
         if gateway and sensor.gateway_id != gateway.id:
             _logger.info(
                 "Migrating bio-sensor MAC=%s from gateway=%s to gateway=%s",
-                mac_address, sensor.gateway_id, gateway.id,
+                mac_address,
+                sensor.gateway_id,
+                gateway.id,
             )
             sensor.gateway_id = gateway.id
         return sensor
@@ -134,27 +137,32 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
         last_alert = _last_alert_times.get(payload.mac_address)
         if not last_alert or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60:
             import asyncio
+
             from app.models.user import User
 
             # Mark alert time
             _last_alert_times[payload.mac_address] = now
-            
+
             # Find users to notify
             if sensor and sensor.gateway and sensor.gateway.zone:
                 zone = sensor.gateway.zone
-                users = db.query(User).filter(
-                    User.organization_id == zone.organization_id,
-                    User.phone_number.isnot(None),
-                    User.phone_number != ""
-                ).all()
-                
+                users = (
+                    db.query(User)
+                    .filter(
+                        User.organization_id == zone.organization_id,
+                        User.phone_number.isnot(None),
+                        User.phone_number != "",
+                    )
+                    .all()
+                )
+
                 for user in users:
                     if user.phone_number:
                         asyncio.create_task(
                             notification_service.send_electrode_disconnect_alert(
                                 phone_number=user.phone_number,
                                 sensor_mac=payload.mac_address,
-                                zone_name=zone.name
+                                zone_name=zone.name,
                             )
                         )
 

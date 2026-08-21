@@ -1,28 +1,29 @@
 """Pydantic schemas for Plant management."""
 
+import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlantCreate(BaseModel):
-    zone_id: str
-    name: str
-    plant_code: str | None = None
-    species: str | None = None
-    cultivar: str | None = None
-    description: str | None = None
+    zone_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=200)
+    plant_code: str | None = Field(None, max_length=100)
+    species: str | None = Field(None, max_length=200)
+    cultivar: str | None = Field(None, max_length=200)
+    description: str | None = Field(None, max_length=10_000)
     planted_at: datetime | None = None
-    status: str = "active"
+    status: str = Field("active", pattern=r"^(?:active|archived|removed)$")
 
 
 class PlantUpdate(BaseModel):
-    name: str | None = None
-    plant_code: str | None = None
-    species: str | None = None
-    cultivar: str | None = None
-    description: str | None = None
-    status: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    plant_code: str | None = Field(None, max_length=100)
+    species: str | None = Field(None, max_length=200)
+    cultivar: str | None = Field(None, max_length=200)
+    description: str | None = Field(None, max_length=10_000)
+    status: str | None = Field(None, pattern=r"^(?:active|archived|removed)$")
 
 
 class PlantSensorAssignmentResponse(BaseModel):
@@ -56,5 +57,5 @@ class PlantResponse(BaseModel):
 
 
 class AssignSensorRequest(BaseModel):
-    sensor_id: str
-    notes: str | None = None
+    sensor_id: uuid.UUID
+    notes: str | None = Field(None, max_length=2_000)

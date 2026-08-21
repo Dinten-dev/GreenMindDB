@@ -1,13 +1,12 @@
-FROM node:20.18.2-alpine AS base
+FROM node:24.18.1-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json ./
-COPY package-lock.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder

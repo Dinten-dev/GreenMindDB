@@ -8,7 +8,8 @@ Ingests the data chunk-by-chunk to the local FastAPI backend.
 import math
 import random
 import time
-import requests
+
+import httpx
 
 API_URL = "http://localhost:8000/api/v1/biosignal/ingest"
 MAC_ADDRESS = "AA:BB:CC:DD:EE:FF"
@@ -69,7 +70,7 @@ def run_simulation(duration_seconds=10):
         batch = generate_batch(tick=i)
         
         try:
-            r = requests.post(API_URL, json=batch, timeout=2.0)
+            r = httpx.post(API_URL, json=batch, timeout=2.0)
             if r.status_code == 201:
                 session_id = r.json().get("session_id")
                 print(f"[{i:02d}] Ingest OK -> Session: {session_id}")
@@ -84,7 +85,10 @@ def run_simulation(duration_seconds=10):
     if session_id:
         print("\nTriggering WAV export...")
         try:
-            r = requests.post(f"http://localhost:8000/api/v1/biosignal/sessions/{session_id}/export-wav")
+            r = httpx.post(
+                f"http://localhost:8000/api/v1/biosignal/sessions/{session_id}/export-wav",
+                timeout=10.0,
+            )
             print(f"Export reply: {r.text}")
         except Exception as e:
             print(f"Export error: {e}")

@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.auth import get_password_hash
+from app.auth import create_access_token, get_password_hash
 from app.database import Base, get_db
 from app.main import app
 from app.models.master import Gateway, Sensor, Zone
@@ -202,6 +202,23 @@ def setup_test_data(db: Session) -> dict:
         "gateway": gw,
         "sensor": sensor,
     }
+
+
+@pytest.fixture
+def tenant_admin_token(db: Session, setup_test_data: dict) -> str:
+    """Authenticate an admin in the same organization as the seeded zone."""
+    user = User(
+        email="tenant-admin@test.com",
+        password_hash=get_password_hash("TestPass123"),
+        role=Role.ADMIN,
+        name="Tenant Admin",
+        is_active=True,
+        is_verified=True,
+        organization_id=setup_test_data["org"].id,
+    )
+    db.add(user)
+    db.commit()
+    return create_access_token({"sub": str(user.id)})
 
 
 # ── Docker-based fixtures (full-stack, skipped in CI) ───────────────

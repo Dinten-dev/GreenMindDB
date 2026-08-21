@@ -1,11 +1,13 @@
 """Router for Plant management within an organization."""
 
+import uuid
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models.user import User
+from app.models.user import Role, User
 from app.schemas.observation import ObservationAccessResponse
 from app.schemas.plant import (
     AssignSensorRequest,
@@ -27,11 +29,12 @@ from app.services.plant_service import (
 )
 
 router = APIRouter(prefix="/plants", tags=["plants"])
+_tenant_manager = require_role([Role.OWNER, Role.ADMIN])
 
 
 @router.get("", response_model=list[PlantResponse])
 def handle_list_plants(
-    zone_id: str | None = None,
+    zone_id: uuid.UUID | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -41,7 +44,7 @@ def handle_list_plants(
 @router.post("", response_model=PlantResponse, status_code=201)
 def handle_create_plant(
     data: PlantCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     return create_plant(db, current_user, data)
@@ -49,7 +52,7 @@ def handle_create_plant(
 
 @router.get("/{plant_id}", response_model=PlantResponse)
 def handle_get_plant(
-    plant_id: str,
+    plant_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -58,28 +61,28 @@ def handle_get_plant(
 
 @router.patch("/{plant_id}", response_model=PlantResponse)
 def handle_update_plant(
-    plant_id: str,
+    plant_id: uuid.UUID,
     data: PlantUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     return update_plant(db, current_user, plant_id, data)
 
+
 @router.delete("/{plant_id}", status_code=204)
 def handle_delete_plant(
-    plant_id: str,
-    current_user: User = Depends(get_current_user),
+    plant_id: uuid.UUID,
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     delete_plant(db, current_user, plant_id)
 
 
-
 @router.post("/{plant_id}/assign-sensor", response_model=PlantSensorAssignmentResponse)
 def handle_assign_sensor(
-    plant_id: str,
+    plant_id: uuid.UUID,
     data: AssignSensorRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     return assign_sensor(db, current_user, plant_id, data)
@@ -87,7 +90,7 @@ def handle_assign_sensor(
 
 @router.get("/{plant_id}/sensor-history", response_model=list[PlantSensorAssignmentResponse])
 def handle_get_sensor_history(
-    plant_id: str,
+    plant_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -96,8 +99,8 @@ def handle_get_sensor_history(
 
 @router.post("/{plant_id}/observation-access", response_model=ObservationAccessResponse)
 def handle_create_observation_access(
-    plant_id: str,
-    current_user: User = Depends(get_current_user),
+    plant_id: uuid.UUID,
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     return get_or_create_observation_access(db, current_user, plant_id)
@@ -105,8 +108,8 @@ def handle_create_observation_access(
 
 @router.delete("/{plant_id}/observation-access", response_model=ObservationAccessResponse)
 def handle_revoke_observation_access(
-    plant_id: str,
-    current_user: User = Depends(get_current_user),
+    plant_id: uuid.UUID,
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     return revoke_observation_access(db, current_user, plant_id)

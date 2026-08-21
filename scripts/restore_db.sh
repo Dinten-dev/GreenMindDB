@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
 
-if [ -z "$1" ]; then
-  echo "Usage: ./scripts/restore_db.sh <path_to_backup.sql>"
-  exit 1
+if [[ $# -ne 1 ]]; then
+    echo "Usage: ./scripts/restore_db.sh <path-to-backup.sql>" >&2
+    exit 2
 fi
 
-BACKUP_FILE="$1"
+readonly backup_file="$1"
 
-if [ ! -f "$BACKUP_FILE" ]; then
-  echo "Error: Backup file $BACKUP_FILE does not exist."
-  exit 1
+if [[ ! -f "${backup_file}" || ! -s "${backup_file}" ]]; then
+    echo "Backup is missing or empty: ${backup_file}" >&2
+    exit 1
 fi
 
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-fi
-
-DB_USER=${POSTGRES_USER:-postgres}
-DB_NAME=${POSTGRES_DB:-greenmind}
-
-echo "Restoring database from $BACKUP_FILE..."
-cat "$BACKUP_FILE" | docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME"
-echo "Restore successfully completed."
+echo "Restoring ${backup_file} into the database configured for this Compose stack..."
+# ON_ERROR_STOP prevents a partially failed SQL stream from being reported as
+# successful. Restore into a disposable database first when validating backups.
+docker compose exec -T postgres sh -c \
+    'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+    < "${backup_file}"
+echo "Restore completed successfully."

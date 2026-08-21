@@ -11,16 +11,18 @@ from fastapi import (
     Depends,
     File,
     Form,
-    Header,
     HTTPException,
     Query,
     Request,
     UploadFile,
 )
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.auth import require_role, verify_password
+from app.auth import require_role
 from app.database import get_db
+from app.file_security import resolve_contained_path, verify_file_sha256
+from app.gateway_auth import get_current_gateway
 from app.models.firmware import FirmwareRelease, FirmwareReport, RolloutPolicy
 from app.models.master import Gateway, Sensor
 from app.models.user import Role, User
@@ -42,16 +44,17 @@ from app.services import firmware_service as fw_svc
 router = APIRouter(prefix="/firmware", tags=["firmware"])
 
 # Reusable dependency for admin-only endpoints
-_require_admin = require_role([Role.ADMIN, Role.OWNER])
+_require_admin = require_role([Role.ADMIN])
 
 
-def _auth_gateway(db: Session, api_key: str) -> Gateway:
-    """Authenticate a gateway via its API key."""
-    gateways = db.query(Gateway).filter(Gateway.is_active.is_(True)).all()
-    for gw in gateways:
-        if gw.api_key_hash and verify_password(api_key, gw.api_key_hash):
-            return gw
-    raise HTTPException(status_code=401, detail="Invalid API key")
+def _release_applies_to_gateway(
+    db: Session,
+    release: FirmwareRelease,
+    gateway: Gateway,
+) -> bool:
+    policies = db.query(RolloutPolicy).filter(RolloutPolicy.release_id == release.id).all()
+    allowed_zones = {policy.zone_id for policy in policies if policy.zone_id}
+    return not allowed_zones or gateway.zone_id in allowed_zones
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -61,25 +64,16 @@ def _auth_gateway(db: Session, api_key: str) -> Gateway:
 
 @router.get("/sync", response_model=list[FirmwareSyncResponse])
 async def sync_firmware(
-    request: Request,
+    gw: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Gateway polls for applicable firmware releases."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing API Key")
-    gw = _auth_gateway(db, x_api_key)
-
     active_releases = db.query(FirmwareRelease).filter(FirmwareRelease.is_active.is_(True)).all()
 
     applicable = []
     for release in active_releases:
-        policies = db.query(RolloutPolicy).filter(RolloutPolicy.release_id == release.id).all()
-        if policies:
-            zone_restricted = any(p.zone_id for p in policies)
-            allowed_zones = [p.zone_id for p in policies if p.zone_id]
-            if zone_restricted and gw.zone_id not in allowed_zones:
-                continue
+        if not _release_applies_to_gateway(db, release, gw):
+            continue
 
         applicable.append(
             FirmwareSyncResponse(
@@ -87,7 +81,7 @@ async def sync_firmware(
                 version=release.version,
                 board_type=release.board_type,
                 hardware_revision=release.hardware_revision,
-                firmware_url=f"/firmware/{release.file_path}",
+                firmware_url=f"/api/v1/firmware/download/{release.id}",
                 sha256=release.sha256,
                 mandatory=release.mandatory,
                 min_version=release.min_version,
@@ -100,13 +94,17 @@ async def sync_firmware(
 @router.post("/report", status_code=201)
 async def report_firmware_status(
     data: FirmwareReportRequest,
+    gw: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Gateway reports update success or failure for a device."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing API Key")
-    gw = _auth_gateway(db, x_api_key)
+    release = (
+        db.query(FirmwareRelease)
+        .filter(FirmwareRelease.id == data.release_id, FirmwareRelease.is_active.is_(True))
+        .first()
+    )
+    if not release or not _release_applies_to_gateway(db, release, gw):
+        raise HTTPException(status_code=404, detail="Firmware release not found")
 
     sensor_id = None
     if data.sensor_mac:
@@ -115,8 +113,9 @@ async def report_firmware_status(
             .filter(Sensor.mac_address == data.sensor_mac, Sensor.gateway_id == gw.id)
             .first()
         )
-        if sensor:
-            sensor_id = sensor.id
+        if not sensor:
+            raise HTTPException(status_code=403, detail="Sensor is not assigned to this gateway")
+        sensor_id = sensor.id
 
     report = FirmwareReport(
         gateway_id=gw.id,
@@ -128,6 +127,38 @@ async def report_firmware_status(
     db.add(report)
     db.commit()
     return {"status": "recorded"}
+
+
+@router.get("/download/{release_id}")
+async def download_firmware(
+    release_id: uuid.UUID,
+    gateway: Gateway = Depends(get_current_gateway),
+    db: Session = Depends(get_db),
+):
+    """Download an active firmware artifact authorized for this gateway."""
+    release = (
+        db.query(FirmwareRelease)
+        .filter(FirmwareRelease.id == release_id, FirmwareRelease.is_active.is_(True))
+        .first()
+    )
+    if not release or not _release_applies_to_gateway(db, release, gateway):
+        raise HTTPException(status_code=404, detail="Firmware release not found")
+    try:
+        file_path = resolve_contained_path(fw_svc.FIRMWARE_STORAGE_DIR, release.file_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Firmware artifact path is invalid") from exc
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Firmware artifact is missing")
+    try:
+        verify_file_sha256(file_path, release.sha256)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Firmware artifact checksum mismatch") from exc
+    return FileResponse(
+        file_path,
+        media_type="application/octet-stream",
+        filename=file_path.name,
+        headers={"X-Checksum-SHA256": release.sha256},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────

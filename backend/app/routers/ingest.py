@@ -2,11 +2,11 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth import verify_password
 from app.database import get_db
+from app.gateway_auth import get_current_gateway
 from app.models.master import Gateway, Sensor
 from app.routers.ws import manager
 from app.schemas.ingest import IngestRequest, IngestResponse
@@ -18,29 +18,15 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 @router.post("", response_model=IngestResponse, status_code=201)
 async def ingest_data(
     data: IngestRequest,
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """
     Ingest sensor readings from a gateway.
     Authenticate via X-Api-Key header (the key returned from gateway registration).
     """
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-
-    gateway = db.query(Gateway).filter(Gateway.hardware_id == data.gateway_serial).first()
-    if not gateway:
-        raise HTTPException(
-            status_code=410, detail={"action": "RESET_TO_SETUP_MODE", "reason": "unassigned"}
-        )
-    if not gateway.is_active:
-        raise HTTPException(status_code=403, detail="Gateway is deactivated")
-    if not gateway.api_key_hash:
-        raise HTTPException(status_code=403, detail="Gateway has no API key")
-
-    # Verify API key
-    if not verify_password(x_api_key, gateway.api_key_hash):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    if gateway.hardware_id != data.gateway_serial:
+        raise HTTPException(status_code=403, detail="Gateway identity mismatch")
 
     try:
         ingested = process_ingestion(data, gateway, db)
@@ -49,7 +35,7 @@ async def ingest_data(
             status="duplicate",
             ingested=0,
             gateway_id=str(gateway.id),
-            measurement_id=data.measurement_id,
+            measurement_id=str(data.measurement_id),
         )
 
     # Broadcast real-time update to zone subscribers
@@ -61,7 +47,7 @@ async def ingest_data(
                 "sensor_kind": r.sensor_kind,
                 "value": r.value,
                 "unit": r.unit,
-                "timestamp": r.timestamp or now.isoformat(),
+                "timestamp": r.timestamp.isoformat() if r.timestamp else now.isoformat(),
             }
             for r in data.readings
         ]
@@ -69,7 +55,7 @@ async def ingest_data(
             {
                 "event": "new_readings",
                 "gateway_id": str(gateway.id),
-                "measurement_id": data.measurement_id,
+                "measurement_id": str(data.measurement_id),
                 "readings": readings_out,
             },
             str(gateway.zone_id),
@@ -83,7 +69,11 @@ async def ingest_data(
             continue
         sensor_macs_seen.add(r.sensor_mac)
 
-        sensor = db.query(Sensor).filter(Sensor.mac_address == r.sensor_mac).first()
+        sensor = (
+            db.query(Sensor)
+            .filter(Sensor.mac_address == r.sensor_mac, Sensor.gateway_id == gateway.id)
+            .first()
+        )
         if not sensor:
             continue
 
@@ -92,7 +82,7 @@ async def ingest_data(
                 "value": rd.value,
                 "unit": rd.unit,
                 "kind": rd.sensor_kind,
-                "timestamp": rd.timestamp or now.isoformat(),
+                "timestamp": rd.timestamp.isoformat() if rd.timestamp else now.isoformat(),
             }
             for rd in data.readings
             if rd.sensor_mac == r.sensor_mac
@@ -111,5 +101,5 @@ async def ingest_data(
         status="success",
         ingested=ingested,
         gateway_id=str(gateway.id),
-        measurement_id=data.measurement_id,
+        measurement_id=str(data.measurement_id),
     )

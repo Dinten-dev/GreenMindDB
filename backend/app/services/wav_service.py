@@ -1,9 +1,10 @@
 """Service layer for WAV file storage in MinIO/S3."""
 
+import hashlib
 import logging
 import wave
 from collections.abc import Generator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import BinaryIO
 
 import boto3
@@ -49,22 +50,21 @@ def upload_wav(
     sensor_mac: str,
     started_at: datetime,
     file_size: int,
+    content_sha256: str | None = None,
 ) -> str:
     """Upload a WAV file to MinIO and return the S3 key.
 
     Key format: wav/{sensor_mac}/{YYYYMMDD}/{HHmmss}.wav
     """
-    import zoneinfo
-    switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
-    if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=timezone.utc)
-    local_start = started_at.astimezone(switzerland_tz)
-    
-    date_str = local_start.strftime("%Y%m%d")
-    time_str = local_start.strftime("%H%M%S")
-    mac_clean = sensor_mac.replace(":", "").upper()
-    s3_key = f"wav/{mac_clean}/{date_str}/{time_str}.wav"
+    if content_sha256 is None:
+        hasher = hashlib.sha256()
+        file_data.seek(0)
+        for chunk in iter(lambda: file_data.read(1024 * 1024), b""):
+            hasher.update(chunk)
+        content_sha256 = hasher.hexdigest()
+        file_data.seek(0)
 
+    s3_key = build_wav_s3_key(sensor_mac, started_at, content_sha256)
     client = _get_s3_client()
     client.upload_fileobj(
         file_data,
@@ -73,8 +73,23 @@ def upload_wav(
         ExtraArgs={"ContentType": "audio/wav"},
     )
 
-    logger.info("Uploaded WAV to s3://%s/%s (%d bytes)", _WAV_BUCKET, s3_key, file_size)
+    logger.info("Uploaded WAV object (%d bytes)", file_size)
     return s3_key
+
+
+def build_wav_s3_key(sensor_mac: str, started_at: datetime, content_sha256: str) -> str:
+    """Build a deterministic, collision-resistant object key for retry idempotency."""
+    import zoneinfo
+
+    switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=UTC)
+    local_start = started_at.astimezone(switzerland_tz)
+
+    date_str = local_start.strftime("%Y%m%d")
+    time_str = local_start.strftime("%H%M%S")
+    mac_clean = sensor_mac.replace(":", "").upper()
+    return f"wav/{mac_clean}/{date_str}/{time_str}_{content_sha256}.wav"
 
 
 def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str:
@@ -88,11 +103,16 @@ def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str:
     return url
 
 
-def download_wav_bytes(s3_key: str) -> bytes:
-    """Download a WAV file from MinIO and return the raw bytes."""
+def stream_wav_bytes(s3_key: str) -> Generator[bytes, None, None]:
+    """Yield a WAV object without buffering the complete file in application memory."""
     client = _get_s3_client()
     response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
-    return response["Body"].read()
+    body = response["Body"]
+    try:
+        while chunk := body.read(64 * 1024):
+            yield chunk
+    finally:
+        body.close()
 
 
 def extract_wav_metadata(file_data: BinaryIO) -> dict:
@@ -105,11 +125,29 @@ def extract_wav_metadata(file_data: BinaryIO) -> dict:
         with wave.open(file_data, "rb") as wf:
             sample_rate = wf.getframerate()
             n_frames = wf.getnframes()
+            channels = wf.getnchannels()
+            sample_width = wf.getsampwidth()
+            compression = wf.getcomptype()
+            if channels != 1 or sample_width != 2 or compression != "NONE":
+                raise ValueError("WAV must be mono, 16-bit, uncompressed PCM")
+            if not 1 <= sample_rate <= 192_000 or n_frames <= 0:
+                raise ValueError("WAV sample rate or frame count is invalid")
+            bytes_per_frame = channels * sample_width
+            frames_read = 0
+            while frames_read < n_frames:
+                block = wf.readframes(min(8_192, n_frames - frames_read))
+                if not block or len(block) % bytes_per_frame:
+                    break
+                frames_read += len(block) // bytes_per_frame
+            if frames_read != n_frames:
+                raise ValueError("WAV payload is truncated")
             duration = n_frames / sample_rate if sample_rate > 0 else 0.0
             return {
                 "sample_rate": sample_rate,
                 "duration_seconds": round(duration, 2),
                 "n_samples": n_frames,
+                "channels": channels,
+                "sample_width": sample_width,
             }
     finally:
         file_data.seek(0)
@@ -148,19 +186,19 @@ def generate_download_filename(
     Bundle:  greenmind_{sensor}_{from}_bis_{to}.zip
     """
     import zoneinfo
-    from datetime import timezone
+
     switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
-    
+
     if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=timezone.utc)
+        started_at = started_at.replace(tzinfo=UTC)
     local_start = started_at.astimezone(switzerland_tz)
-    
+
     slug = _sanitize_filename(sensor_name)
     start_str = local_start.strftime("%Y%m%d-%H%M%S")
 
     if ended_at and extension == "zip":
         if ended_at.tzinfo is None:
-            ended_at = ended_at.replace(tzinfo=timezone.utc)
+            ended_at = ended_at.replace(tzinfo=UTC)
         local_end = ended_at.astimezone(switzerland_tz)
         end_str = local_end.strftime("%Y%m%d-%H%M%S")
         return f"greenmind_{slug}_{start_str}_bis_{end_str}.zip"
@@ -168,9 +206,7 @@ def generate_download_filename(
     return f"greenmind_{slug}_{start_str}.{extension}"
 
 
-def stream_wav_zip(
-    s3_keys: list[str], filenames: list[str]
-) -> Generator[bytes, None, None]:
+def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes, None, None]:
     """Stream a ZIP archive of multiple WAV files from MinIO.
 
     Uses a pipe-based approach: a background thread writes entries into

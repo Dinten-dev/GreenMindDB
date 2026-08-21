@@ -8,12 +8,21 @@ import hashlib
 import json
 import os
 import re
+import tarfile
+import tempfile
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePosixPath
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.config import settings
+from app.file_security import (
+    resolve_contained_path,
+    validate_ed25519_signature,
+    verify_signed_file,
+)
 from app.models.audit_log import AuditLog
 from app.models.gateway_remote import (
     GatewayAppRelease,
@@ -34,7 +43,11 @@ from app.schemas.gateway_remote import (
 
 GATEWAY_RELEASE_DIR = os.getenv("GATEWAY_RELEASE_DIR", "/app/gateway_releases")
 MAX_RELEASE_SIZE = 100 * 1024 * 1024  # 100 MB
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(-[\w.]+)?$")
+SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 COMMAND_TTL_HOURS = 1
 
 
@@ -96,6 +109,7 @@ def get_desired_state(
             .filter(
                 GatewayAppRelease.version == ds.desired_app_version,
                 GatewayAppRelease.is_active.is_(True),
+                GatewayAppRelease.signature.isnot(None),
             )
             .first()
         )
@@ -266,8 +280,21 @@ def process_command_result(
     if not cmd:
         raise HTTPException(status_code=404, detail="Command not found")
 
+    now = datetime.now(UTC)
+    expires_at = cmd.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= now:
+        cmd.status = "expired"
+        db.commit()
+        raise HTTPException(status_code=409, detail="Command expired")
+    if cmd.status not in {"pending", "delivered"}:
+        if cmd.status == result:
+            return
+        raise HTTPException(status_code=409, detail="Command already completed")
+
     cmd.status = result  # executed / failed / rejected
-    cmd.executed_at = datetime.now(UTC)
+    cmd.executed_at = now
     cmd.result_message = message
     db.commit()
 
@@ -289,29 +316,53 @@ def upload_app_release(
 ) -> GatewayAppRelease:
     """Upload a new gateway software release tarball."""
 
-    if not SEMVER_RE.match(version):
+    if len(version) > 50 or not SEMVER_RE.fullmatch(version):
         raise HTTPException(status_code=422, detail="Version must follow semver (e.g. 1.2.0)")
+    if channel not in {"stable", "beta", "development"}:
+        raise HTTPException(status_code=422, detail="Invalid release channel")
+    if min_version and (len(min_version) > 50 or not SEMVER_RE.fullmatch(min_version)):
+        raise HTTPException(status_code=422, detail="Minimum version must follow semver")
+    if changelog and len(changelog) > 20_000:
+        raise HTTPException(status_code=422, detail="Changelog is too long")
 
     existing = db.query(GatewayAppRelease).filter(GatewayAppRelease.version == version).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Release {version} already exists")
 
-    content = file.file.read()
-    if len(content) > MAX_RELEASE_SIZE:
-        raise HTTPException(status_code=413, detail="File exceeds 100MB limit")
-    if len(content) == 0:
-        raise HTTPException(status_code=422, detail="Empty file")
-
-    sha256_hash = hashlib.sha256(content).hexdigest()
+    try:
+        signature = validate_ed25519_signature(signature)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Sanitised filename
     safe_version = re.sub(r"[^a-zA-Z0-9._-]", "_", version)
     safe_filename = f"greenmind-gateway-{safe_version}.tar.gz"
 
     os.makedirs(GATEWAY_RELEASE_DIR, exist_ok=True)
-    file_path = os.path.join(GATEWAY_RELEASE_DIR, safe_filename)
-    with open(file_path, "wb") as f:
-        f.write(content)
+    file_path = resolve_contained_path(GATEWAY_RELEASE_DIR, safe_filename)
+    fd, temporary_path = tempfile.mkstemp(prefix=".gateway-upload-", dir=GATEWAY_RELEASE_DIR)
+    file_size = 0
+    hasher = hashlib.sha256()
+    try:
+        with os.fdopen(fd, "wb") as output:
+            while chunk := file.file.read(1024 * 1024):
+                file_size += len(chunk)
+                if file_size > MAX_RELEASE_SIZE:
+                    raise HTTPException(status_code=413, detail="File exceeds 100MB limit")
+                hasher.update(chunk)
+                output.write(chunk)
+        if file_size == 0:
+            raise HTTPException(status_code=422, detail="Empty file")
+        _validate_release_archive(temporary_path)
+        os.replace(temporary_path, file_path)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+    sha256_hash = hasher.hexdigest()
 
     release = GatewayAppRelease(
         version=version,
@@ -322,7 +373,7 @@ def upload_app_release(
         is_active=False,  # Require explicit activation
         channel=channel,
         min_version=min_version,
-        file_size_bytes=len(content),
+        file_size_bytes=file_size,
         changelog=changelog,
         created_by=user.id,
     )
@@ -365,6 +416,20 @@ def toggle_app_release(
     if not release:
         raise HTTPException(status_code=404, detail="Release not found")
 
+    if is_active:
+        try:
+            artifact = resolve_contained_path(GATEWAY_RELEASE_DIR, release.artifact_path)
+            if not artifact.is_file():
+                raise ValueError("Release artifact is missing")
+            verify_signed_file(
+                artifact,
+                release.sha256,
+                release.signature,
+                settings.gateway_release_signing_public_key_path,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     old = release.is_active
     release.is_active = is_active
     action = "gateway_release.activate" if is_active else "gateway_release.deactivate"
@@ -389,9 +454,12 @@ def delete_app_release(
     if not release:
         raise HTTPException(status_code=404, detail="Release not found")
 
-    file_path = os.path.join(GATEWAY_RELEASE_DIR, release.artifact_path)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    try:
+        file_path = resolve_contained_path(GATEWAY_RELEASE_DIR, release.artifact_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Release artifact path is invalid") from exc
+    if file_path.is_file():
+        file_path.unlink()
 
     _audit(
         db,
@@ -404,6 +472,37 @@ def delete_app_release(
     )
     db.delete(release)
     db.commit()
+
+
+def _validate_release_archive(path: str) -> None:
+    """Reject archive entries that cannot be safely extracted by gateway agents."""
+    try:
+        with tarfile.open(path, "r|gz") as archive:
+            member_count = 0
+            total_size = 0
+            for member in archive:
+                member_count += 1
+                if member_count > 10_000:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Release archive has too many entries",
+                    )
+                member_path = PurePosixPath(member.name)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise HTTPException(status_code=422, detail="Release archive path is unsafe")
+                if not (member.isfile() or member.isdir()):
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Release archive contains a non-file entry",
+                    )
+                total_size += max(member.size, 0)
+                if total_size > MAX_RELEASE_SIZE * 5:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Release archive expands beyond the allowed size",
+                    )
+    except (tarfile.TarError, OSError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid gateway release archive") from exc
 
 
 # ── Config Release Management ────────────────────────────────────────
@@ -427,11 +526,21 @@ def upload_config_release(
     if existing:
         raise HTTPException(status_code=409, detail=f"Config version {version} already exists")
 
-    # Validate config is valid JSON (it already is dict from pydantic, but ensure serialisable)
+    # Validate, canonicalize, and bound the JSON persisted and sent to gateways.
     try:
-        serialised = json.dumps(config_payload, sort_keys=True)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=f"Config not serialisable: {exc}") from exc
+        serialised = json.dumps(
+            config_payload,
+            sort_keys=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise HTTPException(status_code=422, detail="Config is not valid JSON") from exc
+    if len(serialised.encode("utf-8")) > 256 * 1024:
+        raise HTTPException(status_code=413, detail="Config payload exceeds 256KB")
+    for candidate in (compatible_app_min, compatible_app_max):
+        if candidate and (len(candidate) > 50 or not SEMVER_RE.fullmatch(candidate)):
+            raise HTTPException(status_code=422, detail="Compatible app version is invalid")
 
     sha256_hash = hashlib.sha256(serialised.encode()).hexdigest()
 
@@ -549,6 +658,18 @@ def issue_command(
             status_code=422,
             detail=f"Command '{command_type}' not in allowlist: {sorted(ALLOWED_COMMAND_TYPES)}",
         )
+
+    if payload is not None:
+        try:
+            payload_size = len(
+                json.dumps(payload, allow_nan=False, separators=(",", ":")).encode("utf-8")
+            )
+        except (TypeError, ValueError, RecursionError) as exc:
+            raise HTTPException(
+                status_code=422, detail="Command payload is not valid JSON"
+            ) from exc
+        if payload_size > 16 * 1024:
+            raise HTTPException(status_code=413, detail="Command payload exceeds 16KB")
 
     gateway = db.query(Gateway).filter(Gateway.id == gateway_id).first()
     if not gateway:

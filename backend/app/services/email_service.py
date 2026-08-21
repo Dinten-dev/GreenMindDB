@@ -13,8 +13,7 @@ class EmailService:
     @staticmethod
     def send_verification_email(to_email: str, token: str):
         if not settings.resend_api_key:
-            # Fallback for local development if the API key is not set
-            logger.info(f"!!! DEV-MODE: Verification Token for {to_email}: {token} !!!")
+            logger.warning("Verification email not sent because RESEND_API_KEY is not configured")
             return
 
         try:
@@ -48,10 +47,10 @@ class EmailService:
                 }
             )
 
-            logger.info(f"Verification email successfully dispatched via Resend to {to_email}")
+            logger.info("Verification email successfully dispatched via provider")
 
-        except Exception as e:
-            logger.error(f"Failed to send Resend email to {to_email}: {e}")
+        except Exception as exc:
+            logger.error("Verification email delivery failed (%s)", type(exc).__name__)
 
 
 def send_notification_email(subject: str, body: str):
@@ -62,7 +61,7 @@ def send_notification_email(subject: str, body: str):
         return
 
     if not settings.resend_api_key:
-        logger.info(f"!!! DEV-MODE: Notification email skipped. Subject: {subject} !!!")
+        logger.info("Notification email skipped because RESEND_API_KEY is not configured")
         return
 
     try:
@@ -75,6 +74,6 @@ def send_notification_email(subject: str, body: str):
                 "text": body,
             }
         )
-        logger.info(f"Notification email sent: {subject}")
-    except Exception as e:
-        logger.error(f"Failed to send notification email: {e}")
+        logger.info("Notification email successfully dispatched via provider")
+    except Exception as exc:
+        logger.error("Notification email delivery failed (%s)", type(exc).__name__)

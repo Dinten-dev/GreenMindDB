@@ -1,13 +1,13 @@
-#!/bin/bash
-set -eo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 # Define forbidden paths (iCloud)
 FORBIDDEN_PATHS=("Mobile Documents" "com~apple~CloudDocs")
-CURRENT_DIR=$(pwd)
+CURRENT_DIR="$(pwd -P)"
 
 # Default Local Data Root
-if [ -z "$LOCAL_DATA_ROOT" ]; then
-    export LOCAL_DATA_ROOT="$HOME/LocalData/greenmind"
+if [[ -z "${LOCAL_DATA_ROOT:-}" ]]; then
+    export LOCAL_DATA_ROOT="${HOME}/LocalData/greenmind"
     echo "LOCAL_DATA_ROOT not set. Defaulting to: $LOCAL_DATA_ROOT"
 fi
 
@@ -33,22 +33,21 @@ if ! check_path "$CURRENT_DIR"; then
 fi
 
 # Check LOCAL_DATA_ROOT
+if [[ "$LOCAL_DATA_ROOT" != /* || "$LOCAL_DATA_ROOT" == "/" ]]; then
+    echo "CRITICAL ERROR: LOCAL_DATA_ROOT must be a non-root absolute path."
+    exit 1
+fi
 if ! check_path "$LOCAL_DATA_ROOT"; then
     echo "CRITICAL ERROR: LOCAL_DATA_ROOT '$LOCAL_DATA_ROOT' is inside iCloud."
     echo "Please set LOCAL_DATA_ROOT to a local path (e.g., /Users/username/LocalData/greenmind) in your .env file."
     exit 1
 fi
 
-# Create directories
+# Create private data directories. Database and object-store contents may hold
+# credentials, account data, and raw measurements.
 echo "Creating local data directories at $LOCAL_DATA_ROOT..."
-mkdir -p "$LOCAL_DATA_ROOT/postgres"
-mkdir -p "$LOCAL_DATA_ROOT/minio"
-mkdir -p "$LOCAL_DATA_ROOT/logs"
-
-# Fix permissions (ensure current user owns them)
-# Docker (if mapped correctly) will write as this user or root.
-# If using bind mounts, we want access.
-chmod 755 "$LOCAL_DATA_ROOT"
+mkdir -p -m 700 "$LOCAL_DATA_ROOT/postgres" "$LOCAL_DATA_ROOT/minio"
+chmod 700 "$LOCAL_DATA_ROOT" "$LOCAL_DATA_ROOT/postgres" "$LOCAL_DATA_ROOT/minio"
 
 # Export for next steps
 export PGDATA_DIR="$LOCAL_DATA_ROOT/postgres"

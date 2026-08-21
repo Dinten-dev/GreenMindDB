@@ -1,754 +1,385 @@
-# GreenMind — R&D Framework
+# GreenMind
 
-🎥 **Video Presentation:** [Watch our showcase at the Science Exhibition](https://youtu.be/OdKqk1Vc4Uo?si=9BqRJsJWqswzQC3o) — A short introduction to what we have discovered so far.
-> Research & development platform for bioelectrical plant signal analysis — a project of **Galaxyadvisors AG** (Aarau, Switzerland) in collaboration with FHNW. Captures, aggregates, and analyzes electrophysiological plant data from ESP32 sensors via Raspberry Pi gateways, stored in TimescaleDB and visualized on a modern Next.js frontend.
+GreenMind is an R&D platform for acquiring and analyzing bioelectrical plant signals. ESP32
+sensor nodes send measurements through Raspberry Pi gateways to this repository's FastAPI,
+TimescaleDB, MinIO, and Next.js stack.
 
-> **⚠️ R&D Status:** GreenMind is in active research and development. The platform is not commercially available. Partnership inquiries for field studies and controlled experiments are welcome at [info@galaxyadvisors.com](mailto:info@galaxyadvisors.com).
+> GreenMind is an active research system, not a commercially supported product. Never use
+> example configuration unchanged in an internet-facing deployment.
 
 [![CI](https://github.com/Dinten-dev/GreenMindDB/actions/workflows/ci.yml/badge.svg)](https://github.com/Dinten-dev/GreenMindDB/actions/workflows/ci.yml)
-![Coverage](https://img.shields.io/badge/coverage-60%25+-brightgreen)
 
----
-
-## Table of Contents
-
-1. [Project Overview](#project-overview)
-2. [Features](#features)
-3. [Related Repositories](#related-repositories)
-4. [Architecture](#architecture)
-5. [Tech Stack](#tech-stack)
-6. [Project Structure](#project-structure)
-7. [Prerequisites](#prerequisites)
-8. [Local Setup](#local-setup)
-9. [Development](#development)
-10. [Testing](#testing)
-11. [Linting & Formatting](#linting--formatting)
-12. [Build & Deployment](#build--deployment)
-13. [Environment Variables](#environment-variables)
-14. [API Endpoints](#api-endpoints)
-15. [Database Backup & Restore](#database-backup--restore)
-16. [Branching Strategy](#branching-strategy)
-17. [Git Workflow](#git-workflow)
-18. [Pull Request Rules](#pull-request-rules)
-19. [CI/CD](#cicd)
-20. [Troubleshooting](#troubleshooting)
-21. [Security](#security)
-22. [Known Limitations](#known-limitations)
-23. [Author & Credits](#author--credits)
-24. [License](#license)
-
----
-
-## Project Overview
-
-GreenMind is a full-stack R&D platform for capturing, processing, and analyzing **bioelectrical plant signals** across diverse agricultural environments. The system ingests electrophysiological data from ESP32 sensors via Raspberry Pi gateways into a TimescaleDB-backed FastAPI service, visualized and exported through a modern Next.js frontend.
-
-**Research Objectives:**
-- Data-driven analysis of bioelectrical plant responses for stress factor identification
-- Signal classification for drought, pathogen, and nutrient deficiency detection
-- Hardware resilience testing under extreme agricultural conditions
-- Scalable data aggregation pipeline for longitudinal studies
-- Multi-zone management (Greenhouse, Open Field, Vertical Farm, Orchard) with geodata
-- Secure JWT-based authentication with role-based access
-
----
-
-## Features
-
-- **Real-time biosignal streaming** — 380 Hz data capture from ESP32 sensors via WebSocket
-- **Multi-zone management** — Greenhouse, Open Field, Vertical Farm, Orchard with GPS metadata
-- **Interactive dashboards** — live sensor charts with configurable time ranges and resolution
-- **Data export** — CSV/ZIP export per sensor with zone metadata headers
-- **WAV raw data archive** — 10-minute PCM recordings stored in MinIO (S3-compatible)
-- **Gateway fleet management** — OTA updates with staged rollouts (canary → early → stable)
-- **Secure device pairing** — captive portal provisioning with short-lived pairing codes
-- **Plant observation app** — login-free mobile observation via short-lived QR access tokens
-- **Plant evaluation engine** — automated scoring based on species-specific target ranges
-- **Firmware OTA** — Ed25519-signed releases with SHA256 verification and automatic rollback
-- **JWT authentication** — httpOnly cookies, bcrypt password hashing, RBAC with org-scoping
-- **Audit trail** — all admin actions logged with timestamps, IP, and entity references
-- **Prometheus monitoring** — `/metrics` endpoint for operational observability
-- **CI/CD** — GitHub Actions pipeline with automated deployment to staging and production
-
----
-
-## Related Repositories
-
-GreenMind is a multi-repo project. This repository (`GreenMindDB`) contains the cloud backend, frontend, and infrastructure. The embedded components live in separate repositories:
-
-| Repository | Description |
-|---|---|
-| **[GreenMindDB](https://github.com/Dinten-dev/GreenMindDB)** (this repo) | FastAPI backend, Next.js frontend, Docker Compose, CI/CD |
-| **[GreenMindRPI](https://github.com/Dinten-dev/GreenMindRPIv1)** | Raspberry Pi gateway — data aggregation, WAV recording, OTA update agent |
-| **[GreenMindArdu](https://github.com/Dinten-dev/GreenMindArdu)** | ESP32 sensor firmware — 380 Hz bioelectric signal capture (Arduino C++) |
-
-## Architecture
+## System architecture
 
 ```mermaid
-graph TD;
-    Sensors[ESP32 Sensors 380 Hz] -->|HTTP POST| Pi[Raspberry Pi Gateway]
-    Pi -->|POST /api/v1/ingest| API[FastAPI Backend :8000]
-    Pi -->|POST /api/v1/wav/upload| API
-    Agent[Update Agent on Pi] -->|Poll desired-state| API
-    Agent -->|Report state| API
-    API -->|SQLAlchemy| DB[(TimescaleDB :5432)]
-    API -->|boto3| S3[(MinIO / S3 :9000)]
-    UI[Next.js Frontend :3000] -->|REST API| API
-    UI -->|Gateway Fleet Admin| API
-    API -->|Resend API| Email[Email Notifications]
+flowchart LR
+    Plant[Plant electrodes] --> Sensor[ESP32 sensor node]
+    Sensor -->|380 Hz batches over local HTTP| Gateway[Raspberry Pi gateway]
+    Gateway -->|Authenticated aggregates| Ingest[POST /api/v1/ingest]
+    Gateway -->|Authenticated WAV uploads| Wav[POST /api/v1/wav/upload]
+    Ingest --> API[FastAPI]
+    Wav --> API
+    API --> DB[(TimescaleDB / PostgreSQL)]
+    API --> Object[(MinIO / S3)]
+    UI[Next.js web application] -->|REST and WebSocket| API
 ```
 
-### Data Flow
+The three deployable parts intentionally live in separate repositories:
 
-1. **ESP32 sensors** capture bioelectrical signals at **380 Hz** with a 3-sample Moving Average filter
-2. **Raspberry Pi gateway** receives 380-sample batches (1 second of data) via HTTP POST
-   - **Raw samples** → written to local **WAV files** (10-minute chunks, 16-bit PCM)
-   - **Aggregate** (mean of 380 samples) → queued for cloud upload
-3. **Gateway WAV uploader** transfers completed WAV files to the cloud (MinIO)
-4. **FastAPI backend** stores aggregates in TimescaleDB, WAV metadata in PostgreSQL, WAV files in MinIO
-5. **Next.js frontend** renders real-time dashboards and provides WAV download access
+| Repository | Runs on | Responsibility |
+|---|---|---|
+| [GreenMindArdu](https://github.com/Dinten-dev/GreenMindArdu) | ESP32-S3 | ADC acquisition, filtering, BLE Wi-Fi provisioning, sensor-to-gateway batches |
+| [GreenMindRPI](https://github.com/Dinten-dev/GreenMindRPIv1) | Raspberry Pi | Sensor ingress, local buffering, WAV generation, cloud upload, gateway agent |
+| [GreenMindDB](https://github.com/Dinten-dev/GreenMindDB) | Server / developer machine | API, web application, database, object storage, CI/CD |
 
----
+The measurement flow is deliberately split by responsibility:
 
-## Tech Stack
+1. The sensor firmware samples and filters the plant signal, then sends one-second batches to
+   its local gateway.
+2. The gateway buffers data locally, creates WAV artifacts, and retries authenticated cloud
+   uploads across network interruptions.
+3. GreenMindDB stores aggregate readings in TimescaleDB, WAV metadata in PostgreSQL, and WAV
+   bytes in the `greenmind-raw` MinIO bucket.
+4. The frontend reads REST endpoints and zone/sensor WebSockets exposed by the backend.
 
-| Layer          | Technology                                       |
-|----------------|--------------------------------------------------|
-| **Frontend**   | Next.js 14, TypeScript, TailwindCSS, Recharts    |
-| **Backend**    | FastAPI, SQLAlchemy, Alembic, Pydantic            |
-| **Database**   | PostgreSQL 15 + TimescaleDB                       |
-| **Object Storage** | MinIO (S3-compatible) — WAV raw data archive  |
-| **Auth**       | JWT (httpOnly cookies), bcrypt                    |
-| **Email**      | Resend (transactional email API)                  |
-| **OTA/Fleet**  | Desired-state agent, Ed25519 signatures, symlink releases |
-| **Deployment** | Docker Compose                                    |
-| **CI/CD**      | GitHub Actions                                    |
-| **Linting**    | ruff, black (Python) · ESLint, Prettier (TS)      |
+Do not change a sensor payload, gateway protocol, database schema, or stored file format in one
+repository without checking its consumers in the other two.
 
----
+## This repository
 
-## Project Structure
-
-```
+```text
 GreenMindDB/
-├── backend/                  # FastAPI Python backend
-│   ├── app/
-│   │   ├── main.py           # Application entrypoint
-│   │   ├── config.py         # Settings (pydantic-settings)
-│   │   ├── database.py       # SQLAlchemy engine & session
-│   │   ├── auth.py           # JWT, password hashing, auth deps
-│   │   ├── logging_config.py # Structured logging setup
-│   │   ├── models/           # SQLAlchemy ORM models (Zone, Gateway, Sensor, WavFile, GatewayRemote)
-│   │   ├── routers/          # API route handlers (zones, gateways, sensors, wav, gateway_admin, gateway_desired_state)
-│   │   ├── schemas/          # Pydantic schemas (gateway_remote)
-│   │   └── services/         # Business logic (zone, gateway, email, wav_service, gateway_remote_service)
-│   ├── alembic/              # Database migrations
-│   ├── scripts/              # Utility scripts (seeding, import)
-│   ├── tests/                # pytest test suite
+├── backend/
+│   ├── app/                 # FastAPI application, models, schemas, services, routers
+│   ├── alembic/             # Canonical database migrations
+│   ├── scripts/             # Explicit manual maintenance utilities only
+│   ├── tests/               # pytest unit and integration tests
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   └── pyproject.toml        # ruff, black, pytest config
-├── frontend/                 # Next.js TypeScript frontend
-│   ├── src/
-│   │   ├── app/              # Next.js App Router pages
-│   │   │   └── app/gateway-fleet/  # Gateway Fleet Admin UI (6 tabs)
-│   │   ├── components/       # Reusable UI components
-│   │   ├── contexts/         # React context providers
-│   │   ├── hooks/            # Custom React hooks
-│   │   ├── lib/              # API client, utilities (gateway-admin-api.ts)
-│   │   └── types/            # Shared TypeScript types
-│   ├── public/               # Static assets
+│   ├── pyproject.toml       # Ruff, pytest, and coverage configuration
+│   ├── requirements.txt     # Pinned direct production dependencies
+│   ├── requirements.lock    # Hash-locked production dependency graph
+│   └── requirements-dev.txt # Pinned test/quality tools
+├── frontend/
+│   ├── src/                 # Next.js App Router application
+│   ├── public/
 │   ├── Dockerfile
-│   └── package.json
-├── compose/                  # Production Docker Compose config
-├── db/                       # Database init scripts
-├── docs/                     # Project documentation
-├── scripts/                  # Dev/deploy helper scripts
-├── .github/                  # CI/CD, PR & issue templates
-├── docker-compose.yml        # Local development compose
-├── Makefile                  # Developer convenience commands
-├── .env.example              # Environment template
-└── README.md
+│   ├── package.json
+│   └── package-lock.json
+├── compose/                 # Optional API-only Caddy deployment profile
+├── db/                      # Database initialization required before Alembic
+├── docs/                    # Architecture, deployment, and testing documentation
+├── nginx/                   # Host reverse-proxy configuration for VPS deployment
+├── scripts/                 # Deployment, backup, restore, smoke-test, and simulators
+├── docker-compose.yml       # Canonical local full-stack definition
+├── docker-compose.prod.yml  # VPS production definition
+├── docker-compose.staging.yml
+├── Makefile
+└── .env.example
 ```
 
----
+### Technology versions
 
-## Prerequisites
+| Layer | Current implementation |
+|---|---|
+| Frontend | Next.js 16.3.1, React 19, TypeScript, Node.js 24 |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic 2 |
+| Database | TimescaleDB 2.17.2 on PostgreSQL 15 in the canonical Compose files |
+| Object storage | MinIO with S3-compatible access |
+| Frontend quality | ESLint 9, Prettier 3, TypeScript, Jest 30 |
+| Backend quality | Ruff, pytest, coverage |
+| Deployment | Docker Compose, Nginx on the VPS; optional Caddy profile under `compose/` |
 
-- **Docker** ≥ 24.0 and **Docker Compose** ≥ 2.20
-- **Python** ≥ 3.11 (for local backend development)
-- **Node.js** ≥ 20 and **npm** ≥ 10 (for local frontend development)
-- **Git** ≥ 2.40
+## Quick start
 
----
+### Prerequisites
 
-## Local Setup
+- Docker 24 or newer with Docker Compose v2
+- Git
+- Python 3.12 only when running backend tools outside Docker
+- Node.js 24 and npm only when running the frontend outside Docker
 
-### 1. Clone the Repository
+### Start the full local stack
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Dinten-dev/GreenMindDB.git
 cd GreenMindDB
-```
-
-### 2. Configure the Environment
-
-```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set your values. At minimum, configure:
-- `POSTGRES_PASSWORD` — a strong database password
-- `JWT_SECRET_KEY` — at least 32 random characters
+Edit `.env` before starting. At minimum, replace all `CHANGE_ME` values and set:
 
-> **⚠️ macOS iCloud Users:** If this project is inside an iCloud-synced folder, you **must** set `PGDATA_DIR` to a path **outside** iCloud to prevent database corruption:
-> ```env
-> LOCAL_DATA_ROOT=/Users/yourname/LocalData/greenmind
-> PGDATA_DIR=/Users/yourname/LocalData/greenmind/postgres_data
-> ```
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`
+- `JWT_SECRET_KEY` to a random value of at least 32 characters
+- `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`
+- `CORS_ORIGINS` and `FRONTEND_URL` for the environment
+- `RESEND_API_KEY` and a verified `EMAIL_FROM` before onboarding accounts
 
-### 3. Start the Application Stack
+Generate secrets with a password manager or a cryptographic generator; do not paste generated
+values into source files or issue trackers.
 
 ```bash
+docker compose config --quiet
 make dev
-# or: docker compose up -d --build
+make health
 ```
 
-This will:
-1. Pull and start the TimescaleDB database
-2. Build and start the FastAPI backend (runs Alembic migrations automatically)
-3. Build and start the Next.js frontend
+The backend applies `alembic upgrade head` before Gunicorn starts. There is no automatic demo
+seed, default owner, or default administrator account.
 
-### 4. Seed Demo Data (Optional)
+| Service | Local address | Notes |
+|---|---|---|
+| Frontend | <http://localhost:3000> | Next.js application |
+| API documentation | <http://localhost:8000/docs> | Development only; disabled in production |
+| Health endpoint | <http://localhost:8000/health> | Backend liveness |
+| MinIO API | <http://localhost:9000> | S3 endpoint; localhost-bound |
+| MinIO console | <http://localhost:9001> | Local operator UI; localhost-bound |
+| Prometheus | <http://localhost:9090> | Local metrics UI; localhost-bound |
+
+Use `docker compose ps` and `docker compose logs -f <service>` if health checks do not become
+ready. Local PostgreSQL, MinIO, backend, frontend, and Prometheus ports bind to `127.0.0.1`.
+
+## Account verification and platform administration
+
+Signup creates an unverified tenant `OWNER` and returns `AuthResponse.detail`; it does not issue
+an authenticated session. The verification token must be submitted to
+`POST /api/v1/auth/verify-email` before login succeeds. Configure Resend before onboarding users:
+without `RESEND_API_KEY`, the account is created but the verification email is not delivered.
+
+A tenant `OWNER` can manage resources inside its organization. Fleet-wide gateway and firmware
+administration requires the platform `ADMIN` role, and signup cannot grant that role.
+
+### One-time platform ADMIN bootstrap
+
+There is intentionally no fixed administrator credential. First create an account normally and
+verify it. Then open `psql` using the deployment's own environment:
 
 ```bash
-docker compose exec backend python -m scripts.seed_data
+# Canonical local/staging/production Compose files
+docker compose exec postgres \
+  sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+# Optional compose/ API profile (service name differs)
+docker compose -f compose/docker-compose.yml exec db \
+  sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-### 5. Access the Platform
+Run this interactively. Commit only if `RETURNING` shows exactly the intended active, verified
+account; otherwise run `ROLLBACK;`.
 
-| Service               | URL                                  |
-|-----------------------|--------------------------------------|
-| Frontend Dashboard    | http://localhost:3000                 |
-| Backend API Docs      | http://localhost:8000/docs            |
-| Health Check          | http://localhost:8000/health          |
+```sql
+BEGIN;
+\prompt 'Verified account email: ' bootstrap_email
+UPDATE users
+SET role = 'admin'
+WHERE email = lower(:'bootstrap_email')
+  AND is_active IS TRUE
+  AND is_verified IS TRUE
+RETURNING email, role, is_active, is_verified;
+-- Inspect the single returned row, then enter COMMIT; or ROLLBACK;.
+```
 
-**Demo credentials:** `demo@greenmind.io` / `Demo1234`
+Keep platform administrators deliberately scarce and audit every promotion.
 
----
+## Developer commands
 
-## Development
+Run `make help` for the maintained command list.
 
-### Running Individual Services
+| Command | Purpose |
+|---|---|
+| `make dev` | Build and start the canonical local stack |
+| `make stop` | Stop services without deleting data |
+| `make logs` | Follow all service logs |
+| `make health` | Check backend, frontend, and MinIO health |
+| `make build` | Build Docker images |
+| `make migrate` | Apply Alembic migrations in the running backend container |
+| `make test` | Run backend and frontend unit suites |
+| `make test-docker` | Run the Docker-backed backend test stack |
+| `make lint` | Run backend Ruff and frontend ESLint/type checks |
+| `make format` | Apply Ruff formatter and Prettier to maintained source trees |
+| `make format-check` | Verify formatting without changing files |
+| `make clean` | Stop the stack and remove named volumes; review bind-mounted data separately |
+
+Schema and reference data changes belong in reviewed Alembic migrations. GreenMindDB does not
+ship a demo-data command because a seeded verified `OWNER` would bypass the normal account
+verification lifecycle.
+
+## Running components outside Docker
+
+Backend:
 
 ```bash
-# Backend only (local Python)
 cd backend
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --require-hashes -r requirements.lock
+python -m pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000
+```
 
-# Frontend only (local Node)
+Set `DATABASE_URL` and the other backend variables first, or keep PostgreSQL and MinIO running
+through Docker.
+
+Frontend:
+
+```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-### Useful Commands
+The frontend expects the backend at `INTERNAL_API_URL` (Docker default
+`http://backend:8000`).
+
+## Testing and quality gates
+
+The authoritative commands and fixture design are documented in [docs/testing.md](docs/testing.md).
+The short form is:
 
 ```bash
-make dev       # Start full Docker stack
-make stop      # Stop all containers
-make logs      # Tail container logs
-make clean     # Stop + remove volumes (full reset)
-make health    # Check service health
-make seed      # Seed demo data
+make test
+make lint
+make format-check
 ```
 
----
+The CI workflow runs on pushes and pull requests to `main` and `develop`:
 
-## Testing
+- Python 3.12: Ruff lint, Ruff format check, non-Docker pytest suite, 60% coverage gate
+- Node.js 24: `npm ci`, ESLint, Prettier check, type-check, production dependency audit,
+  Next.js build, and Jest coverage
 
-### Backend Tests
-
-The most robust way to run the entire backend test suite (unit + integration) is inside a dedicated Docker container. This ensures testing matches production dependencies without relying on local Python setups:
+Run the Docker-backed backend tests explicitly with:
 
 ```bash
 ./scripts/run_docker_tests.sh
 ```
 
-Alternatively, to run tests locally (requires Python 3.11+ and PostgreSQL libraries):
-```bash
-make test
-# or: cd backend && python -m pytest tests/ -v
-```
+## Configuration
 
-Integration tests that require Docker can be bypassed locally with:
-```bash
-SKIP_DOCKER_TESTS=1 pytest tests/ -v
-```
+`.env.example` is the canonical root-Compose template. `compose/.env.example` belongs to the
+separate API-only Caddy profile.
 
-### Frontend Tests
-
-```bash
-cd frontend && npm test
-```
-
----
-
-## Linting & Formatting
-
-### Backend
-
-```bash
-make lint      # Run ruff linter
-make format    # Format with black
-
-# Or manually:
-cd backend
-python -m ruff check app/ tests/
-python -m black app/ tests/
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm run lint      # ESLint via Next.js
-npm run format    # Prettier
-```
-
-### Pre-commit Hooks (Optional)
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-This will automatically run linting and formatting checks before each commit.
-
----
-
-## Build & Deployment (CI/CD)
-
-GreenMind utilizes a dual-environment deployment strategy powered by **GitHub Actions** and **Docker Compose**, hosted on a Hetzner VPS.
-
-### Environments
-
-1. **Production** (`main` branch)
-   - **URL:** [https://green-mind.ch](https://green-mind.ch)
-   - **Path:** `/home/traver/greenmind-prod/`
-   - **Deploy Trigger:** Push or merge to `main`
-
-2. **Staging** (`develop` branch)
-   - **URL:** [https://test.green-mind.ch](https://test.green-mind.ch) (No-Index)
-   - **Path:** `/home/traver/greenmind-staging/`
-   - **Deploy Trigger:** Push or merge to `develop`
-   - **Constraint:** Independent databases and volumes. Safe for testing migrations.
-
-### CI/CD Workflow
-
-The pipeline consists of two stages:
-1. **CI (Continuous Integration):** Triggered on pushes/PRs. Runs `ruff`, `black`, and `pytest` for the backend, plus `npm build` and `eslint` for the frontend.
-2. **CD (Continuous Deployment):** If CI passes on `develop` or `main`, the deployment workflow executes `scripts/deploy.sh`:
-   - Uses `rsync` over SSH to copy code to the appropriate environment folder on Hetzner.
-   - Preserves `.env` files and Docker data volumes.
-   - Starts containers using `docker-compose.prod.yml` or `docker-compose.staging.yml`.
-   - Runs `smoke-test.sh` to guarantee both Frontend and Backend API are reachable.
-
-### GitHub Secrets Required
-
-To enable automated deployments, configure these secrets in `Settings > Secrets and variables > Actions`:
-- `DEPLOY_HOST`: Set to `188.245.247.156`
-- `DEPLOY_USER`: The SSH username (e.g., `traver`)
-- `DEPLOY_SSH_KEY`: The **private** SSH deploy key
-
-> **⚠️ Important:** The `.env` on the server is never overwritten by deploy.
-> To change environment variables, SSH into the server and edit `/home/traver/greenmind-prod/.env` or `/home/traver/greenmind-staging/.env` directly,
-> then restart the corresponding compose stack.
-
-### Manual Local Docker Build
-
-```bash
-make build     # Build all Docker images locally
-# or: docker compose build
-```
-
----
-
-## Environment Variables
-
-All configuration is via environment variables. Copy `.env.example` to `.env` and customize:
-
-| Variable                          | Description                                 | Default                       |
-|-----------------------------------|---------------------------------------------|-------------------------------|
-| `POSTGRES_USER`                   | Database username                           | `greenmind`                   |
-| `POSTGRES_PASSWORD`               | Database password                           | *(required)*                  |
-| `POSTGRES_DB`                     | Database name                               | `greenminddb`                 |
-| `POSTGRES_PORT`                   | Exposed database port                       | `5432`                        |
-| `BACKEND_PORT`                    | Exposed backend port                        | `8000`                        |
-| `FRONTEND_PORT`                   | Exposed frontend port                       | `3000`                        |
-| `CORS_ORIGINS`                    | Allowed CORS origins (comma-separated)      | `http://localhost:3000`       |
-| `JWT_SECRET_KEY`                  | JWT signing key (min 32 chars)              | *(required)*                  |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Token validity in minutes                   | `10080` (7 days)              |
-| `COOKIE_SECURE`                   | Set `true` in production (HTTPS)            | `false`                       |
-| `LOCAL_DATA_ROOT`                 | Local data storage root (macOS iCloud fix)  | `./data`                      |
-| `PGDATA_DIR`                      | PostgreSQL data directory                   | `./postgres_data`             |
-| `RESEND_API_KEY`                  | Resend API key for transactional email      | *(optional)*                  |
-| `EMAIL_FROM`                      | Sender address for outgoing email           | `onboarding@biolingo.org`     |
-| `FRONTEND_URL`                    | Frontend URL (used in email links)          | `https://biolingo.org`        |
-| `CONTACT_FORM_TO`                 | Recipient for contact/early-access emails   | *(optional)*                  |
-| `S3_ENDPOINT`                     | MinIO / S3 endpoint URL                     | `http://minio:9000`           |
-| `S3_REGION`                       | S3 region                                   | `eu-central-1`                |
-| `S3_ACCESS_KEY_ID`                | MinIO / S3 access key                       | `minioadmin`                  |
-| `S3_SECRET_ACCESS_KEY`            | MinIO / S3 secret key                       | *(required in production)*    |
-| `GATEWAY_RELEASE_DIR`             | Storage path for gateway release tarballs   | `/app/firmware_data/gateway_releases` |
-
-> **🔒 Never commit `.env` files with real credentials.** Use `.env.example` as a template.
-
----
-
-## Branching Strategy
-
-We use a **branch-based workflow** with two long-lived branches:
-
-```
-main ──────────────────────────────────────  (stable, production)
- └── develop ──────────────────────────────  (integration)
-      ├── feature/live-sensor-stream
-      ├── fix/api-validation
-      ├── hotfix/login-crash
-      ├── refactor/backend-services
-      ├── docs/readme-update
-      └── chore/update-dependencies
-```
-
-| Branch      | Purpose                                      |
-|-------------|----------------------------------------------|
-| `main`      | Stable, production-ready – no direct commits  |
-| `develop`   | Integration branch for ongoing work           |
-| `feature/*` | New functionality                             |
-| `fix/*`     | Bug fixes                                     |
-| `hotfix/*`  | Urgent production fixes (from `main`)         |
-| `refactor/*`| Code improvements                             |
-| `docs/*`    | Documentation changes                         |
-| `chore/*`   | Maintenance / tooling                         |
-
----
-
-## Git Workflow
-
-### Starting a New Feature
-
-```bash
-# 1. Ensure you're up to date
-git checkout develop
-git pull origin develop
-
-# 2. Create your feature branch
-git checkout -b feature/my-feature
-
-# 3. Work on your changes
-# ... edit files ...
-
-# 4. Stage and commit
-git add .
-git commit -m "feat: add sensor streaming endpoint"
-
-# 5. Push to remote
-git push -u origin feature/my-feature
-
-# 6. Create a Pull Request on GitHub → target: develop
-```
-
-### Keeping Your Branch Up to Date
-
-```bash
-git fetch origin
-git rebase origin/develop
-```
-
-### Creating a Release
-
-```bash
-# Merge develop into main
-git checkout main
-git merge develop
-git tag -a v1.0.0 -m "Release 1.0.0"
-git push origin main --tags
-```
-
----
-
-## Pull Request Rules
-
-1. **All changes** must go through Pull Requests
-2. PRs must target `develop` (never `main` directly, except hotfixes)
-3. **CI must be green** before merging
-4. At least **one code review approval** required
-5. Use the [PR template](.github/pull_request_template.md) and fill it out completely
-6. Squash-merge to keep a clean history
-
----
-
-## CI/CD
-
-GitHub Actions automatically runs on every push and PR to `main` or `develop`:
-
-| Job          | Steps                              |
-|--------------|-------------------------------------|
-| **Backend**  | Install → Lint (ruff) → Format check (black) → Test (pytest) |
-| **Frontend** | Install → Lint (ESLint) → Build (Next.js)                    |
-| **Docker**   | Build all containers (on `main`/`develop` only)              |
-
-Configuration: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-
----
-
-## Troubleshooting
-
-### Containers won't start
-
-```bash
-# Check logs
-docker compose logs -f
-
-# Check specific service
-docker logs -f greenminddb-backend-1
-```
-
-### Database migration errors
-
-```bash
-# Full reset: remove volumes + data directory
-docker compose down -v
-rm -rf /path/to/your/PGDATA_DIR
-docker compose up -d --build
-```
-
-### Port conflicts
-
-If ports 3000, 8000, or 5432 are already in use, change them in `.env`:
-```env
-BACKEND_PORT=8001
-FRONTEND_PORT=3001
-POSTGRES_PORT=5433
-```
-
-### iCloud sync issues (macOS)
-
-PostgreSQL data **must not** be stored in an iCloud-synced folder. Set `PGDATA_DIR` to a local path outside iCloud in your `.env`.
-
-### Backend rebuild after code changes
-
-```bash
-docker compose build backend
-docker compose up -d
-```
-
----
-
-## Security
-
-### Authentication & Access Control
-
-- **Password hashing**: bcrypt via `passlib` with auto-configured work factor
-- **Password complexity**: Backend enforces ≥8 chars, uppercase, lowercase, digit
-- **JWT storage**: httpOnly + SameSite=Lax cookies only — **never** in localStorage
-- **Token expiration**: Configurable via `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`
-- **RBAC**: All API endpoints enforce `organization_id` ownership checks (prevents IDOR)
-- **Rate limiting**: Login, signup, verify-email (5/min), pairing-code, register (5/min)
-
-### IoT / Gateway Security
-
-- **API keys**: Each gateway receives a unique `secrets.token_urlsafe(32)` key, stored as bcrypt hash
-- **Pairing codes**: 6-char, 10 min TTL, single-use, `hardware_id` uniqueness enforced
-- **Sensor-gateway affinity**: Ingest rejects readings from gateways that don't own the sensor MAC
-- **Idempotency**: `measurement_id` prevents duplicate data ingestion
-
-### HTTP Security Headers
-
-| Header | Value |
+| Variable | Purpose |
 |---|---|
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Content-Security-Policy` | `default-src 'self'; frame-ancestors 'none'` |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
-| `Strict-Transport-Security` | `max-age=63072000` (production only) |
+| `ENVIRONMENT` | `development`, `staging`, or `production` behavior |
+| `DATABASE_URL` | Backend SQLAlchemy connection when running outside root Compose |
+| `POSTGRES_*` | PostgreSQL container/database configuration |
+| `PGDATA_DIR`, `MINIO_DATA_DIR` | Named volumes by default; set explicit host paths only for a reviewed bind-mount deployment |
+| `GREENMIND_DOCKER_SUBNET`, `GREENMIND_DOCKER_GATEWAY` | Collision-free private bridge network used to identify the trusted host proxy peer |
+| `FRONTEND_PROXY_IP` | Fixed local Next.js proxy address trusted by the canonical development stack |
+| `JWT_SECRET_KEY` | JWT signing secret, at least 32 characters |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Browser session lifetime; maintained default is 480 minutes (8 hours) |
+| `COOKIE_SECURE`, `COOKIE_DOMAIN` | Authentication-cookie deployment settings |
+| `CORS_ORIGINS` | Explicit comma-separated frontend origins |
+| `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | MinIO root credentials used by root Compose |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Backend S3-compatible connection settings |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `FRONTEND_URL`, `CONTACT_FORM_TO` | Verification and contact email delivery |
+| `ASPSMS_USERKEY`, `ASPSMS_PASSWORD`, `ASPSMS_SENDER_ID` | Optional electrode-disconnect SMS alerts |
+| `GATEWAY_RELEASE_DIR` | Gateway application artifact storage |
+| `GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_PATH` | PEM Ed25519 public key for gateway releases |
+| `ENABLE_EXPERIMENTAL_PROVISIONING` | Explicit opt-in to the experimental provisioning API |
+| `ENABLE_EXPERIMENTAL_BIOSIGNAL` | Explicit opt-in to the experimental biosignal API |
+| `MAX_WAV_UPLOAD_BYTES` | Per-request WAV upload limit; default 32 MiB |
+| `MAX_WAV_BUNDLE_FILES`, `MAX_WAV_BUNDLE_BYTES` | Maximum files and total uncompressed bytes in one WAV download bundle |
+| `SENSOR_EXPORT_MAX_ROWS`, `SENSOR_EXPORT_MAX_BYTES`, `SENSOR_EXPORT_MAX_KINDS` | Bounds for generated sensor-data archives |
+| `WEBSOCKET_MAX_CONNECTIONS*` | Global, user, and IP WebSocket limits |
+| `WEBSOCKET_*_TIMEOUT_SECONDS` | WebSocket idle/send timeouts |
 
-### Network & API
+Production and staging `.env` files live only on their hosts and are excluded from rsync.
 
-- **CORS**: Explicit origins only (no wildcards), `credentials: true`
-- **Swagger/Docs**: Disabled in production (`ENVIRONMENT=production`)
-- **Input validation**: Pydantic schemas on all endpoints, `EmailStr` for emails
-- **Honeypot**: Contact/Early Access forms check `website` field against bots
+## API boundaries
 
-### Container & Infrastructure
+Every maintained route is under `/api/v1` except `/`, `/health`, `/metrics`, and development
+OpenAPI endpoints. Important groups are:
 
-- All containers run as **non-root** users (`appuser`, `nextjs`)
-- `no-new-privileges: true` and `cap_drop: ALL` on all services
-- TimescaleDB bound to `127.0.0.1` only (not reachable from internet)
+| Prefix | Authentication | Purpose |
+|---|---|---|
+| `/api/v1/auth` | Public for signup/login/verify; cookie/JWT for profile | Account lifecycle |
+| `/api/v1/organizations`, `/zones`, `/plants`, `/sensors`, `/gateways` | Cookie/JWT | Tenant resources and pairing |
+| `/api/v1/ingest` | `X-Api-Key` | Idempotent gateway aggregate ingestion |
+| `/api/v1/wav` | Gateway key for upload; JWT for tenant access | WAV upload, listing, download |
+| `/api/v1/ws/zone/{id}`, `/ws/sensor/{id}` | JWT/cookie | Live views |
+| `/api/v1/gateway` | `X-Api-Key` | Gateway desired state, reports, commands, releases |
+| `/api/v1/admin` | Platform `ADMIN` | Fleet releases, rollout, commands, audit |
+| `/api/v1/firmware` | Gateway key or platform `ADMIN`, endpoint-dependent | ESP firmware OTA metadata and reports |
+| `/api/v1/public/observe`, `/public/evaluate` | Short-lived scoped tokens / public validation | Field observations |
 
-### Secrets Management
+Experimental `/api/v1/provisioning` and `/api/v1/biosignal` routes are absent unless their
+explicit feature flags are enabled. Consult `/docs` in development or the router source for the
+exact request and response schema.
 
-- **Never commit** `.env` files with real credentials
-- All secrets loaded from environment variables
-- JWT secret validator rejects defaults in production
-- `COOKIE_SECURE` configurable via env (set `true` when HTTPS is enabled)
+### Gateway trust and release integrity
 
-### OTA / Gateway Remote Management Security
+- Gateways receive a one-time `gmk_<gateway-id>_<secret>` API key. Only its bcrypt hash is
+  stored; legacy keys remain accepted during migration/rotation.
+- Gateway application activation and download fail closed unless the artifact SHA-256 is signed
+  by the configured Ed25519 public key. The signing contract is the ASCII SHA-256 hexadecimal
+  digest, matching the gateway agent.
+- Ingest checks that sensor MAC addresses belong to the authenticated gateway and uses
+  `measurement_id` for idempotency.
+- Local ESP32 firmware OTA has a separate trust model in GreenMindArdu/GreenMindRPI and must not
+  be inferred from the gateway application-release mechanism documented here.
 
-- **Agent identity**: Each agent authenticates via the same `X-Api-Key` used by its gateway
-- **Artifact integrity**: All release tarballs are verified by SHA256 hash before installation
-- **Ed25519 signatures**: Optional code-signing verification (enforcement-ready)
-- **Privilege separation**: Agent runs as unprivileged `greenmind-agent` user with restricted `sudo` (whitelist: `systemctl restart/reboot` only)
-- **Offline install**: Python wheels are pre-built and installed via `pip --no-index` — no PyPI access on the Pi
-- **Atomic updates**: Symlink-based release switch prevents partial installations
-- **Disk pre-checks**: Agent verifies sufficient disk space (`file_size * 2 + 100 MB`) before downloading
-- **Global locking**: `fcntl.flock()` prevents concurrent update/command execution
-- **Update windows**: Configurable per-gateway time windows for apply phase (download allowed anytime)
-- **Audit trail**: All admin actions (upload, rollout, command, rollback) are logged with timestamps, IP, and entity
+## Deployment
 
----
+The VPS deployment workflows run only after CI succeeds:
 
-## API Endpoints
+| Branch | Environment | Compose file |
+|---|---|---|
+| `develop` | staging | `docker-compose.staging.yml` |
+| `main` | production | `docker-compose.prod.yml` |
 
-### Authentication
-| Method | Endpoint                | Description                       |
-|--------|-------------------------|-----------------------------------|
-| POST   | `/api/v1/auth/signup`      | Create new account                |
-| POST   | `/api/v1/auth/login`       | Login (sets httpOnly cookie)      |
-| POST   | `/api/v1/auth/logout`      | Logout user                       |
-| GET    | `/api/v1/auth/me`          | Get current user                  |
+The workflows require environment-scoped `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and
+`DEPLOY_KNOWN_HOSTS` secrets. `scripts/deploy.sh` enforces host-key checking, rsyncs source while
+preserving host `.env` and data, builds the selected Compose stack, and waits for backend and
+frontend health. Run it manually only as an authorized operator with those variables supplied.
 
-### Core Resources
-| Method | Endpoint                           | Description                     |
-|--------|------------------------------------|---------------------------------|
-| GET    | `/api/v1/organizations`               | List organizations              |
-| POST   | `/api/v1/organizations`               | Create organization             |
-| GET    | `/api/v1/zones`                       | List zones (all types)          |
-| POST   | `/api/v1/zones`                       | Create zone (type, GPS)         |
-| DELETE | `/api/v1/zones/{id}`                  | Delete zone + cascade           |
-| GET    | `/api/v1/zones/{id}/overview`         | Zone dashboard overview         |
-| GET    | `/api/v1/gateways`                    | List gateways (`?zone_id=`)     |
-| POST   | `/api/v1/gateways/pairing-code`       | Generate pairing code           |
-| POST   | `/api/v1/gateways/register`           | Register a gateway              |
-| POST   | `/api/v1/gateways/heartbeat`          | Gateway heartbeat (X-Api-Key)   |
-| GET    | `/api/v1/sensors`                     | List sensors (`?zone_id=`)      |
-| GET    | `/api/v1/sensors/{id}/data`           | Get sensor timeseries data      |
-| GET    | `/api/v1/sensors/{id}/export`         | Export sensor data as ZIP       |
+Each profile uses a distinct fixed private bridge so Gunicorn accepts `X-Forwarded-*` identity
+headers only from the expected host bridge or application proxy. Before first deployment, confirm
+that `GREENMIND_DOCKER_SUBNET` does not overlap a host LAN, VPN, or another Docker network. Changing
+an existing deployment's subnet requires a planned recreation of that Compose network; named data
+volumes remain separate and must not be deleted as part of that operation.
 
-### Ingestion (IoT)
-| Method | Endpoint          | Description                                    |
-|--------|-------------------|------------------------------------------------|
-| POST   | `/api/v1/ingest`     | Push sensor readings (`X-Api-Key` auth)        |
+The optional backend-only Caddy profile is documented in
+[docs/SETUP_MACMINI.md](docs/SETUP_MACMINI.md). It is not the canonical full-stack frontend
+deployment.
 
-### Live Data (WebSocket)
-| Method | Endpoint                    | Description                             |
-|--------|-----------------------------|-----------------------------------------|
-| WS     | `/api/v1/ws/zone/{id}`      | Stream live sensor readings per zone    |
+## Backup and restore
 
-### Contact & Early Access
-| Method | Endpoint               | Description                                    |
-|--------|------------------------|------------------------------------------------|
-| POST   | `/api/v1/contact`       | Submit contact form (public, rate-limited)      |
-| POST   | `/api/v1/early-access`  | Submit early-access request (public)            |
-| GET    | `/api/v1/submissions`   | List all form submissions (admin only)          |
-
-> All submissions are persisted to the database as a durable backup.
-> Email notifications via Resend are sent as best-effort.
-> Filter by type: `GET /api/v1/submissions?form_type=early_access`
-
-### WAV File Management
-| Method | Endpoint                    | Description                                       |
-|--------|-----------------------------|-------------------------------------------------|
-| POST   | `/api/v1/wav/upload`          | Upload WAV file from gateway (multipart, X-Api-Key) |
-| GET    | `/api/v1/wav/files`           | List WAV files (`?sensor_id=`, `?from_dt=`, `?to_dt=`) |
-| GET    | `/api/v1/wav/download/{id}`   | Get presigned MinIO download URL                  |
-
-> WAV files are 16-bit PCM, mono, 380 Hz. Each file covers a 10-minute recording
-> (~456 KB). Stored in MinIO bucket `greenmind-raw` under `wav/{MAC}/{date}/{time}.wav`.
-
-### Gateway Pairing Flow
-1. User creates a **Zone** (Greenhouse, Open Field, Vertical Farm, or Orchard)
-2. User generates a 10-minute pairing code for that zone via the dashboard
-3. Raspberry Pi gateway sends `POST /api/v1/gateways/register` with code + hardware serial
-4. Backend validates, registers the gateway to the zone, returns an `X-Api-Key`
-5. Gateway sends heartbeats via `POST /api/v1/gateways/heartbeat`
-6. Gateway streams readings via `POST /api/v1/ingest` using the API key
-7. Live data appears on the zone dashboard via WebSocket
-
-### Gateway Remote Management (OTA)
-| Method | Endpoint                                     | Auth      | Description                               |
-|--------|----------------------------------------------|-----------|-------------------------------------------|
-| GET    | `/api/v1/gateway/desired-state`              | X-Api-Key | Agent polls for desired app/config version |
-| POST   | `/api/v1/gateway/state-report`               | X-Api-Key | Agent reports current state + health       |
-| POST   | `/api/v1/gateway/command-result`             | X-Api-Key | Agent reports command execution result     |
-| GET    | `/api/v1/gateway/releases/{id}/download`     | X-Api-Key | Download release tarball                   |
-| GET    | `/api/v1/gateway/configs/{id}/download`      | X-Api-Key | Download config payload                    |
-
-### Gateway Admin (Fleet Management)
-| Method | Endpoint                                     | Auth | Description                               |
-|--------|----------------------------------------------|------|-------------------------------------------|
-| GET    | `/api/v1/admin/gateway/fleet`                | JWT  | Fleet overview (all gateways + status)     |
-| POST   | `/api/v1/admin/gateway/releases`             | JWT  | Upload new app release tarball             |
-| GET    | `/api/v1/admin/gateway/releases`             | JWT  | List app releases                          |
-| PATCH  | `/api/v1/admin/gateway/releases/{id}`        | JWT  | Activate/deactivate release                |
-| POST   | `/api/v1/admin/gateway/configs`              | JWT  | Create config release (JSON)               |
-| GET    | `/api/v1/admin/gateway/configs`              | JWT  | List config releases                       |
-| PUT    | `/api/v1/admin/gateway/{id}/desired-state`   | JWT  | Set desired app/config version per gateway |
-| POST   | `/api/v1/admin/gateway/{id}/command`         | JWT  | Issue remote command                       |
-| POST   | `/api/v1/admin/gateway/rollout`              | JWT  | Start staged rollout to ring               |
-| POST   | `/api/v1/admin/gateway/{id}/rollback`        | JWT  | Initiate rollback to previous release      |
-| GET    | `/api/v1/admin/gateway/update-logs`          | JWT  | List update logs (filterable, paginated)   |
-| GET    | `/api/v1/admin/gateway/audit-logs`           | JWT  | Audit trail of all admin actions           |
-
-### OTA Update Flow
-1. Admin uploads a **release tarball** (containing `src/`, `wheels/`, `requirements.lock`)
-2. Admin starts a **staged rollout** targeting a ring (`canary` → `early` → `stable`)
-3. Matching gateways receive the update via the **desired-state** endpoint
-4. The **agent** downloads the tarball, verifies **SHA256** and optional **Ed25519 signature**
-5. Agent extracts to `/opt/greenmind/releases/<version>/`, installs wheels **offline**
-6. **Atomic symlink switch**: `/opt/greenmind/current` → new release
-7. Agent restarts `greenmind-gateway.service` and runs a **6-point healthcheck**
-8. On healthcheck failure → **automatic rollback** to previous release
-9. Agent reports status back to the cloud (download/apply/rollback status)
-
-## Database Backup & Restore
-
-Automated bash scripts are provided to cleanly run `pg_dump` and `pg_restore` through the active TimescaleDB container.
-
-### Backup Database
 ```bash
 ./scripts/backup_db.sh
+./scripts/restore_db.sh ./backups/greenmind_<UTC-timestamp>.sql
 ```
-This generates a timestamped `.sql` file in the `./backups` directory.
 
-### Restore Database
-```bash
-./scripts/restore_db.sh ./backups/backup_YYYYMMDD_HHMMSS.sql
-```
-*Note: Restoration will apply the SQL dump to the current database.*
+Backups are created with restrictive permissions. Restore is destructive to the selected
+database: validate a backup against a disposable database first and confirm the active Compose
+environment before proceeding. MinIO objects require a separate backup/replication policy.
 
----
+## Security and operational limits
 
-## Known Limitations
+- Secrets are loaded from environment variables; real `.env` files, deployment keys, and
+  simulator state must never be committed.
+- Browser authentication uses httpOnly cookies. Login rejects inactive or unverified users.
+- Tenant `OWNER` and platform `ADMIN` are different trust scopes.
+- Database, MinIO, backend, frontend, and metrics ports bind to localhost in maintained Compose
+  definitions; reverse proxies provide external TLS.
+- Containers use non-root users where supported, drop capabilities, set PID limits, and cap log
+  rotation.
+- WebSocket rooms are process-local, so production keeps one backend worker until a shared
+  pub/sub layer exists.
+- WAV uploads are bounded, validated, content-addressed, and stored in the fixed
+  `greenmind-raw` MinIO bucket; observation photos use `greenmind-photos`, and metadata remains
+  in PostgreSQL.
+- Database backups are manual, and MinIO has no replication configured by this repository.
 
-- **R&D status** — GreenMind is in active research and development; the platform is not commercially available
-- **Single-tenant** — the current architecture supports one organization per deployment
-- **No automated database backups** — backup scripts exist but must be triggered manually or via cron
-- **Frontend test coverage** — Jest is configured but test coverage is minimal
-- **WebSocket scaling** — the current WebSocket implementation is single-process and does not scale horizontally without a pub/sub layer
-- **Offline gateway sync** — gateways queue data locally but conflict resolution for extended offline periods is not implemented
+Report vulnerabilities privately to the repository maintainers. Do not include credentials,
+tokens, tenant data, or production measurements in an issue.
 
----
+## Contributing
 
-## Author & Credits
-
-**Traver Dinten** 
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch and review rules. Architecture decisions live
+in [docs/architecture-decisions.md](docs/architecture-decisions.md), and test commands live in
+[docs/testing.md](docs/testing.md).
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+GreenMindDB is licensed under the [MIT License](LICENSE).

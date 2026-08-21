@@ -11,10 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class DesiredStateRequest(BaseModel):
     """Query params sent by the agent when polling desired state."""
 
-    gateway_id: str
-    current_app_version: str | None = None
-    current_config_version: str | None = None
-    current_agent_version: str | None = None
+    gateway_id: uuid.UUID
+    current_app_version: str | None = Field(None, max_length=50)
+    current_config_version: str | None = Field(None, max_length=50)
+    current_agent_version: str | None = Field(None, max_length=50)
 
 
 class PendingCommandResponse(BaseModel):
@@ -55,37 +55,37 @@ class DesiredStateResponse(BaseModel):
     allow_reboot_outside_window: bool = False
 
     # Pending commands
-    pending_commands: list[PendingCommandResponse] = []
+    pending_commands: list[PendingCommandResponse] = Field(default_factory=list)
 
 
 # ── State Report (agent → cloud) ─────────────────────────────────────
 
 
 class StateReportRequest(BaseModel):
-    gateway_id: str
-    app_version: str | None = None
-    config_version: str | None = None
-    agent_version: str | None = None
-    status: str = "idle"
-    health_status: str | None = None
-    disk_free_mb: int | None = None
-    cpu_temp_c: float | None = None
-    ram_usage_pct: float | None = None
-    uptime_seconds: int | None = None
-    last_error: str | None = None
-    update_download_status: str | None = None
-    update_apply_status: str | None = None
-    signature_status: str | None = None
+    gateway_id: uuid.UUID
+    app_version: str | None = Field(None, max_length=50, pattern=r"^[A-Za-z0-9._+-]+$")
+    config_version: str | None = Field(None, max_length=50, pattern=r"^[A-Za-z0-9._+-]+$")
+    agent_version: str | None = Field(None, max_length=50, pattern=r"^[A-Za-z0-9._+-]+$")
+    status: str = Field("idle", max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    health_status: str | None = Field(None, max_length=20, pattern=r"^[a-z][a-z0-9_]*$")
+    disk_free_mb: int | None = Field(None, ge=0, le=1_000_000_000)
+    cpu_temp_c: float | None = Field(None, ge=-50, le=150, allow_inf_nan=False)
+    ram_usage_pct: float | None = Field(None, ge=0, le=100, allow_inf_nan=False)
+    uptime_seconds: int | None = Field(None, ge=0, le=10_000_000_000)
+    last_error: str | None = Field(None, max_length=2_000)
+    update_download_status: str | None = Field(None, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    update_apply_status: str | None = Field(None, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    signature_status: str | None = Field(None, max_length=20, pattern=r"^[a-z][a-z0-9_]*$")
 
 
 # ── Command Result (agent → cloud) ───────────────────────────────────
 
 
 class CommandResultRequest(BaseModel):
-    gateway_id: str
+    gateway_id: uuid.UUID
     command_id: uuid.UUID
-    result: str  # executed / failed / rejected
-    message: str | None = None
+    result: str = Field(pattern=r"^(executed|failed|rejected)$")
+    message: str | None = Field(None, max_length=2_000)
 
 
 # ── App Release ──────────────────────────────────────────────────────
@@ -116,11 +116,11 @@ class AppReleaseListResponse(BaseModel):
 
 
 class ConfigReleaseCreate(BaseModel):
-    version: str
+    version: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9._+-]+$")
     config_payload: dict
-    schema_version: str = "1"
-    compatible_app_min: str | None = None
-    compatible_app_max: str | None = None
+    schema_version: str = Field("1", min_length=1, max_length=20, pattern=r"^[A-Za-z0-9._-]+$")
+    compatible_app_min: str | None = Field(None, max_length=50)
+    compatible_app_max: str | None = Field(None, max_length=50)
 
 
 class ConfigReleaseResponse(BaseModel):
@@ -148,16 +148,28 @@ class ConfigReleaseListResponse(BaseModel):
 class DesiredStateUpdate(BaseModel):
     """Admin sets the target state for a gateway."""
 
-    desired_app_version: str | None = None
-    desired_config_version: str | None = None
+    desired_app_version: str | None = Field(
+        None,
+        max_length=50,
+        pattern=(
+            r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+        ),
+    )
+    desired_config_version: str | None = Field(
+        None,
+        max_length=50,
+        pattern=r"^[A-Za-z0-9._+-]+$",
+    )
     maintenance_mode: bool | None = None
     reboot_allowed: bool | None = None
     blocked: bool | None = None
-    rollout_ring: str | None = None
+    rollout_ring: str | None = Field(None, pattern=r"^(canary|pilot|all|stable)$")
     force_downgrade: bool | None = None
-    update_window_start: str | None = None
-    update_window_end: str | None = None
-    update_timezone: str | None = None
+    update_window_start: str | None = Field(None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    update_window_end: str | None = Field(None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    update_timezone: str | None = Field(None, min_length=1, max_length=50)
     allow_download_outside_window: bool | None = None
     allow_apply_outside_window: bool | None = None
     allow_reboot_outside_window: bool | None = None
@@ -176,7 +188,7 @@ ALLOWED_COMMAND_TYPES = {
 
 
 class CommandCreate(BaseModel):
-    command_type: str = Field(..., description="Must be in allowlist")
+    command_type: str = Field(min_length=1, max_length=50, description="Must be in allowlist")
     payload: dict | None = None
 
 
@@ -260,12 +272,28 @@ class UpdateLogListResponse(BaseModel):
 class RolloutCreate(BaseModel):
     """Start a staged rollout of a gateway app release."""
 
-    release_version: str
-    target_ring: str = "canary"  # canary → early → stable
+    release_version: str = Field(
+        min_length=1,
+        max_length=50,
+        pattern=(
+            r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+        ),
+    )
+    target_ring: str = Field("canary", pattern=r"^(canary|pilot|all)$")
     zone_id: uuid.UUID | None = None
 
 
 class RollbackRequest(BaseModel):
     """Trigger rollback to previous version for a gateway."""
 
-    target_version: str | None = None  # None = auto-detect previous
+    target_version: str | None = Field(
+        None,
+        max_length=50,
+        pattern=(
+            r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+        ),
+    )  # None = auto-detect previous

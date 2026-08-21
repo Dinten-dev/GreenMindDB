@@ -1,20 +1,25 @@
 """Sensor (ESP32) management and data query endpoints."""
 
+import csv
 import io
+import re
+import uuid
 import zipfile
 import zoneinfo
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, verify_password
+from app.auth import get_current_user, require_role
+from app.config import settings
 from app.database import get_db
+from app.gateway_auth import get_current_gateway
 from app.models.master import Gateway, Sensor, Zone
 from app.models.timeseries import SensorReading
-from app.models.user import User
+from app.models.user import Role, User
 from app.rate_limit import limiter
 from app.schemas.gateway import PairingCodeRequest, PairingCodeResponse
 from app.schemas.sensor import (
@@ -29,6 +34,7 @@ from app.schemas.sensor import (
 from app.services.gateway_service import gateway_commands_cache, generate_pairing_code
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
+_tenant_manager = require_role([Role.OWNER, Role.ADMIN])
 
 RANGE_MAP = {
     "5m": timedelta(minutes=5),
@@ -46,8 +52,8 @@ LIVENESS_THRESHOLD = timedelta(minutes=5)
 
 @router.get("", response_model=list[SensorResponse])
 async def list_sensors(
-    zone_id: str | None = Query(None),
-    gateway_id: str | None = Query(None),
+    zone_id: uuid.UUID | None = Query(None),
+    gateway_id: uuid.UUID | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -69,7 +75,10 @@ async def list_sensors(
     now = datetime.now(UTC)
     results = []
     for sensor, gw in query.all():
-        is_online = bool(sensor.last_seen and (now - sensor.last_seen) < LIVENESS_THRESHOLD)
+        last_seen = sensor.last_seen
+        if last_seen and last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=UTC)
+        is_online = bool(last_seen and (now - last_seen) < LIVENESS_THRESHOLD)
         results.append(
             SensorResponse(
                 id=str(sensor.id),
@@ -95,16 +104,10 @@ async def list_sensors(
 @router.post("/claim", response_model=ClaimSensorResponse, status_code=201)
 async def claim_sensor(
     data: ClaimSensorRequest,
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Gateway claims a discovered ESP32 sensor by MAC address."""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
-
-    # Find the gateway by API key
-    gateway = _authenticate_gateway(db, x_api_key)
-
     # Check if MAC already claimed
     existing = db.query(Sensor).filter(Sensor.mac_address == data.mac_address).first()
     if existing:
@@ -134,7 +137,7 @@ async def claim_sensor(
 async def handle_generate_pairing_code(
     request: Request,
     data: PairingCodeRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Generate a short-lived pairing code for a sensor to use in its Captive Portal."""
@@ -146,9 +149,9 @@ async def handle_generate_pairing_code(
 
 @router.patch("/{sensor_id}", response_model=SensorResponse)
 async def update_sensor(
-    sensor_id: str,
+    sensor_id: uuid.UUID,
     data: SensorUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Update sensor settings (name, sms_alerts_enabled)."""
@@ -179,7 +182,11 @@ async def update_sensor(
     db.refresh(sensor)
 
     now = datetime.now(UTC)
-    last_seen = sensor.last_seen.replace(tzinfo=UTC) if sensor.last_seen and sensor.last_seen.tzinfo is None else sensor.last_seen
+    last_seen = (
+        sensor.last_seen.replace(tzinfo=UTC)
+        if sensor.last_seen and sensor.last_seen.tzinfo is None
+        else sensor.last_seen
+    )
     is_online = bool(last_seen and (now - last_seen) < LIVENESS_THRESHOLD)
 
     return SensorResponse(
@@ -200,9 +207,9 @@ async def update_sensor(
 
 @router.patch("/{sensor_id}/move", response_model=SensorResponse)
 async def move_sensor(
-    sensor_id: str,
+    sensor_id: uuid.UUID,
     data: MoveSensorRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Move a sensor to a different gateway within the same zone."""
@@ -264,8 +271,8 @@ async def move_sensor(
 
 @router.delete("/{sensor_id}", status_code=204)
 async def delete_sensor(
-    sensor_id: str,
-    current_user: User = Depends(get_current_user),
+    sensor_id: uuid.UUID,
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Delete a sensor and all its readings."""
@@ -317,7 +324,7 @@ RESOLUTION_BUCKET_MAP = {
 
 @router.get("/{sensor_id}/data", response_model=list[SensorDataResponse])
 async def get_sensor_data(
-    sensor_id: str,
+    sensor_id: uuid.UUID,
     range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
     resolution: str | None = Query(None, pattern="^(raw|1m|5m|1h|1d)$"),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
@@ -461,9 +468,52 @@ EXPORT_RANGE_MAP = {
 }
 
 
+class _ExportBudget:
+    """Bound uncompressed export bytes across every ZIP member."""
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.used = 0
+
+    def consume(self, size: int) -> None:
+        self.used += size
+        if self.used > self.limit:
+            raise HTTPException(status_code=413, detail="Sensor export exceeds byte limit")
+
+
+class _BoundedZipTextWriter:
+    """Minimal text writer for csv.writer that writes directly into a ZIP member."""
+
+    def __init__(self, destination, budget: _ExportBudget):
+        self.destination = destination
+        self.budget = budget
+
+    def write(self, value: str) -> int:
+        encoded = value.encode("utf-8")
+        self.budget.consume(len(encoded))
+        self.destination.write(encoded)
+        return len(value)
+
+
+def _safe_export_component(value: str | None, fallback: str) -> str:
+    component = re.sub(r"[^A-Za-z0-9_.-]+", "_", value or "").strip("._-")
+    component = re.sub(r"\.{2,}", ".", component)
+    return (component[:80] or fallback).strip("._-") or fallback
+
+
+def _safe_export_text(value: object) -> str:
+    text_value = str(value).replace("\r", " ").replace("\n", " ").strip()
+    # Prevent spreadsheet formula execution when a CSV is opened interactively.
+    if text_value.startswith(("=", "+", "-", "@")):
+        return f"'{text_value}"
+    return text_value
+
+
 @router.get("/{sensor_id}/export")
+@limiter.limit("3/minute")
 async def export_sensor_data(
-    sensor_id: str,
+    request: Request,
+    sensor_id: uuid.UUID,
     range: str = Query("24h", pattern="^(1h|24h|7d|30d|all)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -490,37 +540,59 @@ async def export_sensor_data(
     td = EXPORT_RANGE_MAP[range]
     cutoff = datetime.now(UTC) - td
 
+    reading_filter = (
+        SensorReading.sensor_id == sensor_id,
+        SensorReading.timestamp >= cutoff,
+    )
+    row_count = (
+        db.query(func.count()).select_from(SensorReading).filter(*reading_filter).scalar() or 0
+    )
+    if row_count > settings.sensor_export_max_rows:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Sensor export exceeds {settings.sensor_export_max_rows} row limit",
+        )
+
     # Get distinct kinds
     kinds = (
         db.query(SensorReading.kind)
-        .filter(SensorReading.sensor_id == sensor_id, SensorReading.timestamp >= cutoff)
+        .filter(*reading_filter)
         .distinct()
+        .order_by(SensorReading.kind.asc())
+        .limit(settings.sensor_export_max_kinds + 1)
         .all()
     )
 
     if not kinds:
         raise HTTPException(status_code=404, detail="No data available for export")
+    if len(kinds) > settings.sensor_export_max_kinds:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Sensor export exceeds {settings.sensor_export_max_kinds} kind limit",
+        )
 
     # Build zone metadata header
     zone_meta = (
-        f"# Zone: {zone.name}\n"
-        f"# Type: {zone.zone_type}\n"
-        f"# Location: {zone.location or '—'}\n"
+        f"# Zone: {_safe_export_text(zone.name)}\n"
+        f"# Type: {_safe_export_text(zone.zone_type)}\n"
+        f"# Location: {_safe_export_text(zone.location or '—')}\n"
     )
     if zone.latitude is not None and zone.longitude is not None:
         zone_meta += f"# GPS: {zone.latitude}, {zone.longitude}\n"
-    zone_meta += f"# Gateway: {gw.name or gw.hardware_id}\n"
-    zone_meta += f"# Sensor: {sensor.name or sensor.mac_address}\n"
+    zone_meta += f"# Gateway: {_safe_export_text(gw.name or gw.hardware_id)}\n"
+    zone_meta += f"# Sensor: {_safe_export_text(sensor.name or sensor.mac_address)}\n"
 
-    # Build ZIP in memory
+    # Build a strictly bounded ZIP. Each CSV is written directly into its ZIP
+    # member so there is no second, unbounded StringIO copy per measurement kind.
     zip_buffer = io.BytesIO()
-    sensor_label = sensor.name or sensor.mac_address
+    budget = _ExportBudget(settings.sensor_export_max_bytes)
+    emitted_rows = 0
+    switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for (kind,) in kinds:
-            csv_buffer = io.StringIO()
-            csv_buffer.write(zone_meta)
-            csv_buffer.write("timestamp,value,unit\n")
+        for index, (kind,) in enumerate(kinds, start=1):
+            safe_kind = _safe_export_component(kind, "reading")
+            member_name = f"{index:02d}_{safe_kind}.csv"
 
             readings = (
                 db.query(
@@ -534,40 +606,45 @@ async def export_sensor_data(
                     SensorReading.timestamp >= cutoff,
                 )
                 .order_by(SensorReading.timestamp.asc())
-                .yield_per(5000)
+                .yield_per(2_000)
             )
 
-            switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
+            with zf.open(member_name, "w") as member:
+                text_writer = _BoundedZipTextWriter(member, budget)
+                text_writer.write(zone_meta)
+                csv_writer = csv.writer(text_writer, lineterminator="\n")
+                csv_writer.writerow(["timestamp", "value", "unit"])
 
-            for ts, val, unit in readings:
-                # convert to Switzerland time
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=UTC)
-                ts_local = ts.astimezone(switzerland_tz)
-                # Format as YYYY-MM-DD HH:MM:SS for easy Excel reading
-                ts_str = ts_local.strftime('%Y-%m-%d %H:%M:%S')
-                csv_buffer.write(f"{ts_str},{round(val, 4)},{unit}\n")
+                for ts, val, unit in readings:
+                    emitted_rows += 1
+                    if emitted_rows > settings.sensor_export_max_rows:
+                        raise HTTPException(
+                            status_code=413, detail="Sensor export exceeds row limit"
+                        )
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=UTC)
+                    ts_local = ts.astimezone(switzerland_tz)
+                    csv_writer.writerow(
+                        [
+                            ts_local.strftime("%Y-%m-%d %H:%M:%S"),
+                            round(val, 4),
+                            _safe_export_text(unit),
+                        ]
+                    )
 
-            zf.writestr(f"{kind}.csv", csv_buffer.getvalue())
-            csv_buffer.close()
+    archive_size = zip_buffer.getbuffer().nbytes
+    if archive_size > settings.sensor_export_max_bytes:
+        raise HTTPException(status_code=413, detail="Sensor export exceeds byte limit")
 
     zip_buffer.seek(0)
+    sensor_label = _safe_export_component(sensor.name or sensor.mac_address, "sensor")
     filename = f"greenmind_{sensor_label}_{range}_{datetime.now(UTC).strftime('%Y%m%d')}.zip"
 
     return StreamingResponse(
         zip_buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(archive_size),
+        },
     )
-
-
-# ── Helpers ─────────────────────────────────────────
-
-
-def _authenticate_gateway(db: Session, api_key: str) -> Gateway:
-    """Find and authenticate a gateway by its API key (brute search)."""
-    gateways = db.query(Gateway).filter(Gateway.is_active.is_(True)).all()
-    for gw in gateways:
-        if gw.api_key_hash and verify_password(api_key, gw.api_key_hash):
-            return gw
-    raise HTTPException(status_code=401, detail="Invalid API key")

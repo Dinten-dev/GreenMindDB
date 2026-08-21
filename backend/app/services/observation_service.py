@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 _s3_client = None
 _PHOTO_BUCKET = "greenmind-photos"
 
+
 def _get_s3_client():
     global _s3_client
     if _s3_client is not None:
@@ -57,16 +58,19 @@ def _get_s3_client():
     return _s3_client
 
 
-def create_observation_session(db: Session, public_id: str, ip: str, user_agent: str) -> ObservationSessionResponse:
+def create_observation_session(
+    db: Session, public_id: str, ip: str, user_agent: str
+) -> ObservationSessionResponse:
     try:
         uuid_obj = uuid.UUID(public_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid public ID format") from None
 
-    access = db.query(PlantObservationAccess).filter(
-        PlantObservationAccess.public_id == uuid_obj,
-        PlantObservationAccess.is_active
-    ).first()
+    access = (
+        db.query(PlantObservationAccess)
+        .filter(PlantObservationAccess.public_id == uuid_obj, PlantObservationAccess.is_active)
+        .first()
+    )
 
     if not access:
         raise HTTPException(status_code=404, detail="Observation access not found or revoked")
@@ -86,23 +90,26 @@ def create_observation_session(db: Session, public_id: str, ip: str, user_agent:
         expires_at=expires_at,
         used_ip=ip,
         user_agent=user_agent,
-        is_active=True
+        is_active=True,
     )
     db.add(session)
     db.commit()
     db.refresh(session)
 
     return ObservationSessionResponse(
-        session_token=session.session_token,
-        expires_at=session.expires_at.isoformat()
+        session_token=session.session_token, expires_at=session.expires_at.isoformat()
     )
 
 
 def _get_valid_session(db: Session, session_token: str) -> PlantObservationSession:
-    session = db.query(PlantObservationSession).filter(
-        PlantObservationSession.session_token == session_token,
-        PlantObservationSession.is_active
-    ).first()
+    session = (
+        db.query(PlantObservationSession)
+        .filter(
+            PlantObservationSession.session_token == session_token,
+            PlantObservationSession.is_active,
+        )
+        .first()
+    )
 
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session token")
@@ -124,20 +131,19 @@ def get_plant_context(db: Session, session_token: str) -> PublicPlantContextResp
         plant_id=str(plant.id),
         name=plant.name,
         plant_code=plant.plant_code,
-        zone_name=zone.name if zone else None
+        zone_name=zone.name if zone else None,
     )
 
 
-def create_observation(db: Session, session_token: str, data: PlantObservationCreate) -> PlantObservationResponse:
+def create_observation(
+    db: Session, session_token: str, data: PlantObservationCreate
+) -> PlantObservationResponse:
     session = _get_valid_session(db, session_token)
     plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
 
     active_assignment = (
         db.query(PlantSensorAssignment)
-        .filter(
-            PlantSensorAssignment.plant_id == plant.id,
-            PlantSensorAssignment.is_active
-        )
+        .filter(PlantSensorAssignment.plant_id == plant.id, PlantSensorAssignment.is_active)
         .first()
     )
     sensor_id = active_assignment.sensor_id if active_assignment else None
@@ -170,22 +176,29 @@ def upload_observation_photo(
     observation_id: str,
     file_data: BinaryIO,
     mime_type: str,
-    file_size: int
+    file_size: int,
 ) -> PlantObservationPhotoResponse:
     session = _get_valid_session(db, session_token)
 
-    obs = db.query(PlantObservation).filter(
-        PlantObservation.id == observation_id,
-        PlantObservation.plant_id == session.plant_id
-    ).first()
+    obs = (
+        db.query(PlantObservation)
+        .filter(
+            PlantObservation.id == observation_id,
+            PlantObservation.plant_id == session.plant_id,
+            PlantObservation.observation_session_id == session.id,
+        )
+        .first()
+    )
     if not obs:
         raise HTTPException(status_code=404, detail="Observation not found in this session")
 
     # Generate key
     date_str = datetime.now(UTC).strftime("%Y%m%d")
     time_str = datetime.now(UTC).strftime("%H%M%S")
-    file_ext = "jpg" if "jpeg" in mime_type or "jpg" in mime_type else "png"
-    s3_key = f"photos/plant/{session.plant_id}/{date_str}/{time_str}_{uuid.uuid4().hex[:8]}.{file_ext}"
+    file_ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[mime_type]
+    s3_key = (
+        f"photos/plant/{session.plant_id}/{date_str}/{time_str}_{uuid.uuid4().hex[:8]}.{file_ext}"
+    )
 
     # Upload to MinIO
     client = _get_s3_client()
@@ -197,10 +210,7 @@ def upload_observation_photo(
     )
 
     photo = PlantObservationPhoto(
-        observation_id=obs.id,
-        storage_key=s3_key,
-        mime_type=mime_type,
-        file_size=file_size
+        observation_id=obs.id, storage_key=s3_key, mime_type=mime_type, file_size=file_size
     )
     db.add(photo)
     db.commit()
@@ -212,7 +222,7 @@ def upload_observation_photo(
         storage_key=photo.storage_key,
         mime_type=photo.mime_type,
         file_size=photo.file_size,
-        created_at=photo.created_at.isoformat()
+        created_at=photo.created_at.isoformat(),
     )
 
 
@@ -221,7 +231,9 @@ def get_observation(db: Session, observation_id: str) -> PlantObservationRespons
     if not obs:
         raise HTTPException(status_code=404, detail="Observation not found")
 
-    photos = db.query(PlantObservationPhoto).filter(PlantObservationPhoto.observation_id == obs.id).all()
+    photos = (
+        db.query(PlantObservationPhoto).filter(PlantObservationPhoto.observation_id == obs.id).all()
+    )
     photo_responses = [
         PlantObservationPhotoResponse(
             id=str(p.id),
@@ -229,7 +241,7 @@ def get_observation(db: Session, observation_id: str) -> PlantObservationRespons
             storage_key=p.storage_key,
             mime_type=p.mime_type,
             file_size=p.file_size,
-            created_at=p.created_at.isoformat()
+            created_at=p.created_at.isoformat(),
         )
         for p in photos
     ]
@@ -250,5 +262,5 @@ def get_observation(db: Session, observation_id: str) -> PlantObservationRespons
         suspected_stress_type=obs.suspected_stress_type,
         notes=obs.notes,
         created_at=obs.created_at.isoformat(),
-        photos=photo_responses
+        photos=photo_responses,
     )

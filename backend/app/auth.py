@@ -14,8 +14,10 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import Role, User
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# New credentials use bcrypt-sha256 so passwords are not silently truncated at
+# bcrypt's 72-byte boundary. Legacy bcrypt hashes remain verifiable and are
+# marked for opportunistic migration after a successful user login.
+pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated=["bcrypt"])
 
 # JWT settings
 SECRET_KEY = settings.jwt_secret_key
@@ -29,6 +31,12 @@ security = HTTPBearer(auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def verify_password_and_update(
+    plain_password: str, hashed_password: str
+) -> tuple[bool, str | None]:
+    return pwd_context.verify_and_update(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
@@ -121,6 +129,8 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    if not user.is_verified:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
 
     return user
 

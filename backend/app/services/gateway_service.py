@@ -3,13 +3,18 @@
 import logging
 import secrets
 import string
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import get_password_hash
+from app.gateway_auth import (
+    generate_gateway_api_key,
+    set_gateway_api_key,
+    verify_gateway_api_key,
+)
 from app.models.master import Gateway, Sensor, Zone
 from app.models.pairing import PairingCode
 from app.models.user import User
@@ -40,7 +45,9 @@ def _require_org(user: User):
     return user.organization_id
 
 
-def list_gateways(db: Session, user: User, *, zone_id: str | None = None) -> list[GatewayResponse]:
+def list_gateways(
+    db: Session, user: User, *, zone_id: uuid.UUID | None = None
+) -> list[GatewayResponse]:
     org_id = _require_org(user)
 
     z_ids = [z.id for z in db.query(Zone.id).filter(Zone.organization_id == org_id).all()]
@@ -57,7 +64,10 @@ def list_gateways(db: Session, user: User, *, zone_id: str | None = None) -> lis
     for gw in gateways:
         sensor_count = db.query(func.count(Sensor.id)).filter(Sensor.gateway_id == gw.id).scalar()
         z = db.query(Zone).filter(Zone.id == gw.zone_id).first()
-        is_online = bool(gw.last_seen and (now - gw.last_seen) < LIVENESS_THRESHOLD)
+        last_seen = gw.last_seen
+        if last_seen and last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=UTC)
+        is_online = bool(last_seen and (now - last_seen) < LIVENESS_THRESHOLD)
         results.append(
             GatewayResponse(
                 id=str(gw.id),
@@ -77,7 +87,7 @@ def list_gateways(db: Session, user: User, *, zone_id: str | None = None) -> lis
     return results
 
 
-def generate_pairing_code(db: Session, user: User, zone_id: str) -> PairingCodeResponse:
+def generate_pairing_code(db: Session, user: User, zone_id: uuid.UUID | str) -> PairingCodeResponse:
     org_id = _require_org(user)
 
     z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
@@ -110,7 +120,11 @@ def generate_pairing_code(db: Session, user: User, zone_id: str) -> PairingCodeR
     )
 
 
-def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatewayResponse:
+def register_gateway(
+    db: Session,
+    data: RegisterGatewayRequest,
+    current_api_key: str | None = None,
+) -> RegisterGatewayResponse:
     now = datetime.now(UTC)
 
     pc = (
@@ -125,14 +139,30 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
     if not pc:
         raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
 
-    api_key = secrets.token_urlsafe(32)
-
     existing = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
     if existing:
-        # Re-provisioning: gateway was factory-reset and is registering again.
-        # Update credentials and zone assignment, keep existing sensors.
+        if not existing.is_active:
+            raise HTTPException(status_code=403, detail="Gateway deactivated")
+        if not verify_gateway_api_key(existing, current_api_key):
+            raise HTTPException(
+                status_code=409,
+                detail="Existing gateway must prove possession of its current API key",
+            )
+
+        current_zone = db.query(Zone).filter(Zone.id == existing.zone_id).first()
+        requested_zone = db.query(Zone).filter(Zone.id == pc.zone_id).first()
+        if (
+            not current_zone
+            or not requested_zone
+            or current_zone.organization_id != requested_zone.organization_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Gateway reassignment across organizations is not allowed",
+            )
+
+        # Same-tenant re-provisioning rotates the credential and keeps sensor identity.
         existing.zone_id = pc.zone_id
-        existing.api_key_hash = get_password_hash(api_key)
         existing.name = data.name or existing.name
         existing.fw_version = data.fw_version or existing.fw_version
         existing.local_ip = data.local_ip
@@ -142,7 +172,9 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
         gateway = existing
         logger.info(
             "Re-provisioned gateway %s (hw: %s) to zone %s",
-            gateway.id, data.hardware_id, pc.zone_id,
+            gateway.id,
+            data.hardware_id,
+            pc.zone_id,
         )
     else:
         gateway = Gateway(
@@ -152,12 +184,14 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
             fw_version=data.fw_version,
             local_ip=data.local_ip,
             status="online",
-            api_key_hash=get_password_hash(api_key),
             paired_at=now,
             last_seen=now,
         )
         db.add(gateway)
     db.flush()
+
+    api_key = generate_gateway_api_key(gateway.id)
+    set_gateway_api_key(gateway, api_key)
 
     pc.used_at = now
     pc.gateway_id = gateway.id
@@ -171,7 +205,7 @@ def register_gateway(db: Session, data: RegisterGatewayRequest) -> RegisterGatew
     )
 
 
-def delete_gateway(db: Session, user: User, gateway_id: str) -> None:
+def delete_gateway(db: Session, user: User, gateway_id: uuid.UUID | str) -> None:
     org_id = _require_org(user)
 
     gateway = (
@@ -209,20 +243,23 @@ def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> di
     if pc.zone_id != gw.zone_id:
         raise HTTPException(status_code=400, detail="Pairing code zone does not match Gateway zone")
 
-    # Clean up any existing old record
     existing = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
     if existing:
-        db.delete(existing)
-        db.flush()
-
-    sensor = Sensor(
-        gateway_id=gw.id,
-        mac_address=mac_address,
-        name=f"Sensor-{mac_address[-4:]}",
-        sensor_type="generic",
-        status="online",
-    )
-    db.add(sensor)
+        if existing.gateway_id != gw.id:
+            raise HTTPException(status_code=409, detail="Sensor is already assigned")
+        sensor = existing
+        sensor.status = "online"
+        sensor.last_seen = now
+    else:
+        sensor = Sensor(
+            gateway_id=gw.id,
+            mac_address=mac_address,
+            name=f"Sensor-{mac_address[-4:]}",
+            sensor_type="generic",
+            status="online",
+            last_seen=now,
+        )
+        db.add(sensor)
 
     pc.used_at = now
     db.commit()
@@ -231,6 +268,6 @@ def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> di
     return {"status": "ok", "sensor_id": str(sensor.id)}
 
 
-def pull_gateway_commands(db: Session, gateway_id: str) -> list[dict]:
-    cmds = gateway_commands_cache.pop(gateway_id, [])
+def pull_gateway_commands(db: Session, gateway: Gateway) -> list[dict]:
+    cmds = gateway_commands_cache.pop(str(gateway.id), [])
     return cmds

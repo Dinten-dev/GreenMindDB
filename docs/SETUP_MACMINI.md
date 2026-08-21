@@ -1,185 +1,156 @@
-# GreenMindDB – Mac Mini Setup Guide
+# Optional Mac mini API deployment
 
-> Local development & production setup for the GreenMindDB greenhouse monitoring stack.
+This guide covers the isolated `compose/` profile: FastAPI, TimescaleDB, MinIO, Caddy, and
+optional Prometheus/Grafana. It does **not** run the Next.js frontend and is not the canonical
+developer stack. For ordinary local development, use the root `docker-compose.yml` and the
+[README quick start](../README.md#quick-start).
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| Docker + Docker Compose | ≥ 24.x | `docker compose` (V2 CLI) |
-| Git | ≥ 2.x | |
-| Python | ≥ 3.11 | Only for running tests locally |
+- Docker 24 or newer with Docker Compose v2
+- a host name that resolves to the Mac mini, or Caddy's local TLS mode for a private test host
+- an Ed25519 gateway-release verification public key in PEM format
+- SMTP replacement/email delivery configured through Resend before onboarding users
+- a separate backup plan for PostgreSQL and MinIO data
 
-## Quick Start
+The profile uses named Docker volumes. Treat it as a persistent backend deployment, not a
+throwaway frontend preview.
+
+## Configuration
 
 ```bash
-# 1. Clone & enter the project
 cd GreenMindDB
-
-# 2. Create .env from template
 cp compose/.env.example compose/.env
-
-# 3. Edit .env – at minimum change:
-#    - POSTGRES_PASSWORD
-#    - JWT_SECRET_KEY (≥32 chars)
-#    - ADMIN_PASSWORD
-#    - MINIO_ROOT_PASSWORD / S3_SECRET_ACCESS_KEY
-#    - SMTP_PASSWORD (if using contact forms)
-nano compose/.env
-
-# 4. Start the stack
-cd compose && docker compose up -d --build
-
-# 5. Verify
-docker compose logs -f api    # watch for "Seeded admin user"
-curl -k https://localhost/health
 ```
 
-## Architecture
+Edit `compose/.env` and replace every `change-me` value. At minimum review:
 
-```
-┌───────────────────────────── Mac Mini ──────────────────────────────┐
-│                                                                     │
-│  ┌─── Caddy ───┐   ┌──── FastAPI ────┐   ┌──── PostgreSQL ────┐   │
-│  │ TLS (443)   │──▶│ /auth/*         │──▶│ TimescaleDB 2.17   │   │
-│  │ Rate limit  │   │ /admin/*        │   │ Hypertables:       │   │
-│  │             │   │ /operator/*     │   │  - plant_signal_1hz│   │
-│  └─────────────┘   │ /v1/ingest/*   │   │  - env_measurement │   │
-│                     │ /v1/exports/*  │   │ + continuous aggs  │   │
-│                     │ /v1/media/*    │   └────────────────────┘   │
-│                     │ /health        │                             │
-│                     └───────┬────────┘   ┌──── MinIO ────────┐   │
-│                             └───────────▶│ S3 object storage │   │
-│                                          │ exports, images   │   │
-│                                          └───────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-```
+- `GREENMIND_DOMAIN`, `CADDY_TLS_MODE`, and proxy ports;
+- a collision-free `GREENMIND_DOCKER_SUBNET`/`GREENMIND_DOCKER_GATEWAY`, keeping
+  `CADDY_PROXY_IP` inside that subnet;
+- `POSTGRES_*` and a unique `JWT_SECRET_KEY` of at least 32 characters;
+- unique `MINIO_ROOT_*` administrative credentials, plus a separately provisioned
+  bucket-scoped `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` for the backend;
+- `CORS_ORIGINS` for the separately deployed frontend;
+- `GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_FILE`, set to an absolute host path containing the public
+  verification key;
+- `GRAFANA_ADMIN_*` before enabling the monitoring profile.
 
-## Services
+Keep the signing private key outside this repository and outside the application host where
+practical. GreenMind verifies gateway-release signatures over the ASCII SHA-256 hexadecimal
+digest; it does not sign releases with the public key.
 
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| `db` | `timescale/timescaledb:2.17.2-pg16` | 5432 (internal) | Primary database |
-| `minio` | `minio/minio:latest` | 9000/9001 (internal) | S3 object storage |
-| `api` | Custom Python 3.11 | 8000 (internal) | FastAPI backend |
-| `proxy` | `caddy:2.10.2` | 80, 443 | TLS reverse proxy |
-| `prometheus` | `prom/prometheus:v3.5.0` | 9090 (internal) | Metrics (optional) |
-| `grafana` | `grafana/grafana:12.1.1` | 3000 (internal) | Dashboards (optional) |
+The Compose profile intentionally disables the experimental provisioning and biosignal routers.
+The application owns the fixed `greenmind-raw` and `greenmind-photos` buckets; there is no
+runtime-selectable application bucket. Do not use example secrets or local Caddy certificates on
+an internet-facing host.
 
-## Authentication
-
-### Login
+## Validate and start
 
 ```bash
-# Get tokens
-curl -k -X POST https://localhost/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@greenmind.local","password":"YOUR_ADMIN_PASSWORD"}'
+docker compose \
+  --env-file compose/.env \
+  -f compose/docker-compose.yml \
+  config --quiet
 
-# Response:
-# { "access_token": "...", "refresh_token": "...", "role": "admin" }
+docker compose \
+  --env-file compose/.env \
+  -f compose/docker-compose.yml \
+  up -d --build
 ```
 
-### Using Tokens
+The API container applies `alembic upgrade head` before the server starts. Watch readiness with:
 
 ```bash
-# All endpoints require Authorization header:
-curl -k -H "Authorization: Bearer <access_token>" https://localhost/admin/users
+docker compose --env-file compose/.env -f compose/docker-compose.yml ps
+docker compose --env-file compose/.env -f compose/docker-compose.yml logs -f api proxy
+curl --fail --cacert /path/to/local-ca.pem https://api.example.test/health
 ```
 
-### Roles
+For a public certificate, use the normal system trust store and omit `--cacert`. Avoid `curl -k`
+outside an isolated local diagnosis because it disables certificate verification.
 
-| Role | Scope | Capabilities |
-|------|-------|-------------|
-| `admin` | All greenhouses | User management, master data, audit, annotation review |
-| `operator` | Own greenhouse only | Dashboard, data entry, ground truth, annotations |
-| `research` | Read-only | Data queries, exports |
-| `viewer` | Read-only | Basic dashboard access |
+## Services and exposure
 
-## API Overview
+| Service | Image/runtime | Exposure | Purpose |
+|---|---|---|---|
+| `db` | TimescaleDB 2.17.2 on PostgreSQL 16 | internal network only | relational and time-series data |
+| `minio` | pinned MinIO release | internal network only | S3-compatible object storage |
+| `api` | Python 3.12/FastAPI | via Caddy only | `/api/v1`, health, and application metrics |
+| `proxy` | Caddy 2.10.2 | configured HTTP/HTTPS ports | TLS termination and security headers |
+| `prometheus` | Prometheus 3.5.0 | optional profile, internal only | metric collection |
+| `grafana` | Grafana 12.1.1 | optional profile at `/grafana/` | operator dashboards |
 
-### Auth (`/auth/*`)
-- `POST /auth/login` – Email/password → JWT tokens
-- `POST /auth/refresh` – Rotate refresh token
-- `POST /auth/logout` – Revoke refresh token
+Caddy denies public `/metrics` access. The Next.js frontend must be deployed separately and its
+origin must be present in `CORS_ORIGINS`.
 
-### Admin (`/admin/*`) – requires `admin` role
-- `GET/POST /admin/users` – User management
-- `PATCH /admin/users/{id}` – Update role/greenhouse
-- `GET/POST /admin/greenhouses` – Greenhouse CRUD
-- `GET/POST /admin/zones` – Zone CRUD
-- `GET/POST /admin/plants` – Plant CRUD
-- `GET/POST /admin/devices` – Device CRUD
-- `GET/POST /admin/sensors` – Sensor CRUD
-- `GET/POST /admin/label-schemas` – Label schema management
-- `GET /admin/annotations` – Review queue
-- `POST /admin/annotations/{id}/review` – Approve/reject
-- `GET /admin/audit` – Audit trail
+The API trusts forwarding headers only from the fixed `CADDY_PROXY_IP`. If the private Docker
+subnet must change, update all three network values together and recreate the Compose network in
+a planned maintenance window; never replace the trusted proxy list with `*`.
 
-### Operator (`/operator/*`) – requires `operator` or `admin`
-- `GET /operator/overview` – Dashboard KPIs
-- `GET /operator/plants` – Plants in operator's greenhouse
-- `GET /operator/plants/{id}/signal` – Raw or aggregated signals
-- `GET /operator/sensors/{id}/env` – Environment data
-- `GET /operator/events` – Event listing
-- `POST /operator/events` – Log new event
-- `GET /operator/ground-truth` – Daily assessments
-- `POST /operator/ground-truth/daily` – Create daily assessment
-- `GET/POST /operator/annotations` – Annotations
-- `POST /operator/annotations/{id}/submit` – Submit for review
+## Accounts and roles
 
-### Ingestion (`/v1/ingest/*`) – requires `INGEST_TOKEN`
-- `POST /v1/ingest/plant-signal-1hz` – Batch plant signals
-- `POST /v1/ingest/env` – Batch environment data
-- `POST /v1/ingest/events` – Ingest events
-- All endpoints are **idempotent** via `request_id`
+There are no demo, default owner, or fixed administrator credentials. Signup creates an
+unverified tenant `OWNER` and returns a detail response without establishing a session. The user
+must follow the verification link and the frontend must submit the token to
+`POST /api/v1/auth/verify-email` before login succeeds.
 
-### Export (`/v1/exports/*`)
-- `POST /v1/exports/dataset` – Create ML-ready export (Parquet ZIP)
-- `GET /v1/exports/{id}/status` – Poll export status
-- `GET /v1/exports/{id}/download` – Download ZIP
+`OWNER` is organization-scoped. Fleet-wide gateway and firmware administration requires the
+platform `ADMIN` role; signup cannot request that role. Follow the reviewed interactive bootstrap
+procedure in the [root README](../README.md#one-time-platform-admin-bootstrap) to promote one
+already verified account. Never add a fixed bootstrap password or seed a verified owner.
 
-### Media (`/v1/media/*`)
-- `POST /v1/media/presign` – Get presigned upload URL
-- `POST /v1/media/commit` – Commit uploaded media metadata
-- `GET /operator/media` – List media objects
+All maintained application routes are under `/api/v1` except `/`, `/health`, `/metrics`, and
+development OpenAPI endpoints. Use the [API boundary table](../README.md#api-boundaries) or
+OpenAPI in a development environment rather than relying on copied endpoint lists.
 
-## Running Tests
+## Migrations
+
+Migrations run automatically at container startup. To inspect or reapply the current head:
 
 ```bash
-# Integration tests (requires Docker)
-cd backend
-pip install -r requirements.txt
-pytest tests/ -v -m integration
-
-# Skip Docker tests
-SKIP_DOCKER_TESTS=1 pytest tests/ -v
+docker compose --env-file compose/.env -f compose/docker-compose.yml exec api \
+  alembic current
+docker compose --env-file compose/.env -f compose/docker-compose.yml exec api \
+  alembic upgrade head
 ```
 
-## Database Migrations
+Do not use `alembic downgrade base` as a troubleshooting shortcut: it is destructive and may not
+preserve production data. Back up first, inspect the failing revision, and test recovery against a
+disposable database.
+
+## Monitoring profile
 
 ```bash
-# Auto-run on container start, or manually:
-docker compose exec api alembic upgrade head
-docker compose exec api alembic downgrade -1
+docker compose \
+  --env-file compose/.env \
+  -f compose/docker-compose.yml \
+  --profile monitoring \
+  up -d
 ```
 
-## Monitoring (Optional)
+Grafana is routed at `https://api.example.test/grafana/` (replace the example host with
+`GREENMIND_DOMAIN`). Prometheus remains on the internal
+Compose network.
+
+## Testing and operations
+
+Unit and Docker-backed test commands are maintained in [testing.md](testing.md). The optional
+deployment profile itself does not include the Next.js tests or frontend service.
+
+Before an upgrade:
+
+1. back up PostgreSQL and MinIO independently;
+2. validate the Compose rendering with the host's real environment;
+3. review Alembic revisions and gateway/server API compatibility;
+4. deploy, then check `ps`, API health, Caddy logs, MinIO health, and one authenticated request;
+5. keep the prior image and configuration available for a controlled rollback.
+
+Stop services without deleting volumes:
 
 ```bash
-# Start with monitoring profile
-docker compose --profile monitoring up -d
-
-# Grafana at: https://localhost/grafana/
-# Prometheus at: http://localhost:9090 (internal only)
+docker compose --env-file compose/.env -f compose/docker-compose.yml stop
 ```
 
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| `Service unhealthy` | Check `docker compose logs <service>` |
-| `Connection refused` on health | Wait 30-60s for migrations to complete |
-| `401 Unauthorized` on ingest | Ensure `INGEST_TOKEN` in `.env` matches `Authorization: Bearer <token>` |
-| MinIO errors | Verify `MINIO_ROOT_PASSWORD` matches `S3_SECRET_ACCESS_KEY` |
-| Alembic migration error | `docker compose exec api alembic downgrade base && docker compose exec api alembic upgrade head` |
+Do not add `--volumes` unless destruction of the named database, MinIO, and monitoring volumes is
+explicitly intended and independently recoverable.

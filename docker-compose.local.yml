@@ -1,7 +1,7 @@
 services:
   postgres:
     volumes:
-      - ${HOME}/LocalData/greenmind/postgres:/var/lib/postgresql/data
+      - ${LOCAL_DATA_ROOT:?Set LOCAL_DATA_ROOT}/postgres:/var/lib/postgresql/data
   minio:
     volumes:
-      - ${HOME}/LocalData/greenmind/minio:/data
+      - ${LOCAL_DATA_ROOT:?Set LOCAL_DATA_ROOT}/minio:/data

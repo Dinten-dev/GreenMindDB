@@ -14,6 +14,7 @@ class ProvisioningStatus(enum.StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+
 class ProvisioningJob(Base):
     __tablename__ = "provisioning_jobs"
 

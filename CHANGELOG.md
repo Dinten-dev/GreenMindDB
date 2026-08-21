@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WAV file management** — listing, download, and configurable export date ranges
 - **Apple HIG export modal** — format and range selection for sensor data export
 - **Prometheus monitoring** — `/metrics` endpoint with FastAPI instrumentator
-- **Pre-commit hooks** — ruff + black auto-checks before commits
+- **Pre-commit hooks** — Ruff linting and formatting before commits
 - **Staging environment** — independent CI/CD pipeline at `test.green-mind.ch`
 
 ### Changed

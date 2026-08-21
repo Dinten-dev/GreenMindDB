@@ -28,6 +28,7 @@ scripts/.simulator_state.json
 *.swp
 *.swo
 *~
+.fleet/
 
 # ── OS files ─────────────────────────────────
 .DS_Store
@@ -54,6 +55,7 @@ frontend/.next/
 frontend/node_modules/
 tsconfig.tsbuildinfo
 frontend/tsconfig.tsbuildinfo
+npm-debug.log*
 
 # ── Logs ─────────────────────────────────────
 *.log
@@ -67,4 +69,4 @@ frontend/coverage/
 
 # ── Ruff cache ───────────────────────────────
 .ruff_cache/
-.DS_Store
+.mypy_cache/

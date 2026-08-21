@@ -5,11 +5,17 @@
 {$GREENMIND_DOMAIN} {
     tls {$CADDY_TLS_MODE}
     encode zstd gzip
+    request_body {
+        max_size 110MB
+    }
 
     @grafana path /grafana*
     handle @grafana {
         reverse_proxy grafana:3000
     }
+
+    @metrics path /metrics
+    respond @metrics 404
 
     handle {
         reverse_proxy {$API_UPSTREAM}
@@ -24,23 +30,29 @@
 
     log {
         output stdout
-        format json
+        format filter {
+            # Redact public-session path credentials and verification-token
+            # query values while retaining useful structured request logs.
+            request>uri regexp "(?i)(/api/v1/public/(observe|evaluate)/session/|[?&]token=)[^/?& ]+" "${1}REDACTED"
+            request>headers>Referer delete
+            wrap json
+        }
     }
 }
 
 firmware.green-mind.ch {
     tls {$CADDY_TLS_MODE}
     encode zstd gzip
-
-    handle /firmware/* {
-        root * /app/firmware_data
-        file_server
-        header Cache-Control "public, max-age=31536000, immutable"
+    request_body {
+        max_size 110MB
     }
 
     handle /api/* {
         reverse_proxy {$API_UPSTREAM}
     }
+
+    @metrics path /metrics
+    respond @metrics 404
 
     handle {
         redir https://green-mind.ch/app/firmware/dashboard
@@ -55,6 +67,10 @@ firmware.green-mind.ch {
 
     log {
         output stdout
-        format json
+        format filter {
+            request>uri regexp "(?i)(/api/v1/public/(observe|evaluate)/session/|[?&]token=)[^/?& ]+" "${1}REDACTED"
+            request>headers>Referer delete
+            wrap json
+        }
     }
 }

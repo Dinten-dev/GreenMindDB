@@ -1,17 +1,20 @@
 """WAV file management endpoints — upload from gateways, list, download, bundle."""
 
+import hashlib
 import logging
+import tempfile
 import uuid
-from datetime import datetime
-from io import BytesIO
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, verify_password
+from app.auth import get_current_user
+from app.config import settings
 from app.database import get_db
+from app.gateway_auth import get_current_gateway
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.models.wav_file import WavFile
@@ -31,22 +34,34 @@ async def upload_wav(
     started_at: str = Form(...),
     ended_at: str = Form(...),
     timestamp_source: str = Form("filename"),
+    gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(None),
 ):
     """Receive a WAV file from a gateway and store in MinIO.
 
     Authenticated via X-Api-Key (same as /ingest).
     """
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing X-Api-Key header")
+    if len(gateway_serial) > 100 or len(sensor_mac) > 17:
+        raise HTTPException(status_code=422, detail="Gateway or sensor identifier is too long")
+    if not 1 <= sample_rate <= 192_000:
+        raise HTTPException(status_code=422, detail="Invalid WAV sample rate")
+    if gateway.hardware_id != gateway_serial:
+        raise HTTPException(status_code=403, detail="Gateway identity mismatch")
 
-    # Authenticate gateway
-    gateway = db.query(Gateway).filter(Gateway.hardware_id == gateway_serial).first()
-    if not gateway or not gateway.api_key_hash:
-        raise HTTPException(status_code=403, detail="Unknown or unconfigured gateway")
-    if not verify_password(x_api_key, gateway.api_key_hash):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    try:
+        from app.validation import normalize_mac_address
+
+        sensor_mac = normalize_mac_address(sensor_mac)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid sensor MAC address") from exc
+
+    sensor = (
+        db.query(Sensor)
+        .filter(Sensor.mac_address == sensor_mac, Sensor.gateway_id == gateway.id)
+        .first()
+    )
+    if not sensor:
+        raise HTTPException(status_code=403, detail="Sensor is not assigned to this gateway")
 
     # Parse timestamps
     try:
@@ -56,37 +71,75 @@ async def upload_wav(
         raise HTTPException(
             status_code=400, detail="Invalid timestamp format (ISO 8601 required)"
         ) from e
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=UTC)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=UTC)
+    if end_dt <= start_dt or end_dt - start_dt > timedelta(days=1):
+        raise HTTPException(status_code=422, detail="Invalid WAV time range")
+    if end_dt > datetime.now(UTC) + timedelta(minutes=15):
+        raise HTTPException(status_code=422, detail="WAV end timestamp is too far in the future")
 
     # Validate timestamp_source
     if timestamp_source not in ("filename", "embedded"):
-        timestamp_source = "filename"
+        raise HTTPException(status_code=422, detail="Invalid timestamp source")
 
-    # Read file
-    file_data = await file.read()
-    file_size = len(file_data)
-    file_io = BytesIO(file_data)
-
-    # Extract WAV metadata for validation
+    file_io = tempfile.SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
+    file_size = 0
+    hasher = hashlib.sha256()
     try:
-        meta = wav_service.extract_wav_metadata(file_io)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid WAV file") from e
+        while chunk := await file.read(64 * 1024):
+            file_size += len(chunk)
+            if file_size > settings.max_wav_upload_bytes:
+                raise HTTPException(status_code=413, detail="WAV file exceeds upload limit")
+            hasher.update(chunk)
+            file_io.write(chunk)
+        if file_size == 0:
+            raise HTTPException(status_code=422, detail="Empty WAV file")
+        file_io.seek(0)
 
-    # Upload to MinIO
-    s3_key = wav_service.upload_wav(
-        file_data=file_io,
-        sensor_mac=sensor_mac,
-        started_at=start_dt,
-        file_size=file_size,
-    )
+        try:
+            meta = wav_service.extract_wav_metadata(file_io)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Invalid WAV file") from exc
+        if meta["sample_rate"] != sample_rate:
+            raise HTTPException(status_code=422, detail="WAV sample rate does not match metadata")
+        declared_duration = (end_dt - start_dt).total_seconds()
+        if abs(meta["duration_seconds"] - declared_duration) > max(1.0, declared_duration * 0.05):
+            raise HTTPException(status_code=422, detail="WAV duration does not match timestamps")
 
-    # Find or identify sensor
-    sensor = db.query(Sensor).filter(Sensor.mac_address == sensor_mac).first()
-    sensor_id = sensor.id if sensor else uuid.uuid4()
+        content_sha256 = hasher.hexdigest()
+        s3_key = wav_service.build_wav_s3_key(sensor_mac, start_dt, content_sha256)
+        existing = (
+            db.query(WavFile)
+            .filter(
+                WavFile.s3_key == s3_key,
+                WavFile.gateway_id == gateway.id,
+                WavFile.sensor_id == sensor.id,
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "status": "duplicate",
+                "wav_id": str(existing.id),
+                "s3_key": existing.s3_key,
+                "duration_seconds": existing.duration_seconds,
+            }
+
+        wav_service.upload_wav(
+            file_data=file_io,
+            sensor_mac=sensor_mac,
+            started_at=start_dt,
+            file_size=file_size,
+            content_sha256=content_sha256,
+        )
+    finally:
+        file_io.close()
 
     # Create DB record
     wav_record = WavFile(
-        sensor_id=sensor_id,
+        sensor_id=sensor.id,
         gateway_id=gateway.id,
         sensor_mac=sensor_mac,
         s3_key=s3_key,
@@ -119,11 +172,11 @@ async def upload_wav(
 
 @router.get("/files")
 def list_wav_files(
-    sensor_id: str | None = None,
+    sensor_id: uuid.UUID | None = None,
     sensor_mac: str | None = None,
     from_dt: str | None = None,
     to_dt: str | None = None,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=1_000),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -155,7 +208,7 @@ def list_wav_files(
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid to_dt format") from e
 
-    files = query.order_by(desc(WavFile.started_at)).limit(min(limit, 10_000)).all()
+    files = query.order_by(desc(WavFile.started_at)).limit(limit).all()
 
     return [
         {
@@ -176,7 +229,7 @@ def list_wav_files(
 
 @router.get("/count")
 def count_wav_files(
-    sensor_id: str,
+    sensor_id: uuid.UUID,
     from_dt: str | None = None,
     to_dt: str | None = None,
     current_user: User = Depends(get_current_user),
@@ -231,7 +284,7 @@ def _resolve_sensor_name(sensor_id: uuid.UUID, db: Session) -> str:
 
 @router.get("/download/{wav_id}")
 def download_wav(
-    wav_id: str,
+    wav_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -259,7 +312,6 @@ def download_wav(
     if not wav_file:
         raise HTTPException(status_code=404, detail="WAV file not found")
 
-    body = wav_service.download_wav_bytes(wav_file.s3_key)
     sensor_name = _resolve_sensor_name(wav_file.sensor_id, db)
     filename = wav_service.generate_download_filename(
         sensor_name=sensor_name,
@@ -267,18 +319,18 @@ def download_wav(
     )
 
     return StreamingResponse(
-        iter([body]),
+        wav_service.stream_wav_bytes(wav_file.s3_key),
         media_type="audio/wav",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(len(body)),
+            "Content-Length": str(wav_file.file_size_bytes),
         },
     )
 
 
 @router.get("/download-bundle")
 def download_wav_bundle(
-    sensor_id: str,
+    sensor_id: uuid.UUID,
     from_dt: str,
     to_dt: str,
     current_user: User = Depends(get_current_user),
@@ -311,7 +363,7 @@ def download_wav_bundle(
             Zone.organization_id == current_user.organization_id,
         )
         .order_by(WavFile.started_at)
-        .limit(10_000)
+        .limit(settings.max_wav_bundle_files + 1)
         .all()
     )
 
@@ -321,7 +373,14 @@ def download_wav_bundle(
             detail="No WAV files found for this sensor in the given time range",
         )
 
-    sensor_name = _resolve_sensor_name(uuid.UUID(sensor_id), db)
+    if len(wav_files) > settings.max_wav_bundle_files:
+        raise HTTPException(status_code=413, detail="WAV bundle contains too many files")
+
+    total_size = sum(f.file_size_bytes for f in wav_files)
+    if total_size > settings.max_wav_bundle_bytes:
+        raise HTTPException(status_code=413, detail="WAV bundle exceeds download limit")
+
+    sensor_name = _resolve_sensor_name(sensor_id, db)
 
     # Build per-file names inside the ZIP
     s3_keys = [f.s3_key for f in wav_files]
@@ -341,7 +400,6 @@ def download_wav_bundle(
         extension="zip",
     )
 
-    total_size = sum(f.file_size_bytes for f in wav_files)
     logger.info(
         "WAV bundle download: %d files, ~%.1f MB, sensor=%s",
         len(wav_files),
