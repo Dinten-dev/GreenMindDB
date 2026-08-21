@@ -34,6 +34,14 @@ jobs:
           DEPLOY_SSH_KEY_CONTENT: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS_CONTENT: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
+          if [ -z "$DEPLOY_SSH_KEY_CONTENT" ]; then
+            echo "::error::DEPLOY_SSH_KEY secret is missing or empty in GitHub Secrets."
+            exit 1
+          fi
+          if [ -z "$DEPLOY_KNOWN_HOSTS_CONTENT" ]; then
+            echo "::error::DEPLOY_KNOWN_HOSTS secret is missing or empty in GitHub Secrets."
+            exit 1
+          fi
           install -m 600 /dev/null /tmp/greenmind_deploy_key
           printf '%s\n' "$DEPLOY_SSH_KEY_CONTENT" > /tmp/greenmind_deploy_key
           install -m 600 /dev/null /tmp/greenmind_known_hosts

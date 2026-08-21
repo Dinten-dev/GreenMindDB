@@ -97,8 +97,10 @@ REMOTE_HOST="$DEPLOY_HOST"
 SSH_KEY="$DEPLOY_SSH_KEY_FILE"
 KNOWN_HOSTS="$DEPLOY_KNOWN_HOSTS_FILE"
 
-[[ -s "$SSH_KEY" ]] || { echo "❌ Deploy key file is missing or empty"; exit 1; }
-[[ -s "$KNOWN_HOSTS" ]] || { echo "❌ known_hosts file is missing or empty"; exit 1; }
+if ! grep -q "PRIVATE KEY" "$SSH_KEY" 2>/dev/null; then
+    echo "❌ DEPLOY_SSH_KEY does not contain a valid private key header. Please verify GitHub Secrets."
+    exit 1
+fi
 
 SSH_OPTS=(
     -i "$SSH_KEY"
@@ -116,8 +118,8 @@ echo ""
 
 # ── 1. Check SSH ─────────────────────────────────────────
 echo "📡 Checking SSH connection..."
-if ! ssh -q "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" exit; then
-    echo "❌ SSH connection failed."
+if ! ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" exit; then
+    echo "❌ SSH connection to ${REMOTE_USER}@${REMOTE_HOST} failed."
     exit 1
 fi
 echo "✅ SSH OK"
