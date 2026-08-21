@@ -72,9 +72,23 @@ function formatBytes(bytes: number): string {
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 function isSensorArchived(s: SensorInfo): boolean {
-  if (!s.last_seen) return true;
-  const lastSeenTime = new Date(s.last_seen).getTime();
-  return isNaN(lastSeenTime) || Date.now() - lastSeenTime > THREE_DAYS_MS;
+  if (s.status === 'online') return false;
+
+  if (s.last_seen) {
+    const lastSeenTime = new Date(s.last_seen).getTime();
+    if (!isNaN(lastSeenTime)) {
+      return Date.now() - lastSeenTime > THREE_DAYS_MS;
+    }
+  }
+
+  if (s.claimed_at) {
+    const claimedTime = new Date(s.claimed_at).getTime();
+    if (!isNaN(claimedTime)) {
+      return Date.now() - claimedTime > THREE_DAYS_MS;
+    }
+  }
+
+  return true;
 }
 
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
@@ -1029,44 +1043,56 @@ export default function SensorsPage() {
           )}
 
           {/* Archived Sensors Section (> 3 Days Inactive) */}
-          {archivedSensors.length > 0 && (
-            <div className="border border-black/[0.06] rounded-2xl bg-gray-50/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
-              <button
-                onClick={() => setIsArchiveOpen((prev) => !prev)}
-                className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-black/[0.02] transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">📁</span>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                      Archiv (Inaktive Sensoren)
-                      <span className="px-2 py-0.5 rounded-full bg-gray-200/80 text-gray-600 text-xs font-semibold">
-                        {archivedSensors.length}
-                      </span>
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Seit mehr als 3 Tagen (72h) keine Daten empfangen
-                    </p>
-                  </div>
+          <div className="border border-black/[0.06] rounded-2xl bg-gray-50/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
+            <button
+              onClick={() => setIsArchiveOpen((prev) => !prev)}
+              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-black/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📁</span>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    Archiv (Inaktive Sensoren)
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        archivedSensors.length > 0
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-gray-200/80 text-gray-500'
+                      }`}
+                    >
+                      {archivedSensors.length}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Sensoren, die seit mehr als 3 Tagen (72h) offline sind
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
-                  <span>{isArchiveOpen ? 'Einklappen' : 'Anzeigen'}</span>
-                  <span
-                    className={`transform transition-transform duration-200 text-[10px] ${isArchiveOpen ? 'rotate-180' : ''}`}
-                  >
-                    ▼
-                  </span>
-                </div>
-              </button>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
+                <span>{isArchiveOpen ? 'Einklappen' : 'Anzeigen'}</span>
+                <span
+                  className={`transform transition-transform duration-200 text-[10px] ${isArchiveOpen ? 'rotate-180' : ''}`}
+                >
+                  ▼
+                </span>
+              </div>
+            </button>
 
-              {isArchiveOpen && (
-                <div className="p-3 border-t border-black/[0.04] bg-white/40 space-y-4 animate-in fade-in duration-200">
-                  {renderSensorTable(archivedSensors, true)}
-                  {renderSensorMobileCards(archivedSensors, true)}
-                </div>
-              )}
-            </div>
-          )}
+            {isArchiveOpen && (
+              <div className="p-3 border-t border-black/[0.04] bg-white/40 space-y-4 animate-in fade-in duration-200">
+                {archivedSensors.length > 0 ? (
+                  <>
+                    {renderSensorTable(archivedSensors, true)}
+                    {renderSensorMobileCards(archivedSensors, true)}
+                  </>
+                ) : (
+                  <div className="p-4 text-center text-xs text-gray-400">
+                    Keine inaktiven Sensoren im Archiv vorhanden.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

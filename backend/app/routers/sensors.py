@@ -79,6 +79,11 @@ async def list_sensors(
         if last_seen and last_seen.tzinfo is None:
             last_seen = last_seen.replace(tzinfo=UTC)
         is_online = bool(last_seen and (now - last_seen) < LIVENESS_THRESHOLD)
+
+        claimed_at = sensor.claimed_at
+        if claimed_at and claimed_at.tzinfo is None:
+            claimed_at = claimed_at.replace(tzinfo=UTC)
+
         results.append(
             SensorResponse(
                 id=str(sensor.id),
@@ -88,8 +93,8 @@ async def list_sensors(
                 name=sensor.name,
                 sensor_type=sensor.sensor_type,
                 status="online" if is_online else "offline",
-                last_seen=sensor.last_seen.isoformat() if sensor.last_seen else None,
-                claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
+                last_seen=last_seen.isoformat() if last_seen else None,
+                claimed_at=claimed_at.isoformat() if claimed_at else None,
                 gateway_name=gw.name,
                 gateway_hardware_id=gw.hardware_id,
                 sms_alerts_enabled=sensor.sms_alerts_enabled,
