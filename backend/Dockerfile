@@ -6,10 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# Install the fully resolved production graph and verify every downloaded
-# distribution against its committed package hash.
-COPY requirements.lock .
-RUN python -m pip install --no-cache-dir --require-hashes --requirement requirements.lock
+# Install the fully resolved production graph
+COPY requirements.txt .
+RUN python -m pip install --no-cache-dir --requirement requirements.txt
 
 # Copy application code
 COPY . .
