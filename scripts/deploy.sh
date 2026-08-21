@@ -189,11 +189,10 @@ ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "
             sudo nginx -t && sudo systemctl reload nginx
             echo '✅ Nginx config updated and reloaded'
         else
-            echo '❌ Passwordless sudo is not available.'
-            echo 'Please SSH into the server and run manually:'
+            echo '⚠️ Passwordless sudo is not available for automatic Nginx config sync.'
+            echo 'Containers will deploy, but please SSH into the server to update Nginx if needed:'
             echo '   sudo cp ${NGINX_SRC} ${NGINX_DST}'
             echo '   sudo nginx -t && sudo systemctl reload nginx'
-            exit 1
         fi
     else
         echo '✅ Nginx config unchanged — skipping reload'
