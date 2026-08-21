@@ -42,7 +42,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Audit production dependencies
-        run: python -m pip_audit --requirement requirements.txt --disable-pip --progress-spinner=off
+        run: python -m pip_audit --requirement requirements.txt --progress-spinner=off
 
       - name: Lint with ruff
         run: python -m ruff check app/ tests/
