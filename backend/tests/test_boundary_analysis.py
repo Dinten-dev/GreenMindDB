@@ -68,12 +68,8 @@ class TestIngestBoundary:
         assert response.status_code == 401
         assert "Missing X-Api-Key" in response.json()["detail"]
 
-    def test_ingest_unknown_gateway_serial_returns_404(self, client: TestClient):
-        """Boundary: valid API key format but gateway_serial does not exist in DB.
-
-        The endpoint returns 404 (Not Found) with an error detail
-        so the gateway knows it is unauthorized/unknown but doesn't hard-reset.
-        """
+    def test_ingest_unknown_api_key_does_not_enumerate_gateway(self, client: TestClient):
+        """An unknown credential is rejected before gateway identity is disclosed."""
         payload = {
             "measurement_id": "00000000-0000-0000-0000-000000000002",
             "gateway_serial": "nonexistent-serial-xyz",
@@ -84,7 +80,7 @@ class TestIngestBoundary:
             json=payload,
             headers={"X-Api-Key": "any-key"},
         )
-        assert response.status_code == 404
+        assert response.status_code == 401
 
     def test_ingest_empty_readings_list(self, client: TestClient, setup_test_data: dict):
         """Boundary: readings list is empty (length = 0).
@@ -133,6 +129,38 @@ class TestIngestBoundary:
         data = response.json()
         assert data["status"] == "success"
         assert data["ingested"] == 1  # Grenzwert: genau 1
+
+    def test_ingest_broadcast_serializes_explicit_timestamp(
+        self,
+        client: TestClient,
+        setup_test_data: dict,
+        mocker,
+    ):
+        zone_broadcast = mocker.patch("app.routers.ingest.manager.broadcast_to_zone")
+        sensor_broadcast = mocker.patch("app.routers.ingest.manager.broadcast_to_sensor")
+        timestamp = "2026-01-02T03:04:05+00:00"
+
+        response = client.post(
+            "/api/v1/ingest",
+            json={
+                "measurement_id": "00000000-0000-0000-0000-000000000014",
+                "gateway_serial": "test-gw-ci",
+                "readings": [
+                    {
+                        "sensor_mac": "AA:BB:CC:DD:EE:FF",
+                        "sensor_kind": "leaf_voltage",
+                        "value": 1.25,
+                        "unit": "mV",
+                        "timestamp": timestamp,
+                    }
+                ],
+            },
+            headers={"X-Api-Key": "ci-api-key"},
+        )
+
+        assert response.status_code == 201
+        assert zone_broadcast.await_args.args[0]["readings"][0]["timestamp"] == timestamp
+        assert sensor_broadcast.await_args.args[0]["readings"][0]["timestamp"] == timestamp
 
     def test_ingest_extreme_sensor_value(self, client: TestClient, setup_test_data: dict):
         """Boundary: sensor value at sys.float_info.max (largest finite float).

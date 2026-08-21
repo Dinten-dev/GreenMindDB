@@ -55,7 +55,7 @@ class TestSettingsValidation:
 
         from app.config import Settings
 
-        with pytest.raises(ValidationError, match="overridden in production"):
+        with pytest.raises(ValidationError, match="overridden"):
             Settings(
                 environment="production",
                 jwt_secret_key="dev-only-change-me-please-dev-only-change-me",

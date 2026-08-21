@@ -1,4 +1,4 @@
-FROM python:3.11.11-slim-bookworm
+FROM python:3.12.13-slim-bookworm AS base
 
 WORKDIR /app
 
@@ -6,15 +6,27 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Install the fully resolved production graph and verify every downloaded
+# distribution against its committed package hash.
+COPY requirements.lock .
+RUN python -m pip install --no-cache-dir --require-hashes --requirement requirements.lock
 
 # Copy application code
 COPY . .
 
 RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/firmware_data/gateway_releases \
     && chown -R appuser:appuser /app
+
+FROM base AS test
+
+RUN python -m pip install --no-cache-dir --requirement requirements-dev.txt
+
+USER appuser
+
+CMD ["python", "-m", "pytest", "tests/", "-v"]
+
+FROM base AS production
 
 USER appuser
 

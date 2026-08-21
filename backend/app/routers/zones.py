@@ -1,11 +1,13 @@
 """Zone management endpoints."""
 
+import uuid
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models.user import User
+from app.models.user import Role, User
 from app.schemas.gateway import PairingCodeResponse
 from app.schemas.zone import ZoneCreate, ZoneOverview, ZoneResponse
 from app.services.gateway_service import generate_pairing_code
@@ -18,6 +20,7 @@ from app.services.zone_service import (
 )
 
 router = APIRouter(prefix="/zones", tags=["zones"])
+_tenant_manager = require_role([Role.OWNER, Role.ADMIN])
 
 
 @router.get("", response_model=list[ZoneResponse])
@@ -32,7 +35,7 @@ async def handle_list_zones(
 @router.post("", response_model=ZoneResponse, status_code=201)
 async def handle_create_zone(
     data: ZoneCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Create a new zone in the user's organization."""
@@ -41,7 +44,7 @@ async def handle_create_zone(
 
 @router.get("/{zone_id}", response_model=ZoneResponse)
 async def handle_get_zone(
-    zone_id: str,
+    zone_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -51,8 +54,8 @@ async def handle_get_zone(
 
 @router.delete("/{zone_id}", status_code=204)
 async def handle_delete_zone(
-    zone_id: str,
-    current_user: User = Depends(get_current_user),
+    zone_id: uuid.UUID,
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Delete a zone and cascade delete all its resources."""
@@ -61,7 +64,7 @@ async def handle_delete_zone(
 
 @router.get("/{zone_id}/overview", response_model=ZoneOverview)
 async def handle_get_zone_overview(
-    zone_id: str,
+    zone_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -71,8 +74,8 @@ async def handle_get_zone_overview(
 
 @router.post("/{zone_id}/pairing-codes", response_model=PairingCodeResponse, status_code=201)
 async def handle_generate_pairing_code(
-    zone_id: str,
-    current_user: User = Depends(get_current_user),
+    zone_id: uuid.UUID,
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Generate a short-lived pairing code for a zone."""

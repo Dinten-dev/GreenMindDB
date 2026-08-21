@@ -1,12 +1,12 @@
 """Authentication request/response schemas."""
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class SignupRequest(BaseModel):
-    email: EmailStr
-    password: str
-    name: str = ""
+    email: EmailStr = Field(max_length=255)
+    password: str = Field(max_length=128)
+    name: str = Field("", max_length=200)
 
     @field_validator("password")
     @classmethod
@@ -23,12 +23,16 @@ class SignupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(max_length=255)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class VerifyEmailRequest(BaseModel):
-    token: str
+    token: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr = Field(max_length=255)
 
 
 class UserResponse(BaseModel):
@@ -45,8 +49,8 @@ class UserResponse(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
-    name: str | None = None
-    phone_number: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    phone_number: str | None = Field(None, max_length=50)
 
 
 class AuthResponse(BaseModel):

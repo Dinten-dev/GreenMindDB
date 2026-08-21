@@ -1,6 +1,10 @@
 """Sensor (ESP32) request/response schemas."""
 
-from pydantic import BaseModel, ConfigDict
+import uuid
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.validation import normalize_mac_address
 
 
 class SensorResponse(BaseModel):
@@ -21,20 +25,30 @@ class SensorResponse(BaseModel):
 
 
 class SensorUpdateRequest(BaseModel):
-    name: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=200)
     sms_alerts_enabled: bool | None = None
 
 
 class ClaimSensorRequest(BaseModel):
-    mac_address: str
-    sensor_type: str = "generic"
-    name: str | None = None
+    mac_address: str = Field(min_length=12, max_length=17)
+    sensor_type: str = Field("generic", min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_.:-]+$")
+    name: str | None = Field(None, min_length=1, max_length=200)
+
+    @field_validator("mac_address")
+    @classmethod
+    def validate_mac(cls, value: str) -> str:
+        return normalize_mac_address(value)
 
 
 class PairSensorRequest(BaseModel):
-    code: str
-    zone_id: str
-    name: str | None = None
+    code: str = Field(min_length=6, max_length=8, pattern=r"^[A-Za-z0-9]+$")
+    zone_id: uuid.UUID
+    name: str | None = Field(None, min_length=1, max_length=200)
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        return value.upper()
 
 
 class ClaimSensorResponse(BaseModel):
@@ -44,7 +58,7 @@ class ClaimSensorResponse(BaseModel):
 
 
 class MoveSensorRequest(BaseModel):
-    target_gateway_id: str
+    target_gateway_id: uuid.UUID
 
 
 class DataPoint(BaseModel):

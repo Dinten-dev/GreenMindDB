@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -15,6 +16,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.file_security import resolve_contained_path, verify_file_sha256
 from app.models.audit_log import AuditLog
 from app.models.firmware import FirmwareRelease, FirmwareReport, RolloutPolicy
 from app.models.master import Gateway, Sensor, Zone
@@ -155,26 +157,22 @@ def upload_release(
     ip_address: str | None = None,
 ) -> FirmwareRelease:
     # Validate version format
-    if not SEMVER_RE.match(version):
+    if len(version) > 50 or not SEMVER_RE.fullmatch(version):
         raise HTTPException(status_code=422, detail="Version must follow semver (e.g. 1.2.3)")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,50}", board_type):
+        raise HTTPException(status_code=422, detail="Invalid board type")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,50}", hardware_revision):
+        raise HTTPException(status_code=422, detail="Invalid hardware revision")
+    if min_version and (len(min_version) > 50 or not SEMVER_RE.fullmatch(min_version)):
+        raise HTTPException(status_code=422, detail="Minimum version must follow semver")
+    if changelog and len(changelog) > 20_000:
+        raise HTTPException(status_code=422, detail="Changelog is too long")
 
     # Validate file extension
     original_name = file.filename or ""
     ext = os.path.splitext(original_name)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=422, detail=f"Only {ALLOWED_EXTENSIONS} files allowed")
-
-    # Read and validate size
-    content = file.file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413, detail=f"File exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"
-        )
-    if len(content) == 0:
-        raise HTTPException(status_code=422, detail="Empty file")
-
-    # Compute SHA256
-    sha256_hash = hashlib.sha256(content).hexdigest()
 
     # Check for duplicate version+board+revision
     existing = (
@@ -198,9 +196,32 @@ def upload_release(
     safe_filename = f"{safe_board}_{safe_version}_{uuid.uuid4().hex[:8]}.bin"
 
     os.makedirs(FIRMWARE_STORAGE_DIR, exist_ok=True)
-    file_loc = os.path.join(FIRMWARE_STORAGE_DIR, safe_filename)
-    with open(file_loc, "wb") as f:
-        f.write(content)
+    file_loc = resolve_contained_path(FIRMWARE_STORAGE_DIR, safe_filename)
+    fd, temporary_path = tempfile.mkstemp(prefix=".firmware-upload-", dir=FIRMWARE_STORAGE_DIR)
+    file_size = 0
+    hasher = hashlib.sha256()
+    try:
+        with os.fdopen(fd, "wb") as output:
+            while chunk := file.file.read(1024 * 1024):
+                file_size += len(chunk)
+                if file_size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds {MAX_FILE_SIZE // (1024 * 1024)}MB limit",
+                    )
+                hasher.update(chunk)
+                output.write(chunk)
+        if file_size == 0:
+            raise HTTPException(status_code=422, detail="Empty file")
+        os.replace(temporary_path, file_loc)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+    sha256_hash = hasher.hexdigest()
 
     release = FirmwareRelease(
         version=version,
@@ -237,6 +258,14 @@ def toggle_release(
     db: Session, user: User, release_id: uuid.UUID, is_active: bool, ip: str | None = None
 ) -> FirmwareRelease:
     release = get_release(db, release_id)
+    if is_active:
+        try:
+            artifact = resolve_contained_path(FIRMWARE_STORAGE_DIR, release.file_path)
+            if not artifact.is_file():
+                raise ValueError("Firmware artifact is missing")
+            verify_file_sha256(artifact, release.sha256)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     old_state = release.is_active
     release.is_active = is_active
     action = "firmware.activate" if is_active else "firmware.deactivate"
@@ -264,9 +293,12 @@ def delete_release(db: Session, user: User, release_id: uuid.UUID, ip: str | Non
     release = get_release(db, release_id)
 
     # Remove file from disk
-    file_loc = os.path.join(FIRMWARE_STORAGE_DIR, release.file_path)
-    if os.path.exists(file_loc):
-        os.remove(file_loc)
+    try:
+        file_loc = resolve_contained_path(FIRMWARE_STORAGE_DIR, release.file_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Firmware artifact path is invalid") from exc
+    if file_loc.is_file():
+        file_loc.unlink()
 
     _audit(
         db,

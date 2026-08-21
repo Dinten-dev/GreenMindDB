@@ -2,14 +2,14 @@
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
-import json
+from datetime import UTC, datetime
 
 import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 class SMSAdapter(ABC):
     @abstractmethod
@@ -35,7 +35,7 @@ class ASPSMSAdapter(SMSAdapter):
             "Password": self.password,
             "Originator": self.sender_id,
             "Recipients": [phone_number],
-            "MessageText": message
+            "MessageText": message,
         }
 
         try:
@@ -43,7 +43,7 @@ class ASPSMSAdapter(SMSAdapter):
                 response = await client.post(url, json=payload, timeout=10.0)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 status_code = data.get("StatusCode")
                 if status_code == "1":
                     logger.info(f"ASPSMS sent successfully to {phone_number}")
@@ -75,20 +75,22 @@ class NotificationService:
         else:
             self.adapter = SNSAdapter()
 
-    async def send_electrode_disconnect_alert(self, phone_number: str, sensor_mac: str, zone_name: str | None = None):
+    async def send_electrode_disconnect_alert(
+        self, phone_number: str, sensor_mac: str, zone_name: str | None = None
+    ):
         if not phone_number:
             logger.warning("No phone number provided for disconnect alert, skipping.")
             return False
 
         location = f"Zone {zone_name}" if zone_name else "einem Sensor"
-        time_str = datetime.now(timezone.utc).strftime("%H:%M UTC")
-        
+        time_str = datetime.now(UTC).strftime("%H:%M UTC")
+
         message = (
             f"GreenMind Alert: Elektrode ab! "
             f"Sensor {sensor_mac} in {location} hat das Pflanzensignal verloren ({time_str}). "
             f"Bitte prüfen und ggf. neu ankleben."
         )
-        
+
         return await self.adapter.send_sms(phone_number, message)
 
 

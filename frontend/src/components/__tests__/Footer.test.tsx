@@ -9,33 +9,33 @@ import Footer from '../Footer';
 
 // Mock next/link to render a plain <a> tag in tests
 jest.mock('next/link', () => {
-    const MockLink = ({ children, href }: { children: React.ReactNode; href: string }) => (
-        <a href={href}>{children}</a>
-    );
-    MockLink.displayName = 'MockLink';
-    return MockLink;
+  const MockLink = ({ children, href }: { children: React.ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  );
+  MockLink.displayName = 'MockLink';
+  return MockLink;
 });
 
 describe('Footer', () => {
-    it('renders copyright with the current year', () => {
-        render(<Footer />);
+  it('renders copyright with the current year', () => {
+    render(<Footer />);
 
-        const currentYear = new Date().getFullYear().toString();
+    const currentYear = new Date().getFullYear().toString();
 
-        // Grenzwert: Jahreszahl muss dynamisch sein, kein Hardcode
-        const copyright = screen.getByText((content) =>
-            content.includes(currentYear) && content.includes('Galaxyadvisors AG'),
-        );
-        expect(copyright).toBeInTheDocument();
-    });
+    // Grenzwert: Jahreszahl muss dynamisch sein, kein Hardcode
+    const copyright = screen.getByText(
+      (content) => content.includes(currentYear) && content.includes('Galaxyadvisors AG')
+    );
+    expect(copyright).toBeInTheDocument();
+  });
 
-    it('renders navigation links with correct hrefs', () => {
-        render(<Footer />);
+  it('renders navigation links with correct hrefs', () => {
+    render(<Footer />);
 
-        const kontaktLink = screen.getByRole('link', { name: /contact/i });
-        expect(kontaktLink).toHaveAttribute('href', '/de/contact');
+    const kontaktLink = screen.getByRole('link', { name: /contact/i });
+    expect(kontaktLink).toHaveAttribute('href', '/de/contact');
 
-        const impressumLink = screen.getByRole('link', { name: /impressum/i });
-        expect(impressumLink).toHaveAttribute('href', '/de/impressum');
-    });
+    const impressumLink = screen.getByRole('link', { name: /impressum/i });
+    expect(impressumLink).toHaveAttribute('href', '/de/impressum');
+  });
 });

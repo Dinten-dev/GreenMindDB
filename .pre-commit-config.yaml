@@ -17,10 +17,5 @@ repos:
       - id: ruff
         args: [--fix]
         files: ^backend/
-
-  - repo: https://github.com/psf/black
-    rev: 24.4.2
-    hooks:
-      - id: black
+      - id: ruff-format
         files: ^backend/
-        args: [--config, backend/pyproject.toml]

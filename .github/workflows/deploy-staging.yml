@@ -1,8 +1,13 @@
 name: Deploy to Staging
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [develop]
+    types: [completed]
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-staging-${{ github.ref }}
@@ -11,25 +16,37 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to Staging
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    # Wait for CI to pass before deploying
-    # (Assuming the ci.yml workflow runs on pull requests and pushes)
-    # We don't 'need' it strictly here if it runs in parallel, but it's 
-    # safer to ensure tests pass. Since ci.yml is a separate workflow, 
-    # we can use the workflow_run event or just run CI steps here. 
-    # For simplicity, we just trigger deploy on push if you have branch protection.
+    environment: staging
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
       - name: Setup SSH Key
+        env:
+          DEPLOY_SSH_KEY_CONTENT: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS_CONTENT: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > /tmp/ssh_key
-          chmod 600 /tmp/ssh_key
+          install -m 600 /dev/null /tmp/greenmind_deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY_CONTENT" > /tmp/greenmind_deploy_key
+          install -m 600 /dev/null /tmp/greenmind_known_hosts
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS_CONTENT" > /tmp/greenmind_known_hosts
           
       - name: Deploy to Staging
         run: ./scripts/deploy.sh --env staging
         env:
-          DEPLOY_SSH_KEY_FILE: /tmp/ssh_key
+          DEPLOY_SSH_KEY_FILE: /tmp/greenmind_deploy_key
+          DEPLOY_KNOWN_HOSTS_FILE: /tmp/greenmind_known_hosts
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f /tmp/greenmind_deploy_key /tmp/greenmind_known_hosts

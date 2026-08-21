@@ -14,7 +14,10 @@ class Plant(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(
-        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     zone_id = Column(
         UUID(as_uuid=True), ForeignKey("zone.id", ondelete="CASCADE"), nullable=False, index=True
@@ -33,9 +36,15 @@ class Plant(Base):
 
     organization = relationship("Organization")
     zone = relationship("Zone")
-    sensor_assignments = relationship("PlantSensorAssignment", back_populates="plant", cascade="all, delete-orphan")
-    observations = relationship("PlantObservation", back_populates="plant", cascade="all, delete-orphan")
-    observation_accesses = relationship("PlantObservationAccess", back_populates="plant", cascade="all, delete-orphan")
+    sensor_assignments = relationship(
+        "PlantSensorAssignment", back_populates="plant", cascade="all, delete-orphan"
+    )
+    observations = relationship(
+        "PlantObservation", back_populates="plant", cascade="all, delete-orphan"
+    )
+    observation_accesses = relationship(
+        "PlantObservationAccess", back_populates="plant", cascade="all, delete-orphan"
+    )
 
 
 class PlantSensorAssignment(Base):

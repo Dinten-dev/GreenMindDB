@@ -1,26 +1,40 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
 
-# Load env variables if .env exists
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+# Backups contain credentials and other sensitive tenant data. Keep newly
+# created files private even when the caller has a permissive default umask.
+umask 077
+
+readonly backup_dir="${BACKUP_DIR:-./backups}"
+readonly timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
+readonly backup_file="${backup_dir}/greenmind_${timestamp}.sql"
+readonly temporary_file="${backup_file}.part"
+
+if [[ -z "${backup_dir}" || "${backup_dir}" == "/" ]]; then
+    echo "Refusing unsafe BACKUP_DIR: ${backup_dir:-<empty>}" >&2
+    exit 2
 fi
 
-DB_USER=${POSTGRES_USER:-postgres}
-DB_NAME=${POSTGRES_DB:-greenmind}
-BACKUP_DIR="./backups"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="$BACKUP_DIR/backup_${TIMESTAMP}.sql"
+mkdir -p -- "${backup_dir}"
+chmod 700 -- "${backup_dir}"
 
-mkdir -p "$BACKUP_DIR"
+cleanup() {
+    rm -f -- "${temporary_file}"
+}
+trap cleanup EXIT
 
-echo "Creating database backup to $BACKUP_FILE..."
-docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" > "$BACKUP_FILE"
-# Check if file has content
-if [ -s "$BACKUP_FILE" ]; then
-    echo "Backup successfully created: $BACKUP_FILE"
-else
-    echo "Error: Backup file is empty. Check if postgres container is running."
-    rm "$BACKUP_FILE"
+echo "Creating private database backup at ${backup_file}..."
+# POSTGRES_USER/POSTGRES_DB are expanded inside the container. Docker Compose
+# loads its normal .env file without exposing or reparsing it in this shell.
+docker compose exec -T postgres sh -c \
+    'exec pg_dump --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+    > "${temporary_file}"
+
+if [[ ! -s "${temporary_file}" ]]; then
+    echo "Backup failed: pg_dump produced no data." >&2
     exit 1
 fi
+
+mv -- "${temporary_file}" "${backup_file}"
+trap - EXIT
+echo "Backup completed: ${backup_file}"

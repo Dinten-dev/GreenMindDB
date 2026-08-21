@@ -24,7 +24,7 @@ select = [
     "S",   # flake8-bandit (security)
 ]
 ignore = [
-    "E501",  # line length handled by black
+    "E501",  # line length handled by the Ruff formatter
     "B008",  # allow Depends() in function defaults (FastAPI pattern)
     "S608",  # allow string-based SQL construction (controlled use with parameterized queries)
     "S105",  # hardcoded password (false positives in config)
@@ -33,16 +33,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/*" = ["S101", "S501", "E501", "S603"]  # allow assert, verify=False, long lines, subprocess in tests
-"**/scripts/*" = ["S311"]  # allow standard random for data seeding
-"**/seed/*" = ["E402"]  # sys.path manipulation must precede imports
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
-
-# ─── black ───────────────────────────────────────────────────────────
-[tool.black]
-line-length = 100
-target-version = ["py311"]
 
 # ─── pytest ──────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
@@ -58,7 +51,7 @@ markers = [
 # ─── coverage ────────────────────────────────────────────────────────
 [tool.coverage.run]
 source = ["app"]
-omit = ["app/seed/*", "app/__pycache__/*"]
+omit = ["app/__pycache__/*"]
 
 [tool.coverage.report]
 fail_under = 60

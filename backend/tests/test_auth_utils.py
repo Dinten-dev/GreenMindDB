@@ -6,7 +6,9 @@ from app.auth import (
     create_access_token,
     decode_token,
     get_password_hash,
+    pwd_context,
     verify_password,
+    verify_password_and_update,
 )
 
 
@@ -38,6 +40,24 @@ class TestPasswordHashing:
         assert hash1 != hash2
         assert verify_password(plain, hash1) is True
         assert verify_password(plain, hash2) is True
+
+    def test_long_unicode_password_is_not_truncated(self):
+        password = "ValidPass1" + "🌿" * 40
+        same_prefix_different_suffix = "ValidPass1" + "🌿" * 39 + "🌵"
+        hashed = get_password_hash(password)
+
+        assert hashed.startswith("$bcrypt-sha256$")
+        assert verify_password(password, hashed) is True
+        assert verify_password(same_prefix_different_suffix, hashed) is False
+
+    def test_legacy_bcrypt_hash_verifies_and_requests_migration(self):
+        legacy_hash = pwd_context.handler("bcrypt").hash("LegacyPass1")
+
+        verified, replacement_hash = verify_password_and_update("LegacyPass1", legacy_hash)
+
+        assert verified is True
+        assert replacement_hash is not None
+        assert replacement_hash.startswith("$bcrypt-sha256$")
 
 
 class TestJWTTokens:

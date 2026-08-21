@@ -11,7 +11,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "operator" | "viewer";
+  role: 'admin' | 'operator' | 'viewer';
   organization_id: string;
   is_active: boolean;
 }
@@ -40,7 +40,7 @@ export interface Device {
   name: string;
   serial: string;
   type: string;
-  status: "online" | "offline" | "pairing";
+  status: 'online' | 'offline' | 'pairing';
   zone_id: string;
 }
 

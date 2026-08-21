@@ -1,5 +1,6 @@
 """Business logic for zones (agriculture areas)."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
@@ -70,7 +71,7 @@ def create_zone(db: Session, user: User, data: ZoneCreate) -> ZoneResponse:
     )
 
 
-def get_zone(db: Session, user: User, zone_id: str) -> ZoneResponse:
+def get_zone(db: Session, user: User, zone_id: uuid.UUID | str) -> ZoneResponse:
     org_id = _require_org(user)
     z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:
@@ -95,7 +96,7 @@ def get_zone(db: Session, user: User, zone_id: str) -> ZoneResponse:
     )
 
 
-def get_zone_overview(db: Session, user: User, zone_id: str) -> ZoneOverview:
+def get_zone_overview(db: Session, user: User, zone_id: uuid.UUID | str) -> ZoneOverview:
     org_id = _require_org(user)
     z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:
@@ -134,7 +135,7 @@ def get_zone_overview(db: Session, user: User, zone_id: str) -> ZoneOverview:
     )
 
 
-def delete_zone(db: Session, user: User, zone_id: str) -> None:
+def delete_zone(db: Session, user: User, zone_id: uuid.UUID | str) -> None:
     org_id = _require_org(user)
     z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
     if not z:

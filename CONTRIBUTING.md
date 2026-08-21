@@ -14,9 +14,12 @@ Thank you for contributing to GreenMind! This document outlines our workflow, co
 
 ## Development Setup
 
+Use Python 3.12 for backend work and Node.js 24 for frontend work. Docker 24 or newer with
+Compose v2 is required for the canonical local stack and integration tests.
+
 ```bash
 # 1. Clone the repository
-git clone <repo-url> && cd GreenMindDB
+git clone https://github.com/Dinten-dev/GreenMindDB.git && cd GreenMindDB
 
 # 2. Copy environment config
 cp .env.example .env
@@ -27,6 +30,10 @@ make dev
 # 4. Verify everything is running
 make health
 ```
+
+There are no seeded demo accounts. A newly signed-up account must verify its email before login;
+see the [README](README.md#account-verification-and-platform-administration) for configuration
+and the controlled one-time platform-admin bootstrap.
 
 See the [README](README.md) for detailed setup instructions.
 
@@ -109,7 +116,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 ### Examples
 
 ```
-feat(api): add greenhouse overview endpoint
+feat(api): add zone overview endpoint
 fix(frontend): correct chart timezone offset
 docs: update setup instructions for macOS
 chore(ci): add Docker build step to pipeline
@@ -125,6 +132,7 @@ chore(ci): add Docker build step to pipeline
    ```bash
    make lint
    make test
+   make format-check
    ```
 4. **Push and open a PR** targeting `develop`
 5. **Fill out the PR template** completely
@@ -139,8 +147,8 @@ chore(ci): add Docker build step to pipeline
 
 ### Backend (Python)
 
-- **Formatter**: `black` (line-length 100)
-- **Linter**: `ruff`
+- **Runtime**: Python 3.12
+- **Formatter and linter**: Ruff (line length 100)
 - **Tests**: `pytest`
 
 ```bash
@@ -156,13 +164,19 @@ make test
 
 ### Frontend (TypeScript / Next.js)
 
-- **Linter**: `eslint` via `next lint`
-- **Formatter**: `prettier`
+- **Runtime**: Node.js 24
+- **Framework**: Next.js 16 and React 19
+- **Linter**: ESLint 9
+- **Formatter**: Prettier 3
+- **Tests**: Jest and React Testing Library
 
 ```bash
 cd frontend
+npm ci
 npm run lint
-npm run format
+npm run format:check
+npm run type-check
+npm test -- --ci --passWithNoTests
 ```
 
 ### General Principles

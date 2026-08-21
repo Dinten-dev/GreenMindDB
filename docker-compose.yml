@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - ${PGDATA_DIR:-./postgres_data}:/var/lib/postgresql/data
+      - ${PGDATA_DIR:-postgres_data}:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
@@ -18,6 +18,34 @@ services:
       retries: 5
     security_opt:
       - no-new-privileges:true
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ${MINIO_DATA_DIR:-minio_data}:/data
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: [ "CMD-SHELL", "mc ready local || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -25,25 +53,53 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      ENVIRONMENT: production
+      ENVIRONMENT: development
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CORS_ORIGINS: ${CORS_ORIGINS}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      FIRMWARE_STORAGE_DIR: /app/firmware_data
+      GATEWAY_RELEASE_DIR: /app/firmware_data/gateway_releases
+      GUNICORN_WORKERS: 1
+      # Uvicorn 0.27 accepts literal trusted proxy IPs, not CIDR ranges.
+      # Trust only loopback, the fixed bridge gateway used by host-local
+      # access, and the fixed Next.js proxy address below.
+      FORWARDED_ALLOW_IPS: "127.0.0.1,::1,${GREENMIND_DOCKER_GATEWAY:-172.28.10.1},${FRONTEND_PROXY_IP:-172.28.10.10}"
+      # Empty in ordinary local development; signed-release activation fails closed.
+      GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_PATH: ${GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_PATH:-}
+      MAX_WAV_UPLOAD_BYTES: ${MAX_WAV_UPLOAD_BYTES:-33554432}
+      MAX_WAV_BUNDLE_FILES: ${MAX_WAV_BUNDLE_FILES:-2000}
+      MAX_WAV_BUNDLE_BYTES: ${MAX_WAV_BUNDLE_BYTES:-2147483648}
+      SENSOR_EXPORT_MAX_ROWS: ${SENSOR_EXPORT_MAX_ROWS:-250000}
+      SENSOR_EXPORT_MAX_BYTES: ${SENSOR_EXPORT_MAX_BYTES:-67108864}
+      SENSOR_EXPORT_MAX_KINDS: ${SENSOR_EXPORT_MAX_KINDS:-32}
+      ENABLE_EXPERIMENTAL_PROVISIONING: "${ENABLE_EXPERIMENTAL_PROVISIONING:-false}"
+      ENABLE_EXPERIMENTAL_BIOSIGNAL: "${ENABLE_EXPERIMENTAL_BIOSIGNAL:-false}"
+      WEBSOCKET_MAX_CONNECTIONS: ${WEBSOCKET_MAX_CONNECTIONS:-500}
+      WEBSOCKET_MAX_CONNECTIONS_PER_USER: ${WEBSOCKET_MAX_CONNECTIONS_PER_USER:-5}
+      WEBSOCKET_MAX_CONNECTIONS_PER_IP: ${WEBSOCKET_MAX_CONNECTIONS_PER_IP:-20}
+      WEBSOCKET_IDLE_TIMEOUT_SECONDS: ${WEBSOCKET_IDLE_TIMEOUT_SECONDS:-300}
+      WEBSOCKET_SEND_TIMEOUT_SECONDS: ${WEBSOCKET_SEND_TIMEOUT_SECONDS:-2}
       # Resend / Email
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-onboarding@biolingo.org}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
+      # Object storage
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       # ASPSMS
       ASPSMS_USERKEY: ${ASPSMS_USERKEY:-}
       ASPSMS_PASSWORD: ${ASPSMS_PASSWORD:-}
       ASPSMS_SENDER_ID: ${ASPSMS_SENDER_ID:-GreenMind}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\"" ]
@@ -54,6 +110,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    pids_limit: 256
+    volumes:
+      - firmware_data:/app/firmware_data
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
@@ -63,7 +126,7 @@ services:
     environment:
       INTERNAL_API_URL: http://backend:8000
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -71,11 +134,19 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    pids_limit: 256
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: [ "CMD-SHELL", "node -e \"fetch('http://localhost:3000').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\"" ]
       interval: 15s
       timeout: 5s
       retries: 10
+    networks:
+      default:
+        ipv4_address: ${FRONTEND_PROXY_IP:-172.28.10.10}
 
   prometheus:
     image: prom/prometheus:v2.51.0
@@ -84,12 +155,26 @@ services:
       - ./compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     security_opt:
       - no-new-privileges:true
     depends_on:
       backend:
         condition: service_healthy
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
+  postgres_data:
+  minio_data:
   prometheus_data:
+  firmware_data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${GREENMIND_DOCKER_SUBNET:-172.28.10.0/24}
+          gateway: ${GREENMIND_DOCKER_GATEWAY:-172.28.10.1}

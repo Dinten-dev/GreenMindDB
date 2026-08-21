@@ -6,7 +6,7 @@ Simulates a Raspberry Pi gateway + ESP32 sensors sending live data to the API.
 
 Usage:
   1. Generate a pairing code in the Dashboard (Gateways → Gateway pairen)
-  2. Run:  python scripts/simulate_gateway.py --api-url http://188.245.247.156:8000 --code <PAIRING_CODE>
+  2. Run: python scripts/simulate_gateway.py --api-url http://localhost:8000 --code <PAIRING_CODE>
   3. The simulator registers itself, then starts sending synthetic sensor data every 10s.
 
 First run registers the gateway. Subsequent runs reuse the stored API key from .simulator_state.json.
@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
+import httpx
 
 STATE_FILE = Path(__file__).parent / ".simulator_state.json"
 
@@ -52,12 +52,13 @@ def load_state() -> dict | None:
 
 def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, indent=2))
+    STATE_FILE.chmod(0o600)
 
 
 def register_gateway(api_url: str, code: str) -> dict:
     """Register the simulated gateway using a pairing code."""
-    print(f"🔗 Registering gateway with code: {code}")
-    resp = requests.post(
+    print("🔗 Registering gateway")
+    resp = httpx.post(
         f"{api_url}/api/v1/gateways/register",
         json={
             "code": code,
@@ -76,11 +77,11 @@ def register_gateway(api_url: str, code: str) -> dict:
     state = {
         "gateway_id": data["gateway_id"],
         "api_key": data["api_key"],
-        "greenhouse_id": data["greenhouse_id"],
+        "zone_id": data["zone_id"],
     }
     save_state(state)
     print(f"✅ Gateway registered: {state['gateway_id']}")
-    print(f"   API Key: {state['api_key'][:8]}…")
+    print("   API key stored in the restricted simulator state file")
     return state
 
 
@@ -106,7 +107,7 @@ def generate_value(kind: str, hour: int, day_progress: float) -> float:
 
 def send_heartbeat(api_url: str, api_key: str):
     """Send a heartbeat to mark the gateway as online."""
-    requests.post(
+    httpx.post(
         f"{api_url}/api/v1/gateways/heartbeat",
         json={"hardware_id": HARDWARE_ID, "local_ip": "192.168.1.42"},
         headers={"X-Api-Key": api_key},
@@ -138,7 +139,7 @@ def send_readings(api_url: str, api_key: str):
         "readings": readings,
     }
 
-    resp = requests.post(
+    resp = httpx.post(
         f"{api_url}/api/v1/ingest",
         json=payload,
         headers={"X-Api-Key": api_key},

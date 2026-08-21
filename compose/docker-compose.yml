@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: timescale/timescaledb:2.17.2-pg16
@@ -16,9 +22,12 @@ services:
       retries: 10
     networks:
       - internal
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -33,6 +42,9 @@ services:
       retries: 10
     networks:
       - internal
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
 
   api:
     build:
@@ -40,43 +52,62 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      APP_ENV: ${APP_ENV}
-      API_HOST: 0.0.0.0
-      API_PORT: ${API_PORT}
+      ENVIRONMENT: ${ENVIRONMENT}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      JWT_ACCESS_EXPIRE_MINUTES: ${JWT_ACCESS_EXPIRE_MINUTES}
-      JWT_REFRESH_EXPIRE_DAYS: ${JWT_REFRESH_EXPIRE_DAYS}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      INGEST_TOKEN: ${INGEST_TOKEN}
-      S3_PROVIDER: ${S3_PROVIDER}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}
-      S3_BUCKET: ${S3_BUCKET}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
-      S3_SECURE: ${S3_SECURE}
-      ENABLE_CONTINUOUS_AGGREGATES: ${ENABLE_CONTINUOUS_AGGREGATES}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set a bucket-scoped S3 access key}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set a bucket-scoped S3 secret key}
       LOG_LEVEL: ${LOG_LEVEL}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      FRONTEND_URL: ${FRONTEND_URL}
+      CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
       FIRMWARE_STORAGE_DIR: /app/firmware_data
+      GATEWAY_RELEASE_DIR: /app/firmware_data/gateway_releases
+      GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_PATH: /run/greenmind/gateway-release-signing-public.pem
+      MAX_WAV_UPLOAD_BYTES: ${MAX_WAV_UPLOAD_BYTES:-33554432}
+      MAX_WAV_BUNDLE_FILES: ${MAX_WAV_BUNDLE_FILES:-2000}
+      MAX_WAV_BUNDLE_BYTES: ${MAX_WAV_BUNDLE_BYTES:-2147483648}
+      SENSOR_EXPORT_MAX_ROWS: ${SENSOR_EXPORT_MAX_ROWS:-250000}
+      SENSOR_EXPORT_MAX_BYTES: ${SENSOR_EXPORT_MAX_BYTES:-67108864}
+      SENSOR_EXPORT_MAX_KINDS: ${SENSOR_EXPORT_MAX_KINDS:-32}
+      ENABLE_EXPERIMENTAL_PROVISIONING: "false"
+      ENABLE_EXPERIMENTAL_BIOSIGNAL: "false"
+      WEBSOCKET_MAX_CONNECTIONS: ${WEBSOCKET_MAX_CONNECTIONS:-500}
+      WEBSOCKET_MAX_CONNECTIONS_PER_USER: ${WEBSOCKET_MAX_CONNECTIONS_PER_USER:-5}
+      WEBSOCKET_MAX_CONNECTIONS_PER_IP: ${WEBSOCKET_MAX_CONNECTIONS_PER_IP:-20}
+      WEBSOCKET_IDLE_TIMEOUT_SECONDS: ${WEBSOCKET_IDLE_TIMEOUT_SECONDS:-300}
+      WEBSOCKET_SEND_TIMEOUT_SECONDS: ${WEBSOCKET_SEND_TIMEOUT_SECONDS:-2}
+      # Only the fixed Caddy container and loopback may supply forwarding
+      # headers used for request.client, rate limits, and audit attribution.
+      FORWARDED_ALLOW_IPS: "127.0.0.1,::1,${CADDY_PROXY_IP:-172.28.30.10}"
     volumes:
       - firmware_data:/app/firmware_data
+      - ${GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_FILE:?Set GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_FILE}:/run/greenmind/gateway-release-signing-public.pem:ro
     depends_on:
       db:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${API_PORT}/health', timeout=3)\"" ]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\"" ]
       interval: 15s
       timeout: 5s
       retries: 10
-    ports:
-      - "${API_PORT}:${API_PORT}"
     networks:
-      - internal
+      internal:
+        aliases: [backend]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    logging: *default-logging
 
   proxy:
     image: caddy:2.10.2
@@ -86,18 +117,26 @@ services:
         condition: service_healthy
     environment:
       GREENMIND_DOMAIN: ${GREENMIND_DOMAIN}
-      API_UPSTREAM: api:${API_PORT}
+      API_UPSTREAM: api:8000
       CADDY_TLS_MODE: ${CADDY_TLS_MODE}
     ports:
       - "${PROXY_HTTP_PORT}:80"
       - "${PROXY_HTTPS_PORT}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - firmware_data:/app/firmware_data:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
-      - internal
+      internal:
+        ipv4_address: ${CADDY_PROXY_IP:-172.28.30.10}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    pids_limit: 256
+    logging: *default-logging
 
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -110,6 +149,9 @@ services:
       - prometheus_data:/prometheus
     networks:
       - internal
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
 
   grafana:
     image: grafana/grafana:12.1.1
@@ -126,10 +168,17 @@ services:
       - prometheus
     networks:
       - internal
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
 
 networks:
   internal:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${GREENMIND_DOCKER_SUBNET:-172.28.30.0/24}
+          gateway: ${GREENMIND_DOCKER_GATEWAY:-172.28.30.1}
 
 volumes:
   db_data:

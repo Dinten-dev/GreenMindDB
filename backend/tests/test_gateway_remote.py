@@ -4,8 +4,10 @@ Covers: desired state, auth, releases, config, commands, rollout, and audit.
 Uses an in-memory SQLite database for speed and isolation.
 """
 
+import base64
 import hashlib
 import io
+import tarfile
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -29,6 +31,18 @@ from app.services.gateway_remote_service import (
     issue_command,
     upload_config_release,
 )
+
+
+def _release_archive(content: bytes = b"release payload") -> bytes:
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        info = tarfile.TarInfo("greenmind-release/payload.txt")
+        info.size = len(content)
+        archive.addfile(info, io.BytesIO(content))
+    return output.getvalue()
+
+
+TEST_SIGNATURE = base64.b64encode(b"x" * 64).decode("ascii")
 
 # ── Test fixtures ────────────────────────────────────────────────────
 
@@ -139,6 +153,7 @@ def app_release(db: Session, admin_user: User) -> GatewayAppRelease:
         channel="stable",
         file_size_bytes=1024,
         changelog="Test release",
+        signature=TEST_SIGNATURE,
         created_by=admin_user.id,
     )
     db.add(release)
@@ -272,7 +287,7 @@ def test_app_release_sha256_computed(db, admin_user):
 
     from app.services.gateway_remote_service import upload_app_release
 
-    content = b"test binary content for hashing"
+    content = _release_archive()
     expected_sha256 = hashlib.sha256(content).hexdigest()
     fake_file = UploadFile(filename="test.tar.gz", file=io.BytesIO(content))
 
@@ -289,7 +304,7 @@ def test_app_release_sha256_computed(db, admin_user):
             channel="stable",
             min_version=None,
             changelog=None,
-            signature=None,
+            signature=TEST_SIGNATURE,
         )
 
     assert release.sha256 == expected_sha256

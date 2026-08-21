@@ -1,199 +1,164 @@
-# Testing – Übersicht und Anleitung
+# Testing GreenMindDB
 
-> Dieses Dokument beschreibt die Testinfrastruktur in GreenMindDB,
-> wie Tests lokal ausgeführt werden und welche Bereiche abgedeckt sind.
+This document is the maintained command reference for the backend, frontend, and Docker-backed
+tests. Run commands from the repository root unless a section says otherwise.
 
----
+## Supported toolchain
 
-## 1. Backend (pytest)
+| Component | CI runtime | Test and quality tools |
+|---|---|---|
+| Backend | Python 3.12 | pytest, pytest-cov, Ruff |
+| Frontend | Node.js 24 | Jest 30, React Testing Library, ESLint 9, Prettier 3, TypeScript |
+| Integration | Docker 24+ with Compose v2 | `docker-compose.test.yml` |
 
-### Voraussetzungen
+Install local dependencies once:
+
+```bash
+make setup
+```
+
+`make setup` copies `.env.example` only when `.env` does not already exist. Replace every
+`CHANGE_ME` value before starting services. Test-only secrets in the commands below are fixed,
+non-production values and must never be reused for a deployment.
+
+## Fast local verification
+
+```bash
+make test
+make lint
+make format-check
+```
+
+`make test` runs the non-Docker backend suite and the frontend Jest suite. It does not start
+PostgreSQL, TimescaleDB, MinIO, or the full application stack.
+
+## Backend tests
+
+The backend suite is under `backend/tests/`. Its default fixtures use a temporary SQLite
+database and FastAPI dependency overrides. This keeps most tests fast, but it does not reproduce
+TimescaleDB extensions, PostgreSQL locking, MinIO behavior, or network boundaries.
+
+Run the same non-integration selection used by CI:
+
+```bash
+make test-backend
+```
+
+Run it with the CI coverage threshold:
+
+```bash
+make test-cov
+```
+
+The coverage command enforces 60% and writes the local HTML report to
+`backend/htmlcov/index.html`.
+
+Run a focused test while developing:
 
 ```bash
 cd backend
-source .venv/bin/activate     # virtualenv aktivieren
-pip install pytest pytest-mock pytest-cov  # falls noch nicht installiert
-```
-
-### Tests ausführen
-
-```bash
-# Alle Unit Tests (ohne Docker-Integration)
 SKIP_DOCKER_TESTS=1 \
-JWT_SECRET_KEY="ci-test-secret-key-that-is-at-least-32-chars" \
-FIRMWARE_STORAGE_DIR=/tmp/gm_firmware_test \
-python -m pytest tests/ -v --tb=short -m "not integration"
-
-# Mit Coverage-Report
-python -m pytest tests/ -v --tb=short -m "not integration" \
-  --cov=app --cov-report=term-missing --cov-fail-under=60
-
-# Einzelne Testdatei
-python -m pytest tests/test_boundary_analysis.py -v
-
-# Nur ein spezifischer Test
-python -m pytest tests/test_auth_router.py::TestLogin::test_login_success -v
+JWT_SECRET_KEY=ci-test-secret-key-that-is-at-least-32-chars \
+python -m pytest tests/test_auth_router.py -v
 ```
 
-### Umgebungsvariablen
+Useful test areas include:
 
-| Variable | Pflicht | Beschreibung |
-|----------|---------|-------------|
-| `JWT_SECRET_KEY` | ✅ | Mind. 32 Zeichen, beliebiger Wert für Tests |
-| `SKIP_DOCKER_TESTS` | ✅ | `"1"` um Docker-basierte Integration-Tests zu überspringen |
-| `FIRMWARE_STORAGE_DIR` | ✅ | Temp-Verzeichnis für Firmware-Uploads (z. B. `/tmp/gm_firmware_test`) |
+- account signup, verification, login, cookies, and authorization;
+- request validation and boundary analysis;
+- gateway authentication, desired state, remote commands, and release handling;
+- sensor ingestion, WAV metadata, and plant-evaluation behavior;
+- public observation tokens and tenant isolation;
+- configuration and production-safety validation.
 
-### Test-Fixtures (conftest.py)
+When adding a test, prefer behavior visible at an API, service, parser, storage, or trust
+boundary. Keep each test independent and include rejection cases for malformed or unauthorized
+input.
 
-Die zentrale `conftest.py` stellt folgende Fixtures bereit:
+### Docker-backed backend tests
 
-| Fixture | Scope | Beschreibung |
-|---------|-------|-------------|
-| `_reset_tables` | autouse | Erstellt alle SQLite-Tabellen vor jedem Test, löscht nach |
-| `db` | function | Saubere SQLAlchemy-Session gegen In-Memory SQLite |
-| `client` | function | `TestClient` mit überschriebener DB-Dependency |
-| `admin_token` | function | JWT-Token für einen Admin-User (erstellt User + Login) |
-| `setup_test_data` | function | Seed-Daten: Organization, Zone, Gateway, Sensor |
-
-> **Wichtig:** Tests laufen gegen SQLite (nicht PostgreSQL). SQLite-spezifische
-> Adapter für UUID- und `now()`-Funktionen werden in `conftest.py` registriert.
-> TimescaleDB-Hypertables (z. B. `sensor_reading`) verhalten sich wie normale
-> Tabellen in SQLite.
-
-### Testdateien und Abdeckung
-
-| Datei | Bereich | Tests |
-|-------|---------|-------|
-| `test_auth_utils.py` | JWT + Password-Hashing | 9 |
-| `test_auth_router.py` | Auth-Endpoints (signup/login/logout/me) | 13 |
-| `test_boundary_analysis.py` | Ingest + Zone + Auth Grenzwerte | 11 |
-| `test_contact.py` | Kontaktformular + Honeypot | 3 |
-| `test_config.py` | Settings-Validierung | 7 |
-| `test_gateway_admin.py` | Fleet Overview + Audit Logs | 8 |
-| `test_health.py` | Health + Root + Security Headers | 6 |
-
-### Lint
+The integration marker is reserved for tests that need the Docker test stack. Run it explicitly:
 
 ```bash
-python -m ruff check app/ tests/
+make test-docker
 ```
 
----
+This invokes `scripts/run_docker_tests.sh`, which creates the isolated
+`docker-compose.test.yml` stack and removes its volumes afterward. Do not point the test stack at
+a development or production database. The test runner builds the `test` target in
+`backend/Dockerfile`, installs `requirements-dev.txt` during the image build, and runs pytest as
+the unprivileged application user; it does not install packages when the container starts.
 
-## 2. Frontend (Jest)
+To select integration tests manually:
 
-### Voraussetzungen
+```bash
+cd backend
+python -m pytest tests/ -v -m integration
+```
+
+## Frontend tests
+
+Install exactly the locked dependency graph and run Jest:
 
 ```bash
 cd frontend
 npm ci
+npm test -- --ci --passWithNoTests
 ```
 
-### Tests ausführen
+Other maintained commands are:
 
 ```bash
-# Alle Tests
-npx jest --ci --passWithNoTests
-
-# Mit Coverage
-npx jest --coverage
-
-# Nur Component-Tests
-npx jest src/components/__tests__/
-
-# Watch-Modus (Entwicklung)
-npx jest --watch
+npm run test:watch
+npm run test:coverage
+npm run lint
+npm run format:check
+npm run type-check
+npm run build
 ```
 
-### Test-Setup (jest.setup.ts)
+Jest uses jsdom, React Testing Library, and the browser API mocks in `jest.setup.ts`. Tests cover
+shared components and user-facing flows including account verification, contact, and early
+access. Prefer queries and assertions that reflect what a user can observe; avoid testing React
+implementation details.
 
-Das Setup registriert globale Mocks für APIs, die in jsdom nicht existieren:
+## CI quality gates
 
-- **`IntersectionObserver`** – benötigt von `ScrollReveal`-Komponente
-- **`window.matchMedia`** – benötigt von responsiven Komponenten
+`.github/workflows/ci.yml` runs for pushes and pull requests to `main` and `develop`.
 
-### Testdateien
+The backend job uses Python 3.12 and performs:
 
-| Datei | Komponente | Tests |
-|-------|-----------|-------|
-| `Footer.test.tsx` | Footer | 2 (Copyright, Links) |
-| `Modal.test.tsx` | Modal | 4 (open/close, Escape, Backdrop) |
-| `ContactPage.test.tsx` | Kontaktformular | 5 (Render, Submit, Error, Honeypot, Reset) |
-| `EarlyAccessPage.test.tsx` | Early Access Form | 4 (Render, Submit, Error, Honeypot) |
+1. hash-locked application dependencies from `backend/requirements.lock`, then pinned test and
+   quality tools from `backend/requirements-dev.txt`;
+2. `python -m ruff check app/ tests/`;
+3. `python -m ruff format --check app/ tests/`;
+4. non-integration pytest with a 60% coverage gate;
+5. upload of `coverage.xml` as an artifact.
 
-### jest.config.js
+The frontend job uses Node.js 24 and performs:
 
-- **Transform:** `ts-jest` mit `{ jsx: 'react-jsx' }` (da `tsconfig.json` `preserve` nutzt)
-- **CSS-Stub:** `.css`-Imports werden gemockt
-- **Path-Alias:** `@/` → `src/`
+1. `npm ci`;
+2. ESLint and Prettier checks;
+3. TypeScript type-checking;
+4. a high-severity production dependency audit;
+5. the Next.js production build;
+6. Jest with coverage and artifact upload.
 
----
+CI deliberately skips Docker-marked backend tests. Run them locally or in an appropriately
+isolated integration environment before merging changes that depend on PostgreSQL, TimescaleDB,
+MinIO, migrations, or container networking.
 
-## 3. CI-Pipeline
+## What requires explicit integration coverage
 
-Die CI-Pipeline (`.github/workflows/ci.yml`) läuft bei jedem Push und PR auf `main`/`develop`:
+SQLite unit fixtures cannot establish all production properties. Changes in these areas require
+targeted integration verification:
 
-### Backend-Job
+- Alembic migrations and TimescaleDB hypertables;
+- transaction isolation, row locking, and concurrent idempotency;
+- MinIO/S3 upload, download, limits, and cleanup;
+- WebSocket connection limits and multi-client behavior;
+- gateway-to-server retries and release downloads;
+- reverse-proxy, cookie, CORS, and TLS behavior.
 
-1. Python 3.12 Setup
-2. `pip install` Dependencies + Test-Tools
-3. `ruff check` (Lint)
-4. `pytest` mit `--cov-fail-under=60` (Coverage-Gate)
-5. Coverage-XML als Artefakt hochladen
-6. Dynamischer Coverage-Badge (nur auf `main`)
-
-### Frontend-Job
-
-1. Node.js 20 Setup
-2. `npm ci`
-3. `npm run lint` (ESLint)
-4. `npm run build` (Next.js Build)
-5. `npx jest --ci --coverage`
-6. Coverage-Ordner als Artefakt hochladen
-
-### Coverage-Badge Setup
-
-Der dynamische Coverage-Badge benötigt zwei GitHub-Konfigurationen:
-
-1. **Secret `GIST_TOKEN`**: GitHub Personal Access Token mit `gist`-Scope
-2. **Variable `COVERAGE_GIST_ID`**: ID eines GitHub Gists für die Badge-Daten
-
-Bis diese konfiguriert sind, zeigt der statische Badge im README den Mindestwert an.
-
----
-
-## 4. Teststrategie
-
-### Grenzwertanalyse
-
-Alle Boundary-Tests in `test_boundary_analysis.py` dokumentieren explizit
-die getesteten Grenzwerte als Kommentare:
-
-```python
-def test_ingest_empty_readings_list(...):
-    """Boundary: readings list is empty (length = 0).
-    Zero readings is a valid edge case...
-    """
-    payload = {
-        "readings": [],  # Grenzwert: leere Liste
-    }
-```
-
-### Was NICHT getestet wird (und warum)
-
-| Bereich | Grund |
-|---------|-------|
-| WebSocket-Handler (`ws.py`) | Erfordert echte WebSocket-Verbindung, zu komplex für Unit Tests |
-| MinIO/S3 Uploads (`firmware_service.py`) | Externe Abhängigkeit, braucht Mocking oder Integration-Test |
-| TimescaleDB-spezifische Features | SQLite hat keine Hypertables; Aggregations-Queries weichen ab |
-| OTA-Update-Delivery | Gateway-seitig, nicht im Backend testbar |
-
-### Coverage-Ziele
-
-| Bereich | Aktuell | Ziel |
-|---------|---------|------|
-| Gesamt | ~65 % | 70 %+ |
-| Auth (`auth.py`, `auth` Router) | ~80 % | 90 % |
-| Ingest (`ingest.py`, `ingest_service.py`) | ~85 % | 90 % |
-| Zone CRUD | ~80 % | 85 % |
-| Gateway Admin | ~50 % | 60 % |
+Never report a Docker, firmware, or hardware path as passing when only the SQLite/Jest suites were
+run.

@@ -120,7 +120,6 @@ class TestConfidenceScore:
 # ── Schema validation tests (no DB needed) ───────────────────────────
 
 
-
 class TestSchemaValidation:
     def test_rejects_overall_score_too_high(self):
         with pytest.raises(ValidationError, match="overall_score"):
@@ -237,7 +236,7 @@ pytestmark_integration = pytest.mark.integration
 
 
 @pytest.mark.integration
-def test_evaluation_full_flow(client: TestClient, db, admin_token, setup_test_data):
+def test_evaluation_full_flow(client: TestClient, db, tenant_admin_token, setup_test_data):
     """Test the complete QR → session → evaluation flow."""
     zone = setup_test_data["zone"]
 
@@ -245,7 +244,7 @@ def test_evaluation_full_flow(client: TestClient, db, admin_token, setup_test_da
     res = client.post(
         "/api/v1/plants",
         json={"name": "Eval Test Plant", "zone_id": str(zone.id)},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers={"Authorization": f"Bearer {tenant_admin_token}"},
     )
     assert res.status_code == 201
     plant_id = res.json()["id"]
@@ -253,7 +252,7 @@ def test_evaluation_full_flow(client: TestClient, db, admin_token, setup_test_da
     # 2. Generate observation access
     res = client.post(
         f"/api/v1/plants/{plant_id}/observation-access",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers={"Authorization": f"Bearer {tenant_admin_token}"},
     )
     assert res.status_code == 200
     public_id = res.json()["public_id"]
@@ -294,20 +293,20 @@ def test_evaluation_full_flow(client: TestClient, db, admin_token, setup_test_da
 
 
 @pytest.mark.integration
-def test_evaluation_with_bad_scores(client: TestClient, db, admin_token, setup_test_data):
+def test_evaluation_with_bad_scores(client: TestClient, db, tenant_admin_token, setup_test_data):
     """Test evaluation with poor plant health."""
     zone = setup_test_data["zone"]
 
     res = client.post(
         "/api/v1/plants",
         json={"name": "Sick Plant", "zone_id": str(zone.id)},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers={"Authorization": f"Bearer {tenant_admin_token}"},
     )
     plant_id = res.json()["id"]
 
     res = client.post(
         f"/api/v1/plants/{plant_id}/observation-access",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers={"Authorization": f"Bearer {tenant_admin_token}"},
     )
     public_id = res.json()["public_id"]
 

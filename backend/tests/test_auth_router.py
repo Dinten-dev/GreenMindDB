@@ -4,18 +4,20 @@ Covers successful flows and error cases to improve coverage on
 app/routers/auth.py (from 53% → target 80%+).
 """
 
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.auth import get_password_hash
-from app.models.user import Organization, Role, User
+from app.auth import get_password_hash, pwd_context
+from app.models.user import EmailVerification, Organization, Role, User
 
 
 class TestSignup:
     """POST /api/v1/auth/signup – account creation."""
 
     def test_signup_success(self, client: TestClient, db: Session, mocker):
-        """Happy path: new user gets created and receives a cookie."""
+        """Happy path: new user is created but receives no session before verification."""
         mocker.patch("app.routers.auth.EmailService.send_verification_email")
 
         response = client.post(
@@ -30,7 +32,8 @@ class TestSignup:
         data = response.json()
         assert data["user"]["email"] == "new@example.com"
         assert data["user"]["name"] == "New User"
-        assert "access_token" in response.cookies
+        assert data["detail"] == "Account created. Verify your email before signing in."
+        assert "access_token" not in response.cookies
 
     def test_signup_duplicate_email(self, client: TestClient, db: Session, mocker):
         """Boundary: email already exists → 400."""
@@ -53,6 +56,28 @@ class TestSignup:
         )
         assert response.status_code == 400
         assert "Could not create account" in response.json()["detail"]
+
+    def test_signup_stores_only_token_digest_and_raw_token_still_verifies(
+        self, client: TestClient, db: Session, mocker
+    ):
+        send = mocker.patch("app.routers.auth.EmailService.send_verification_email")
+        response = client.post(
+            "/api/v1/auth/signup",
+            json={"email": "token-digest@example.com", "password": "ValidPass1"},
+        )
+        assert response.status_code == 201
+        raw_token = send.call_args.kwargs["token"]
+        verification = db.query(EmailVerification).one()
+        assert verification.token != raw_token
+        assert len(verification.token) == 64
+
+        verified = client.post(
+            "/api/v1/auth/verify-email",
+            json={"token": raw_token},
+        )
+        assert verified.status_code == 200
+        user = db.query(User).filter_by(email="token-digest@example.com").one()
+        assert user.is_verified is True
 
     def test_signup_weak_password(self, client: TestClient):
         """Boundary: password too short (< 8 chars) → 422 validation error."""
@@ -98,6 +123,26 @@ class TestLogin:
         assert response.status_code == 200
         assert response.json()["user"]["email"] == "login@example.com"
         assert "access_token" in response.cookies
+
+    def test_login_migrates_legacy_bcrypt_hash(self, client: TestClient, db: Session):
+        user = User(
+            email="legacy-login@example.com",
+            password_hash=pwd_context.handler("bcrypt").hash("LegacyPass1"),
+            role=Role.MEMBER,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": user.email, "password": "LegacyPass1"},
+        )
+
+        assert response.status_code == 200
+        db.refresh(user)
+        assert user.password_hash.startswith("$bcrypt-sha256$")
 
     def test_login_wrong_password(self, client: TestClient, db: Session):
         """Boundary: correct email, wrong password → 401."""
@@ -163,6 +208,47 @@ class TestLogin:
         )
         assert response.status_code == 403
         assert "Email not verified" in response.json()["detail"]
+
+
+class TestResendVerification:
+    """POST /api/v1/auth/resend-verification – generic recovery flow."""
+
+    def test_resend_rotates_token_without_enumerating_users(
+        self, client: TestClient, db: Session, mocker
+    ):
+        user = User(
+            email="resend@example.com",
+            password_hash=get_password_hash("ValidPass1"),
+            role=Role.MEMBER,
+            is_active=True,
+            is_verified=False,
+        )
+        db.add(user)
+        db.flush()
+        existing = EmailVerification(
+            user_id=user.id,
+            token="a" * 32,
+            expires_at=datetime.now(UTC),
+        )
+        db.add(existing)
+        db.commit()
+        send = mocker.patch("app.routers.auth.EmailService.send_verification_email")
+
+        known = client.post(
+            "/api/v1/auth/resend-verification",
+            json={"email": user.email},
+        )
+        unknown = client.post(
+            "/api/v1/auth/resend-verification",
+            json={"email": "missing@example.com"},
+        )
+
+        assert known.status_code == unknown.status_code == 200
+        assert known.json() == unknown.json()
+        db.refresh(existing)
+        assert existing.used_at is not None
+        assert db.query(EmailVerification).filter_by(user_id=user.id).count() == 2
+        send.assert_called_once()
 
 
 class TestLogout:

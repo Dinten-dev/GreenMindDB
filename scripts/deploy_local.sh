@@ -1,42 +1,34 @@
-#!/bin/bash
-set -eo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# 1. Load Environment Variables (if .env exists)
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly repository_dir="$(cd -- "${script_dir}/.." && pwd)"
+cd -- "${repository_dir}"
+
+# Docker Compose loads .env itself. Do not source it as shell code. For local
+# storage, accept only the literal value of LOCAL_DATA_ROOT or use a safe default.
+if [[ -z "${LOCAL_DATA_ROOT:-}" && -f .env ]]; then
+    LOCAL_DATA_ROOT="$(sed -n 's/^LOCAL_DATA_ROOT=//p' .env | tail -n 1)"
 fi
+export LOCAL_DATA_ROOT="${LOCAL_DATA_ROOT:-${HOME}/LocalData/greenmind}"
+source "${script_dir}/ensure_local_storage.sh"
 
-# 2. Ensure Local Storage
-# We get the path from the script output or define it manually if needed.
-# For now, let's hardcode the expectation or capture it.
-# Actually, ensure_local_storage.sh exports LOCAL_DATA_ROOT if sourced.
-source ./scripts/ensure_local_storage.sh
-
-# 3. Source Docker Environment (UID/GID)
-if [ -f ./dev-tools/docker-env.sh ]; then
-    source ./dev-tools/docker-env.sh
-else
-    export CURRENT_UID=$(id -u)
-    export CURRENT_GID=$(id -g)
-fi
+export CURRENT_UID="$(id -u)"
+export CURRENT_GID="$(id -g)"
 
 echo "=== deploying locally ==="
-echo "User: $CURRENT_UID:$CURRENT_GID"
+echo "Frontend bind-mount user: $CURRENT_UID:$CURRENT_GID"
 echo "Volumes: $LOCAL_DATA_ROOT"
 
 # Ensure clean export
 export PGDATA_DIR="$LOCAL_DATA_ROOT/postgres"
 export MINIO_DATA_DIR="$LOCAL_DATA_ROOT/minio"
-export PG_PORT=5432
+export POSTGRES_PORT=5432
 export MINIO_PORT=9000
 export MINIO_CONSOLE_PORT=9001
 
-# 4. Start Docker Compose
-# We pass the env vars explicitly to be sure
-# Note: Variables are already exported above.
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --remove-orphans
 
-# 5. Check Status
 echo "Waiting for services..."
 sleep 5
 docker compose ps

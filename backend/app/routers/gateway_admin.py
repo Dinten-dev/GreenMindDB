@@ -1,9 +1,11 @@
 """Admin endpoints for gateway remote management.
 
-All endpoints require JWT authentication and ADMIN or OWNER role.
+All endpoints require JWT authentication and the platform ADMIN role.
 """
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth import require_role
@@ -47,7 +49,7 @@ from app.services.gateway_remote_service import (
 
 router = APIRouter(prefix="/admin", tags=["gateway-admin"])
 
-_admin = require_role([Role.ADMIN, Role.OWNER])
+_admin = require_role([Role.ADMIN])
 
 
 # ── Fleet Overview ───────────────────────────────────────────────────
@@ -55,19 +57,16 @@ _admin = require_role([Role.ADMIN, Role.OWNER])
 
 @router.get("/gateway-fleet", response_model=GatewayFleetResponse)
 async def handle_fleet_overview(
-    zone_id: str | None = None,
-    status: str | None = None,
-    offset: int = 0,
-    limit: int = 50,
+    zone_id: uuid.UUID | None = None,
+    status: str | None = Query(None, pattern=r"^(?:online|offline)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """List all gateways with their current state, versions, and health."""
-    import uuid as _uuid
-
-    z_id = _uuid.UUID(zone_id) if zone_id else None
     items, total = get_fleet_overview(
-        db, zone_id=z_id, status_filter=status, offset=offset, limit=limit
+        db, zone_id=zone_id, status_filter=status, offset=offset, limit=limit
     )
     return GatewayFleetResponse(items=items, total=total)
 
@@ -106,10 +105,10 @@ async def handle_upload_app_release(
 
 @router.get("/gateway-app-releases", response_model=AppReleaseListResponse)
 async def handle_list_app_releases(
-    channel: str | None = None,
+    channel: str | None = Query(None, pattern=r"^(?:stable|beta|development)$"),
     is_active: bool | None = None,
-    offset: int = 0,
-    limit: int = 50,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
@@ -125,38 +124,32 @@ async def handle_list_app_releases(
 
 @router.patch("/gateway-app-releases/{release_id}/status", response_model=AppReleaseResponse)
 async def handle_toggle_app_release(
-    release_id: str,
+    release_id: uuid.UUID,
+    request: Request,
     is_active: bool = True,
-    request: Request = None,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """Activate or deactivate a release."""
-    import uuid as _uuid
-
     release = toggle_app_release(
         db,
         user,
-        _uuid.UUID(release_id),
+        release_id,
         is_active,
-        ip=request.client.host if request and request.client else None,
+        ip=request.client.host if request.client else None,
     )
     return AppReleaseResponse.model_validate(release)
 
 
 @router.delete("/gateway-app-releases/{release_id}", status_code=204)
 async def handle_delete_app_release(
-    release_id: str,
+    release_id: uuid.UUID,
     request: Request,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """Delete a gateway app release and its artifact."""
-    import uuid as _uuid
-
-    delete_app_release(
-        db, user, _uuid.UUID(release_id), ip=request.client.host if request.client else None
-    )
+    delete_app_release(db, user, release_id, ip=request.client.host if request.client else None)
 
 
 # ── Config Releases ──────────────────────────────────────────────────
@@ -186,8 +179,8 @@ async def handle_upload_config_release(
 @router.get("/gateway-config-releases", response_model=ConfigReleaseListResponse)
 async def handle_list_config_releases(
     is_active: bool | None = None,
-    offset: int = 0,
-    limit: int = 50,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
@@ -200,20 +193,18 @@ async def handle_list_config_releases(
 
 @router.patch("/gateway-config-releases/{release_id}/status", response_model=ConfigReleaseResponse)
 async def handle_toggle_config_release(
-    release_id: str,
+    release_id: uuid.UUID,
+    request: Request,
     is_active: bool = True,
-    request: Request = None,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
-    import uuid as _uuid
-
     config = toggle_config_release(
         db,
         user,
-        _uuid.UUID(release_id),
+        release_id,
         is_active,
-        ip=request.client.host if request and request.client else None,
+        ip=request.client.host if request.client else None,
     )
     return ConfigReleaseResponse.model_validate(config)
 
@@ -223,19 +214,17 @@ async def handle_toggle_config_release(
 
 @router.put("/gateway/{gateway_id}/desired-state")
 async def handle_set_desired_state(
-    gateway_id: str,
+    gateway_id: uuid.UUID,
     data: DesiredStateUpdate,
     request: Request,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """Set or update the desired state for a specific gateway."""
-    import uuid as _uuid
-
     ds = set_desired_state(
         db,
         user,
-        _uuid.UUID(gateway_id),
+        gateway_id,
         data.model_dump(exclude_none=True),
         ip=request.client.host if request.client else None,
     )
@@ -247,19 +236,17 @@ async def handle_set_desired_state(
 
 @router.post("/gateway/{gateway_id}/command", response_model=CommandResponse, status_code=201)
 async def handle_issue_command(
-    gateway_id: str,
+    gateway_id: uuid.UUID,
     data: CommandCreate,
     request: Request,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """Issue a remote command to a gateway (allowlist enforced)."""
-    import uuid as _uuid
-
     cmd = issue_command(
         db,
         user,
-        _uuid.UUID(gateway_id),
+        gateway_id,
         data.command_type,
         data.payload,
         ip=request.client.host if request.client else None,
@@ -269,17 +256,18 @@ async def handle_issue_command(
 
 @router.get("/gateway/{gateway_id}/commands", response_model=CommandListResponse)
 async def handle_list_commands(
-    gateway_id: str,
-    status: str | None = None,
-    offset: int = 0,
-    limit: int = 50,
+    gateway_id: uuid.UUID,
+    status: str | None = Query(
+        None,
+        pattern=r"^(?:pending|delivered|executed|failed|rejected|expired)$",
+    ),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """List commands for a gateway."""
-    import uuid as _uuid
-
-    q = db.query(GatewayCommand).filter(GatewayCommand.gateway_id == _uuid.UUID(gateway_id))
+    q = db.query(GatewayCommand).filter(GatewayCommand.gateway_id == gateway_id)
     if status:
         q = q.filter(GatewayCommand.status == status)
     total = q.count()
@@ -319,19 +307,17 @@ async def handle_start_rollout(
 
 @router.post("/gateway/{gateway_id}/rollback", status_code=200)
 async def handle_rollback(
-    gateway_id: str,
+    gateway_id: uuid.UUID,
     data: RollbackRequest,
     request: Request,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
     """Initiate a rollback for a specific gateway."""
-    import uuid as _uuid
-
     ds = initiate_rollback(
         db,
         user,
-        _uuid.UUID(gateway_id),
+        gateway_id,
         target_version=data.target_version,
         ip=request.client.host if request.client else None,
     )
@@ -343,9 +329,9 @@ async def handle_rollback(
 
 @router.put("/gateway/{gateway_id}/maintenance", status_code=200)
 async def handle_toggle_maintenance(
-    gateway_id: str,
+    gateway_id: uuid.UUID,
+    request: Request,
     enabled: bool = True,
-    request: Request = None,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
@@ -353,18 +339,18 @@ async def handle_toggle_maintenance(
     set_desired_state(
         db,
         user,
-        __import__("uuid").UUID(gateway_id),
+        gateway_id,
         {"maintenance_mode": enabled},
-        ip=request.client.host if request and request.client else None,
+        ip=request.client.host if request.client else None,
     )
     return {"status": "ok", "maintenance_mode": enabled}
 
 
 @router.put("/gateway/{gateway_id}/block", status_code=200)
 async def handle_toggle_block(
-    gateway_id: str,
+    gateway_id: uuid.UUID,
+    request: Request,
     blocked: bool = True,
-    request: Request = None,
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
@@ -372,9 +358,9 @@ async def handle_toggle_block(
     set_desired_state(
         db,
         user,
-        __import__("uuid").UUID(gateway_id),
+        gateway_id,
         {"blocked": blocked},
-        ip=request.client.host if request and request.client else None,
+        ip=request.client.host if request.client else None,
     )
     return {"status": "ok", "blocked": blocked}
 
@@ -384,18 +370,15 @@ async def handle_toggle_block(
 
 @router.get("/gateway-update-logs", response_model=UpdateLogListResponse)
 async def handle_list_update_logs(
-    gateway_id: str | None = None,
-    update_type: str | None = None,
-    offset: int = 0,
-    limit: int = 50,
+    gateway_id: uuid.UUID | None = None,
+    update_type: str | None = Query(None, max_length=50, pattern=r"^[A-Za-z0-9_.:-]+$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):
-    import uuid as _uuid
-
-    gw_id = _uuid.UUID(gateway_id) if gateway_id else None
     items, total = list_update_logs(
-        db, gateway_id=gw_id, update_type=update_type, offset=offset, limit=limit
+        db, gateway_id=gateway_id, update_type=update_type, offset=offset, limit=limit
     )
     return UpdateLogListResponse(
         items=[UpdateLogResponse(**i) for i in items],
@@ -408,9 +391,9 @@ async def handle_list_update_logs(
 
 @router.get("/gateway-audit-logs")
 async def handle_gateway_audit_logs(
-    action: str | None = None,
-    offset: int = 0,
-    limit: int = 50,
+    action: str | None = Query(None, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(_admin),
     db: Session = Depends(get_db),
 ):

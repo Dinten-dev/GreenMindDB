@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.image_security import validate_observation_image
 from app.rate_limit import limiter
 from app.schemas.observation import (
     ObservationSessionCreate,
@@ -69,26 +70,22 @@ def handle_upload_photo(
     file: UploadFile,
     db: Session = Depends(get_db),
 ):
-    if not file.content_type:
-        raise HTTPException(status_code=400, detail="Missing content type")
-
-    allowed_types = ["image/jpeg", "image/png", "image/webp"]
-    if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="File must be a JPEG, PNG, or WebP image")
-
-    file_size = 0
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
 
-    if file_size > 10 * 1024 * 1024:  # 10 MB limit
-        raise HTTPException(status_code=400, detail="File too large")
+    if file_size == 0 or file_size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image file size is outside the allowed limit")
+    try:
+        mime_type = validate_observation_image(file.file)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return upload_observation_photo(
         db,
         session_token,
         observation_id,
         file.file,
-        file.content_type,
+        mime_type,
         file_size,
     )

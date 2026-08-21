@@ -3,15 +3,31 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.validation import normalize_mac_address
 
 # ── Base & Create ────────────────────────────────────────────────────
 
 
 class FirmwareReleaseBase(BaseModel):
-    version: str = Field(..., description="Semantic version string, e.g., 1.0.0")
-    board_type: str = Field(..., description="ESP32 variant, e.g., ESP32_WROOM")
-    hardware_revision: str = Field(..., description="e.g., v1")
+    version: str = Field(
+        min_length=1,
+        max_length=50,
+        description="Semantic version string, e.g., 1.0.0",
+    )
+    board_type: str = Field(
+        min_length=1,
+        max_length=50,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="ESP32 variant, e.g., ESP32_WROOM",
+    )
+    hardware_revision: str = Field(
+        min_length=1,
+        max_length=50,
+        pattern=r"^[A-Za-z0-9._-]+$",
+        description="e.g., v1",
+    )
     mandatory: bool = False
     min_version: str | None = None
     changelog: str | None = None
@@ -66,10 +82,24 @@ class FirmwareReleaseListResponse(BaseModel):
 
 
 class FirmwareReportRequest(BaseModel):
-    sensor_mac: str | None = Field(None, description="MAC of sensor updating")
+    sensor_mac: str | None = Field(
+        None,
+        min_length=12,
+        max_length=17,
+        description="MAC of sensor updating",
+    )
     release_id: uuid.UUID
-    status: str = Field(..., description="success, failed, hash_mismatch, rollback, incompatible")
-    error_message: str | None = None
+    status: str = Field(
+        ...,
+        pattern=r"^(success|failed|hash_mismatch|rollback|incompatible)$",
+        description="Firmware update result",
+    )
+    error_message: str | None = Field(None, max_length=1_000)
+
+    @field_validator("sensor_mac")
+    @classmethod
+    def validate_sensor_mac(cls, value: str | None) -> str | None:
+        return normalize_mac_address(value) if value is not None else None
 
 
 class FirmwareReportResponse(BaseModel):
@@ -97,7 +127,7 @@ class FirmwareReportListResponse(BaseModel):
 class RolloutPolicyCreate(BaseModel):
     release_id: uuid.UUID
     zone_id: uuid.UUID | None = None
-    canary_percentage: str = "100"
+    canary_percentage: str = Field("100", pattern=r"^(?:100|[1-9]?\d)$")
 
 
 class RolloutPolicyResponse(RolloutPolicyCreate):

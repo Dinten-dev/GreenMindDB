@@ -61,7 +61,8 @@ make dev          # Docker Stack starten
 make test         # Backend-Tests ausführen
 make test-cov     # Tests mit Coverage-Report
 make lint         # Backend (ruff) + Frontend (eslint) linten
-make format       # Code formatieren (black)
+make format       # Code formatieren (Ruff + Prettier)
+make format-check # Formatierung ohne Änderungen prüfen
 make health       # Service-Health prüfen
 make setup        # Projekt initial einrichten
 make install-hooks # Pre-commit Hooks installieren
@@ -94,7 +95,7 @@ Automatische Qualitätskontrollen vor jedem Commit:
 | `check-merge-conflict` | Erkennt unaufgelöste Merge-Konflikte |
 | `detect-private-key`  | Verhindert versehentliches Committen von Schlüsseln |
 | `ruff`               | Python Linting mit Auto-Fix           |
-| `black`              | Python Code-Formatierung              |
+| `ruff-format`        | Python Code-Formatierung              |
 
 **Begründung**: Pre-commit Hooks implementieren das "Shift-Left"-Prinzip – Fehler werden bereits lokal erkannt, bevor sie in die CI-Pipeline gelangen. Das spart CI-Laufzeit und gibt dem Entwickler sofortiges Feedback.
 
@@ -113,10 +114,11 @@ Bei jedem Push auf `main`/`develop` und bei jedem Pull Request wird die CI-Pipel
 │              CI Pipeline                     │
 │                                              │
 │  Backend (Python)        Frontend (Next.js)  │
-│  ├── Setup Python 3.12   ├── Setup Node 20   │
+│  ├── Setup Python 3.12   ├── Setup Node 24   │
 │  ├── pip install         ├── npm ci          │
-│  ├── ruff lint           ├── eslint lint     │
-│  └── pytest + coverage   └── next build      │
+│  ├── ruff lint/format    ├── eslint/prettier │
+│  └── pytest + coverage   ├── typecheck/audit │
+│                          └── build + Jest     │
 │                                              │
 └─────────────────────────────────────────────┘
 ```
@@ -179,7 +181,7 @@ Die Software ist testbar durch:
 
 **Begründung**: Unit-Tests bilden die Basis der Testpyramide. Durch Marker können Integration-Tests lokal zugeschaltet, in der CI aber übersprungen werden. Die Kombination aus schnellen Unit-Tests (CI) und umfassenden Integration-Tests (lokal/staging) bietet einen guten Kompromiss zwischen Geschwindigkeit und Abdeckung.
 
-→ Dateien: `backend/tests/`, `backend/conftest.py`, `frontend/jest.config.js`, `frontend/jest.setup.ts`
+→ Dateien: `backend/tests/`, `backend/tests/conftest.py`, `frontend/jest.config.js`, `frontend/jest.setup.ts`
 
 ---
 
@@ -190,8 +192,8 @@ Die Software ist testbar durch:
 | Tool       | Sprache    | Konfiguration              | Zweck                    |
 |------------|------------|----------------------------|--------------------------|
 | **Ruff**   | Python     | `pyproject.toml`           | Linting (E, W, F, I, B, UP, S) |
-| **Black**  | Python     | `pyproject.toml`           | Code-Formatierung         |
-| **ESLint** | TypeScript | `.eslintrc.json`           | JavaScript/TypeScript Linting |
+| **Ruff format** | Python | `pyproject.toml`           | Code-Formatierung         |
+| **ESLint** | TypeScript | `eslint.config.mjs`         | JavaScript/TypeScript Linting |
 | **Prettier** | TypeScript | `.prettierrc`            | Code-Formatierung         |
 
 **Ruff Regel-Kategorien**:
@@ -213,14 +215,14 @@ Die Software ist testbar durch:
 
 ### Coding Guidelines
 
-- Python: Line length 100 (Black + Ruff)
+- Python: Line length 100 (Ruff Formatter + Ruff Linter)
 - TypeScript: Prettier-Konfiguration in `.prettierrc`
 - Imports: Automatisch sortiert durch `ruff` (isort-kompatibel)
 - Pre-commit Hooks erzwingen Einhaltung automatisch
 
-**Begründung**: Die Kombination aus Linter (Ruff) und Formatter (Black) eliminiert Style-Diskussionen im Code Review. Ruff wurde statt Flake8/pylint gewählt, weil es 10-100x schneller ist und die gleichen Regel-Sets unterstützt. Security-Regeln (Bandit/S) erkennen häufige Sicherheitsprobleme bereits zur Entwicklungszeit.
+**Begründung**: Ruff übernimmt Linting und Formatierung mit einer gemeinsamen Konfiguration und eliminiert dadurch widersprüchliche Formatter. Ruff ersetzt Flake8/pylint-Regelsätze mit deutlich kürzeren Laufzeiten. Security-Regeln (Bandit/S) erkennen häufige Sicherheitsprobleme bereits zur Entwicklungszeit.
 
-→ Dateien: `pyproject.toml`, `.pre-commit-config.yaml`, `.eslintrc.json`, `.prettierrc`
+→ Dateien: `backend/pyproject.toml`, `.pre-commit-config.yaml`, `frontend/eslint.config.mjs`, `frontend/.prettierrc`
 
 ---
 
@@ -239,8 +241,8 @@ pytest --cov=app --cov-report=term-missing --cov-report=xml
 ```
 
 Konfiguration in `pyproject.toml`:
-- Minimum Coverage: 40% (steigend)
-- Source: `app/` (ohne `seed/` und `__pycache__/`)
+- Minimum Coverage: 60%
+- Source: `app/` (generierte `__pycache__/`-Dateien ausgeschlossen)
 - Report zeigt fehlende Zeilen
 
 **Frontend** (Jest):
@@ -303,10 +305,12 @@ async def log_requests(request, call_next):
     # Überspringt Health-Checks um Log-Noise zu vermeiden
 ```
 
-**Audit Logging** (`app/audit.py`):
-- Persistentes Logging von Datenänderungen in der Datenbank
-- Speichert: Benutzer, Entity-Typ, Aktion, Vorher/Nachher-Diff
-- Ermöglicht Nachvollziehbarkeit von Änderungen (Compliance)
+**Audit Logging** (`app/models/audit_log.py`):
+
+- Firmware- und Gateway-Management-Services schreiben Audit-Einträge in derselben Transaktion
+  wie die auslösende Änderung
+- Gespeichert werden Benutzer, Aktion, Entity-Typ/-ID, Details, Quell-IP und Zeitstempel
+- Admin-Endpunkte stellen gefilterte Audit-Listen bereit
 
 **Konfigurierbarkeit**:
 - Log-Level über Environment-Variable `LOG_LEVEL` steuerbar
@@ -314,7 +318,10 @@ async def log_requests(request, call_next):
 
 **Begründung**: Strukturiertes Logging (statt unstrukturiertem Text) ermöglicht maschinelle Auswertung durch Log-Aggregatoren (ELK, Loki). Das key=value Format wurde über JSON gewählt, weil es menschenlesbar UND maschinell parsebar ist. Die Request-Logging-Middleware loggt jede Anfrage mit Dauer – so können langsame Requests identifiziert werden. Health-Checks werden bewusst ausgefiltert, um das Log-Volumen zu reduzieren.
 
-→ Dateien: `app/logging_config.py`, `app/main.py`, `app/audit.py`, `compose/prometheus.yml`, `pyproject.toml`
+→ Dateien: `backend/app/logging_config.py`, `backend/app/main.py`,
+`backend/app/models/audit_log.py`, `backend/app/services/firmware_service.py`,
+`backend/app/services/gateway_remote_service.py`, `compose/prometheus.yml`,
+`backend/pyproject.toml`
 
 ---
 
@@ -328,10 +335,10 @@ async def log_requests(request, call_next):
 | Testing (Backend)      | pytest, pytest-cov, pytest-mock         |
 | Testing (Frontend)     | Jest, React Testing Library             |
 | Linting (Python)       | Ruff                                    |
-| Formatting (Python)    | Black                                   |
+| Formatting (Python)    | Ruff Formatter                          |
 | Linting (TypeScript)   | ESLint                                  |
 | Formatting (TypeScript)| Prettier                                |
-| Pre-commit             | pre-commit (trailing-ws, ruff, black)   |
+| Pre-commit             | pre-commit (trailing-ws, Ruff lint/format) |
 | Metriken               | Prometheus, FastAPI Instrumentator      |
 | Logging                | Python logging, StructuredFormatter     |
 | Code Coverage          | pytest-cov, Jest --coverage             |

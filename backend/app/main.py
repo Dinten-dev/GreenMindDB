@@ -1,11 +1,10 @@
 """GreenMind API – FastAPI application."""
 
-import os
+import re
 import time
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -17,13 +16,35 @@ from app.logging_config import get_logger, setup_logging
 setup_logging(settings.log_level)
 logger = get_logger(__name__)
 
+_PUBLIC_SESSION_PATH = re.compile(r"(/api/v1/public/(?:observe|evaluate)/session/)[^/]+")
+
+
+def _redact_sensitive_path(path: str) -> str:
+    """Remove bearer-like public session tokens before request logging."""
+    return _PUBLIC_SESSION_PATH.sub(r"\1[REDACTED]", path)
+
+
+def _content_security_policy(*, production: bool) -> str:
+    """Return a strict API policy, retaining Swagger compatibility in development."""
+    script_sources = "'self'" if production else "'self' 'unsafe-inline' 'unsafe-eval'"
+    style_sources = "'self'" if production else "'self' 'unsafe-inline'"
+    return (
+        "default-src 'self'; "
+        f"script-src {script_sources}; "
+        f"style-src {style_sources}; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'"
+    )
+
+
 # ── Router imports ───────────────────────────────────────────────────
 
 
 from app.rate_limit import limiter  # noqa: E402
 from app.routers import (  # noqa: E402
     auth_router,
-    biosignal_router,
     contact_router,
     firmware_router,
     gateway_admin_router,
@@ -32,7 +53,6 @@ from app.routers import (  # noqa: E402
     ingest_router,
     organizations_router,
     plants_router,
-    provisioning_router,
     public_evaluate_router,
     public_observe_router,
     sensors_router,
@@ -79,14 +99,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "font-src 'self' data:; "
-        "connect-src 'self' ws: wss:; "
-        "frame-ancestors 'none'"
+    response.headers["Content-Security-Policy"] = _content_security_policy(
+        production=_is_production
     )
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     if _is_production:
@@ -105,7 +119,7 @@ async def log_requests(request: Request, call_next):
         logger.info(
             "%s %s → %s",
             request.method,
-            request.url.path,
+            _redact_sensitive_path(request.url.path),
             response.status_code,
             extra={"duration_ms": f"{duration_ms:.1f}"},
         )
@@ -128,29 +142,26 @@ api_v1_router.include_router(ingest_router)
 api_v1_router.include_router(contact_router)
 api_v1_router.include_router(wav_router)
 api_v1_router.include_router(ws_router)
-api_v1_router.include_router(biosignal_router)
 api_v1_router.include_router(firmware_router)
 api_v1_router.include_router(gateway_desired_state_router)
 api_v1_router.include_router(gateway_admin_router)
 api_v1_router.include_router(plants_router)
 api_v1_router.include_router(public_observe_router)
 api_v1_router.include_router(public_evaluate_router)
-api_v1_router.include_router(provisioning_router)
+
+if settings.enable_experimental_biosignal:
+    from app.routers.biosignal import router as biosignal_router
+
+    logger.warning("Experimental biosignal API is enabled")
+    api_v1_router.include_router(biosignal_router)
+
+if settings.enable_experimental_provisioning:
+    from app.routers.provisioning import router as provisioning_router
+
+    logger.warning("Experimental provisioning API is enabled")
+    api_v1_router.include_router(provisioning_router)
 
 app.include_router(api_v1_router)
-
-# ── Static firmware file serving (OTA binary downloads) ──────────────
-_firmware_dir = os.getenv("FIRMWARE_STORAGE_DIR", "/app/firmware_data")
-try:
-    os.makedirs(_firmware_dir, exist_ok=True)
-except (PermissionError, OSError):
-    import tempfile
-
-    _firmware_dir = os.path.join(tempfile.gettempdir(), "greenmind_firmware")
-    os.makedirs(_firmware_dir, exist_ok=True)
-    logger.warning("Cannot create %s, using fallback: %s", "/app/firmware_data", _firmware_dir)
-app.mount("/firmware", StaticFiles(directory=_firmware_dir), name="firmware")
-
 
 # ── Health & Root ────────────────────────────────────────────────────
 

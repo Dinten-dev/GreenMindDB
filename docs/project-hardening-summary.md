@@ -1,5 +1,9 @@
 # Project Hardening Summary
 
+> Historical snapshot: this report records an earlier hardening pass and contains pre-v3 names
+> and paths. It is retained for project history, not as an onboarding, architecture, deployment,
+> or command reference. Use the root `README.md` and `docs/testing.md` for the current system.
+
 > GreenMind repository hardening – completed 2026-03-21
 
 ---

@@ -3,12 +3,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models.user import Organization, User
+from app.models.user import Organization, Role, User
 from app.schemas.organization import OrgCreate, OrgResponse
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
+_tenant_manager = require_role([Role.OWNER, Role.ADMIN])
 
 
 @router.get("", response_model=OrgResponse | None)
@@ -28,7 +29,7 @@ async def get_organization(
 @router.post("", response_model=OrgResponse, status_code=201)
 async def create_organization(
     data: OrgCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Create a new organization and assign the current user as owner."""
