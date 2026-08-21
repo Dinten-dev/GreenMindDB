@@ -491,10 +491,13 @@ def test_pending_commands_delivered(db, gateway, admin_user):
     db.refresh(cmd)
     assert cmd.status == "delivered"
 
+
 def test_command_result_success(client: TestClient, db: Session, gateway: Gateway):
     import uuid
+
     cmd_id = uuid.uuid4()
-    from datetime import datetime, UTC, timedelta
+    from datetime import UTC, datetime, timedelta
+
     cmd = GatewayCommand(
         id=cmd_id,
         gateway_id=gateway.id,
@@ -516,13 +519,15 @@ def test_command_result_success(client: TestClient, db: Session, gateway: Gatewa
             "message": "Reboot initiated",
         },
     )
-    
+
     assert response.status_code == 200
     db.refresh(cmd)
     assert cmd.status == "success"
 
+
 def test_command_result_missing_auth(client: TestClient):
     import uuid
+
     response = client.post(
         "/api/v1/gateway/command-result",
         json={

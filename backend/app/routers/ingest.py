@@ -37,7 +37,7 @@ async def ingest_data(
                 notification_service.send_electrode_disconnect_alert,
                 phone_number=alert["phone_number"],
                 sensor_mac=alert["sensor_mac"],
-                zone_name=alert["zone_name"]
+                zone_name=alert["zone_name"],
             )
     except DuplicateIngestionError:
         return IngestResponse(

@@ -316,6 +316,7 @@ class TestIngestIdempotency:
         """Boundary: bio_signal value <= 10.0 mV triggers SMS alert."""
         # 1. Create a user in the same organization with a phone number
         from app.models.user import User
+
         org = setup_test_data["org"]
         user = User(
             email="test-alert-user@example.com",
@@ -328,7 +329,10 @@ class TestIngestIdempotency:
         db.commit()
 
         # Mock notification service
-        mock_send = mocker.patch("app.routers.ingest.notification_service.send_electrode_disconnect_alert", return_value=True)
+        mock_send = mocker.patch(
+            "app.routers.ingest.notification_service.send_electrode_disconnect_alert",
+            return_value=True,
+        )
 
         # 2. Ingest low value (flatline) for bio_signal
         sensor = setup_test_data["sensor"]
@@ -352,7 +356,7 @@ class TestIngestIdempotency:
             headers={"X-Api-Key": "ci-api-key"},
         )
         assert resp.status_code == 201
-        
+
         # Verify alert was sent
         mock_send.assert_called_once_with(
             phone_number="+41760000000",

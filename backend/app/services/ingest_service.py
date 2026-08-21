@@ -80,27 +80,39 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
         ingested_count += 1
 
         # Check for electrode alert condition
-        if reading.sensor_kind in ("bio_signal", "bioelectric") and getattr(sensor, "sms_alerts_enabled", True):
+        if reading.sensor_kind in ("bio_signal", "bioelectric") and getattr(
+            sensor, "sms_alerts_enabled", True
+        ):
             is_flatline = reading.value <= 10.0
             is_saturated = reading.value >= 3200.0
             if is_flatline or is_saturated:
                 last_alert = _last_alert_times.get(reading.sensor_mac)
-                if not last_alert or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60:
+                if (
+                    not last_alert
+                    or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60
+                ):
                     _last_alert_times[reading.sensor_mac] = now
                     from app.models.user import User
+
                     if sensor.gateway and sensor.gateway.zone:
                         zone = sensor.gateway.zone
-                        users = db.query(User).filter(
-                            User.organization_id == zone.organization_id,
-                            User.phone_number.isnot(None),
-                            User.phone_number != ""
-                        ).all()
+                        users = (
+                            db.query(User)
+                            .filter(
+                                User.organization_id == zone.organization_id,
+                                User.phone_number.isnot(None),
+                                User.phone_number != "",
+                            )
+                            .all()
+                        )
                         for u in users:
-                            alerts_to_trigger.append({
-                                "phone_number": u.phone_number,
-                                "sensor_mac": reading.sensor_mac,
-                                "zone_name": zone.name
-                            })
+                            alerts_to_trigger.append(
+                                {
+                                    "phone_number": u.phone_number,
+                                    "sensor_mac": reading.sensor_mac,
+                                    "zone_name": zone.name,
+                                }
+                            )
 
         # Update sensor last_seen
         sensor.last_seen = now
