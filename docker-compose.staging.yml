@@ -97,7 +97,7 @@ services:
       - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
     volumes:
       - staging_firmware_data:/app/firmware_data
-      - ${GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_FILE:?Set GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_FILE}:/run/greenmind/gateway-release-signing-public.pem:ro
+      - ${GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_FILE:-./keys/gateway-release-signing-public.pem}:/run/greenmind/gateway-release-signing-public.pem:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -157,6 +157,14 @@ else
     exit 1
 fi
 
+# Ensure release signing public key exists
+ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "
+    mkdir -p ${REMOTE_DIR}/keys
+    if [ ! -f ${REMOTE_DIR}/keys/gateway-release-signing-public.pem ]; then
+        touch ${REMOTE_DIR}/keys/gateway-release-signing-public.pem
+    fi
+"
+
 # ── 5. Build & Deploy ────────────────────────────────────
 echo "🐳 Building and starting containers..."
 if [[ "$SKIP_BUILD" == "true" ]]; then
