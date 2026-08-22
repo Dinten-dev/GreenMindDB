@@ -32,19 +32,21 @@ jobs:
         env:
           DEPLOY_SSH_KEY_CONTENT: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS_CONTENT: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           if [ -z "$DEPLOY_SSH_KEY_CONTENT" ]; then
             echo "::error::DEPLOY_SSH_KEY secret is missing or empty in GitHub Secrets."
             exit 1
           fi
-          if [ -z "$DEPLOY_KNOWN_HOSTS_CONTENT" ]; then
-            echo "::error::DEPLOY_KNOWN_HOSTS secret is missing or empty in GitHub Secrets."
-            exit 1
-          fi
           install -m 600 /dev/null /tmp/greenmind_deploy_key
           printf '%s\n' "$DEPLOY_SSH_KEY_CONTENT" > /tmp/greenmind_deploy_key
           install -m 600 /dev/null /tmp/greenmind_known_hosts
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS_CONTENT" > /tmp/greenmind_known_hosts
+          if [ -n "$DEPLOY_KNOWN_HOSTS_CONTENT" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS_CONTENT" > /tmp/greenmind_known_hosts
+          else
+            echo "Fetching host keys for ${DEPLOY_HOST}..."
+            ssh-keyscan -H "${DEPLOY_HOST}" > /tmp/greenmind_known_hosts 2>/dev/null || true
+          fi
           
       - name: Deploy to Staging
         run: ./scripts/deploy.sh --env staging
