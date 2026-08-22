@@ -55,7 +55,6 @@ services:
     restart: always
     environment:
       ENVIRONMENT: production
-      GUNICORN_WORKERS: 1
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CORS_ORIGINS: ${CORS_ORIGINS}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
