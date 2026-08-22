@@ -62,8 +62,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set a bucket-scoped S3 access key}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set a bucket-scoped S3 secret key}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-${MINIO_ROOT_USER:-staging-storage-user}}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-${MINIO_ROOT_PASSWORD:-staging-storage-secret}}
       FIRMWARE_STORAGE_DIR: /app/firmware_data
       GATEWAY_RELEASE_DIR: /app/firmware_data/gateway_releases
       GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_PATH: /run/greenmind/gateway-release-signing-public.pem
