@@ -159,9 +159,9 @@ fi
 
 # Ensure release signing public key exists
 ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "
-    mkdir -p ${REMOTE_DIR}/keys
+    mkdir -p ${REMOTE_DIR}/keys 2>/dev/null || true
     if [ ! -f ${REMOTE_DIR}/keys/gateway-release-signing-public.pem ]; then
-        touch ${REMOTE_DIR}/keys/gateway-release-signing-public.pem
+        touch ${REMOTE_DIR}/keys/gateway-release-signing-public.pem 2>/dev/null || true
     fi
 "
 
