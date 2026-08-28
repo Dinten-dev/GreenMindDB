@@ -81,7 +81,7 @@ services:
       WEBSOCKET_IDLE_TIMEOUT_SECONDS: ${WEBSOCKET_IDLE_TIMEOUT_SECONDS:-300}
       WEBSOCKET_SEND_TIMEOUT_SECONDS: ${WEBSOCKET_SEND_TIMEOUT_SECONDS:-2}
       # Resend / Email
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_staging_placeholder_key_for_testing}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@green-mind.ch}
       FRONTEND_URL: ${FRONTEND_URL:-https://test.green-mind.ch}
       CONTACT_FORM_TO: ${CONTACT_FORM_TO:-}
