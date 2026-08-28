@@ -144,6 +144,7 @@ rsync -az --delete \
     --exclude '.ruff_cache' \
     --exclude 'data' \
     --exclude '.next' \
+    --exclude 'keys' \
     "${LOCAL_DIR}/" \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 echo "✅ Code synced"
