@@ -6,6 +6,7 @@ import {
   apiListZones,
   apiGeneratePairingCode,
   apiDeleteGateway,
+  gatewayHasWavIssue,
   GatewayInfo,
   Zone,
   PairingCode,
@@ -186,13 +187,15 @@ export default function GatewaysPage() {
                 </div>
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                    gw.status === 'online'
+                    gw.status === 'online' && !gatewayHasWavIssue(gw)
                       ? 'bg-emerald-50 text-emerald-600'
-                      : 'bg-gray-100 text-gray-400'
+                      : gw.status === 'online'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-gray-100 text-gray-400'
                   }`}
                 >
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${gw.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}
+                    className={`w-1.5 h-1.5 rounded-full ${gw.status !== 'online' ? 'bg-gray-300' : gatewayHasWavIssue(gw) ? 'bg-amber-500' : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'}`}
                   />
                   {gw.status}
                 </span>
@@ -214,6 +217,13 @@ export default function GatewaysPage() {
                   </svg>
                 </button>
               </div>
+
+              {gatewayHasWavIssue(gw) && (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  WAV-Rückstau: {gw.wav_pending_files ?? 0} Dateien
+                  {gw.wav_last_error_code ? ` · ${gw.wav_last_error_code}` : ''}
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div className="bg-white/40 rounded-xl px-2.5 py-1.5 border border-black/[0.03]">

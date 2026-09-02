@@ -1,16 +1,20 @@
 """GreenMind API – FastAPI application."""
 
+import asyncio
 import re
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import REGISTRY
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.logging_config import get_logger, setup_logging
+from app.operational_metrics import OperationalCollector
 
 # ── Initialize structured logging ────────────────────────────────────
 setup_logging(settings.log_level)
@@ -37,6 +41,31 @@ def _content_security_policy(*, production: bool) -> str:
         "connect-src 'self' ws: wss:; "
         "frame-ancestors 'none'"
     )
+
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    tasks = []
+    if settings.embedded_background_workers_enabled and settings.wav_feature_extraction_enabled:
+        feature_task = asyncio.create_task(_wav_feature_loop())
+        application.state.wav_feature_task = feature_task
+        tasks.append(feature_task)
+        logger.info("Scheduled WAV feature extraction enabled")
+    if settings.embedded_background_workers_enabled and settings.retention_enabled:
+        retention_task = asyncio.create_task(_retention_loop())
+        application.state.retention_task = retention_task
+        tasks.append(retention_task)
+        logger.info("Scheduled retention enabled; dry_run=%s", settings.retention_dry_run)
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 # ── Router imports ───────────────────────────────────────────────────
@@ -72,6 +101,7 @@ app = FastAPI(
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",
     openapi_url=None if _is_production else "/openapi.json",
+    lifespan=_lifespan,
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────
@@ -88,6 +118,7 @@ app.add_middleware(
 # /metrics is safe: backend port is bound to 127.0.0.1 in production,
 # only reachable from the Docker network (Prometheus) and localhost.
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+REGISTRY.register(OperationalCollector())
 
 # ── Middleware ───────────────────────────────────────────────────────
 
@@ -162,6 +193,46 @@ if settings.enable_experimental_provisioning:
     api_v1_router.include_router(provisioning_router)
 
 app.include_router(api_v1_router)
+
+
+async def _wav_feature_loop() -> None:
+    """Extract verified features independently from destructive retention."""
+    from app.database import SessionLocal
+    from app.services.wav_feature_service import process_pending_wav_features
+
+    while True:
+        db = SessionLocal()
+        try:
+            result = await asyncio.to_thread(process_pending_wav_features, db)
+            if result["verified"] or result["failed"]:
+                logger.info("Scheduled WAV feature extraction completed", extra=result)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Scheduled WAV feature extraction failed")
+        finally:
+            db.close()
+        await asyncio.sleep(settings.wav_feature_interval_minutes * 60)
+
+
+async def _retention_loop() -> None:
+    """Run retention periodically without blocking API request handling."""
+    from app.database import SessionLocal
+    from app.services.retention_service import run_retention
+
+    while True:
+        db = SessionLocal()
+        try:
+            result = await asyncio.to_thread(run_retention, db)
+            logger.info("Scheduled retention completed", extra=result)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Scheduled retention failed")
+        finally:
+            db.close()
+        await asyncio.sleep(settings.retention_interval_hours * 3600)
+
 
 # ── Health & Root ────────────────────────────────────────────────────
 

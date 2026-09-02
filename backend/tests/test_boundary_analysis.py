@@ -310,6 +310,44 @@ class TestIngestIdempotency:
         assert resp2.json()["status"] == "duplicate"
         assert resp2.json()["ingested"] == 0  # Grenzwert: keine Daten doppelt gespeichert
 
+    def test_ingest_retry_with_new_measurement_id_skips_existing_reading(
+        self, client: TestClient, db: Session, setup_test_data: dict
+    ):
+        """Legacy retries can change IDs while retaining reading identities."""
+        reading = {
+            "sensor_mac": "AA:BB:CC:DD:EE:FF",
+            "sensor_kind": "bio_signal",
+            "value": 42.0,
+            "unit": "mV",
+            "timestamp": "2026-09-01T12:00:00Z",
+        }
+        first = client.post(
+            "/api/v1/ingest",
+            json={
+                "measurement_id": "00000000-0000-0000-0000-000000000101",
+                "gateway_serial": "test-gw-ci",
+                "readings": [reading],
+            },
+            headers={"X-Api-Key": "ci-api-key"},
+        )
+        second = client.post(
+            "/api/v1/ingest",
+            json={
+                "measurement_id": "00000000-0000-0000-0000-000000000102",
+                "gateway_serial": "test-gw-ci",
+                "readings": [reading],
+            },
+            headers={"X-Api-Key": "ci-api-key"},
+        )
+
+        from app.models.timeseries import SensorReading
+
+        assert first.status_code == 201
+        assert first.json()["ingested"] == 1
+        assert second.status_code == 201
+        assert second.json()["ingested"] == 0
+        assert db.query(SensorReading).count() == 1
+
     def test_ingest_electrode_disconnect_triggers_sms(
         self, client: TestClient, db: Session, setup_test_data: dict, mocker
     ):

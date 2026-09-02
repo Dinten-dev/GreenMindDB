@@ -10,6 +10,7 @@ Provides two fixture scopes:
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -24,6 +25,7 @@ from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth import create_access_token, get_password_hash
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models.master import Gateway, Sensor, Zone
@@ -92,11 +94,12 @@ _TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=_sqlite_e
 
 
 @pytest.fixture(autouse=True)
-def _reset_tables():
+def _reset_tables(monkeypatch):
     """Create all tables before each test, drop after.  Also reset rate limiter."""
     from app.rate_limit import limiter
 
     limiter.reset()
+    monkeypatch.setattr(settings, "wav_feature_extraction_enabled", False)
     Base.metadata.create_all(bind=_sqlite_engine)
     yield
     Base.metadata.drop_all(bind=_sqlite_engine)
@@ -240,6 +243,15 @@ def _read_env_file(path: Path) -> dict[str, str]:
 
 
 def _compose_cmd(env_file: Path) -> list[str]:
+    standalone_compose = shutil.which("docker-compose")
+    if standalone_compose:
+        return [
+            standalone_compose,
+            "-f",
+            str(COMPOSE_FILE),
+            "--env-file",
+            str(env_file),
+        ]
     return [
         "docker",
         "compose",

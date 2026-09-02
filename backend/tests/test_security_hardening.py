@@ -769,6 +769,66 @@ def test_wav_upload_is_owned_validated_and_idempotent(
     assert record.gateway_id == setup_test_data["gateway"].id
 
 
+def test_wav_upload_accepts_sparse_legacy_window(
+    client: TestClient,
+    setup_test_data: dict,
+    mocker,
+):
+    start = datetime.now(UTC) - timedelta(minutes=20)
+    end = start + timedelta(minutes=10)
+    mocker.patch("app.routers.wav.wav_service.upload_wav")
+
+    response = client.post(
+        "/api/v1/wav/upload",
+        headers={"X-Api-Key": "ci-api-key"},
+        data={
+            "sensor_mac": setup_test_data["sensor"].mac_address,
+            "gateway_serial": setup_test_data["gateway"].hardware_id,
+            "sample_rate": "10",
+            "started_at": start.isoformat(),
+            "ended_at": end.isoformat(),
+            "timestamp_source": "filename",
+        },
+        files={"file": ("sparse.wav", _wav(), "audio/wav")},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["timing_status"] == "partial"
+    assert response.json()["coverage_ratio"] == pytest.approx(1 / 600)
+
+
+def test_ingest_persists_source_continuity_metadata(
+    client: TestClient,
+    db: Session,
+    setup_test_data: dict,
+):
+    response = client.post(
+        "/api/v1/ingest",
+        headers={"X-Api-Key": "ci-api-key"},
+        json={
+            "measurement_id": str(uuid.uuid4()),
+            "gateway_serial": setup_test_data["gateway"].hardware_id,
+            "readings": [
+                {
+                    "sensor_mac": setup_test_data["sensor"].mac_address,
+                    "sensor_kind": "bio_signal",
+                    "value": 123.0,
+                    "unit": "mV",
+                    "source_sequence": 42,
+                    "source_uptime_ms": 123456,
+                    "source_dropped_samples_total": 7,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    reading = db.query(SensorReading).one()
+    assert reading.source_sequence == 42
+    assert reading.source_uptime_ms == 123456
+    assert reading.source_dropped_samples_total == 7
+
+
 def test_websocket_rejects_wrong_origin_and_cross_tenant_zone(
     client: TestClient,
     db: Session,

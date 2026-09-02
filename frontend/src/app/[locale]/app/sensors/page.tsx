@@ -756,6 +756,9 @@ export default function SensorsPage() {
                     WAV-Dateien (380 Hz Rohdaten)
                   </span>
                 </div>
+                <p className="text-xs text-gray-400 mb-3">
+                  Rohdaten 90 Tage · verifizierte Merkmale mindestens zwei Jahre
+                </p>
 
                 {/* Date Range + Download */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">

@@ -2,6 +2,7 @@
 
 import ipaddress
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -21,6 +22,11 @@ class GatewayResponse(BaseModel):
     last_seen: str | None = None
     paired_at: str | None = None
     sensor_count: int = 0
+    wav_pending_files: int | None = None
+    wav_pending_bytes: int | None = None
+    wav_oldest_pending_age_hours: float | None = None
+    wav_last_upload_at: str | None = None
+    wav_last_error_code: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +74,16 @@ class HeartbeatRequest(BaseModel):
     ram_usage_pct: float | None = Field(None, ge=0, le=100, allow_inf_nan=False)
     wifi_rssi_dbm: int | None = Field(None, ge=-150, le=0)
     queue_depth: int | None = Field(None, ge=0, le=10_000_000)
+    wav_pending_files: int | None = Field(None, ge=0, le=10_000_000)
+    wav_pending_bytes: int | None = Field(None, ge=0, le=10_000_000_000_000)
+    wav_oldest_pending_age_hours: float | None = Field(
+        None,
+        ge=0,
+        le=876_000,
+        allow_inf_nan=False,
+    )
+    wav_last_upload_at: datetime | None = None
+    wav_last_error_code: str | None = Field(None, max_length=100)
 
     @field_validator("local_ip")
     @classmethod

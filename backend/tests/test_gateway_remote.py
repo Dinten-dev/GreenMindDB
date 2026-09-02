@@ -492,7 +492,7 @@ def test_pending_commands_delivered(db, gateway, admin_user):
     assert cmd.status == "delivered"
 
 
-def test_command_result_success(client: TestClient, db: Session, gateway: Gateway):
+def test_command_result_executed(client: TestClient, db: Session, gateway: Gateway):
     import uuid
 
     cmd_id = uuid.uuid4()
@@ -515,14 +515,14 @@ def test_command_result_success(client: TestClient, db: Session, gateway: Gatewa
         json={
             "gateway_id": str(gateway.id),
             "command_id": str(cmd_id),
-            "result": "success",
+            "result": "executed",
             "message": "Reboot initiated",
         },
     )
 
     assert response.status_code == 200
     db.refresh(cmd)
-    assert cmd.status == "success"
+    assert cmd.status == "executed"
 
 
 def test_command_result_missing_auth(client: TestClient):
@@ -533,7 +533,7 @@ def test_command_result_missing_auth(client: TestClient):
         json={
             "gateway_id": "test-gateway-id",
             "command_id": str(uuid.uuid4()),
-            "result": "success",
+            "result": "executed",
         },
     )
     assert response.status_code == 401

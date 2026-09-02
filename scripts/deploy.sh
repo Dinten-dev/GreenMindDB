@@ -108,8 +108,10 @@ SSH_OPTS=(
     -o StrictHostKeyChecking=yes
     -o ConnectTimeout=10
     -o BatchMode=yes
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=4
 )
-printf -v RSYNC_SSH 'ssh -i %q -o UserKnownHostsFile=%q -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o BatchMode=yes' \
+printf -v RSYNC_SSH 'ssh -i %q -o UserKnownHostsFile=%q -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4' \
     "$SSH_KEY" "$KNOWN_HOSTS"
 
 echo "🚀 Deploying GreenMind → ${LABEL}"
@@ -142,6 +144,11 @@ rsync -az --delete \
     --exclude 'minio_data' \
     --exclude '.pytest_cache' \
     --exclude '.ruff_cache' \
+    --exclude '.coverage' \
+    --exclude 'coverage.xml' \
+    --exclude 'test*.db' \
+    --exclude 'next-env.d.ts' \
+    --exclude 'tsconfig.tsbuildinfo' \
     --exclude 'data' \
     --exclude '.next' \
     --exclude 'keys' \
@@ -185,7 +192,7 @@ ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "
 echo "🌐 Syncing Nginx config..."
 if [[ "$ENVIRONMENT" == "production" ]]; then
     NGINX_SRC="${REMOTE_DIR}/nginx/green-mind.ch.conf"
-    NGINX_DST="/etc/nginx/sites-available/greenmind"
+    NGINX_DST="/etc/nginx/sites-available/greenmind-prod"
 elif [[ "$ENVIRONMENT" == "staging" ]]; then
     NGINX_SRC="${REMOTE_DIR}/nginx/test.green-mind.ch.conf"
     NGINX_DST="/etc/nginx/sites-available/greenmind-staging"

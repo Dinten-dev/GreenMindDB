@@ -4,7 +4,7 @@ import hashlib
 import logging
 import wave
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import BinaryIO
 
 import boto3
@@ -18,6 +18,46 @@ logger = logging.getLogger(__name__)
 # Lazy-initialized S3 client
 _s3_client = None
 _WAV_BUCKET = "greenmind-raw"
+
+
+def reconcile_wav_timing(
+    started_at: datetime,
+    declared_ended_at: datetime,
+    audio_duration_seconds: float,
+    *,
+    now: datetime | None = None,
+) -> tuple[datetime, float, str]:
+    """Reconcile legacy gateway timestamps with the WAV frame duration.
+
+    Older gateways used file mtime as ``ended_at``. Sparse recordings therefore
+    legitimately contain less audio than their wall-clock window. Invalid or too
+    short declared windows are replaced with the duration derived from WAV frames.
+    """
+    if audio_duration_seconds <= 0 or audio_duration_seconds > timedelta(days=1).total_seconds():
+        raise ValueError("Invalid WAV audio duration")
+
+    now = now or datetime.now(UTC)
+    inferred_end = started_at + timedelta(seconds=audio_duration_seconds)
+    future_limit = now + timedelta(minutes=15)
+    if inferred_end > future_limit:
+        raise ValueError("WAV timestamp is too far in the future")
+
+    declared_duration = (declared_ended_at - started_at).total_seconds()
+    declared_valid = (
+        0 < declared_duration <= timedelta(days=1).total_seconds()
+        and declared_ended_at <= future_limit
+    )
+    if not declared_valid:
+        return inferred_end, 1.0, "inferred"
+
+    tolerance = max(1.0, declared_duration * 0.05)
+    difference = audio_duration_seconds - declared_duration
+    if abs(difference) <= tolerance:
+        return declared_ended_at, 1.0, "complete"
+    if difference < 0:
+        coverage_ratio = max(0.0, min(1.0, audio_duration_seconds / declared_duration))
+        return declared_ended_at, coverage_ratio, "partial"
+    return inferred_end, 1.0, "inferred"
 
 
 def _get_s3_client():
@@ -115,6 +155,44 @@ def stream_wav_bytes(s3_key: str) -> Generator[bytes, None, None]:
         body.close()
 
 
+def download_object(s3_key: str, destination: BinaryIO) -> None:
+    """Download one raw or derived object into a seekable file."""
+    client = _get_s3_client()
+    destination.seek(0)
+    destination.truncate(0)
+    client.download_fileobj(_WAV_BUCKET, s3_key, destination)
+    destination.seek(0)
+
+
+def upload_artifact(
+    file_data: BinaryIO,
+    s3_key: str,
+    *,
+    content_type: str,
+    content_sha256: str,
+) -> int:
+    """Upload and verify a derived lossless artifact."""
+    client = _get_s3_client()
+    file_data.seek(0, 2)
+    size = file_data.tell()
+    file_data.seek(0)
+    client.upload_fileobj(
+        file_data,
+        _WAV_BUCKET,
+        s3_key,
+        ExtraArgs={
+            "ContentType": content_type,
+            "Metadata": {"sha256": content_sha256},
+        },
+    )
+    head = client.head_object(Bucket=_WAV_BUCKET, Key=s3_key)
+    if head.get("ContentLength") != size:
+        raise RuntimeError("Artifact size verification failed")
+    if head.get("Metadata", {}).get("sha256") != content_sha256:
+        raise RuntimeError("Artifact checksum metadata verification failed")
+    return size
+
+
 def extract_wav_metadata(file_data: BinaryIO) -> dict:
     """Extract metadata from a WAV file (sample rate, duration, size).
 
@@ -158,6 +236,13 @@ def delete_wav(s3_key: str) -> None:
     client = _get_s3_client()
     client.delete_object(Bucket=_WAV_BUCKET, Key=s3_key)
     logger.info("Deleted WAV s3://%s/%s", _WAV_BUCKET, s3_key)
+
+
+def delete_artifact(s3_key: str) -> None:
+    """Idempotently delete a derived WAV/FLAC artifact."""
+    client = _get_s3_client()
+    client.delete_object(Bucket=_WAV_BUCKET, Key=s3_key)
+    logger.info("Deleted derived artifact s3://%s/%s", _WAV_BUCKET, s3_key)
 
 
 def _sanitize_filename(name: str) -> str:

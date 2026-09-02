@@ -3,6 +3,7 @@
 import uuid
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -78,6 +79,13 @@ class Gateway(Base):
     update_download_status = Column(String(20), nullable=True)
     update_apply_status = Column(String(20), nullable=True)
     signature_status = Column(String(20), nullable=True)
+
+    # Raw-WAV backlog reported by the gateway heartbeat.
+    wav_pending_files = Column(Integer, nullable=True)
+    wav_pending_bytes = Column(BigInteger, nullable=True)
+    wav_oldest_pending_age_hours = Column(Float, nullable=True)
+    wav_last_upload_at = Column(DateTime(timezone=True), nullable=True)
+    wav_last_error_code = Column(String(100), nullable=True)
 
     zone = relationship("Zone", back_populates="gateways")
     sensors = relationship("Sensor", back_populates="gateway", cascade="all, delete-orphan")

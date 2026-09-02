@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.models.ingest_log import IngestLog
@@ -17,6 +19,22 @@ class DuplicateIngestionError(Exception):
 
 _last_alert_times = {}
 ALERT_COOLDOWN_MINUTES = 720
+
+
+def _insert_readings_idempotently(db: Session, rows: list[dict]) -> int:
+    """Insert readings once, even when legacy gateways change retry IDs."""
+    if not rows:
+        return 0
+    dialect = db.get_bind().dialect.name
+    if dialect == "postgresql":
+        statement = postgresql_insert(SensorReading).values(rows)
+    elif dialect == "sqlite":
+        statement = sqlite_insert(SensorReading).values(rows)
+    else:
+        raise RuntimeError(f"Unsupported ingestion database dialect: {dialect}")
+    statement = statement.on_conflict_do_nothing(index_elements=["timestamp", "sensor_id", "kind"])
+    result = db.execute(statement)
+    return max(0, result.rowcount or 0)
 
 
 def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tuple[int, list[dict]]:
@@ -57,7 +75,7 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
     db.add(log)
 
     now = datetime.now(UTC)
-    ingested_count = 0
+    reading_rows = []
     alerts_to_trigger = []
 
     # 3. Store Readings
@@ -67,24 +85,48 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
         # Use pre-validated timestamp from schema or fall back to now
         ts = reading.timestamp or now
 
-        # Create timeseries row
-        sr = SensorReading(
-            timestamp=ts,
-            sensor_id=sensor.id,
-            kind=reading.sensor_kind,
-            value=reading.value,
-            unit=reading.unit,
-            measurement_id=data.measurement_id,
+        reading_rows.append(
+            {
+                "timestamp": ts,
+                "sensor_id": sensor.id,
+                "kind": reading.sensor_kind,
+                "value": reading.value,
+                "unit": reading.unit,
+                "measurement_id": data.measurement_id,
+                "source_sequence": reading.source_sequence,
+                "source_uptime_ms": reading.source_uptime_ms,
+                "source_dropped_samples_total": reading.source_dropped_samples_total,
+                "sample_count": reading.sample_count,
+                "sample_rate_hz": reading.sample_rate_hz,
+                "median": reading.median,
+                "rms": reading.rms,
+                "standard_deviation": reading.standard_deviation,
+                "minimum": reading.minimum,
+                "maximum": reading.maximum,
+                "p05": reading.p05,
+                "p95": reading.p95,
+                "coverage_ratio": reading.coverage_ratio,
+                "source_boot_id": reading.source_boot_id,
+                "protocol_version": reading.protocol_version,
+                "firmware_version": reading.firmware_version,
+                "calibration_version": reading.calibration_version,
+                "quality_valid_count": reading.quality_valid_count,
+                "quality_lead_off_count": reading.quality_lead_off_count,
+                "quality_rail_high_count": reading.quality_rail_high_count,
+                "quality_rail_low_count": reading.quality_rail_low_count,
+                "quality_jump_count": reading.quality_jump_count,
+                "quality_recovery_count": reading.quality_recovery_count,
+            }
         )
-        db.add(sr)
-        ingested_count += 1
 
         # Check for electrode alert condition
         if reading.sensor_kind in ("bio_signal", "bioelectric") and getattr(
             sensor, "sms_alerts_enabled", True
         ):
             is_flatline = reading.value <= 10.0
-            is_saturated = reading.value >= 3200.0
+            is_saturated = reading.value >= 3200.0 or bool(
+                (reading.quality_rail_high_count or 0) + (reading.quality_rail_low_count or 0)
+            )
             if is_flatline or is_saturated:
                 last_alert = _last_alert_times.get(reading.sensor_mac)
                 if (
@@ -123,6 +165,7 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
     gateway.status = "online"
 
     # 5. Commit
+    ingested_count = _insert_readings_idempotently(db, reading_rows)
     log.status = "success"
     log.raw_file_reference = data.raw_file_reference
     db.commit()

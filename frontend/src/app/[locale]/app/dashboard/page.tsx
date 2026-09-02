@@ -8,6 +8,7 @@ import {
   apiListSensors,
   apiDeleteGateway,
   apiUpdateSensor,
+  gatewayHasWavIssue,
   Zone,
   GatewayInfo,
   SensorInfo,
@@ -135,6 +136,9 @@ export default function DashboardPage() {
   }
 
   const onlineGateways = gateways.filter((g) => g.status === 'online').length;
+  const healthyDataFlows = gateways.filter(
+    (g) => g.status === 'online' && !gatewayHasWavIssue(g)
+  ).length;
 
   return (
     <div className="space-y-8">
@@ -168,8 +172,8 @@ export default function DashboardPage() {
         />
         <StatCard label="Sensoren" value={sensors.length} icon="📡" />
         <StatCard
-          label="Online"
-          value={onlineGateways}
+          label="Datenfluss"
+          value={healthyDataFlows}
           sub={`von ${gateways.length}`}
           icon="◉"
           accent
@@ -181,41 +185,50 @@ export default function DashboardPage() {
         <div className="glass-card p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Gateways</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {gateways.map((gw) => (
-              <div
-                key={gw.id}
-                className="group flex items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border border-black/[0.03] transition-colors hover:bg-white/60 relative"
-              >
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${gw.status === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}
-                />
-                <div className="flex-1 min-w-0 pr-8">
-                  <p className="text-sm font-medium text-gray-800 truncate">
-                    {gw.name || gw.hardware_id}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {gw.sensor_count} Sensoren · {gw.zone_name}
-                  </p>
-                </div>
-                <span className="text-xs text-gray-400 shrink-0">
-                  {gw.last_seen ? timeAgo(gw.last_seen) : 'nie'}
-                </span>
-                <button
-                  onClick={() => setDeletingGatewayId(gw.id)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                  title="Gateway entfernen"
+            {gateways.map((gw) => {
+              const wavIssue = gatewayHasWavIssue(gw);
+              return (
+                <div
+                  key={gw.id}
+                  className={`group flex items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border transition-colors hover:bg-white/60 relative ${wavIssue ? 'border-amber-300' : 'border-black/[0.03]'}`}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
-              </div>
-            ))}
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${gw.status !== 'online' ? 'bg-gray-300' : wavIssue ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'}`}
+                  />
+                  <div className="flex-1 min-w-0 pr-8">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {gw.name || gw.hardware_id}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {gw.sensor_count} Sensoren · {gw.zone_name}
+                    </p>
+                    {wavIssue && (
+                      <p className="text-xs text-amber-600">
+                        WAV-Rückstau: {gw.wav_pending_files ?? 0} Dateien
+                        {gw.wav_last_error_code ? ` · ${gw.wav_last_error_code}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {gw.last_seen ? timeAgo(gw.last_seen) : 'nie'}
+                  </span>
+                  <button
+                    onClick={() => setDeletingGatewayId(gw.id)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Gateway entfernen"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (

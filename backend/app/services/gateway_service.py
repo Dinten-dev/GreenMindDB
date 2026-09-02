@@ -82,6 +82,13 @@ def list_gateways(
                 last_seen=gw.last_seen.isoformat() if gw.last_seen else None,
                 paired_at=gw.paired_at.isoformat() if gw.paired_at else None,
                 sensor_count=sensor_count,
+                wav_pending_files=gw.wav_pending_files,
+                wav_pending_bytes=gw.wav_pending_bytes,
+                wav_oldest_pending_age_hours=gw.wav_oldest_pending_age_hours,
+                wav_last_upload_at=(
+                    gw.wav_last_upload_at.isoformat() if gw.wav_last_upload_at else None
+                ),
+                wav_last_error_code=gw.wav_last_error_code,
             )
         )
     return results

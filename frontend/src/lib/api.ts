@@ -181,6 +181,19 @@ export interface GatewayInfo {
   last_seen: string | null;
   paired_at: string | null;
   sensor_count: number;
+  wav_pending_files: number | null;
+  wav_pending_bytes: number | null;
+  wav_oldest_pending_age_hours: number | null;
+  wav_last_upload_at: string | null;
+  wav_last_error_code: string | null;
+}
+
+export function gatewayHasWavIssue(gateway: GatewayInfo): boolean {
+  return Boolean(
+    gateway.wav_last_error_code ||
+      (gateway.wav_pending_files ?? 0) >= 6 ||
+      (gateway.wav_oldest_pending_age_hours ?? 0) >= 1
+  );
 }
 
 export interface PairingCode {
@@ -349,6 +362,60 @@ export interface WavFileInfo {
   ended_at: string;
   created_at: string;
   timestamp_source: string;
+  coverage_ratio: number;
+  timing_status: string;
+  raw_available: boolean;
+  raw_deleted_at: string | null;
+  feature_status: 'pending' | 'processing' | 'verified' | 'failed';
+  feature_verified_at: string | null;
+  is_anomaly: boolean | null;
+  anomaly_score: number | null;
+  flac_available: boolean;
+}
+
+export interface WavFeatureInfo {
+  id: string;
+  wav_file_id: string;
+  sensor_id: string;
+  sensor_mac: string;
+  started_at: string;
+  ended_at: string;
+  extractor_version: string;
+  feature_checksum: string;
+  sample_rate: number;
+  sample_count: number;
+  duration_seconds: number;
+  value_unit: string;
+  mean: number;
+  median: number;
+  rms: number;
+  standard_deviation: number;
+  minimum: number;
+  maximum: number;
+  quantiles: Record<string, number>;
+  outlier_count: number;
+  outlier_ratio: number;
+  clipping_count: number;
+  clipping_ratio: number;
+  coverage_ratio: number;
+  timing_status: string;
+  missing_duration_seconds: number;
+  flatline_count: number;
+  flatline_seconds: number;
+  sequence_observations: number;
+  sequence_gap_count: number;
+  sequence_missing_count: number;
+  sequence_reset_count: number;
+  source_dropped_samples_delta: number | null;
+  spectral_energy_total: number;
+  dominant_frequency_hz: number;
+  spectral_bands: Record<string, number>;
+  is_anomaly: boolean;
+  anomaly_score: number;
+  anomaly_reasons: string[];
+  anomaly_archive_available: boolean;
+  flac_archive_available: boolean;
+  verified_at: string;
 }
 
 export async function apiListWavFiles(
@@ -360,6 +427,18 @@ export async function apiListWavFiles(
   if (opts?.to_dt) params.to_dt = opts.to_dt;
   if (opts?.limit) params.limit = String(opts.limit);
   return apiFetch<WavFileInfo[]>('/wav/files', { params });
+}
+
+export async function apiListWavFeatures(
+  sensorId: string,
+  opts?: { from_dt?: string; to_dt?: string; anomalies_only?: boolean; limit?: number }
+): Promise<WavFeatureInfo[]> {
+  const params: Record<string, string> = { sensor_id: sensorId };
+  if (opts?.from_dt) params.from_dt = opts.from_dt;
+  if (opts?.to_dt) params.to_dt = opts.to_dt;
+  if (opts?.anomalies_only) params.anomalies_only = 'true';
+  if (opts?.limit) params.limit = String(opts.limit);
+  return apiFetch<WavFeatureInfo[]>('/wav/features', { params });
 }
 
 export interface WavCountInfo {

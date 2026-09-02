@@ -82,6 +82,11 @@ async def handle_heartbeat(
     gateway.status = "online"
     if data.local_ip:
         gateway.local_ip = data.local_ip
+    gateway.wav_pending_files = data.wav_pending_files
+    gateway.wav_pending_bytes = data.wav_pending_bytes
+    gateway.wav_oldest_pending_age_hours = data.wav_oldest_pending_age_hours
+    gateway.wav_last_upload_at = data.wav_last_upload_at
+    gateway.wav_last_error_code = data.wav_last_error_code
     db.commit()
 
     return {"status": "ok"}

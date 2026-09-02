@@ -52,6 +52,36 @@ class Settings(BaseSettings):
     )
     sensor_export_max_kinds: int = Field(32, ge=1, le=100)
 
+    # Feature extraction is non-destructive. Retention additionally requires
+    # an explicit enable and defaults to a reporting-only dry run.
+    wav_feature_extraction_enabled: bool = True
+    wav_feature_interval_minutes: int = Field(5, ge=1, le=1_440)
+    wav_feature_active_interval_seconds: int = Field(5, ge=1, le=300)
+    wav_feature_batch_size: int = Field(20, ge=1, le=1_000)
+    wav_feature_max_attempts: int = Field(5, ge=1, le=100)
+    embedded_background_workers_enabled: bool = False
+    wav_anomaly_archive_enabled: bool = False
+    wav_anomaly_clip_seconds: int = Field(30, ge=1, le=600)
+    wav_flac_archive_enabled: bool = False
+
+    retention_enabled: bool = False
+    retention_dry_run: bool = True
+    retention_interval_hours: int = Field(24, ge=1, le=168)
+    retention_batch_size: int = Field(500, ge=1, le=10_000)
+    retention_max_batches_per_run: int = Field(10, ge=1, le=1_000)
+    retention_advisory_lock_id: int = Field(7_194_202_601, ge=1)
+    retention_wav_days: int = Field(90, ge=1, le=3_650)
+    retention_wav_feature_days: int = Field(730, ge=730, le=7_300)
+    retention_anomaly_days: int = Field(365, ge=90, le=7_300)
+    retention_flac_days: int = Field(365, ge=90, le=7_300)
+    retention_sensor_reading_days: int = Field(180, ge=1, le=3_650)
+    retention_ingest_log_days: int = Field(30, ge=1, le=3_650)
+    retention_gateway_state_days: int = Field(30, ge=1, le=3_650)
+    retention_pairing_days: int = Field(30, ge=1, le=3_650)
+    retention_provisioning_days: int = Field(30, ge=1, le=3_650)
+    storage_capacity_bytes: int = Field(100 * 1024**3, ge=1024**3)
+    gateway_offline_minutes: int = Field(15, ge=1, le=10_080)
+
     # PEM Ed25519 public key shared with the gateway agent's release verifier.
     gateway_release_signing_public_key_path: str = Field("", max_length=1_024)
 

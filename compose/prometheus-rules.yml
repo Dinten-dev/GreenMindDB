@@ -1,0 +1,59 @@
+groups:
+  - name: greenmind-pipeline
+    rules:
+      - alert: GreenMindStorageBudgetWarning
+        expr: greenmind_storage_budget_ratio > 0.80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: GreenMind storage exceeds 80 percent
+      - alert: GreenMindStorageBudgetCritical
+        expr: greenmind_storage_budget_ratio > 0.90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: GreenMind storage exceeds 90 percent
+      - alert: GreenMindFeatureBackfillStalled
+        expr: greenmind_wav_feature_old_pending > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Old WAV files remain unverified
+      - alert: GreenMindFeatureWorkerStale
+        expr: greenmind_worker_heartbeat_age_seconds{worker="wav_features"} > 900
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: WAV feature worker heartbeat is stale
+      - alert: GreenMindGatewayOffline
+        expr: greenmind_gateways_offline > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: At least one active gateway is offline
+      - alert: GreenMindGatewayWavBacklog
+        expr: greenmind_gateway_wav_backlog{unit="bytes"} > 1073741824
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Gateway WAV backlog exceeds one gigabyte
+      - alert: GreenMindWavUploadRejected
+        expr: sum(increase(http_requests_total{handler="/api/v1/wav/upload",status="4xx"}[15m])) > 20
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: WAV uploads are being rejected
+      - alert: GreenMindClientErrorSurge
+        expr: sum(increase(http_requests_total{status="4xx"}[15m])) > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: API client errors exceed expected volume

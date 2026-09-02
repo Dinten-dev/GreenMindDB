@@ -6,9 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes flac \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install the fully resolved production graph
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --requirement requirements.txt
+COPY requirements.lock .
+RUN python -m pip install --no-cache-dir --require-hashes --requirement requirements.lock
 
 # Copy application code
 COPY . .

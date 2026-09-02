@@ -21,12 +21,13 @@ from app.models.observation import (
     PlantObservationPhoto,
     PlantObservationSession,
 )
+from app.models.operations import BackgroundWorkerHeartbeat, RetentionRun, RetentionRunItem
 from app.models.pairing import PairingCode
 from app.models.plant import Plant, PlantSensorAssignment
 from app.models.provisioning import ProvisioningJob, ProvisioningStatus
 from app.models.timeseries import SensorReading
 from app.models.user import EmailVerification, Organization, Role, User
-from app.models.wav_file import WavFile
+from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
 
 __all__ = [
     "User",
@@ -41,6 +42,11 @@ __all__ = [
     "EmailVerification",
     "FormSubmission",
     "WavFile",
+    "WavFeature",
+    "WavFeatureVersion",
+    "RetentionRun",
+    "RetentionRunItem",
+    "BackgroundWorkerHeartbeat",
     "BioSession",
     "BioAggregate",
     "FirmwareRelease",
