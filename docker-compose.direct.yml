@@ -1,0 +1,81 @@
+# Optional overlay. Never included by the existing staging/production deployment.
+# Review first; provision a dedicated Direct bucket and separate DB credentials.
+services:
+  direct-postgres:
+    profiles: [direct]
+    image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DIRECT_POSTGRES_USER:?Set dedicated Direct database user}
+      POSTGRES_PASSWORD: ${DIRECT_POSTGRES_PASSWORD:?Set dedicated Direct database password}
+      POSTGRES_DB: greenmind_direct
+    volumes:
+      - direct_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d greenmind_direct"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+    logging: &direct-logging
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  direct-api:
+    profiles: [direct]
+    image: ${DIRECT_BACKEND_IMAGE:-greenmind-backend-staging:latest}
+    restart: unless-stopped
+    environment: &direct-environment
+      DIRECT_ENVIRONMENT: ${DIRECT_ENVIRONMENT:-staging}
+      DIRECT_INGEST_ENABLED: ${DIRECT_INGEST_ENABLED:-false}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL:?Point only to direct-postgres/greenmind_direct}
+      DIRECT_STORAGE: s3
+      DIRECT_S3_ENDPOINT_URL: ${DIRECT_S3_ENDPOINT_URL:?Set HTTPS object storage endpoint}
+      DIRECT_S3_BUCKET: ${DIRECT_S3_BUCKET:?Set greenmind-direct-staging bucket with quota}
+      DIRECT_S3_ACCESS_KEY: ${DIRECT_S3_ACCESS_KEY:?Set bucket-scoped Direct access key}
+      DIRECT_S3_SECRET_KEY: ${DIRECT_S3_SECRET_KEY:?Set bucket-scoped Direct secret key}
+      DIRECT_MAX_SPOOL_BYTES: ${DIRECT_MAX_SPOOL_BYTES:-1073741824}
+      DIRECT_MAX_DEVICE_SPOOL_BYTES: ${DIRECT_MAX_DEVICE_SPOOL_BYTES:-268435456}
+      DIRECT_RETENTION_ENABLED: ${DIRECT_RETENTION_ENABLED:-false}
+      DIRECT_RETENTION_DRY_RUN: ${DIRECT_RETENTION_DRY_RUN:-true}
+      # Read-only numerical adapter imports legacy feature definitions but uses
+      # no Legacy DB connection. Do not provide any production DSN or secret.
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg2://unused:unused@127.0.0.1:1/unused
+      FORWARDED_ALLOW_IPS: ${DIRECT_TRUSTED_PROXY_IPS:-127.0.0.1}
+    command: [gunicorn, app.direct.main:app, -k, uvicorn.workers.UvicornWorker, --bind, "0.0.0.0:8002", --workers, "2", --timeout, "60", --limit-request-field_size, "4096"]
+    ports: ["127.0.0.1:${DIRECT_PORT:-8002}:8002"]
+    depends_on:
+      direct-postgres: {condition: service_healthy}
+    mem_limit: 384m
+    cpus: 1
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: *direct-logging
+    healthcheck:
+      test: [CMD-SHELL, "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  direct-worker:
+    profiles: [direct]
+    image: ${DIRECT_BACKEND_IMAGE:-greenmind-backend-staging:latest}
+    restart: on-failure
+    environment: *direct-environment
+    command: [python, -m, app.direct.worker]
+    depends_on:
+      direct-postgres: {condition: service_healthy}
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: *direct-logging
+
+volumes:
+  direct_postgres_data:
