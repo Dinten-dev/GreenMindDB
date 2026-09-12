@@ -3,8 +3,32 @@
 Stand: 12. September 2026. **Gemeinsame Basis main + Direct für develop/Staging freigegeben.**
 Der Benutzer hat ausdrücklich angewiesen, die bestehenden main-Änderungen
 ebenfalls zu prüfen und anschliessend beide Änderungen auf develop zu pushen.
-Dieser Bericht beschreibt den geprüften Stand vor diesem Push. Eine Freigabe
-für Produktion oder Firmware-Flash besteht weiterhin nicht.
+Dieser Bericht beschreibt den geprüften Stand und die nachstehend dokumentierte
+Staging-Nachbesserung. Eine Freigabe für Produktion oder Firmware-Flash besteht
+weiterhin nicht.
+
+## Staging-Auslieferung: Build vom gemeinsamen Server verlagert
+
+Die erste gemeinsame Lieferung `305cb5a` hat alle drei GitHub-CI-Jobs bestanden.
+Der anschliessende Staging-Lauf `34697116124` wurde abgebrochen: Sein bisheriger
+serverseitiger Build beanspruchte den gemeinsamen 4-GB-Host stark. Beim Check
+waren zeitweise nur 51 MB RAM verfügbar, ohne Swap; das ist kein tragfähiger
+Deploymentweg für einen gleichzeitig Daten empfangenden Produktionsserver.
+Der eindeutig zugehörige Staging-Buildprozess wurde beendet. Bestehende
+Produktionscontainer wurden weder neu gestartet noch ersetzt; beim folgenden
+Statuscheck meldeten alle vorhandenen Healthchecks wieder gesund.
+
+`scripts/deploy.sh` baut deshalb ausschliesslich für Staging Backend und
+Frontend nacheinander auf dem aufrufenden GitHub-Runner. Die Zielarchitektur
+wird über die bereits verifizierte SSH-Verbindung gelesen. Fertige Images
+werden über dieselbe Verbindung gestreamt und geladen; erst nach erfolgreichem
+Transfer startet `gm-staging` mit `--no-build`. Auch `--skip-build` darf auf
+Staging keinen Serverbuild auslösen. Fehler beim Build, Export oder Laden
+brechen vor dem Containerwechsel ab. Produktionsbefehle bleiben unverändert.
+Zehn Tests führen das echte Deploymentskript mit ersetzten externen Befehlen
+aus und prüfen Zielarchitektur, Reihenfolge, Abbruchverhalten sowie den
+unveränderten Produktionszweig. Die tatsächliche Auslieferung und Serverreserve
+müssen zusätzlich anhand des neuen Staging-Laufs kontrolliert werden.
 
 ## Entschiedener Umfang und Ergebnis der Nachprüfung
 

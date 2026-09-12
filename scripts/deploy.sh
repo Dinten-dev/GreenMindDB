@@ -175,7 +175,27 @@ ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "
 
 # ── 5. Build & Deploy ────────────────────────────────────
 echo "🐳 Building and starting containers..."
-if [[ "$SKIP_BUILD" == "true" ]]; then
+if [[ "$ENVIRONMENT" == "staging" ]]; then
+    # Staging shares the ingestion host with production. Build on the caller
+    # (the GitHub runner in CI), then transfer finished images over verified SSH.
+    if [[ "$SKIP_BUILD" != "true" ]]; then
+        REMOTE_ARCH=$(ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" uname -m)
+        case "$REMOTE_ARCH" in
+            x86_64) IMAGE_PLATFORM="linux/amd64" ;;
+            aarch64|arm64) IMAGE_PLATFORM="linux/arm64" ;;
+            *) echo "❌ Unsupported Staging architecture: ${REMOTE_ARCH}"; exit 1 ;;
+        esac
+        docker build --platform "$IMAGE_PLATFORM" \
+            -t greenmind-backend-staging:latest "${LOCAL_DIR}/backend"
+        docker build --platform "$IMAGE_PLATFORM" \
+            -t greenmind-frontend-staging:latest "${LOCAL_DIR}/frontend"
+        docker image save greenmind-backend-staging:latest greenmind-frontend-staging:latest \
+            | ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+                'export PATH=$PATH:/usr/local/bin; docker image load'
+    fi
+    # Never fall back to building on the shared server, including --skip-build.
+    COMPOSE_ACTION="COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} up -d --no-build --remove-orphans"
+elif [[ "$SKIP_BUILD" == "true" ]]; then
     COMPOSE_ACTION="COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} up -d --remove-orphans"
 else
     COMPOSE_ACTION="COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} build && COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT} docker compose -f ${COMPOSE_FILE} up -d --remove-orphans"
