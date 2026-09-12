@@ -6,6 +6,10 @@ WAV reader, feature worker, retention worker and authentication are unchanged.
 The normal deployment does not include the Direct Compose overlay.
 The older `develop` differs from this baseline in 52 pre-existing files; see the
 release review before deciding which baseline will be delivered to Staging.
+The owner has now selected main plus Direct for develop/Staging. The accompanying
+review also strengthens byte verification of legacy derived archives and fixes
+frontend security dependencies. Staging retention is explicitly disabled during
+the sensor pilot, including if older server environment values requested it.
 
 Release order required by the owner: review **every change**, then authorize
 `develop`/Staging; connect the first real test sensors; verify both paths; only

@@ -1,34 +1,51 @@
 # GreenMind: lokale Änderungsdurchsicht für develop / Staging
 
-Stand: 12. September 2026. **Lokal implementiert und geprüft; keine Auslieferungsfreigabe.**
-Es wurde nichts gepusht, auf einen Server geschrieben, migriert oder geflasht.
-Die Original-Repositories wurden nicht verändert. Die lokalen Push-Ziele sind
-bis zur gemeinsamen Durchsicht gesperrt.
+Stand: 12. September 2026. **Gemeinsame Basis main + Direct für develop/Staging freigegeben.**
+Der Benutzer hat ausdrücklich angewiesen, die bestehenden main-Änderungen
+ebenfalls zu prüfen und anschliessend beide Änderungen auf develop zu pushen.
+Dieser Bericht beschreibt den geprüften Stand vor diesem Push. Eine Freigabe
+für Produktion oder Firmware-Flash besteht weiterhin nicht.
 
-## Zuerst gemeinsam zu entscheiden
+## Entschiedener Umfang und Ergebnis der Nachprüfung
 
 1. **Staging-Ausgangsstand:** Der gelesene Backend-Branch `develop` (`93cea4e`)
    liegt einen bestehenden Commit hinter `main` (`3c82579`). Dieser Commit
    umfasst **52 Dateien, +3.762 / −112 Zeilen**. Die neue Direct-Implementierung
-   verwendet dessen vorhandene WAV-Merkmalsberechnung. Die Frage ist offen,
-   ob dieser bestehende Stand ebenfalls geprüft und auf Staging übernommen
-   oder Direct gesondert auf den älteren develop-Stand angepasst wird.
+   verwendet dessen vorhandene WAV-Merkmalsberechnung. Der Benutzer hat den
+   gemeinsamen Abgleich mit main gewählt. Alle 52 Dateien wurden nachgeprüft:
+   alte API-Pflichtfelder bleiben gültig, zusätzliche Felder sind optional oder
+   haben rückwärtskompatible Datenbankdefaults; alte Rohpfade bleiben erhalten.
    Die unten gelisteten 52 Dateien sind keine neu geschriebenen Direct-Dateien.
-2. **Vorhandener Sicherheitsbefund:** Der Produktionsabhängigkeitscheck der
-   unveränderten Oberfläche schlägt fehl: Next.js und Sharp werden beanstandet.
-   Diese Paketversionen sind nicht durch Direct eingeführt worden. Vor einem
-   Push mit automatischem Staging-Deployment braucht es eine getrennt sichtbare
-   Korrektur samt erneutem Frontend-Test und erfolgreichem Sicherheitscheck.
-   Es wurden keine pauschalen Paket-Upgrades oder Audit-Ausnahmen vorgenommen.
+2. **Sicherheitsbefund behoben:** Next.js und eslint-config-next wurden gezielt
+   von 16.3.1 auf 16.3.5 aktualisiert, Sharp mit den zugehörigen Binärpaketen
+   von 0.35.3 auf 0.35.4. Sonstige Paketfamilien wurden nicht angehoben.
+   Der Produktionsabhängigkeitscheck meldet jetzt null Schwachstellen;
+   17 Oberflächentests, Build, Typprüfung, Lint und Formatierung bestehen.
 3. **Firmware-Zielbranch:** Remote existiert noch kein `develop`. Die lokale
    Lieferkopie basiert auf veröffentlichtem `main` (`773b958`); sie enthält
    ausschliesslich sechs zusätzliche Dateien. Die persönliche Captive-Portal-
    Entwicklung wird nicht stillschweigend mitgeliefert.
 
-Ein Push des heutigen Backend-Standes nach develop wäre somit mehr als die
-Direct-Erweiterung. Bis diese Punkte und der vollständige Diff besprochen sind,
-bleibt es bei lokalen Review-Dateien. Der tatsächliche laufende Serverstand
-wurde nicht kontrolliert; GitHub-main ist kein Nachweis der laufenden Version.
+Der Push enthält die bereits bestehende Erweiterung, Direct und die folgenden
+gezielten Korrekturen/Nachweise. Die tatsächlich laufende Serverversion wird
+nicht aus main abgeleitet; die Staging-Auslieferung wird anhand ihres eigenen
+GitHub-Laufs kontrolliert.
+
+| Zusätzliche Dateiänderung gegenüber dem ersten Review | Bereich / Grund |
+|---|---|
+| `frontend/package.json` | SHARED: gezielte Next.js-/ESLint-Sicherheitspatches. |
+| `frontend/package-lock.json` | SHARED: exakt aufgelöste Patchversionen, einschliesslich Sharp/libvips. |
+| `backend/app/services/wav_service.py` | LEGACY-Archivprüfung: gespeicherte Ableitungen zurücklesen und tatsächliche Bytes hashen; Metadaten allein reichen nicht. Bestehende Uploadannahme unverändert. |
+| `backend/tests/test_wav_features.py` | LEGACY: korrekte sowie beschädigte Archivbytes trotz korrekter Metadaten prüfen. |
+| `backend/tests/test_staging_migrations.py` | SHARED: echte TimescaleDB 2.17.2/PG15, Upgrade 0019→0022 mit Altdaten und Nachlieferung in komprimierte Chunks. Nur leere lokale Testdatenbank erlaubt. |
+| `.github/workflows/ci.yml` | SHARED: Migrationstest zusätzlich zum Direct-Konkurrenztest verpflichtend ausführen. |
+| `docker-compose.staging.yml` | SHARED: Retention für den Sensorpilot ausdrücklich aus und Dry-Run an; alte Servervariablen können keine Löschung aktivieren. Produktion unverändert. |
+
+Die älteren Migrationen 0017 und 0019 ändern ausschliesslich Formatierung;
+ihre Funktionslogik wurde zusätzlich über den Syntaxbaum verglichen. Die
+bereits vorhandene Backend-Lockdatei ergänzt nur greenlet und numpy; sie
+enthält keine weiteren Versionssprünge bestehender Pakete. Retention und
+optionale Archivierung werden durch die Staging-Auslieferung nicht aktiviert.
 
 ## Datenwege und Kompatibilitätsgrenze
 
@@ -48,8 +65,8 @@ DUAL:   unterstützter Testsensor → Pi als bisherige Analysequelle
 Die neue Erweiterung verändert gegenüber `3c82579` keine bestehende Laufzeit-
 API, kein altes Konfigurationsdefault, keinen Legacy-Uploadvalidator, keine
 Legacy-Tabelle, keinen alten Schlüssel-Fallback, keinen Gateway-WAV-Pfad und
-keine alte Retention. Die einzige bearbeitete bestehende Datei ist die CI:
-ein zusätzlicher PostgreSQL-Testjob wird verpflichtender Teil des CI-Ergebnisses.
+keine alte Retention. Die gesonderten Nachprüfungskorrekturen oben verstärken
+die Archivverifikation, aktualisieren Sicherheitsabhängigkeiten und erweitern CI.
 Die frühere 52-Dateien-Differenz gegenüber develop muss unabhängig hiervon
 bewertet werden; insbesondere verändert sie bereits bestehende Laufzeitdateien.
 
@@ -132,10 +149,10 @@ RAM überlebt keinen Reset; sieben Tage SD-Persistenz sind noch nicht vorhanden.
 
 ## Bereits bestehende 52 Dateien zwischen develop und main
 
-Diese gesamte Tabelle gehört nur dann zur Staging-Auslieferung, wenn der
-Benutzer den Abgleich mit main nach Durchsicht auswählt. Sie ist gegenüber dem
-neuen Direct-Diff separat zu lesen. Insbesondere dürfen die bereits vorhandenen
-Migrationen 0020–0022 nicht als auf Staging ausgeführt oder getestet gelten.
+Diese gesamte Tabelle gehört zum vom Benutzer gewählten Staging-Abgleich.
+Sie ist gegenüber dem neuen Direct-Diff separat zu lesen. Die Migrationen
+0020–0022 wurden lokal auf derselben TimescaleDB-/PostgreSQL-Version geprüft;
+die reale Staging-Ausführung folgt erst im autorisierten Deployment.
 
 | Datei | Bereits vorhandene Änderung / Bedeutung für die Durchsicht |
 |---|---|
@@ -204,7 +221,7 @@ Tests mit Mock-Objektspeicher sind kein Nachweis eines realen Server-Uploads.
 | Prüfung | Ergebnis und Aussagegrenze |
 |---|---|
 | Backend vor Erweiterung | PASS: 175 Tests; 10 Docker-Integrationstests ausgenommen. |
-| Backend mit Direct | PASS: 199 Tests im finalen lokalen Lauf; 16 Integrationstests separat ausgenommen; 67,83 % Coverage, Schwelle 60 %. |
+| Backend mit Direct | PASS: final 201 Tests; 68,03 % Coverage; 17 Integrationstests separat ausgenommen. |
 | Direct-Konfigurations-/Pipelinetests | PASS: 22; gültige Staging-Einstellungen und Ablehnung falscher Bucket-Umgebung, fehlender Schlüssel, ungesichertem Speicher und falscher DB. |
 | Beide alten Uploadformate | PASS: 2 Fälle; 91 Tage alte WAVs/Messwerte während Direct 503 meldet, Wiederholung sowie Abschalten von Direct. WAV-Objektablage hier gemockt. |
 | Echtes PostgreSQL + MinIO | PASS: 5 Integrationstests; 30 konkurrierende identische Anfragen ergeben genau einen Chunk, zwei Worker eine Revision, zwei Geräte 40 eigene Chunks. |
@@ -216,16 +233,18 @@ Tests mit Mock-Objektspeicher sind kein Nachweis eines realen Server-Uploads.
 | C++-Hosttest | PASS: PCM16/24, Modusdefault, kopierte Queue-Daten, Überlauf und 10.000 konkurrierende Blöcke. |
 | Bestehende Firmware | PASS: 12 Sicherheitsinvarianten und Build des veröffentlichten main-Standes. |
 | Neue Testfirmware | PASS: separater ESP32-S3-Build; RAM 137.516/327.680 Byte, Flash 985.977/3.145.728 Byte. Kein Hardwarelauf. |
-| Oberfläche | PASS: 17 Tests, Lint, Formatierung, Typprüfung und Produktionsbuild. Unveränderte Paketversionen. |
-| Backend-Stil | PASS: Ruff und Formatprüfung aller 118 Python-Dateien. |
+| Oberfläche | PASS: 17 Tests, Lint, Formatierung, Typprüfung und Produktionsbuild nach den Sicherheitspatches. |
+| Backend-Stil | PASS: Ruff und Formatprüfung einschliesslich des neuen Migrationstests. |
 | Compose | PASS: Konfiguration mit ausschliesslich künstlichen Werten validiert; neue Dienstnamen überschreiben keine alten Dienste. |
 | Backend-Abhängigkeiten | PASS: pip-audit meldet keine bekannten Schwachstellen. |
-| Frontend-Abhängigkeiten | FAIL: npm audit meldet Next.js kritisch und Sharp hoch; bestehender CI-Check würde blockieren. |
+| Frontend-Abhängigkeiten | PASS: npm audit meldet nach den gezielten Patchversionen null Schwachstellen. |
+| Vorherige Legacy-Integrationstests | PASS: neun Tests im isolierten Docker-Stack plus der separat ausgeführte zehnte echte MinIO-/FLAC-Test. |
+| Migration mit vorhandenen Altdaten | PASS: 0019→0022 erhält einen 91 Tage alten Messwert und WAV-Verweis; weiterer alter Upload in komprimiertem Timescale-Chunk und Wiederholung erfolgreich. |
 | Git-/Quellgrenzen | Originale unverändert; kein Gateway-Diff; nur isolierte lokale Review-Kopien bearbeitet. |
 
-Sicherheitsbefunde: Der lokale Audit nennt Next.js `16.3.1` und eine betroffene
-Sharp-Abhängigkeit. Die gemeldete Next.js-Korrektur liegt ausserhalb des exakt
-gepinnten Paketstandes; ein ungeprüftes `audit fix --force` wurde nicht ausgeführt.
+Ursprüngliche Sicherheitsbefunde: Der erste Audit nannte Next.js `16.3.1` und
+Sharp `0.35.3`. Diese Befunde wurden mit den oben genannten Versionen behoben;
+ein pauschales `audit fix --force` wurde nicht ausgeführt.
 Die [Next.js-Meldung](https://github.com/advisories/GHSA-2xp9-vwfh-vxw4)
 und die [Sharp-Meldung](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c)
 beschreiben den AVIF-/libheif-Bezug. Das ist keine Feststellung einer erfolgten
@@ -234,9 +253,9 @@ Kompromittierung des Servers; dessen tatsächliche Laufzeit wurde nicht untersuc
 ## Noch nicht nachgewiesen
 
 - Reale Staging- oder Produktionsversion, Konfiguration und Speicherreserven.
-- Die zehn bisherigen vollständigen Docker-/Timescale-Integrationstests und
-  Migrationen 0020–0022 gegen das tatsächliche Staging-Schema.
-- GitHub-CI nach Push; es gab keinen Push.
+- Migrationen 0020–0022 gegen das tatsächliche Staging-Schema; der lokale
+  Nachweis mit bestehenden Testdaten ersetzt kein tatsächliches Deployment.
+- GitHub-CI und Staging-Auslieferung werden nach dem autorisierten Push geprüft.
 - Reale Geräteprovisionierung gegen Staging-Organisation/Zone und deren Berechtigungen.
 - Tatsächliche TLS-Kette, Proxy-Vertrauen, Netzwerkabbrüche und Wiederanlauf auf Hardware.
 - Reale ADS131M04-Aufnahme, Kalibrierung, Timing, vier Kanäle und Hardwaretreiber.
@@ -251,11 +270,10 @@ main-Basis und die konkret aufgeführten lokalen Regressionen.
 
 ## Reihenfolge nach der gemeinsamen Durchsicht
 
-1. Gewünschte develop-Basis wählen, Sicherheitskorrektur und jeden daraus
-   entstehenden zusätzlichen Diff lokal prüfen; noch kein Push.
-2. Gemeinsam Dateiinventar, Konfigurationen, Schema, Migrationen, Fehlerfälle und
-   Rückfallplan des endgültigen Standes durchgehen.
-3. Benutzer erteilt Freigabe ausschliesslich für diesen Stand auf develop/Staging.
+1. Erledigt: Benutzer wählt main + Direct für develop/Staging.
+2. Erledigt: bestehende Änderungen, zusätzliche Sicherheitskorrektur, Schema,
+   Migrationen, Altdatenannahme, Fehlerfälle und Rückfallplan lokal prüfen.
+3. Gemäss ausdrücklicher Freigabe auf develop pushen und CI/Staging kontrollieren.
 4. Bestehenden Backend-Pfad auf Staging zuerst mit deaktiviertem Direct prüfen.
 5. Separate Direct-Datenbank, Bucket mit Quota, beschränkte Schlüssel und
    reservierten Speicher einrichten; Schema explizit initialisieren.

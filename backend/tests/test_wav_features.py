@@ -258,6 +258,37 @@ def test_calibration_change_requires_recalculation_before_retention(
     delete_object.assert_not_called()
 
 
+@pytest.mark.parametrize("corrupted", [False, True])
+def test_artifact_checks_stored_bytes_not_only_sender_metadata(mocker, corrupted):
+    from app.services import wav_service
+
+    payload = b"lossless-test-artifact"
+    checksum = hashlib.sha256(payload).hexdigest()
+    client = mocker.Mock()
+    client.head_object.return_value = {
+        "ContentLength": len(payload),
+        "Metadata": {"sha256": checksum},
+    }
+    body = io.BytesIO(b"X" * len(payload) if corrupted else payload)
+    client.get_object.return_value = {"Body": body}
+    mocker.patch.object(wav_service, "_get_s3_client", return_value=client)
+
+    def upload():
+        return wav_service.upload_artifact(
+            io.BytesIO(payload),
+            "flac/test.flac",
+            content_type="audio/flac",
+            content_sha256=checksum,
+        )
+
+    if corrupted:
+        with pytest.raises(RuntimeError, match="stored checksum"):
+            upload()
+    else:
+        assert upload() == len(payload)
+    assert body.closed
+
+
 @pytest.mark.integration
 def test_minio_feature_and_flac_pipeline(monkeypatch):
     if os.getenv("IN_DOCKER_TEST") != "1":

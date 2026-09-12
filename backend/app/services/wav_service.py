@@ -190,6 +190,21 @@ def upload_artifact(
         raise RuntimeError("Artifact size verification failed")
     if head.get("Metadata", {}).get("sha256") != content_sha256:
         raise RuntimeError("Artifact checksum metadata verification failed")
+    # Metadata repeats the sender's claim; verify the stored bytes as well
+    # before allowing retention to rely on this lossless replacement.
+    body = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)["Body"]
+    digest = hashlib.sha256()
+    stored_size = 0
+    try:
+        while block := body.read(64 * 1024):
+            stored_size += len(block)
+            if stored_size > size:
+                raise RuntimeError("Artifact stored size verification failed")
+            digest.update(block)
+    finally:
+        body.close()
+    if stored_size != size or digest.hexdigest() != content_sha256:
+        raise RuntimeError("Artifact stored checksum verification failed")
     return size
 
 
