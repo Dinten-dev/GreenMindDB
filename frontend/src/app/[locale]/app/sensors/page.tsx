@@ -1,5 +1,6 @@
 'use client';
 
+import { useLocale } from 'next-intl';
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import {
   apiListSensors,
@@ -94,6 +95,9 @@ function isSensorArchived(s: SensorInfo): boolean {
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
 
 export default function SensorsPage() {
+  const locale = useLocale();
+  const [listError, setListError] = useState(false);
+  const [dataError, setDataError] = useState(false);
   const [sensors, setSensors] = useState<SensorInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
@@ -133,6 +137,8 @@ export default function SensorsPage() {
   const REALTIME_DURATION_S = 300; // 5 minutes
 
   const refreshSensors = useCallback(() => {
+    setLoading(true);
+    setListError(false);
     apiListSensors()
       .then((data) => {
         setSensors(data);
@@ -147,7 +153,10 @@ export default function SensorsPage() {
           }
         }
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error(err);
+        setListError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -169,9 +178,11 @@ export default function SensorsPage() {
         data = await apiGetSensorData(sensorId, range);
       }
       setSensorData(data);
+      setDataError(false);
       hasInitialData.current = true;
     } catch (err) {
       console.error('Failed to load sensor data:', err);
+      setDataError(true);
       if (!silent) setSensorData([]);
     } finally {
       if (!silent) setLoadingData(false);
@@ -444,6 +455,22 @@ export default function SensorsPage() {
     );
   }
 
+  if (listError)
+    return (
+      <div className="glass-card p-8">
+        <h1 className="text-2xl font-semibold text-gray-800">Messungen & Sensoren</h1>
+        <p role="alert" className="mt-3 text-sm text-gray-600">
+          Deine Sensoren konnten nicht geladen werden.
+        </p>
+        <button
+          onClick={refreshSensors}
+          className="mt-4 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm"
+        >
+          Erneut laden
+        </button>
+      </div>
+    );
+
   const selectedSensorInfo = sensors.find((s) => s.id === selectedSensor);
 
   const renderSensorDetailPanel = () => {
@@ -473,6 +500,7 @@ export default function SensorsPage() {
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                       : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
                   }`}
+                  aria-pressed={selectedSensorInfo.sms_alerts_enabled}
                   title="SMS Warnungen bei Elektroden-Abfall"
                 >
                   <span className="text-sm">📱</span>
@@ -484,11 +512,16 @@ export default function SensorsPage() {
                 </button>
 
                 {/* Time Range Segmented Control */}
-                <div className="flex bg-black/[0.03] rounded-xl p-0.5">
+                <div
+                  role="group"
+                  aria-label="Zeitraum"
+                  className="flex flex-wrap bg-black/[0.03] rounded-xl p-0.5"
+                >
                   {(['live', '1h', '24h', '7d', '30d'] as TimeRange[]).map((range) => (
                     <button
                       key={range}
                       onClick={() => handleRangeChange(range)}
+                      aria-pressed={timeRange === range}
                       className={`px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                         timeRange === range
                           ? range === 'live'
@@ -505,7 +538,9 @@ export default function SensorsPage() {
                           Live
                         </span>
                       ) : (
-                        range
+                        { '1h': '1 Stunde', '24h': '24 Stunden', '7d': '7 Tage', '30d': '30 Tage' }[
+                          range
+                        ]
                       )}
                     </button>
                   ))}
@@ -534,11 +569,11 @@ export default function SensorsPage() {
                         <polyline points="7 10 12 15 17 10" />
                         <line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
-                      Export
+                      Daten herunterladen
                     </>
                   )}
                   {exportStatus === 'loading' && 'Lade…'}
-                  {exportStatus === 'zipping' && 'Zipping…'}
+                  {exportStatus === 'zipping' && 'Wird gepackt…'}
                   {exportStatus === 'done' && '✓ Fertig'}
                   {exportStatus === 'error' && '✗ Fehler'}
                 </button>
@@ -555,6 +590,21 @@ export default function SensorsPage() {
               </div>
             )}
 
+            {dataError && (
+              <div
+                role="alert"
+                className="m-4 sm:m-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+              >
+                Messdaten konnten nicht aktualisiert werden. Bereits sichtbare Werte können älter
+                sein.
+                <button
+                  onClick={() => loadSensorData(selectedSensor, timeRange)}
+                  className="block mt-2 underline underline-offset-4 font-medium"
+                >
+                  Erneut versuchen
+                </button>
+              </div>
+            )}
             {/* Charts */}
             <div className="p-4 sm:p-6">
               {loadingData ? (
@@ -565,7 +615,9 @@ export default function SensorsPage() {
                 </div>
               ) : sensorData.length === 0 ? (
                 <div className="py-16 text-center text-gray-400 text-sm">
-                  Keine Messdaten für diesen Zeitraum vorhanden
+                  {dataError
+                    ? 'Messdaten derzeit nicht verfügbar'
+                    : 'Keine Messdaten für diesen Zeitraum vorhanden'}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-6">
@@ -573,8 +625,10 @@ export default function SensorsPage() {
                     .filter((s) => s.kind in KIND_CONFIG)
                     .map((series) => {
                       const config = KIND_CONFIG[series.kind];
+                      const displayUnit = series.unit || config.unit;
                       const latestValue =
                         series.data.length > 0 ? series.data[series.data.length - 1].value : null;
+                      const latestTimestamp = series.data.at(-1)?.timestamp;
                       const electrodeStatus = detectElectrodeDisconnect(
                         series.kind,
                         series.unit,
@@ -584,7 +638,7 @@ export default function SensorsPage() {
                       return (
                         <div
                           key={series.kind}
-                          className={`bg-white/40 rounded-2xl p-4 border backdrop-blur-sm ${
+                          className={`bg-white rounded-xl p-4 sm:p-6 border ${
                             electrodeStatus !== 'ok'
                               ? 'border-amber-400/40 shadow-amber-100'
                               : 'border-black/[0.04]'
@@ -610,19 +664,37 @@ export default function SensorsPage() {
                           )}
 
                           {/* Chart Header */}
-                          <div className="flex items-center justify-between mb-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">{config.icon}</span>
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{ background: config.color }}
+                                aria-hidden="true"
+                              />
                               <span className="text-sm font-medium text-gray-700">
                                 {config.label}
                               </span>
                             </div>
                             {latestValue !== null && (
                               <div className="text-right">
-                                <span className="text-xl font-bold" style={{ color: config.color }}>
+                                <span className="text-2xl font-medium tabular-nums text-gray-800">
                                   {latestValue}
                                 </span>
-                                <span className="text-xs text-gray-400 ml-1">{config.unit}</span>
+                                <span className="text-xs text-gray-500 ml-1">{displayUnit}</span>
+                                {latestTimestamp && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Letzter Messwert ·{' '}
+                                    <time dateTime={latestTimestamp}>
+                                      {new Date(latestTimestamp).toLocaleString(locale, {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                      })}
+                                    </time>
+                                  </p>
+                                )}
                               </div>
                             )}
                           </div>
@@ -630,10 +702,13 @@ export default function SensorsPage() {
                           {/* Chart */}
                           {series.data.length > 0 ? (
                             <ResponsiveContainer width="100%" height={220}>
-                              <LineChart data={series.data}>
+                              <LineChart
+                                data={series.data}
+                                accessibilityLayer
+                                margin={{ top: 12, right: 16, bottom: 8, left: 0 }}
+                              >
                                 <CartesianGrid
-                                  strokeDasharray="3 3"
-                                  stroke="rgba(0,0,0,0.04)"
+                                  stroke="var(--color-border-light)"
                                   vertical={false}
                                 />
                                 <XAxis
@@ -644,17 +719,23 @@ export default function SensorsPage() {
                                       return formatTime(t);
                                     return formatDate(t);
                                   }}
-                                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                  tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
                                   axisLine={{ stroke: 'rgba(0,0,0,0.04)' }}
                                   tickLine={false}
                                   interval="preserveStartEnd"
                                   minTickGap={40}
                                 />
                                 <YAxis
-                                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                  tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
                                   axisLine={false}
                                   tickLine={false}
-                                  width={40}
+                                  width={64}
+                                  label={{
+                                    value: displayUnit,
+                                    angle: -90,
+                                    position: 'insideLeft',
+                                    style: { fill: 'var(--color-text-secondary)', fontSize: 12 },
+                                  }}
                                   domain={['auto', 'auto']}
                                 />
                                 <Tooltip
@@ -662,21 +743,21 @@ export default function SensorsPage() {
                                     borderRadius: '12px',
                                     border: '1px solid rgba(0,0,0,0.06)',
                                     boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-                                    fontSize: '11px',
+                                    fontSize: '13px',
                                     padding: '8px 12px',
-                                    background: 'rgba(255,255,255,0.9)',
-                                    backdropFilter: 'blur(8px)',
+                                    background: 'var(--color-bg)',
+                                    color: 'var(--color-text-primary)',
                                   }}
                                   labelFormatter={(t) =>
                                     new Date(t as string).toLocaleString('de-CH')
                                   }
                                   formatter={(value: number) => [
-                                    `${value} ${config.unit}`,
+                                    `${value} ${displayUnit}`,
                                     config.label,
                                   ]}
                                 />
                                 <Line
-                                  type="monotone"
+                                  type="linear"
                                   dataKey="value"
                                   stroke={config.color}
                                   strokeWidth={2}
@@ -687,7 +768,8 @@ export default function SensorsPage() {
                                     stroke: '#fff',
                                     strokeWidth: 2,
                                   }}
-                                  isAnimationActive={timeRange !== 'live'}
+                                  connectNulls={false}
+                                  isAnimationActive={false}
                                 />
                               </LineChart>
                             </ResponsiveContainer>
@@ -704,12 +786,12 @@ export default function SensorsPage() {
 
               {/* Live indicator + Realtime button */}
               {timeRange === 'live' && !loadingData && sensorData.length > 0 && (
-                <div className="mt-4 flex items-center justify-center gap-3 text-xs text-gray-400">
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-gray-500">
                   {realtimeActive ? (
                     <>
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                       <span className="text-emerald-600 font-medium">
-                        Realtime {wsConnected ? 'verbunden' : 'verbindet…'}
+                        Echtzeit {wsConnected ? 'verbunden' : 'verbindet…'}
                       </span>
                       <span className="font-mono text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">
                         {formatCountdown(realtimeRemaining)}
@@ -718,13 +800,13 @@ export default function SensorsPage() {
                         onClick={stopRealtime}
                         className="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium transition-colors border border-red-200/50"
                       >
-                        Stop
+                        Beenden
                       </button>
                     </>
                   ) : (
                     <>
                       <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
-                      Live – aktualisiert alle 5s
+                      Abfrage alle 5 Sekunden
                       <button
                         onClick={startRealtime}
                         className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-all duration-200 border border-emerald-200/50 hover:shadow-sm"
@@ -741,7 +823,7 @@ export default function SensorsPage() {
                         >
                           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                         </svg>
-                        Realtime
+                        Echtzeit starten
                       </button>
                     </>
                   )}
@@ -852,7 +934,7 @@ export default function SensorsPage() {
   };
 
   const renderSensorTable = (sensorList: SensorInfo[], isArchivedGroup = false) => (
-    <div className="glass-table hidden sm:block">
+    <div className="glass-table hidden xl:block">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-black/[0.04]">
@@ -890,7 +972,16 @@ export default function SensorsPage() {
                     >
                       ▶
                     </span>
-                    {s.name || s.mac_address}
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSensorClick(s.id);
+                      }}
+                      aria-expanded={selectedSensor === s.id}
+                      className="text-left py-2"
+                    >
+                      {s.name || s.mac_address}
+                    </button>
                     {isArchivedGroup && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
                         Archiviert
@@ -962,18 +1053,22 @@ export default function SensorsPage() {
   );
 
   const renderSensorMobileCards = (sensorList: SensorInfo[], isArchivedGroup = false) => (
-    <div className="space-y-2 sm:hidden">
+    <div className="space-y-2 xl:hidden">
       {sensorList.map((s) => (
         <Fragment key={s.id}>
-          <div
+          <button
+            type="button"
+            aria-expanded={selectedSensor === s.id}
             onClick={() => handleSensorClick(s.id)}
-            className={`glass-card p-4 cursor-pointer ${
+            className={`glass-card w-full text-left p-4 cursor-pointer ${
               selectedSensor === s.id ? 'border-emerald-500/20' : ''
             } ${isArchivedGroup ? 'opacity-80 bg-gray-50/40' : ''}`}
           >
             <div className="flex items-center justify-between gap-2 mb-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-800">{s.name || s.mac_address}</span>
+                <span className="text-sm font-medium text-gray-800 break-all">
+                  {s.name || s.mac_address}
+                </span>
                 <span
                   className={`w-2 h-2 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}
                 />
@@ -984,7 +1079,10 @@ export default function SensorsPage() {
                 </span>
               )}
             </div>
-            <div className="text-xs text-gray-400 font-mono">{s.mac_address}</div>
+            <div className="text-xs text-gray-500">
+              {s.status === 'online' ? 'Online' : 'Offline'} · {s.gateway_name || 'Kein Gateway'} ·{' '}
+              {s.mac_address}
+            </div>
             {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
               <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200/50">
                 <span>⚠️</span>
@@ -992,7 +1090,7 @@ export default function SensorsPage() {
                 {electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})
               </div>
             )}
-          </div>
+          </button>
           {selectedSensor === s.id && (
             <div className="mt-1 mb-2 animate-in slide-in-from-top-2 duration-200">
               {renderSensorDetailPanel()}
@@ -1007,19 +1105,19 @@ export default function SensorsPage() {
     <div className="space-y-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Sensoren</h1>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Messungen & Sensoren</h1>
           <p className="text-sm text-gray-400 mt-1">
-            ESP32-Sensormodule – klicke auf einen Sensor für Live-Daten
+            Wähle einen Sensor, um Messwerte, Verlauf und Live-Übertragung anzusehen.
           </p>
         </div>
         <button
           onClick={() => setIsPairDialogOpen(true)}
-          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-2xl hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md active:scale-95 text-center whitespace-nowrap"
+          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors text-center whitespace-nowrap"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Sensor Koppeln
+          Sensor verbinden
         </button>
       </div>
 
@@ -1049,6 +1147,7 @@ export default function SensorsPage() {
           <div className="border border-black/[0.06] rounded-2xl bg-gray-50/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
             <button
               onClick={() => setIsArchiveOpen((prev) => !prev)}
+              aria-expanded={isArchiveOpen}
               className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-black/[0.02] transition-colors"
             >
               <div className="flex items-center gap-3">

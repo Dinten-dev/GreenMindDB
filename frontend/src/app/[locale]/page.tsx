@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import ScrollReveal from '@/components/ScrollReveal';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 
 /* ── Inline SVG Icon Components ──────────── */
 function IconSignal() {
@@ -61,69 +61,39 @@ function IconLeaf() {
 
 export default function LandingPage() {
   const t = useTranslations('LandingPage');
+  const locale = useLocale();
 
   return (
-    <div className="min-h-screen">
+    <div className="landing-page min-h-screen">
       {/* ═══════════════════════════════════════════
                  HERO
             ═══════════════════════════════════════════ */}
-      <section className="relative pt-24 pb-16 md:pt-36 md:pb-32 px-6 overflow-hidden">
-        {/* Hero background image with green overlay */}
-        <div
-          className="absolute inset-0 z-0"
-          style={{
-            backgroundImage: 'url(/hero-greenhouse.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center top',
-            backgroundRepeat: 'no-repeat',
-            opacity: 0.18,
-          }}
-        />
-        <div
-          className="absolute inset-0 z-[1]"
-          style={{
-            background:
-              'radial-gradient(ellipse at center, rgba(52,199,89,0.06) 0%, rgba(255,255,255,0.40) 50%, rgba(255,255,255,0.85) 100%)',
-          }}
-        />
-        <div className="relative z-10 max-w-[1280px] mx-auto text-center">
-          <ScrollReveal variant="fade-in" delay={100}>
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50/80 backdrop-blur-sm text-amber-700 text-sm font-medium mb-8 border border-amber-200/40">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+      <section className="landing-hero px-6">
+        <div className="landing-hero-image" aria-hidden="true" />
+        <div className="landing-hero-shade" aria-hidden="true" />
+        <div className="landing-hero-content mx-auto text-center">
+          <div>
+            <p className="inline-flex items-center gap-2 text-sm text-apple-gray-600 mb-7">
+              <span className="w-2 h-2 rounded-full bg-gm-green-600" aria-hidden="true" />
               {t('hero.inDevelopment')}
-            </div>
-          </ScrollReveal>
-
-          <ScrollReveal variant="fade-up" delay={200}>
-            <h1 className="text-[2.5rem] md:text-8xl font-bold text-apple-gray-800 tracking-tight leading-[1.08] mb-6 md:mb-8 mt-6 md:mt-0">
+            </p>
+            <h1 className="landing-title text-apple-gray-800 mb-7">
               {t('hero.titlePart1')}
               <br />
-              <span className="gradient-text">{t('hero.titlePart2')}</span>
+              <span className="text-gm-green-600">{t('hero.titlePart2')}</span>
             </h1>
-          </ScrollReveal>
-
-          <ScrollReveal variant="fade-up" delay={400}>
-            <p className="text-base md:text-2xl text-apple-gray-500 max-w-2xl mx-auto leading-relaxed mb-8 md:mb-14 px-2 md:px-0">
+            <p className="text-base sm:text-lg md:text-xl text-apple-gray-600 max-w-2xl mx-auto leading-relaxed mb-9">
               {t('hero.subtitle')}
             </p>
-          </ScrollReveal>
-
-          <ScrollReveal variant="fade-up" delay={550}>
-            <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-              <Link
-                href="/early-access"
-                className="btn-glow w-full md:w-auto px-8 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-600 transition-all duration-300 shadow-lg shadow-gm-green-500/20"
-              >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-center gap-3 sm:gap-5">
+              <Link href={`/${locale}/early-access`} className="landing-primary text-center">
                 {t('hero.requestAccess')}
               </Link>
-              <Link
-                href="/technology"
-                className="w-full md:w-auto px-8 py-4 text-apple-gray-700 rounded-full text-lg font-medium hover:bg-apple-gray-100 transition-all duration-300"
-              >
+              <Link href={`/${locale}/technology`} className="landing-secondary text-center">
                 {t('hero.howItWorks')}
               </Link>
             </div>
-          </ScrollReveal>
+          </div>
         </div>
       </section>
 
@@ -156,7 +126,7 @@ export default function LandingPage() {
                  LÖSUNG
             ═══════════════════════════════════════════ */}
       <section className="py-16 md:py-28 px-6 bg-apple-gray-100">
-        <div className="max-w-[1280px] mx-auto">
+        <div className="max-w-[1200px] mx-auto">
           <ScrollReveal>
             <div className="text-center mb-10 md:mb-16">
               <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
@@ -170,7 +140,7 @@ export default function LandingPage() {
               </p>
             </div>
           </ScrollReveal>
-          <div className="grid md:grid-cols-3 gap-4 md:gap-6">
+          <div className="landing-feature-grid grid md:grid-cols-3 gap-4 md:gap-6">
             <ScrollReveal delay={100}>
               <FeatureCard
                 icon={<IconSignal />}
@@ -200,7 +170,7 @@ export default function LandingPage() {
                  WIE ES FUNKTIONIERT
             ═══════════════════════════════════════════ */}
       <section className="py-16 md:py-28 px-6">
-        <div className="max-w-[1280px] mx-auto">
+        <div className="max-w-[1200px] mx-auto">
           <ScrollReveal>
             <div className="text-center mb-10 md:mb-20">
               <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
@@ -214,7 +184,7 @@ export default function LandingPage() {
               </p>
             </div>
           </ScrollReveal>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               {
                 step: '01',
@@ -255,7 +225,7 @@ export default function LandingPage() {
                  FUNDAMENT
             ═══════════════════════════════════════════ */}
       <section className="py-16 md:py-28 px-6 bg-apple-gray-100">
-        <div className="max-w-[1280px] mx-auto">
+        <div className="max-w-[1200px] mx-auto">
           <ScrollReveal>
             <div className="text-center mb-10 md:mb-16">
               <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
@@ -270,7 +240,7 @@ export default function LandingPage() {
             </div>
           </ScrollReveal>
 
-          <div className="grid grid-cols-3 gap-4 md:gap-8 max-w-[960px] mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-8 max-w-[960px] mx-auto">
             <ScrollReveal delay={100}>
               <div className="text-center p-4 md:p-8">
                 <div className="text-2xl md:text-5xl font-bold gradient-text stat-value mb-2">
@@ -312,7 +282,7 @@ export default function LandingPage() {
                  POTENZIALE
             ═══════════════════════════════════════════ */}
       <section className="py-16 md:py-28 px-6">
-        <div className="max-w-[1280px] mx-auto">
+        <div className="max-w-[1200px] mx-auto">
           <ScrollReveal>
             <div className="text-center mb-10 md:mb-16">
               <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
@@ -323,7 +293,7 @@ export default function LandingPage() {
               </h2>
             </div>
           </ScrollReveal>
-          <div className="flex flex-col gap-4 md:grid md:grid-cols-3 md:gap-6">
+          <div className="landing-feature-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {[
               { title: t('potentials.items.i1.title'), desc: t('potentials.items.i1.description') },
               { title: t('potentials.items.i2.title'), desc: t('potentials.items.i2.description') },
@@ -349,7 +319,7 @@ export default function LandingPage() {
                  CTA
             ═══════════════════════════════════════════ */}
       <section className="py-16 md:py-28 px-6 bg-apple-gray-800">
-        <div className="max-w-[1280px] mx-auto text-center">
+        <div className="max-w-[1200px] mx-auto text-center">
           <ScrollReveal>
             <p className="text-sm font-semibold text-gm-green-400 uppercase tracking-widest mb-4">
               {t('cta.tag')}
@@ -369,7 +339,7 @@ export default function LandingPage() {
           </ScrollReveal>
           <ScrollReveal delay={450}>
             <Link
-              href="/early-access"
+              href={`/${locale}/early-access`}
               className="btn-glow inline-flex w-full md:w-auto justify-center px-10 py-4 bg-gm-green-500 text-white rounded-full text-lg font-medium hover:bg-gm-green-400 transition-colors duration-300"
             >
               {t('cta.button')}

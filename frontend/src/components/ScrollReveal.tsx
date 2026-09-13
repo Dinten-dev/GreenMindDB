@@ -71,7 +71,7 @@ export default function ScrollReveal({
   return (
     <div
       ref={ref}
-      className={className}
+      className={`scroll-reveal ${className}`}
       style={{
         ...baseStyles,
         ...(isVisible ? visibleStyles : hiddenStyles[variant]),

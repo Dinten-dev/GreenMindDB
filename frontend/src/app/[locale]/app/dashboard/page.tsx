@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { useLocale } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   apiListZones,
@@ -16,6 +18,10 @@ import {
 import PairSensorDialog from '../sensors/PairSensorDialog';
 
 export default function DashboardPage() {
+  const locale = useLocale();
+  const [loadError, setLoadError] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const { user, createOrg, refresh } = useAuth();
   const [zones, setZones] = useState<Zone[]>([]);
   const [gateways, setGateways] = useState<GatewayInfo[]>([]);
@@ -31,13 +37,17 @@ export default function DashboardPage() {
   const [updatingSmsSensorId, setUpdatingSmsSensorId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
     try {
       const [z, gw, sen] = await Promise.all([apiListZones(), apiListGateways(), apiListSensors()]);
       setZones(z);
       setGateways(gw);
       setSensors(sen);
+      setUpdatedAt(new Date());
     } catch (err) {
       console.error('Dashboard load error:', err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -51,10 +61,12 @@ export default function DashboardPage() {
   const handleCreateOrg = async () => {
     if (!orgName.trim()) return;
     setCreatingOrg(true);
+    setActionError(null);
     try {
       await createOrg(orgName);
       await refresh();
     } catch (err) {
+      setActionError('Die Organisation konnte nicht erstellt werden. Bitte erneut versuchen.');
       console.error(err);
     } finally {
       setCreatingOrg(false);
@@ -64,6 +76,7 @@ export default function DashboardPage() {
   const confirmDelete = async () => {
     if (!deletingGatewayId) return;
     setIsDeleting(true);
+    setActionError(null);
     try {
       await apiDeleteGateway(deletingGatewayId);
       setGateways((prev) => prev.filter((g) => g.id !== deletingGatewayId));
@@ -73,6 +86,7 @@ export default function DashboardPage() {
       setDeletingGatewayId(null);
     } catch (err) {
       console.error('Failed to delete gateway:', err);
+      setActionError('Das Gateway konnte nicht vollständig entfernt werden. Bitte erneut laden.');
     } finally {
       setIsDeleting(false);
     }
@@ -97,12 +111,20 @@ export default function DashboardPage() {
     return (
       <div className="max-w-md mx-auto mt-24">
         <div className="glass-card p-8 text-center">
-          <div className="text-4xl mb-4">🏢</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Organisation erstellen</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Willkommen bei GreenMind</h2>
           <p className="text-sm text-gray-400 mb-6">
             Eine Organisation gruppiert Zonen, Gateways und Teammitglieder.
           </p>
+          {actionError && (
+            <p role="alert" className="text-sm text-red-700 mb-4">
+              {actionError}
+            </p>
+          )}
+          <label htmlFor="organization-name" className="block text-left text-sm text-gray-600 mb-2">
+            Name deiner Organisation
+          </label>
           <input
+            id="organization-name"
             type="text"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
@@ -125,7 +147,7 @@ export default function DashboardPage() {
     return (
       <div className="animate-pulse space-y-6">
         <div className="h-8 w-48 bg-black/[0.04] rounded-xl" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-28 bg-black/[0.04] rounded-2xl" />
           ))}
@@ -135,6 +157,23 @@ export default function DashboardPage() {
     );
   }
 
+  if (loadError)
+    return (
+      <div className="glass-card p-8 max-w-xl">
+        <h1 className="text-2xl font-semibold text-gray-800">Überblick</h1>
+        <p role="alert" className="mt-3 text-sm text-gray-600">
+          Deine Daten konnten nicht geladen werden. Bitte prüfe die Verbindung und versuche es
+          erneut.
+        </p>
+        <button
+          onClick={loadData}
+          className="mt-5 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium"
+        >
+          Erneut laden
+        </button>
+      </div>
+    );
+
   const onlineGateways = gateways.filter((g) => g.status === 'online').length;
   const healthyDataFlows = gateways.filter(
     (g) => g.status === 'online' && !gatewayHasWavIssue(g)
@@ -143,48 +182,98 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="dashboard-welcome border border-gray-200/70 rounded-2xl p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
+            Dein Gewächshaus im Blick
+          </h1>
+          <p className="text-sm text-gray-500 mt-2">
             {user?.organization_name || 'Deine Organisation'} – Überblick
           </p>
         </div>
-        <button
-          onClick={() => setIsPairDialogOpen(true)}
-          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-2xl hover:bg-gray-800 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md active:scale-95 text-center whitespace-nowrap"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Sensor Koppeln
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/${locale}/app/sensors`}
+            className="px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
+          >
+            Messungen ansehen
+          </Link>
+          <button
+            onClick={() => setIsPairDialogOpen(true)}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            Sensor verbinden
+          </button>
+        </div>
       </div>
 
+      {actionError && (
+        <p role="alert" className="rounded-xl p-4 bg-red-50 text-red-700 text-sm">
+          {actionError}
+        </p>
+      )}
+      <div className="flex flex-wrap justify-between items-center gap-3 text-sm text-gray-500">
+        <p>
+          {updatedAt
+            ? `Zuletzt geladen: ${updatedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+            : 'Noch nicht geladen'}
+        </p>
+        <button
+          onClick={loadData}
+          className="px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+        >
+          Aktualisieren
+        </button>
+      </div>
+      {gateways.some((g) => g.status !== 'online' || gatewayHasWavIssue(g)) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <p className="font-medium text-sm text-amber-900">Verbindungen prüfen</p>
+          <p className="text-sm text-amber-800 mt-1">
+            Mindestens ein Gateway ist offline oder meldet ausstehende Übertragungen.
+          </p>
+          <Link
+            href={`/${locale}/app/gateways`}
+            className="inline-block mt-2 text-sm font-medium text-amber-900 underline underline-offset-4"
+          >
+            Gateways ansehen →
+          </Link>
+        </div>
+      )}
+
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Zonen" value={zones.length} icon="⌂" />
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard label="Zonen" value={zones.length} />
+        <StatCard label="Gateways" value={gateways.length} sub={`${onlineGateways} online`} />
+        <StatCard label="Sensoren" value={sensors.length} />
         <StatCard
-          label="Gateways"
-          value={gateways.length}
-          sub={`${onlineGateways} online`}
-          icon="◎"
-        />
-        <StatCard label="Sensoren" value={sensors.length} icon="📡" />
-        <StatCard
-          label="Datenfluss"
+          label="Übertragung bereit"
           value={healthyDataFlows}
-          sub={`von ${gateways.length}`}
-          icon="◉"
+          sub={`von ${gateways.length} Gateways online, ohne WAV-Warnung`}
           accent
         />
       </div>
 
       {/* Gateway Status */}
       {gateways.length > 0 ? (
-        <div className="glass-card p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Gateways</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="glass-card p-4 sm:p-6">
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Verbindungen</h2>
+              <p className="text-sm text-gray-500 mt-1">Deine Gateways übertragen die Messungen.</p>
+            </div>
+            <Link href={`/${locale}/app/gateways`} className="text-sm text-emerald-700 font-medium">
+              Alle Gateways →
+            </Link>
+          </div>
+          <div className="grid xl:grid-cols-2 gap-3">
             {gateways.map((gw) => {
               const wavIssue = gatewayHasWavIssue(gw);
               return (
@@ -193,28 +282,32 @@ export default function DashboardPage() {
                   className={`group flex items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border transition-colors hover:bg-white/60 relative ${wavIssue ? 'border-amber-300' : 'border-black/[0.03]'}`}
                 >
                   <span
-                    className={`w-2.5 h-2.5 rounded-full ${gw.status !== 'online' ? 'bg-gray-300' : wavIssue ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'}`}
+                    className={`w-2.5 h-2.5 shrink-0 rounded-full ${gw.status !== 'online' ? 'bg-gray-300' : wavIssue ? 'bg-amber-500' : 'bg-emerald-500'}`}
                   />
-                  <div className="flex-1 min-w-0 pr-8">
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
                       {gw.name || gw.hardware_id}
                     </p>
                     <p className="text-xs text-gray-400">
-                      {gw.sensor_count} Sensoren · {gw.zone_name}
+                      {gw.status === 'online' ? 'Online' : 'Offline'} · {gw.sensor_count} Sensoren ·{' '}
+                      {gw.zone_name}
                     </p>
                     {wavIssue && (
                       <p className="text-xs text-amber-600">
-                        WAV-Rückstau: {gw.wav_pending_files ?? 0} Dateien
+                        Ausstehende WAV-Dateien: {gw.wav_pending_files ?? 0}
                         {gw.wav_last_error_code ? ` · ${gw.wav_last_error_code}` : ''}
                       </p>
                     )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      {gw.last_seen
+                        ? `Letzter Kontakt ${timeAgo(gw.last_seen)}`
+                        : 'Noch kein Kontakt'}
+                    </p>
                   </div>
-                  <span className="text-xs text-gray-400 shrink-0">
-                    {gw.last_seen ? timeAgo(gw.last_seen) : 'nie'}
-                  </span>
                   <button
                     onClick={() => setDeletingGatewayId(gw.id)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    className="shrink-0 p-2.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    aria-label={`${gw.name || gw.hardware_id} entfernen`}
                     title="Gateway entfernen"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -233,19 +326,24 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4">🖥</div>
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Gateways</h3>
           <p className="text-sm text-gray-400">
-            Erstelle eine Zone und paire ein Raspberry Pi Gateway, um Sensordaten zu empfangen.
+            Verbinde dein erstes Gateway, damit die Messungen deiner Sensoren hier ankommen.
           </p>
+          <Link
+            href={`/${locale}/app/${zones.length ? 'gateways' : 'zones'}`}
+            className="inline-block mt-5 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium"
+          >
+            {zones.length ? 'Gateway verbinden' : 'Erste Zone erstellen'}
+          </Link>
         </div>
       )}
 
       {/* Sensor Status & SMS Alerts */}
       {sensors.length > 0 && (
-        <div className="glass-card p-6">
+        <div className="glass-card p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Sensoren & SMS-Warnungen</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid xl:grid-cols-2 gap-3">
             {sensors.map((sensor) => (
               <div
                 key={sensor.id}
@@ -253,13 +351,15 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span
-                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${sensor.status === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${sensor.status === 'online' ? 'bg-emerald-500' : 'bg-gray-300'}`}
                   />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
                       {sensor.name || sensor.mac_address}
                     </p>
-                    <p className="text-xs text-gray-400 truncate">{sensor.mac_address}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {sensor.status === 'online' ? 'Online' : 'Offline'} · {sensor.mac_address}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -270,6 +370,8 @@ export default function DashboardPage() {
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                       : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
                   }`}
+                  aria-pressed={sensor.sms_alerts_enabled}
+                  aria-label={`SMS-Warnungen für ${sensor.name || sensor.mac_address}`}
                   title="SMS Warnungen bei Elektroden-Abfall"
                 >
                   <span className="text-sm">📱</span>
@@ -343,22 +445,17 @@ function StatCard({
   label,
   value,
   sub,
-  icon,
   accent,
 }: {
   label: string;
   value: number;
   sub?: string;
-  icon: string;
   accent?: boolean;
 }) {
   return (
-    <div className={`glass-card accent-glow p-5 ${accent ? 'border-emerald-500/20' : ''}`}>
+    <div className={`glass-card min-w-0 p-4 sm:p-5 ${accent ? 'border-emerald-500/20' : ''}`}>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-base text-gray-400">{icon}</span>
-        <span className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">
-          {label}
-        </span>
+        <span className="text-sm text-gray-600 font-medium">{label}</span>
       </div>
       <p
         className={`text-2xl font-bold tracking-tight ${accent ? 'text-emerald-600' : 'text-gray-800'}`}
