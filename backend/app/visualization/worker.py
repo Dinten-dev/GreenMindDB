@@ -497,7 +497,7 @@ def main():
         for row in read_archive(manifest):
             if columns is None:
                 columns = sorted(row)
-                if not all(re.fullmatch(r"[a-z_]+", col) for col in columns):
+                if not all(re.fullmatch(r"[a-z_][a-z0-9_]*", col) for col in columns):
                     raise ValueError("Unexpected backup columns")
             batch.append(row)
             if len(batch) >= 1000:

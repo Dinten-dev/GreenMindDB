@@ -1,6 +1,6 @@
 name: ${VISUAL_PROJECT}
 x-common: &common
-  image: greenmind-visual-api:20260915-1
+  image: greenmind-visual-api:20260915-2
   restart: unless-stopped
   user: '${VISUAL_UID}:${VISUAL_GID}'
   env_file:
@@ -10,7 +10,7 @@ x-common: &common
   security_opt: [no-new-privileges:true]
   cap_drop: [ALL]
   read_only: true
-  tmpfs: [/tmp:size=32m,mode=1777]
+  tmpfs: ['/tmp:size=32m,mode=1777']
   pids_limit: 48
   logging:
     driver: json-file
@@ -43,7 +43,7 @@ services:
       VISUAL_BATCH_PAUSE: '0.1'
       VISUAL_WAV_PAUSE: '0.5'
       VISUAL_CYCLE_PAUSE: '20'
-      VISUAL_MAX_HOST_LOAD: '1.8'
+      VISUAL_MAX_HOST_LOAD: '2.4' # 80% of the verified three-CPU host
       OPENBLAS_NUM_THREADS: '1'
     volumes: ['./archive:/archive', './state:/state:ro']
   visual-frontend:

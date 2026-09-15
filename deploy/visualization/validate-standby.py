@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -14,7 +15,12 @@ from app.auth import create_access_token
 from app.visualization.api import read_engine
 from sqlalchemy import text
 
-base = "http://127.0.0.1:8000"
+base = os.environ.get("VISUAL_VALIDATE_BASE_URL", "http://127.0.0.1:8000")
+assert base in (
+    "http://127.0.0.1:8000",
+    "https://test.green-mind.ch",
+    "https://green-mind.ch",
+)
 checks = []
 
 
@@ -31,7 +37,9 @@ def request(path, token=None, expected=200):
     return payload
 
 
-health = json.loads(request("/health"))
+health = json.loads(
+    request("/visualization-health" if base.startswith("https:") else "/health")
+)
 checks.append("read_api_health")
 with read_engine.connect() as db:
     item = (
@@ -64,7 +72,7 @@ checks.append("authentication_and_missing_sensor")
 data = json.loads(request(route, token))
 assert data and all(row["sensor_id"] == str(item["sensor_id"]) for row in data)
 assert any(row["data"] for row in data)
-checks.append("authenticated_real_sensor_data")
+checks.append("authenticated_sensor_data")
 at = item["started_at"] + timedelta(seconds=1)
 waveform = json.loads(
     request(

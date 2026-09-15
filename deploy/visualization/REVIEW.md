@@ -15,24 +15,32 @@ Beauftragt: gestaffelte Dashboard-Historie und Originalsignalansicht auf dem Ser
 
 ## Speicher und manuelle Systemrechte
 
-Aktuell ungefähr 100 MiB verfügbarer RAM bei 4 GiB Gesamtspeicher, kein Swap. Neue Dienste werden deshalb noch nicht gestartet. `prepare-memory.sh` ergänzt 4 GiB Swap auf der Root-Partition (61 GiB frei), sichert fstab vor Änderung und startet keine Anwendungsdienste neu. Das erfordert sudo; der SSH-Benutzer traver besitzt dafür keine passwortlosen Rechte.
+Der Server besitzt drei CPUs und 4 GiB RAM. Zu Beginn waren ungefähr 100 MiB RAM verfügbar, ohne Swap. Der manuelle Schritt `prepare-memory.sh` wurde inzwischen ausgeführt: 4 GiB Swap auf der Root-Partition sind aktiv; zuletzt rund 1,2 GiB RAM verfügbar. Kein Anwendungsdienst wurde dafür neu gestartet. Der SSH-Benutzer traver besitzt weiterhin keine passwortlosen sudo-Rechte für die Nginx-Aktivierung.
 
 ## Rückweg
 
 Vor Entfernung historischer Chunks: neue Worker stoppen, vorherige Nginx-Konfiguration zurückspielen und Nginx sanft neu laden. Nach Entfernung: die neue Lese-API weiterbetreiben, bis die geprüften Originalarchive zurückgespielt sind. Nur das Frontend kann unmittelbar auf die vorherige Version zurückgeschaltet werden. Archive werden nicht automatisch gelöscht.
 
-## Lokale Prüfung
+## Prüfung
 
-17 Tests gegen eine separate echte TimescaleDB bestanden, einschliesslich komprimierter Tabellen, gleichzeitiger aktueller Einlieferung, Nachlieferung, Wiederholung, Alterungsgrenze, verweigerter Sperre, Mandantentrennung, beschädigtem Backup und vollständiger idempotenter Rücksicherung. Frontend-Typprüfung, Lint, 22 Tests und Produktionsbuild bestanden; alle drei finalen Images für linux/amd64 gebaut. Weitere 230 Backendprüfungen bestanden (drei davon auch in den 17 gezielten Tests enthalten). Die Diagramme wurden zusätzlich auf Desktop und Mobilbreite mit einer echten Production-Stichprobe vom 15. September geprüft. Das API-Image startet lokal innerhalb des 192-MiB-Limits und verweigert nicht authentifizierte Zugriffe mit 401.
-
+- 18 gezielte Tests gegen echte lokale TimescaleDB bestanden: komprimierte Chunks, parallele Einlieferung, verspätete Daten, Wiederholungen, Auflösungswechsel, gesperrte Chunks, beschädigte Backups, Mandantentrennung, WAV-Samples, vollständige Rücksicherung inklusive p05/p95 sowie Schutz vor versehentlicher Tabellenlöschung durch spätere Migrationen.
+- Weitere 230 Backendprüfungen bestanden; drei davon sind auch in den 18 gezielten Tests enthalten. Damit 245 unterschiedliche Backendprüfungen.
+- Frontend: Typprüfung, Lint, 22 Tests und beide Produktionsbuilds bestanden. Desktop und Mobilbreite mit einer echten Production-Stichprobe vom 15. September visuell geprüft.
+- Images für linux/amd64 gebaut. API-Image startet lokal innerhalb des 192-MiB-Limits und verweigert nicht authentifizierte Zugriffe mit 401.
+- Staging: getrennte Dienste laufen; Authentifizierung, Daten, CSV und 760 originale WAV-Samples im Endtest geprüft. Da Staging vorher keine Gateway-WAVs enthielt, wurde ein isolierter Prüfsensor mit bekannten Signalen angelegt.
+- Staging-Verdichtung: 60 Sekundenmesswerte im Zehnminutenfenster, bekannter Ausschlag 1200 mV erhalten, korrekte Abdeckung 10 Prozent.
+- Staging-Rücksicherung: 60 Originalzeilen aus dem auf dem Server erzeugten Archiv unverändert in eine temporäre Tabelle zurückgespielt. Keine laufenden Messwerte verändert.
+- Alle bisherigen Backend-, Gateway-/Direct-, Speicher- und Frontend-Dienste behielten ihre Startzeitpunkte.
 
 ## Bereitstellungsstatus
 
-Staging: Paket unter `/home/traver/greenmind-visual-staging`, Compose-Konfiguration und Nginx-Entwurf geprüft. Der Nginx-Test nutzt ausschliesslich temporäre Loopback-Prüfports und ein Testzertifikat. Noch keine neuen Servercontainer gestartet; noch keine Visualisierungstabellen auf dem Server erstellt, keine Daten entfernt und kein öffentlicher Proxy umgeschaltet.
+Staging: Paket und Images unter `/home/traver/greenmind-visual-staging`. Neue Tabellen und drei getrennte Dienste sind eingerichtet. Historische Entfernung ist weiterhin deaktiviert. Der öffentliche Nginx-Proxy wurde noch nicht umgeschaltet. Der Nginx-Entwurf wurde mit temporären Loopback-Prüfports und Testzertifikat erfolgreich geprüft.
 
-Production: getrenntes Image auf Main-Basis lokal fertig. Die automatische Freigabeprüfung hat die Production-Übertragung abgelehnt, weil sie die Staging-Prüfung und ausdrückliche Production-Freigabe verlangt. Kein Production-Paket übertragen.
+Die zusätzliche Prüfung des vollständigen Serverschemas fand eine zu enge Spaltennamenprüfung bei der Rücksicherung (p05/p95). Sie ist korrigiert; API-/Worker-Image `20260915-2` enthält diesen Fix und den Schutz der separat verwalteten Tabellen vor späterer Autogenerierung von Löschmigrationen. Dieses Image ist auf Staging installiert. Der vollständige Endtest und die Ausschlagsprüfung wurden damit erneut erfolgreich ausgeführt; die Aktivierungsfreigabe ist wieder vorhanden.
 
-Ausstehend: manueller Swap-Schritt wegen fehlender sudo-Rechte; danach vollständiger Staging-Lauftest, sanfte Proxy-Aktivierung mit sudo und externe Prüfung. Erst danach darf der Pruning-Marker gesetzt werden. Production benötigt zusätzlich die ausdrückliche Freigabe nach dem Prüfblock.
+Production: getrenntes Frontend-Image auf Main-Basis lokal fertig. Die automatische Freigabeprüfung hat die Production-Übertragung abgelehnt, weil sie die Staging-Prüfung und ausdrückliche Production-Freigabe verlangt. Kein Production-Paket übertragen; Production-Daten unverändert.
+
+Ausstehend: öffentliche Staging-Aktivierung mit sudo, externe Prüfung und anschliessende gezielte Bereinigung des isolierten Prüfsensors. Dessen IDs und S3-Schlüssel sind ausschliesslich in `fixture.json` dokumentiert; `cleanup-staging-fixture.py` entfernt nur diese Datensätze/Objekte. Erst nach externer Prüfung darf der Pruning-Marker gesetzt werden. Production benötigt zusätzlich die angefragte ausdrückliche Freigabe.
 
 ## Ausführung nach Speicherfreigabe
 

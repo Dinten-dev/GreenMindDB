@@ -41,6 +41,8 @@ def fixture(tmp_path, monkeypatch):
         CREATE TABLE IF NOT EXISTS gateway(id uuid PRIMARY KEY,zone_id uuid);
         CREATE TABLE IF NOT EXISTS sensor(id uuid PRIMARY KEY,gateway_id uuid);
         CREATE TABLE IF NOT EXISTS sensor_reading(timestamp timestamptz,sensor_id uuid,kind text,value double precision,unit text,PRIMARY KEY(timestamp,sensor_id,kind));
+        ALTER TABLE sensor_reading ADD COLUMN IF NOT EXISTS p05 double precision;
+        ALTER TABLE sensor_reading ADD COLUMN IF NOT EXISTS p95 double precision;
         SELECT create_hypertable('sensor_reading','timestamp',chunk_time_interval=>interval '1 day',if_not_exists=>true);
         CREATE TABLE IF NOT EXISTS wav_file(id uuid PRIMARY KEY,sensor_id uuid,started_at timestamptz,ended_at timestamptz,feature_status text,
           raw_deleted_at timestamptz,timing_status text,coverage_ratio double precision,s3_key text,sample_rate integer,pcm_scale_mv double precision,pcm_offset_mv double precision);
@@ -444,3 +446,19 @@ def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monk
         organization_id=uuid.uuid4()
     )
     assert client.get(route, params={"at": start.isoformat()}).status_code == 404
+
+
+def test_future_migration_autogeneration_preserves_visual_tables(fixture):
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+    from sqlalchemy import MetaData
+
+    from app.visualization.schema_guard import include_object
+
+    engine, ids, start, add = fixture
+    with engine.connect() as db:
+        context = MigrationContext.configure(db, opts={"include_object": include_object})
+        changes = compare_metadata(context, MetaData())
+    dropped = {change[1].name for change in changes if change[0] == "remove_table"}
+    assert not any(name.startswith("visual_") for name in dropped)
+    assert "sensor" in dropped  # The filter does not hide ordinary application tables.
