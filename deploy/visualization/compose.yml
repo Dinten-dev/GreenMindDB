@@ -1,0 +1,66 @@
+name: ${VISUAL_PROJECT}
+x-common: &common
+  image: greenmind-visual-api:20260915-1
+  restart: unless-stopped
+  user: '${VISUAL_UID}:${VISUAL_GID}'
+  env_file:
+    - path: ./runtime.env
+      format: raw
+  networks: [existing]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp:size=32m,mode=1777]
+  pids_limit: 48
+  logging:
+    driver: json-file
+    options: {max-size: 5m, max-file: '2'}
+services:
+  visual-api:
+    <<: *common
+    command: [uvicorn, app.visualization.api:app, --host, 0.0.0.0, --port, '8000', --workers, '1', --limit-concurrency, '12', --no-access-log, --proxy-headers]
+    ports: ['127.0.0.1:${VISUAL_API_PORT}:8000']
+    mem_limit: 192m
+    memswap_limit: 384m
+    cpus: 0.30
+    environment:
+      FORWARDED_ALLOW_IPS: '${VISUAL_BRIDGE_GATEWAY},127.0.0.1'
+      OPENBLAS_NUM_THREADS: '1'
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health",timeout=5)']
+      interval: 30s
+      timeout: 6s
+      retries: 3
+  visual-worker:
+    <<: *common
+    command: [python, -m, app.visualization.worker, run, --prune]
+    mem_limit: 256m
+    memswap_limit: 512m
+    cpus: 0.20
+    environment:
+      VISUAL_ARCHIVE_DIR: /archive
+      VISUAL_PRUNE_ENABLED: 'true'
+      VISUAL_BATCH_PAUSE: '0.1'
+      VISUAL_WAV_PAUSE: '0.5'
+      VISUAL_CYCLE_PAUSE: '20'
+      VISUAL_MAX_HOST_LOAD: '1.8'
+      OPENBLAS_NUM_THREADS: '1'
+    volumes: ['./archive:/archive', './state:/state:ro']
+  visual-frontend:
+    image: ${VISUAL_FRONTEND_IMAGE}
+    restart: unless-stopped
+    networks: [existing]
+    ports: ['127.0.0.1:${VISUAL_FRONTEND_PORT}:3000']
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 160m
+    memswap_limit: 320m
+    cpus: 0.25
+    pids_limit: 48
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}
+networks:
+  existing:
+    external: true
+    name: ${VISUAL_NETWORK}

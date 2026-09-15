@@ -246,6 +246,14 @@ export async function apiListSensors(zone_id?: string, gateway_id?: string): Pro
 export interface DataPoint {
   timestamp: string;
   value: number;
+  resolution_seconds?: number;
+  reading_count?: number;
+  minimum?: number | null;
+  maximum?: number | null;
+  rms?: number | null;
+  standard_deviation?: number | null;
+  coverage_ratio?: number | null;
+  signal_source?: 'wav' | 'readings' | 'pending' | 'overlap';
 }
 
 export interface SensorDataResponse {
@@ -253,6 +261,8 @@ export interface SensorDataResponse {
   kind: string;
   unit: string;
   data: DataPoint[];
+  aggregation?: string;
+  original_signal_available?: boolean;
 }
 
 export async function apiGetSensorData(
@@ -579,4 +589,11 @@ export function createSensorWebSocket(
     if (reconnectTimer) clearTimeout(reconnectTimer);
     ws?.close();
   };
+}
+
+export async function apiGetSensorWaveform(
+  sensorId: string,
+  at: string
+): Promise<{ sample_rate: number; unit: string; source: string; data: DataPoint[] }> {
+  return apiFetch(`/visualization/sensors/${sensorId}/waveform`, { params: { at, seconds: '10' } });
 }

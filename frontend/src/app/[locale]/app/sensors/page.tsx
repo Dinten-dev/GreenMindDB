@@ -16,15 +16,7 @@ import {
   SensorDataResponse,
   WavCountInfo,
 } from '@/lib/api';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import SignalChart from './SignalChart';
 import PairSensorDialog from './PairSensorDialog';
 import DirectSensorsPanel from './DirectSensorsPanel';
 
@@ -702,78 +694,19 @@ export default function SensorsPage() {
 
                           {/* Chart */}
                           {series.data.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={220}>
-                              <LineChart
-                                data={series.data}
-                                accessibilityLayer
-                                margin={{ top: 12, right: 16, bottom: 8, left: 0 }}
-                              >
-                                <CartesianGrid
-                                  stroke="var(--color-border-light)"
-                                  vertical={false}
-                                />
-                                <XAxis
-                                  dataKey="timestamp"
-                                  tickFormatter={(t) => {
-                                    if (timeRange === 'live') return formatTimeWithSeconds(t);
-                                    if (timeRange === '1h' || timeRange === '24h')
-                                      return formatTime(t);
-                                    return formatDate(t);
-                                  }}
-                                  tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
-                                  axisLine={{ stroke: 'rgba(0,0,0,0.04)' }}
-                                  tickLine={false}
-                                  interval="preserveStartEnd"
-                                  minTickGap={40}
-                                />
-                                <YAxis
-                                  tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
-                                  axisLine={false}
-                                  tickLine={false}
-                                  width={64}
-                                  label={{
-                                    value: displayUnit,
-                                    angle: -90,
-                                    position: 'insideLeft',
-                                    style: { fill: 'var(--color-text-secondary)', fontSize: 12 },
-                                  }}
-                                  domain={['auto', 'auto']}
-                                />
-                                <Tooltip
-                                  contentStyle={{
-                                    borderRadius: '12px',
-                                    border: '1px solid rgba(0,0,0,0.06)',
-                                    boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-                                    fontSize: '13px',
-                                    padding: '8px 12px',
-                                    background: 'var(--color-bg)',
-                                    color: 'var(--color-text-primary)',
-                                  }}
-                                  labelFormatter={(t) =>
-                                    new Date(t as string).toLocaleString('de-CH')
-                                  }
-                                  formatter={(value: number) => [
-                                    `${value} ${displayUnit}`,
-                                    config.label,
-                                  ]}
-                                />
-                                <Line
-                                  type="linear"
-                                  dataKey="value"
-                                  stroke={config.color}
-                                  strokeWidth={2}
-                                  dot={false}
-                                  activeDot={{
-                                    r: 3,
-                                    fill: config.color,
-                                    stroke: '#fff',
-                                    strokeWidth: 2,
-                                  }}
-                                  connectNulls={false}
-                                  isAnimationActive={false}
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
+                            <SignalChart
+                              key={series.sensor_id}
+                              series={series}
+                              color={config.color}
+                              unit={displayUnit}
+                              formatTick={(t) =>
+                                timeRange === 'live'
+                                  ? formatTimeWithSeconds(t)
+                                  : timeRange === '1h' || timeRange === '24h'
+                                    ? formatTime(t)
+                                    : formatDate(t)
+                              }
+                            />
                           ) : (
                             <div className="h-40 flex items-center justify-center text-gray-300 text-xs">
                               Keine Daten
