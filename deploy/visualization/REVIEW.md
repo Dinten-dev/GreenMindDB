@@ -34,13 +34,17 @@ Vor Entfernung historischer Chunks: neue Worker stoppen, vorherige Nginx-Konfigu
 
 ## Bereitstellungsstatus
 
-Staging: Paket und Images unter `/home/traver/greenmind-visual-staging`. Neue Tabellen und drei getrennte Dienste sind eingerichtet. Historische Entfernung ist weiterhin deaktiviert. Der öffentliche Nginx-Proxy wurde noch nicht umgeschaltet. Der Nginx-Entwurf wurde mit temporären Loopback-Prüfports und Testzertifikat erfolgreich geprüft.
+Staging: Paket und Images unter `/home/traver/greenmind-visual-staging`. Neue Tabellen und drei getrennte Dienste sind eingerichtet. Der Benutzer hat den öffentlichen Nginx-Proxy am 15. September um 12:53 UTC erfolgreich aktiviert. Die bestehenden Warnungen anderer virtueller Hosts verhinderten weder Konfigurationsprüfung noch sanftes Neuladen.
+
+Anschliessend über öffentliches HTTPS bestanden: Authentifizierung, fehlender Sensor, authentifizierte Daten, 760 überprüfte Original-WAV-Samples und begrenzter CSV-Export mit Auflösungsangaben. Die öffentliche Oberfläche liefert dieselben Dateien wie der neue Frontend-Dienst; alle zehn referenzierten JavaScript-/CSS-Dateien waren erreichbar. Die Startseite wurde zusätzlich im Browser geöffnet.
+
+Der isolierte Prüfsensor, seine Organisation und abhängigen Testdatensätze sowie exakt seine beiden Test-WAV-Objekte wurden entfernt; ihre Abwesenheit wurde überprüft. Die kleinen archivierten Prüfstände bleiben als Nachweis erhalten. Danach wurde ausschliesslich auf Staging `state/enable-pruning` aktiviert. Worker am 15. September um 13:01 UTC gesund mit aktivierter historischer Bereinigung; zwei aktuelle Archive erfolgreich erneut gelesen und beide realen historischen Messwerte in der Verdichtung repräsentiert. Alle bisherigen Dienste behielten ihre Startzeitpunkte. Keine Aussage über freigegebenen Production-Speicher oder eine physische Sensor-Dauerprüfung.
 
 Die zusätzliche Prüfung des vollständigen Serverschemas fand eine zu enge Spaltennamenprüfung bei der Rücksicherung (p05/p95). Sie ist korrigiert; API-/Worker-Image `20260915-2` enthält diesen Fix und den Schutz der separat verwalteten Tabellen vor späterer Autogenerierung von Löschmigrationen. Dieses Image ist auf Staging installiert. Der vollständige Endtest und die Ausschlagsprüfung wurden damit erneut erfolgreich ausgeführt; die Aktivierungsfreigabe ist wieder vorhanden.
 
 Production: getrenntes Frontend-Image auf Main-Basis lokal fertig. Die automatische Freigabeprüfung hat die Production-Übertragung abgelehnt, weil sie die Staging-Prüfung und ausdrückliche Production-Freigabe verlangt. Kein Production-Paket übertragen; Production-Daten unverändert.
 
-Ausstehend: öffentliche Staging-Aktivierung mit sudo, externe Prüfung und anschliessende gezielte Bereinigung des isolierten Prüfsensors. Dessen IDs und S3-Schlüssel sind ausschliesslich in `fixture.json` dokumentiert; `cleanup-staging-fixture.py` entfernt nur diese Datensätze/Objekte. Erst nach externer Prüfung darf der Pruning-Marker gesetzt werden. Production benötigt zusätzlich die angefragte ausdrückliche Freigabe.
+Ausstehend: die bereits angefragte ausdrückliche Production-Freigabe. Staging-Aktivierung, öffentliche Prüfung, gezielte Prüfbereinigung und Aktivierung der historischen Bereinigung sind abgeschlossen. Die Quelländerungen sind lokal auf Develop eingecheckt; kein GitHub-Push, weil der vorhandene Deploy-Workflow die bisherigen Staging-Dienste neu starten würde.
 
 ## Ausführung nach Speicherfreigabe
 
