@@ -70,3 +70,6 @@ frontend/coverage/
 # ── Ruff cache ───────────────────────────────
 .ruff_cache/
 .mypy_cache/
+
+# Operator-generated Direct pilot credentials
+deploy/direct-staging/private/

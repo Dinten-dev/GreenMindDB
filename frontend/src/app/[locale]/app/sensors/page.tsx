@@ -26,6 +26,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import PairSensorDialog from './PairSensorDialog';
+import DirectSensorsPanel from './DirectSensorsPanel';
 
 type TimeRange = 'live' | '1h' | '24h' | '7d' | '30d';
 
@@ -1121,10 +1122,14 @@ export default function SensorsPage() {
         </button>
       </div>
 
+      <DirectSensorsPanel />
+
       {sensors.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-4xl mb-4">📡</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Keine Sensoren registriert</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+            Keine Gateway-Sensoren registriert
+          </h3>
           <p className="text-sm text-gray-400">
             Sensoren werden automatisch via mDNS erkannt, wenn ein Gateway verbunden ist.
           </p>

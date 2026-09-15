@@ -1,0 +1,40 @@
+name: gm-direct-staging
+services:
+  direct-api:
+    image: greenmind-direct-staging:hotspot-v2
+    restart: unless-stopped
+    env_file: [./private/direct.env]
+    command: [uvicorn, app.direct.main:app, --host, 0.0.0.0, --port, '8002', --proxy-headers, --forwarded-allow-ips, '172.28.21.1']
+    ports: ['127.0.0.1:8002:8002']
+    networks: [staging]
+    extra_hosts: ['test.green-mind.ch:172.28.21.1']
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: &logs
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  direct-worker:
+    image: greenmind-direct-staging:hotspot-v2
+    restart: unless-stopped
+    env_file: [./private/direct.env]
+    command: [python, -m, app.direct.worker]
+    networks: [staging]
+    extra_hosts: ['test.green-mind.ch:172.28.21.1']
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: *logs
+networks:
+  staging:
+    external: true
+    name: gm-staging_default

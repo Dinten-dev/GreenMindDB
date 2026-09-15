@@ -30,6 +30,9 @@ def create_app(settings=None, engine=None, store=None):
     app.state.settings = cfg
     app.state.engine = engine or (make_engine(cfg) if cfg.ingest_enabled else None)
     app.state.store = store or (ArtifactStore(cfg) if cfg.ingest_enabled else None)
+    from app.direct.pairing import install_pairing_routes
+
+    install_pairing_routes(app)
 
     @app.exception_handler(DirectError)
     async def domain_error(_, exc):

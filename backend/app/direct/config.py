@@ -12,6 +12,8 @@ class DirectSettings(BaseSettings):
 
     environment: Literal["development", "staging", "production"] = "development"
     ingest_enabled: bool = False
+    dashboard_api_url: str = ""
+    dashboard_origin: str = ""
     database_url: SecretStr = SecretStr("")
     require_tls: bool = True
     max_chunk_bytes: int = Field(64_000, ge=1024, le=256_000)

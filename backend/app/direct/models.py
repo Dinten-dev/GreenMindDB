@@ -38,6 +38,22 @@ class Budget(Base):
     used_bytes = Column(BigInteger, nullable=False, default=0)
 
 
+class Pairing(Base):
+    __tablename__ = "direct_pairing"
+    code_hash = Column(String(64), primary_key=True)
+    organization_id = Column(String(36), nullable=False)
+    zone_id = Column(String(36), nullable=False)
+    expires_at = Column(Float, nullable=False)
+    device_id = Column(String(36))
+
+
+class Enrollment(Base):
+    __tablename__ = "direct_enrollment"
+    hardware_id = Column(String(17), primary_key=True)
+    device_id = Column(String(36), ForeignKey("direct_device.id"), unique=True, nullable=False)
+    created_at = Column(Float, nullable=False, default=time.time)
+
+
 class Session(Base):
     __tablename__ = "direct_session"
     device_id = Column(String(36), ForeignKey("direct_device.id"), primary_key=True)

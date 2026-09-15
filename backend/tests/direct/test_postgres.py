@@ -117,3 +117,47 @@ def test_postgres_ack_survives_database_restart(pg_pipeline):
     assert p.upload(payload).json()["status"] == "duplicate"
     with transaction(p.engine) as db:
         assert db.query(Chunk).one().payload == payload
+
+
+def test_hotspot_pairing_code_is_consumed_atomically(pg_pipeline):
+    import hashlib
+    import uuid
+
+    from app.direct.auth import issue_token
+    from app.direct.models import Enrollment, Pairing
+
+    p = pg_pipeline
+    p.cfg.dashboard_api_url = "http://unused:8000/api/v1"
+    p.cfg.dashboard_origin = "https://test.green-mind.ch"
+    code = "ABCD2345"
+    with transaction(p.engine) as db:
+        db.add(
+            Pairing(
+                code_hash=hashlib.sha256(code.encode()).hexdigest(),
+                organization_id=str(uuid.uuid4()),
+                zone_id=str(uuid.uuid4()),
+                expires_at=time.time() + 600,
+            )
+        )
+    bodies = []
+    for i in range(2):
+        device_id = str(uuid.uuid4())
+        bodies.append(
+            {
+                "code": code,
+                "device_id": device_id,
+                "token": issue_token(device_id)[0],
+                "hardware_id": f"14:c1:9f:d9:42:9{i}",
+            }
+        )
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda body: p.client.post("/api/v1/direct-ingest/register", json=body), bodies
+            )
+        )
+    assert sorted(r.status_code for r in results) == [201, 409]
+    winner = bodies[next(i for i, r in enumerate(results) if r.status_code == 201)]
+    assert p.client.post("/api/v1/direct-ingest/register", json=winner).status_code == 201
+    with transaction(p.engine) as db:
+        assert db.query(Enrollment).count() == 1

@@ -10,6 +10,9 @@ interface PairSensorDialogProps {
 }
 
 export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSensorDialogProps) {
+  const [directAvailable, setDirectAvailable] = useState(false);
+  const [transport, setTransport] = useState<'GATEWAY' | 'DIRECT'>('GATEWAY');
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZone, setSelectedZone] = useState<string>('');
   const [pairingCode, setPairingCode] = useState<string | null>(null);
@@ -20,6 +23,11 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
     if (isOpen) {
       setPairingCode(null);
       setError('');
+      setExpiresAt(null);
+      setTransport('GATEWAY');
+      fetch('/api/v1/direct-ingest/setup')
+        .then((r) => setDirectAvailable(r.ok))
+        .catch(() => setDirectAvailable(false));
       apiListZones().then((z) => {
         setZones(z);
         if (z.length > 0) setSelectedZone(z[0].id);
@@ -40,11 +48,16 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
 
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/sensors/pairing-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ zone_id: selectedZone }),
-      });
+      const res = await fetch(
+        transport === 'DIRECT'
+          ? '/api/v1/direct-ingest/pairing-code'
+          : '/api/v1/sensors/pairing-code',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ zone_id: selectedZone }),
+        }
+      );
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -53,6 +66,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
 
       const data = await res.json();
       setPairingCode(data.code);
+      setExpiresAt(data.expires_at);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -93,6 +107,26 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
               Wähle die Ziel-Zone aus, um einen temporären Pairing-Code zu erstellen.
             </p>
             <form onSubmit={handleGenerate} className="space-y-6">
+              {directAvailable && (
+                <div>
+                  <label
+                    htmlFor="sensor-transport"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Verbindung
+                  </label>
+                  <select
+                    id="sensor-transport"
+                    value={transport}
+                    onChange={(e) => setTransport(e.target.value as 'GATEWAY' | 'DIRECT')}
+                    className="w-full rounded-xl border border-gray-200 p-3"
+                  >
+                    <option value="GATEWAY">Über ein Gateway</option>
+                    <option value="DIRECT">Direkt über WLAN (Testfirmware)</option>
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2 ml-1">
                   Zone (Gewächshaus)
@@ -145,6 +179,12 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
               <div className="text-4xl font-mono tracking-[0.2em] text-emerald-900 font-bold">
                 {pairingCode}
               </div>
+              {expiresAt && (
+                <p className="mt-3 text-sm text-emerald-800">
+                  Gültig bis {new Date(expiresAt).toLocaleTimeString('de-CH')}. Nur einmal
+                  verwendbar.
+                </p>
+              )}
             </div>
 
             <ul className="text-left text-sm text-gray-600 space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-100">
@@ -161,13 +201,16 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                 <span className="bg-white text-emerald-600 rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-sm shrink-0">
                   2
                 </span>
-                <span>Ein Anmeldefenster öffnet sich automatisch (Captive Portal).</span>
+                <span>Öffne das Anmeldefenster oder rufe http://192.168.4.1 auf.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="bg-white text-emerald-600 rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-sm shrink-0">
                   3
                 </span>
-                <span>Trage dort dein WLAN-Passwort und den Code oben ein.</span>
+                <span>
+                  Trage dort deinen WLAN-Namen, das WLAN-Passwort und den Code oben ein. Verwende
+                  dein 2,4-GHz-WLAN.
+                </span>
               </li>
             </ul>
 
