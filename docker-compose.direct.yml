@@ -32,6 +32,8 @@ services:
       DIRECT_ENVIRONMENT: ${DIRECT_ENVIRONMENT:-staging}
       DIRECT_INGEST_ENABLED: ${DIRECT_INGEST_ENABLED:-false}
       DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL:?Point only to direct-postgres/greenmind_direct}
+      DIRECT_DASHBOARD_API_URL: ${DIRECT_DASHBOARD_API_URL:-}
+      DIRECT_DASHBOARD_ORIGIN: ${DIRECT_DASHBOARD_ORIGIN:-}
       DIRECT_STORAGE: s3
       DIRECT_S3_ENDPOINT_URL: ${DIRECT_S3_ENDPOINT_URL:?Set HTTPS object storage endpoint}
       DIRECT_S3_BUCKET: ${DIRECT_S3_BUCKET:?Set greenmind-direct-staging bucket with quota}

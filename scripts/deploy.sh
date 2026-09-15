@@ -152,6 +152,8 @@ rsync -az --delete \
     --exclude 'data' \
     --exclude '.next' \
     --exclude 'keys' \
+    --exclude 'deploy/direct-*/private' \
+    --exclude 'deploy/direct-*/enabled' \
     "${LOCAL_DIR}/" \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 echo "✅ Code synced"
@@ -263,6 +265,13 @@ for i in $(seq 1 $MAX_RETRIES); do
     echo "   Attempt ${i}/${MAX_RETRIES} — Backend: ${BACKEND_OK}, Frontend: ${FRONTEND_OK}"
     sleep $RETRY_INTERVAL
 done
+
+# Refresh the independent Direct stack only after an explicit first activation.
+# State/secrets live outside the rsync-managed checkout; Staging never enters here.
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+        "bash ${REMOTE_DIR}/deploy/direct-production/rollout.sh ${REMOTE_BASE%/}/greenmind-direct-production"
+fi
 
 # ── 8. Show status ───────────────────────────────────────
 echo ""

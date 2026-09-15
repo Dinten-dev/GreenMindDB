@@ -122,7 +122,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                     className="w-full rounded-xl border border-gray-200 p-3"
                   >
                     <option value="GATEWAY">Über ein Gateway</option>
-                    <option value="DIRECT">Direkt über WLAN (Testfirmware)</option>
+                    <option value="DIRECT">Direkt über WLAN (Direct-Firmware)</option>
                   </select>
                 </div>
               )}

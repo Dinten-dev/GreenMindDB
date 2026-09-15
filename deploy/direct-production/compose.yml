@@ -1,0 +1,40 @@
+name: gm-direct-production
+services:
+  direct-api:
+    image: ${DIRECT_BACKEND_IMAGE:-greenmind-backend:latest}
+    restart: unless-stopped
+    env_file: [./private/direct.env]
+    command: [uvicorn, app.direct.main:app, --host, 0.0.0.0, --port, '8002', --proxy-headers, --forwarded-allow-ips, '172.28.20.1']
+    ports: ['127.0.0.1:8003:8002']
+    networks: [production]
+    extra_hosts: ['green-mind.ch:172.28.20.1']
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: &logs
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  direct-worker:
+    image: ${DIRECT_BACKEND_IMAGE:-greenmind-backend:latest}
+    restart: unless-stopped
+    env_file: [./private/direct.env]
+    command: [python, -m, app.direct.worker]
+    networks: [production]
+    extra_hosts: ['green-mind.ch:172.28.20.1']
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: *logs
+networks:
+  production:
+    external: true
+    name: greenminddb_default

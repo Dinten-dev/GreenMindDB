@@ -146,3 +146,19 @@ def test_production_deploy_behavior_is_preserved(deploy, skip):
     assert "COMPOSE_PROJECT_NAME=greenminddb" in start
     assert "docker-compose.prod.yml up -d --remove-orphans" in start
     assert ("docker-compose.prod.yml build &&" in start) is not skip
+
+
+def test_only_production_checks_explicit_direct_activation(deploy):
+    result, calls = deploy("production")
+    assert result.returncode == 0
+    assert any(
+        "deploy/direct-production/rollout.sh /home/test-user/greenmind-direct-production"
+        in " ".join(call["args"])
+        for call in calls
+    )
+
+
+def test_staging_never_activates_production_direct(deploy):
+    result, calls = deploy("staging")
+    assert result.returncode == 0
+    assert not any("rollout.sh" in " ".join(call["args"]) for call in calls)

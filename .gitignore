@@ -73,3 +73,6 @@ frontend/coverage/
 
 # Operator-generated Direct pilot credentials
 deploy/direct-staging/private/
+
+deploy/direct-production/private/
+deploy/direct-production/enabled
