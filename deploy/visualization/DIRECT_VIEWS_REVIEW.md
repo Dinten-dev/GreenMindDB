@@ -28,3 +28,7 @@ API-Image: `sha256:b4a85d77ef387ea926ab6ffd648e7e8cce5a34c41a957331b24d1cf9d1431
 Aktivierung: `start-direct-views.sh` zusammen mit `direct-views.yml`, `prepare-direct-views.py` und beiden geprüften Images. Künftige gezielte Wartung verwendet `docker compose -f compose.yml -f direct-views.yml`.
 
 Rückweg: neuen Worker stoppen; Lese-API und Frontend mit der bisherigen `compose.yml` gezielt wiederherstellen. Die zusätzliche Konfiguration und die neuen Diagrammtabellen können bestehen bleiben. Der Empfang und die originalen WAVs werden durch die Rücknahme nicht berührt. Kein vollständiger Develop-/Main-Release und kein Production-Push.
+
+## Freigegebene Veröffentlichung auf Develop
+
+Der Benutzer hat die Veröffentlichung auf `develop` und die Prüfung auf der Testseite freigegeben. Dieser Push verwendet einmalig `[skip ci]`: Die bestehende GitHub-Kette verbindet einen erfolgreichen CI-Push automatisch mit `scripts/deploy.sh --env staging`, das sämtliche bisherigen Staging-Dienste neu erstellen und die separate Visualisierungs-Konfiguration übergehen würde. Die oben dokumentierten lokalen Tests und Builds sind durchgeführt; ein neuer GitHub-CI-Lauf wird für diesen isolierten Release ausdrücklich nicht behauptet. Die geprüften Images werden direkt in den vorhandenen Visualisierungs-Stack geladen. Es werden ausschliesslich die zwei Lesedienste ersetzt und der neue Worker gestartet. Künftige vollständige Releases müssen die inzwischen aktive separate Visualisierungs-Konfiguration berücksichtigen.
