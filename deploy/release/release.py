@@ -408,14 +408,21 @@ def prepare(args):
     )
     archive = Path(next(iter(archives))) if archives else root.parent / "archive"
     archive.mkdir(parents=True, exist_ok=True, mode=0o700)
-    database_mounts = inspect(prefix + "-postgres-1")["Mounts"]
-    database_path = next(
-        m["Source"]
-        for m in database_mounts
-        if m["Destination"] == "/var/lib/postgresql/data"
+    # Docker's host volume directories are deliberately root-only. Query the
+    # mounted filesystem from the running DB container without changing it.
+    database_device = int(
+        run(
+            "docker",
+            "exec",
+            prefix + "-postgres-1",
+            "stat",
+            "-c",
+            "%d",
+            "/var/lib/postgresql/data",
+        ).strip()
     )
     require(
-        archive.stat().st_dev != Path(database_path).stat().st_dev,
+        archive.stat().st_dev != database_device,
         "Archive must remain on a separate filesystem from PostgreSQL",
     )
     manifest["archive_directory"] = str(archive)
