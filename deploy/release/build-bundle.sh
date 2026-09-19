@@ -8,9 +8,13 @@ revision=$(git rev-parse HEAD)
 out=${1:?Usage: build-bundle.sh ABSOLUTE_OUTPUT_DIRECTORY}
 [[ "$out" == /* && ! -e "$out" ]] || { echo 'Use a fresh absolute output directory.' >&2; exit 1; }
 mkdir -m 700 -p "$out"
+build_source=$(mktemp -d)
+trap 'rm -rf -- "$build_source"' EXIT
+# Ignored local databases, credentials and build caches must never enter an image.
+git archive "$revision" | tar -x -C "$build_source"
 for component in backend frontend; do
     docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$revision" \
-        -t "greenmind-release-${component}:${revision}" "$component"
+        -t "greenmind-release-${component}:${revision}" "$build_source/$component"
 done
 docker image save "greenmind-release-backend:${revision}" "greenmind-release-frontend:${revision}" | gzip > "$out/images.tar.gz"
 git archive "$revision" deploy/release deploy/direct-production nginx/green-mind.ch.conf nginx/test.green-mind.ch.conf | tar -x -C "$out"

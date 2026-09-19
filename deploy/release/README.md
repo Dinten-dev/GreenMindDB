@@ -32,7 +32,9 @@ transfer. Production remains a separate approval.
    **Prepare Staging Release** / **Prepare Production Release** workflows require
    the full 40-character successful CI commit. Alternatively run
    `bash deploy/release/build-bundle.sh /absolute/new/output` on a build workstation.
-   The source must be clean. No build is performed on the receiving server.
+   The source must be clean. Image contexts come from `git archive` of that exact
+   commit, excluding ignored local credentials/test databases. No build is
+   performed on the receiving server.
 2. Inspect `bundle.json`, its source revision and image/archive hashes. Transfer
    only the reviewed package after user approval. Verify SHA256 before
    `docker image load -i images.tar.gz`. Loaded config IDs must equal `bundle.json`.

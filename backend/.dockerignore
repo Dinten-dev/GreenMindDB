@@ -9,3 +9,11 @@ __pycache__/
 .venv/
 venv/
 .git/
+
+.env.*
+*.db
+*.db-*
+*.sqlite*
+.coverage*
+coverage.xml
+*.log
