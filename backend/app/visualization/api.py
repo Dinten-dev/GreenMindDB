@@ -426,3 +426,9 @@ def waveform(
             for i, value in enumerate(values)
         ],
     }
+
+
+# Direct routes use their own PostgreSQL read model and never alias Gateway IDs.
+from app.visualization.direct_api import install as install_direct_views  # noqa: E402
+
+install_direct_views(app)

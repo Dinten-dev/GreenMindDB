@@ -1,0 +1,34 @@
+# Additive override: only visualization API/frontend and the new projection worker.
+services:
+  visual-api:
+    image: greenmind-visual-api:20260919-direct
+    env_file:
+      - path: ./runtime-direct.env
+        format: raw
+    extra_hosts: ['test.green-mind.ch:172.28.21.1']
+  visual-frontend:
+    image: greenmind-visual-frontend:20260919-direct
+  visual-direct-worker:
+    image: greenmind-visual-api:20260919-direct
+    restart: unless-stopped
+    command: [python, -m, app.visualization.direct, run]
+    user: '${VISUAL_UID}:${VISUAL_GID}'
+    env_file:
+      - path: ./runtime-direct.env
+        format: raw
+    environment:
+      VISUAL_MAX_HOST_LOAD: '2.4'
+      OPENBLAS_NUM_THREADS: '1'
+    extra_hosts: ['test.green-mind.ch:172.28.21.1']
+    networks: [existing]
+    mem_limit: 256m
+    memswap_limit: 512m
+    cpus: 0.20
+    read_only: true
+    tmpfs: ['/tmp:size=16m,mode=1777']
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 48
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}

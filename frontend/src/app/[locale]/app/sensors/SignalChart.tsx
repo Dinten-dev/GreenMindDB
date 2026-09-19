@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { apiGetSensorWaveform, SensorDataResponse } from '@/lib/api';
+import { apiGetDirectWaveform, apiGetSensorWaveform, SensorDataResponse } from '@/lib/api';
 import { prepareSignalSeries, resolutionLabel } from '@/lib/signal-series';
 
 export default function SignalChart({
@@ -52,7 +52,14 @@ export default function SignalChart({
     setError('');
     setWaveform(null);
     try {
-      const result = await apiGetSensorWaveform(series.sensor_id, selected);
+      const result =
+        series.source === 'direct'
+          ? await apiGetDirectWaveform(
+              series.sensor_id,
+              selected,
+              Math.max(0, Number(series.kind.split('ch')[1] || 1) - 1)
+            )
+          : await apiGetSensorWaveform(series.sensor_id, selected);
       if (requestGeneration === generation.current) setWaveform(result);
     } catch (failure) {
       if (requestGeneration !== generation.current) return;

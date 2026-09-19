@@ -257,6 +257,9 @@ export interface DataPoint {
 }
 
 export interface SensorDataResponse {
+  source?: 'direct';
+  analytics_scope?: 'direct' | 'comparison';
+  updated_at?: string;
   sensor_id: string;
   kind: string;
   unit: string;
@@ -596,4 +599,14 @@ export async function apiGetSensorWaveform(
   at: string
 ): Promise<{ sample_rate: number; unit: string; source: string; data: DataPoint[] }> {
   return apiFetch(`/visualization/sensors/${sensorId}/waveform`, { params: { at, seconds: '10' } });
+}
+
+export async function apiGetDirectWaveform(
+  deviceId: string,
+  at: string,
+  channel = 0
+): Promise<Awaited<ReturnType<typeof apiGetSensorWaveform>>> {
+  return apiFetch(`/visualization/direct/${deviceId}/waveform`, {
+    params: { at, seconds: '10', channel: String(channel) },
+  });
 }
