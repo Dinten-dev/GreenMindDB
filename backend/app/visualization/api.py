@@ -227,7 +227,12 @@ def health(db: Session = Depends(get_db)):
         .mappings()
         .first()
     )
-    return {"visualization": "healthy", "worker": dict(row) if row else None}
+    return {
+        "visualization": "healthy",
+        "worker": dict(row) if row else None,
+        "release_revision": os.environ.get("RELEASE_REVISION"),
+        "release_id": os.environ.get("RELEASE_ID"),
+    }
 
 
 @app.get("/api/v1/sensors/{sensor_id}/data")

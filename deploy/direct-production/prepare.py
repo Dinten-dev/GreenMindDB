@@ -5,6 +5,7 @@ Only the dedicated Direct database/account/bucket are provisioned.
 Legacy tables, credentials, services and proxy remain unchanged.
 """
 
+import argparse
 import json
 import os
 import secrets
@@ -12,10 +13,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-if sys.argv[1:] != ["--prepare-production"]:
+if sys.argv[1:2] != ["--prepare-production"]:
     raise SystemExit(
         "Explicit preparation required: python3 prepare.py --prepare-production"
     )
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--prepare-production", action="store_true")
+parser.add_argument("--bucket-quota-gib", type=int, required=True)
+args = parser.parse_args()
+if not 1 <= args.bucket_quota_gib <= 100000:
+    raise SystemExit("Review a positive, bounded Production bucket quota")
 
 BASE = Path(__file__).resolve().parent
 os.umask(0o077)
@@ -121,7 +129,7 @@ umask 077
 trap 'rm -rf /tmp/gm-direct-production-mc-config; rm -f /tmp/gm-direct-production-policy.json' EXIT
 mc alias set setup http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
 mc mb --ignore-existing setup/{bucket} >/dev/null
-mc quota set setup/{bucket} --size 1GiB >/dev/null
+mc quota set setup/{bucket} --size {args.bucket_quota_gib}GiB >/dev/null
 mc admin user add setup {credentials["s3_access_key"]} {credentials["s3_secret_key"]} >/dev/null
 mc admin policy create setup gm-direct-production /tmp/gm-direct-production-policy.json >/dev/null
 mc admin policy attach setup gm-direct-production --user {credentials["s3_access_key"]} >/dev/null
@@ -154,5 +162,5 @@ environment = {
     "".join(f"{k}={v}\n" for k, v in environment.items())
 )
 print(
-    "Dedicated Production database, bucket, restricted credentials and 1-GiB bucket quota prepared."
+    f"Dedicated Production resources prepared with reviewed {args.bucket_quota_gib}-GiB bucket quota."
 )

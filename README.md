@@ -321,17 +321,21 @@ exact request and response schema.
 
 ## Deployment
 
-The VPS deployment workflows run only after CI succeeds:
+Branch pushes run CI only. Manual **Prepare Staging Release** and **Prepare
+Production Release** workflows require a full commit SHA with successful CI and
+build an immutable package on the CI runner. They never connect to a server.
+Review package, destination and rollback before transfer; Production requires
+separate approval and physical Gateway/Direct acceptance on Staging.
 
-| Branch | Environment | Compose file |
-|---|---|---|
-| `develop` | staging | `docker-compose.staging.yml` |
-| `main` | production | `docker-compose.prod.yml` |
+Follow [the isolated release procedure](deploy/release/README.md) to start a new
+read API/frontend, hand over projection workers and switch nginx gracefully.
+The existing Gateway and Direct receivers, database and object store stay running.
+Initial historical pruning is disabled; archive restore is a separate release gate.
 
-The workflows require environment-scoped `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and
-`DEPLOY_KNOWN_HOSTS` secrets. `scripts/deploy.sh` enforces host-key checking, rsyncs source while
-preserving host `.env` and data, builds the selected Compose stack, and waits for backend and
-frontend health. Run it manually only as an authorized operator with those variables supplied.
+`scripts/deploy.sh` is now a full-stack maintenance escape hatch. It refuses all
+operations unless `--allow-receiver-restart` is explicitly supplied. That path
+still requires `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY_FILE` and
+`DEPLOY_KNOWN_HOSTS_FILE`; it must not be used for uninterrupted ingestion.
 
 Each profile uses a distinct fixed private bridge so Gunicorn accepts `X-Forwarded-*` identity
 headers only from the expected host bridge or application proxy. Before first deployment, confirm

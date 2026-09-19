@@ -1,0 +1,48 @@
+name: Build Verified Release Package
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require exact reviewed source and passing CI
+        env:
+          REVISION: ${{ inputs.revision }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TARGET_ENVIRONMENT" == staging || "$TARGET_ENVIRONMENT" == production ]]
+          [[ $(git rev-parse HEAD) == "$REVISION" ]]
+          git merge-base --is-ancestor "$REVISION" origin/develop || git merge-base --is-ancestor "$REVISION" origin/main
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$REVISION&status=completed&per_page=100" > /tmp/ci-runs.json
+          python3 - <<'PY'
+          import json,os
+          runs=json.load(open('/tmp/ci-runs.json'))['workflow_runs']
+          assert any(r['head_sha']==os.environ['REVISION'] and r['conclusion']=='success' and r['head_repository']['full_name']==os.environ['GITHUB_REPOSITORY'] for r in runs), 'Exact commit has no successful CI run'
+          PY
+      - name: Build immutable images away from the receiving server
+        run: bash deploy/release/build-bundle.sh "$RUNNER_TEMP/greenmind-release"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: greenmind-${{ inputs.environment }}-${{ inputs.revision }}
+          path: ${{ runner.temp }}/greenmind-release
+          retention-days: 14

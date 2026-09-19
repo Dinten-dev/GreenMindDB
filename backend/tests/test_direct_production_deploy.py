@@ -33,7 +33,9 @@ def test_prepare_is_separate_and_preserves_credentials_on_retry(tmp_path, monkey
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", execute)
-    monkeypatch.setattr(sys, "argv", [str(script), "--prepare-production"])
+    monkeypatch.setattr(
+        sys, "argv", [str(script), "--prepare-production", "--bucket-quota-gib", "8"]
+    )
     previous_umask = os.umask(0o077)
     try:
         runpy.run_path(str(script))
@@ -105,6 +107,7 @@ def rollout(tmp_path):
                 **os.environ,
                 "PATH": f"{bin_dir}:{os.environ['PATH']}",
                 "CALL_LOG": str(log),
+                "DIRECT_BACKEND_IMAGE": "sha256:" + "a" * 64,
                 **overrides,
             },
             capture_output=True,

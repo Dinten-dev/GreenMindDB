@@ -16,6 +16,11 @@ from app.config import settings
 from app.logging_config import get_logger, setup_logging
 from app.operational_metrics import OperationalCollector
 
+if settings.service_role != "application":
+    raise RuntimeError(
+        "The visualization role must use app.visualization.api, not the receiving API"
+    )
+
 # ── Initialize structured logging ────────────────────────────────────
 setup_logging(settings.log_level)
 logger = get_logger(__name__)

@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,7 +34,8 @@ from app.models.user import Organization, Role, User
 
 # ── SQLite-based fixtures (no Docker required) ──────────────────────
 
-SQLITE_URL = "sqlite:///./test_ci.db"
+_sqlite_directory = tempfile.TemporaryDirectory(prefix="greenmind-pytest-")
+SQLITE_URL = "sqlite:///" + str(Path(_sqlite_directory.name) / "test.db")
 _sqlite_engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
 
 # Register PostgreSQL UUID type with SQLite compiler so models using

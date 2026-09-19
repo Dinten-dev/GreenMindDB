@@ -58,7 +58,7 @@ def fixture(tmp_path, monkeypatch):
         ids = {key: uuid.uuid4() for key in ("org", "zone", "gateway", "sensor")}
         db.execute(
             text(
-                "INSERT INTO organization VALUES (:org); INSERT INTO zone VALUES (:zone,:org); INSERT INTO gateway VALUES (:gateway,:zone); INSERT INTO sensor VALUES (:sensor,:gateway);"
+                "INSERT INTO organization(id) VALUES (:org); INSERT INTO zone VALUES (:zone,:org); INSERT INTO gateway VALUES (:gateway,:zone); INSERT INTO sensor VALUES (:sensor,:gateway);"
             ),
             ids,
         )
@@ -462,3 +462,141 @@ def test_future_migration_autogeneration_preserves_visual_tables(fixture):
     dropped = {change[1].name for change in changes if change[0] == "remove_table"}
     assert not any(name.startswith("visual_") for name in dropped)
     assert "sensor" in dropped  # The filter does not hide ordinary application tables.
+
+
+def test_release_readiness_uses_authenticated_real_api_and_database(fixture, monkeypatch):
+    import json
+    import time
+    import urllib.error
+    from urllib.parse import urlsplit
+
+    from sqlalchemy.orm import Session
+
+    from app.direct.models import Base as DirectBase
+    from app.models.user import Role, User
+    from app.services import wav_service
+    from app.visualization import direct, release_check
+
+    engine, ids, start, add = fixture
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "ALTER TABLE organization ADD COLUMN IF NOT EXISTS name text; ALTER TABLE organization ADD COLUMN IF NOT EXISTS created_at timestamptz"
+            )
+        )
+    User.__table__.create(engine, checkfirst=True)
+    DirectBase.metadata.create_all(engine)
+    direct.initialize(engine)
+    with engine.begin() as db:
+        db.execute(text("TRUNCATE users,direct_device CASCADE"))
+        db.execute(
+            text(
+                "INSERT INTO visual_worker(name,status,updated_at) VALUES('compactor','healthy',now()) ON CONFLICT(name) DO UPDATE SET status='healthy',updated_at=now()"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT INTO direct_visual_worker(id,status,updated_at) VALUES(1,'healthy',now()) ON CONFLICT(id) DO UPDATE SET status='healthy',updated_at=now()"
+            )
+        )
+    with Session(engine) as db, db.begin():
+        db.add(
+            User(
+                email="release-local@example.invalid",
+                password_hash="unused",
+                role=Role.ADMIN,
+                organization_id=ids["org"],
+                is_active=True,
+                is_verified=True,
+            )
+        )
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(380)
+        wav.writeframes(np.ones(1520, dtype="<i2").tobytes())
+    payload = output.getvalue()
+    with engine.begin() as db:
+        db.execute(
+            text("""INSERT INTO wav_file(id,sensor_id,started_at,ended_at,feature_status,timing_status,coverage_ratio,s3_key,sample_rate,pcm_scale_mv,pcm_offset_mv)
+        VALUES(:id,:sid,:start,:end,'verified','complete',1,'release.wav',380,1,0);
+        INSERT INTO wav_feature(wav_file_id,source_sha256) VALUES(:id,:sha)"""),
+            {
+                "id": uuid.uuid4(),
+                "sid": ids["sensor"],
+                "start": start,
+                "end": start + timedelta(seconds=4),
+                "sha": hashlib.sha256(payload).hexdigest(),
+            },
+        )
+    add(start, 1)
+    monkeypatch.setattr(
+        wav_service,
+        "_get_s3_client",
+        lambda: SimpleNamespace(
+            get_object=lambda **kwargs: {"ContentLength": len(payload), "Body": io.BytesIO(payload)}
+        ),
+    )
+    monkeypatch.setattr(release_check, "read_engine", engine)
+    monkeypatch.setattr(
+        release_check,
+        "resources",
+        lambda: (
+            engine,
+            SimpleNamespace(
+                client=SimpleNamespace(list_objects_v2=lambda **kwargs: {}),
+                settings=SimpleNamespace(s3_bucket="local-only"),
+            ),
+        ),
+    )
+    monkeypatch.setenv("FRONTEND_URL", "https://test.green-mind.ch")
+    monkeypatch.setenv("RELEASE_REVISION", "a" * 40)
+    monkeypatch.setenv("RELEASE_ID", "local-candidate")
+    monkeypatch.setenv("RELEASE_WORKERS_STARTED_AFTER", str(time.time() - 60))
+    monkeypatch.delenv("RELEASE_CHECK_BASE", raising=False)
+
+    def database():
+        with Session(engine) as db:
+            yield db
+
+    app.dependency_overrides[get_db] = database
+    client = TestClient(app)
+    statuses = []
+    stale_route = [False]
+
+    class Opener:
+        def open(self, request, timeout):
+            url = urlsplit(request.full_url)
+            response = client.get(
+                url.path + ("?" + url.query if url.query else ""),
+                headers=dict(request.header_items()),
+            )
+            statuses.append(response.status_code)
+            if response.status_code >= 400:
+                raise urllib.error.HTTPError(
+                    request.full_url, response.status_code, "test", {}, io.BytesIO(response.content)
+                )
+            content = response.content
+            if stale_route[0] and url.path == "/health":
+                content = json.dumps(response.json() | {"release_revision": "previous"}).encode()
+            body = io.BytesIO(content)
+            body.status = response.status_code
+            return body
+
+    monkeypatch.setattr(release_check.urllib.request, "build_opener", lambda *_: Opener())
+    assert release_check.workers_ready() == {"passed": True}
+    result = release_check.check()
+    assert result["passed"] and result["gateway_waveform_samples"] == 760
+    assert result["direct_bootstrap_without_devices"] and not result["direct_data_verified"]
+    assert statuses.count(401) == 2 and 404 in statuses
+    stale_route[0] = True
+    monkeypatch.setattr(release_check.time, "sleep", lambda _: None)
+    with pytest.raises(RuntimeError, match="not the candidate release"):
+        release_check.check()
+    stale_route[0] = False
+    # A stale heartbeat must fail even when the HTTP health route still returns 200.
+    with engine.begin() as db:
+        db.execute(text("UPDATE direct_visual_worker SET updated_at=now()-interval '10 minutes'"))
+    with pytest.raises(RuntimeError, match="Direct projection worker unavailable"):
+        release_check.check()

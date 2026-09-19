@@ -66,7 +66,7 @@ def deploy(tmp_path):
             **overrides,
         }
         result = subprocess.run(
-            ["/bin/bash", str(SCRIPT), "--env", environment, *options],
+            ["/bin/bash", str(SCRIPT), "--env", environment, "--allow-receiver-restart", *options],
             env=env,
             capture_output=True,
             text=True,
@@ -148,10 +148,10 @@ def test_production_deploy_behavior_is_preserved(deploy, skip):
     assert ("docker-compose.prod.yml build &&" in start) is not skip
 
 
-def test_only_production_checks_explicit_direct_activation(deploy):
+def test_production_maintenance_does_not_restart_independent_direct(deploy):
     result, calls = deploy("production")
     assert result.returncode == 0
-    assert any(
+    assert not any(
         "deploy/direct-production/rollout.sh /home/test-user/greenmind-direct-production"
         in " ".join(call["args"])
         for call in calls

@@ -12,6 +12,7 @@ usage() {
     echo "Options:"
     echo "  --env        Target environment (staging or production)"
     echo "  --skip-build Skip docker build (just restart services)"
+    echo "  --allow-receiver-restart Explicit full-stack maintenance permission"
     echo "  --help       Show this help"
     echo ""
     echo "Required environment: DEPLOY_USER, DEPLOY_HOST, DEPLOY_SSH_KEY_FILE,"
@@ -22,6 +23,7 @@ usage() {
 # ── Defaults ─────────────────────────────────────────────
 ENVIRONMENT=""
 SKIP_BUILD=false
+ALLOW_RECEIVER_RESTART=false
 
 # ── Parse Args ───────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -32,6 +34,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --skip-build) SKIP_BUILD=true; shift ;;
+        --allow-receiver-restart) ALLOW_RECEIVER_RESTART=true; shift ;;
         --help) usage ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
@@ -40,6 +43,13 @@ done
 if [[ -z "$ENVIRONMENT" ]]; then
     echo "❌ --env is required"
     usage
+fi
+
+# Full-stack maintenance is deliberately separate from an additive release.
+# Refuse before SSH/rsync/build: a branch push must never restart reception.
+if [[ "$ALLOW_RECEIVER_RESTART" != true ]]; then
+    echo 'Full-stack deployment requires --allow-receiver-restart. Use deploy/release for isolated visualization releases.' >&2
+    exit 2
 fi
 
 # ── Environment Config ───────────────────────────────────
@@ -266,12 +276,8 @@ for i in $(seq 1 $MAX_RETRIES); do
     sleep $RETRY_INTERVAL
 done
 
-# Refresh the independent Direct stack only after an explicit first activation.
-# State/secrets live outside the rsync-managed checkout; Staging never enters here.
-if [[ "$ENVIRONMENT" == "production" ]]; then
-    ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
-        "bash ${REMOTE_DIR}/deploy/direct-production/rollout.sh ${REMOTE_BASE%/}/greenmind-direct-production"
-fi
+# Direct reception is maintained separately with a pinned image and explicit approval.
+# A full-stack maintenance run must not implicitly restart the independent receiver.
 
 # ── 8. Show status ───────────────────────────────────────
 echo ""

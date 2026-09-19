@@ -11,6 +11,9 @@ if [[ "$activate" != --activate && ! -f "$state_dir/enabled" ]]; then
     exit 0
 fi
 [[ -f "$state_dir/private/direct.env" ]] || { echo 'Prepare dedicated Direct credentials first.' >&2; exit 1; }
+: "${DIRECT_BACKEND_IMAGE:?Provide a reviewed immutable image ID; no implicit latest release}"
+[[ "$DIRECT_BACKEND_IMAGE" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Use an immutable image ID." >&2; exit 1; }
+export DIRECT_BACKEND_IMAGE
 umask 077
 exec 9>"$state_dir/private/rollout.lock"
 flock -n 9 || { echo 'Another Direct rollout is running.' >&2; exit 1; }
@@ -42,8 +45,6 @@ restore() {
 }
 trap restore EXIT
 cp "$source_dir/compose.yml" compose.yml
-# The normal Production build supplies the reviewed backend image.
-export DIRECT_BACKEND_IMAGE=greenmind-backend:latest
 "${compose[@]}" config --quiet
 # A failed schema preflight leaves running Direct containers alone.
 "${compose[@]}" run --rm --no-deps direct-api python -m app.direct.provision init-schema

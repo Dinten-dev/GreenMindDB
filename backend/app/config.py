@@ -1,3 +1,4 @@
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, ValidationInfo, field_validator, model_validator
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
     )
 
     environment: str = "development"
+    service_role: Literal["application", "visualization"] = "application"
     log_level: str = "INFO"
     database_url: str = "postgresql+psycopg2://plantuser:plantpass@localhost:5432/plantdb"
     cors_origins: str | list[str] = ["http://localhost:3000"]
@@ -126,7 +128,10 @@ class Settings(BaseSettings):
         if env not in {"prod", "production", "stage", "staging"}:
             return self
 
-        if not self.gateway_release_signing_public_key_path.strip():
+        if (
+            self.service_role == "application"
+            and not self.gateway_release_signing_public_key_path.strip()
+        ):
             raise ValueError(
                 "GATEWAY_RELEASE_SIGNING_PUBLIC_KEY_PATH is required in staging and production"
             )
@@ -144,10 +149,11 @@ class Settings(BaseSettings):
 
         deployed_secrets = {
             "JWT_SECRET_KEY": self.jwt_secret_key,
-            "RESEND_API_KEY": self.resend_api_key,
             "S3_ACCESS_KEY_ID": self.s3_access_key_id,
             "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
         }
+        if self.service_role == "application":
+            deployed_secrets["RESEND_API_KEY"] = self.resend_api_key
         for setting_name, value in deployed_secrets.items():
             if not value.strip() or _looks_like_placeholder(value):
                 raise ValueError(
