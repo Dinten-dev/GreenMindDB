@@ -25,6 +25,48 @@ transfer. Production remains a separate approval.
 - A failed nginx check, reload or authenticated public check restores the previous
   proxy. Rollback to the old non-visual API is refused if compacted chunks exist.
 
+## Keep the existing Raspberry unchanged
+
+The cloud can issue app/config updates, reboot/service commands and a legacy
+heartbeat reset response. A server release must not deliver any of those actions.
+Before preparing a release, install the reviewed nginx continuity guard. This
+changes only the cloud proxy; do not update, reboot, reinstall or disconnect the
+production Raspberry. Its existing local health watchdog remains unchanged.
+
+After the user's review and approval of the exact server-only diff:
+
+```sh
+python3 deploy/release/gateway_guard.py prepare --environment staging --directory /home/traver/gateway-guard-staging-REVIEWED_DATE
+# Review before.conf, proposed.conf and manifest.json first.
+sudo python3 deploy/release/gateway_guard.py activate --environment staging --directory /home/traver/gateway-guard-staging-REVIEWED_DATE
+```
+
+Production uses `--environment production` and its own fresh directory, after
+separate approval. Before activation, check that no device update/reboot is
+already executing: a command fetched earlier cannot be revoked by a proxy.
+
+The guard returns HTTP 503 for desired-state polls, remote command polls and
+app/config downloads. Existing gateway workers retry these responses without
+exiting or resetting. Successful heartbeat requests still reach the old API;
+HTTP 410 is converted to HTTP 503, so a backend registration problem cannot
+trigger the old firmware's `RESET_TO_SETUP_MODE` handler. Upload routes stay
+unchanged, including their authentication and actual success/failure responses.
+No upload is falsely acknowledged. TLS/DNS outages still appear as network errors.
+
+The full-stack maintenance script also checks the installed guard before rsync or builds.
+`release.py` refuses preparation or operations without the exact guard in both
+current/rollback and candidate configurations. A visualization rollback therefore
+keeps remote control paused. The standard site templates include the same guard.
+Do not queue remote actions during this pause; removing it is a separate reviewed
+Gateway-maintenance action, including inspection of pending commands/targets.
+
+Only one physical Raspberry is available. Exercise failures in local simulations,
+not on that device: continue real local ingestion/health during DNS, timeout,
+401/403 and 502/503 errors, retain queued readings/WAVs, then recover uploads.
+Validate the installed Pi version read-only when its SSH identity is confirmed.
+These checks do not prove unlimited buffering, power-loss survival, or immunity
+to a local disk/hardware failure. They do not authorize a Production rollout.
+
 ## Build and preparation
 
 1. Finish and commit the reviewed source. Run all CI jobs, including PostgreSQL

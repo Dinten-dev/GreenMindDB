@@ -162,3 +162,14 @@ def test_staging_never_activates_production_direct(deploy):
     result, calls = deploy("staging")
     assert result.returncode == 0
     assert not any("rollout.sh" in " ".join(call["args"]) for call in calls)
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_missing_gateway_shield_stops_before_sync_or_service_changes(deploy, environment):
+    result, calls = deploy(environment, FAIL_COMMAND="python3 - verify --environment")
+    assert result.returncode != 0
+    assert not any(call["tool"] in ("rsync", "docker") for call in calls)
+    assert not any(
+        "mkdir -p" in " ".join(call["args"]) or " up -d " in " ".join(call["args"])
+        for call in calls
+    )

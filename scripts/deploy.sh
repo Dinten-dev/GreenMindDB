@@ -136,6 +136,11 @@ if ! ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" exit; then
 fi
 echo "✅ SSH OK"
 
+# Verify the existing shield before rsync, build, or any receiving-service restart.
+# This is read-only; installation/removal requires a separate reviewed nginx change.
+ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+    "python3 - verify --environment ${ENVIRONMENT}" < "${LOCAL_DIR}/deploy/release/gateway_guard.py"
+
 # ── 2. Ensure remote directory exists ────────────────────
 ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p ${REMOTE_DIR}"
 

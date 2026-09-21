@@ -327,6 +327,8 @@ build an immutable package on the CI runner. They never connect to a server.
 Review package, destination and rollback before transfer; Production requires
 separate approval and physical Gateway/Direct acceptance on Staging.
 
+Install the reviewed [Gateway continuity guard](deploy/release/README.md#keep-the-existing-raspberry-unchanged) before any server rollout. It pauses cloud-issued device actions without changing the Raspberry; both deployment paths refuse an unprotected proxy.
+
 Follow [the isolated release procedure](deploy/release/README.md) to start a new
 read API/frontend, hand over projection workers and switch nginx gracefully.
 The existing Gateway and Direct receivers, database and object store stay running.

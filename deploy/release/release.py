@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import runpy
 import socket
 import signal
 import subprocess
@@ -20,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+require_gateway_guard = runpy.run_path(str(ROOT / "gateway_guard.py"))["require_guard"]
 CONFIG = {
     "staging": ("gm-staging", "test.green-mind.ch", "172.28.21.1", 8005, 3005, 3001),
     "production": ("greenminddb", "green-mind.ch", "172.28.20.1", 8004, 3004, 3000),
@@ -277,6 +279,7 @@ def prepare(args):
         )
     )
     original = target.read_text()
+    require_gateway_guard(original, args.environment)
     # Retain old frontends for browser assets; use a fresh bounded port pair.
     for offset in range(0, 40, 2):
         sockets = []
@@ -648,6 +651,12 @@ def operate(args):
         digest(root / "nginx.before.conf") == manifest["before_sha256"]
         and digest(root / "nginx.proposed.conf") == manifest["after_sha256"],
         "Proxy artifacts changed",
+    )
+    require_gateway_guard(
+        (root / "nginx.before.conf").read_text(), manifest["environment"]
+    )
+    require_gateway_guard(
+        (root / "nginx.proposed.conf").read_text(), manifest["environment"]
     )
     with locked(root):
         verify_artifacts(root, manifest)

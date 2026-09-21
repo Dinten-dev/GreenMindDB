@@ -7,9 +7,11 @@ Opt-in Docker context; unique containers/network are always removed afterwards.
 import importlib.util
 import json
 import os
+import runpy
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -31,6 +33,8 @@ class Handler(BaseHTTPRequestHandler):
   with lock: body=json.dumps({'port':self.server.server_port,'sequences':sorted(seen)}).encode()
   self.send_response(200); self.end_headers(); self.wfile.write(body)
  def do_POST(self):
+  if self.path=='/api/v1/gateways/heartbeat':
+   self.send_response(410); self.end_headers(); self.wfile.write(b'{"detail":{"action":"RESET_TO_SETUP_MODE"}}'); return
   data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
   with lock: seen.add(data['sequence'])
   self.send_response(201); self.end_headers(); self.wfile.write(b'{"accepted":true}')
@@ -71,6 +75,8 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
     # Frontend (Next.js)
     location / { proxy_pass http://127.0.0.1:3000; }
 } }\n"""
+    guard = runpy.run_path(str(ROOT / "deploy/release/gateway_guard.py"))
+    original = guard["render"](original, "production")
     candidate, _ = release.proposal(original, "production", 8004, 3004)
     original = original.replace("http://127.0.0.1:", "http://receiver:")
     candidate = candidate.replace("http://127.0.0.1:", "http://receiver:")
@@ -160,6 +166,25 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
             pytest.fail("Local proxy never became ready")
         started = json.loads(execute("inspect", receiver))[0]["State"]["StartedAt"]
 
+        def assert_gateway_shield():
+            for path in (
+                "/api/v1/gateway/desired-state",
+                "/api/v1/gateway/desired-state/",
+                "/api/v1/gateway/app-release/1.0.0/download",
+                "/api/v1/gateway/config-release/1/download",
+                "/api/v1/gateways/local-gateway/commands",
+            ):
+                with pytest.raises(urllib.error.HTTPError) as error:
+                    get(path)
+                assert error.value.code == 503
+            request = urllib.request.Request(base + "/api/v1/gateways/heartbeat", data=b"{}")  # noqa: S310 - local test server
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=5)  # noqa: S310 - local test server
+            assert error.value.code == 503
+            assert b"RESET_TO_SETUP_MODE" not in error.value.read()
+
+        assert_gateway_shield()
+
         def continuous():
             sequence = 0
             deadline = time.monotonic() + 20
@@ -210,12 +235,14 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
             assert get("/")["port"] == 3004
             assert get("/api/v1/visualization/probe")["port"] == 8004
             assert get("/api/v1/ingest")["port"] == 8000
+            assert_gateway_shield()
             release.rollback_release(tmp_path, manifest, target)
             for _ in range(30):
                 if get("/")["port"] == 3000:
                     break
                 time.sleep(0.1)
             assert get("/")["port"] == 3000
+            assert_gateway_shield()
             (tmp_path / "nginx.proposed.conf").write_text("invalid_nginx_directive;\n")
             with pytest.raises(RuntimeError, match="syntax rejected"):
                 release.activate_release(tmp_path, manifest, target)
@@ -236,6 +263,8 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
                     "switch": True,
                     "rollback": True,
                     "invalid_candidate_restored": True,
+                    "gateway_controls_blocked": True,
+                    "heartbeat_reset_suppressed": True,
                 }
             )
         )
