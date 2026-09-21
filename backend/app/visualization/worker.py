@@ -26,7 +26,11 @@ LOCK_ID = 719420260915
 
 def engine_for_worker():
     return create_engine(
-        os.environ["DATABASE_URL"], pool_size=1, max_overflow=1, pool_pre_ping=True
+        # Advisory guard, snapshot transaction and committed progress update.
+        os.environ["DATABASE_URL"],
+        pool_size=1,
+        max_overflow=2,
+        pool_pre_ping=True,
     )
 
 
@@ -49,6 +53,8 @@ def initialize(engine):
 
 def set_status(engine, status, details):
     with engine.begin() as db:
+        db.execute(text("SET LOCAL lock_timeout='250ms'"))
+        db.execute(text("SET LOCAL statement_timeout='3s'"))
         db.execute(
             text(
                 "INSERT INTO visual_worker(name,status,details) VALUES ('compactor',:s,CAST(:d AS jsonb)) ON CONFLICT(name) DO UPDATE SET status=EXCLUDED.status,details=EXCLUDED.details,updated_at=now()"
@@ -154,6 +160,17 @@ def snapshot_chunk(engine, chunk, now):
     name = chunk["chunk_name"]
     if not re.fullmatch(r"_timescaledb_internal\._hyper_\d+_\d+_chunk", name):
         raise ValueError("Unexpected chunk identifier")
+    last_progress = time.monotonic()
+
+    def progress(phase, rows):
+        nonlocal last_progress
+        current = time.monotonic()
+        if current - last_progress >= 15:
+            # A separate commit is visible while the atomic snapshot is open.
+            # Only observed record progress refreshes liveness, never a timer thread.
+            set_status(engine, "working", {"phase": phase, "chunk": name, "rows": rows})
+            last_progress = current
+
     with engine.connect().execution_options(isolation_level="REPEATABLE READ") as db:
         with db.begin():
             db.execute(text("SET LOCAL statement_timeout='10min'"))
@@ -249,7 +266,7 @@ def snapshot_chunk(engine, chunk, now):
                 finally:
                     rows.close()
 
-            manifest = write_archive(ARCHIVE, records(), name.replace(".", "-"))
+            manifest = write_archive(ARCHIVE, records(), name.replace(".", "-"), progress=progress)
             manifest["protected_rows"] = protected_rows
             db.execute(
                 text(
@@ -446,6 +463,7 @@ def cycle(engine, prune=False):
                     {"id": item["id"], "sha": item["source_sha256"], "error": type(exc).__name__},
                 )
         time.sleep(float(os.environ.get("VISUAL_WAV_PAUSE", "0.2")))
+        set_status(engine, "working", {"phase": "wav_projection", "pruning_enabled": prune})
     track_chunks(engine, now)
     with engine.connect() as db:
         candidate = (
@@ -523,6 +541,9 @@ def main():
             text("SELECT pg_try_advisory_lock(:lock)"), {"lock": LOCK_ID}
         ).scalar_one():
             raise SystemExit("Another visualization worker is running")
+        # Session-level advisory locks survive commit; avoid an idle transaction
+        # spanning the entire lifetime of the worker.
+        guard.commit()
         while True:
             try:
                 cycle(

@@ -136,6 +136,55 @@ def test_late_write_invalidates_snapshot_before_prune(fixture):
         assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 2
 
 
+def test_snapshot_progress_commits_with_guard_and_snapshot_connections(fixture, monkeypatch):
+    engine, ids, start, add = fixture
+    with engine.begin() as db:
+        db.execute(
+            text("""INSERT INTO sensor_reading(timestamp,sensor_id,kind,value,unit)
+            SELECT :start + i * interval '1 second', :sid, 'bio_signal', i, 'mV'
+            FROM generate_series(0,1000) i"""),
+            {"start": start, "sid": ids["sensor"]},
+        )
+    chunk = chunk_for(engine, start)
+    monkeypatch.setenv("DATABASE_URL", engine.url.render_as_string(hide_password=False))
+    bounded = worker.engine_for_worker()
+    clock = iter(range(0, 10000, 20))
+    monkeypatch.setattr(
+        worker, "time", SimpleNamespace(monotonic=lambda: next(clock), sleep=lambda _: None)
+    )
+    observed = []
+    original = worker.set_status
+
+    def status(db_engine, state, details):
+        original(db_engine, state, details)
+        # An independent reader sees committed progress before the snapshot commits.
+        with engine.connect() as db:
+            row = db.execute(text("SELECT status,details FROM visual_worker")).one()
+            observed.append((row.status, row.details["phase"], row.details["rows"]))
+            assert db.execute(text("SELECT count(*) FROM visual_reading")).scalar_one() == 0
+
+    monkeypatch.setattr(worker, "set_status", status)
+    try:
+        with bounded.connect() as guard:
+            assert guard.execute(
+                text("SELECT pg_try_advisory_lock(:id)"), {"id": worker.LOCK_ID}
+            ).scalar_one()
+            guard.commit()
+            manifest = worker.snapshot_chunk(bounded, chunk, datetime.now(UTC))
+            assert guard.execute(
+                text("SELECT pg_advisory_unlock(:id)"), {"id": worker.LOCK_ID}
+            ).scalar_one()
+        assert observed == [
+            ("working", "archive_write", 1000),
+            ("working", "archive_verify", 1000),
+        ]
+        assert len(list(read_archive(manifest))) == 1001
+        with engine.connect() as db:
+            assert db.execute(text("SELECT sum(n) FROM visual_reading")).scalar_one() == 1001
+    finally:
+        bounded.dispose()
+
+
 def test_busy_historical_chunk_is_skipped_without_waiting(fixture):
     engine, ids, start, add = fixture
     add(start, 5)

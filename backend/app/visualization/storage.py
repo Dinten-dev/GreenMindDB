@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 
-def write_archive(root: Path, records, label: str):
+def write_archive(root: Path, records, label: str, *, progress=None):
     """Create a durable gzip JSONL snapshot, then independently read it back."""
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     if shutil.disk_usage(root).free < 2 * 1024**3:
@@ -29,6 +29,8 @@ def write_archive(root: Path, records, label: str):
                 output.write(line)
                 digest.update(line)
                 count += 1
+                if progress and count % 1000 == 0:
+                    progress("archive_write", count)
         raw.flush()
         os.fsync(raw.fileno())
     verified = hashlib.sha256()
@@ -38,6 +40,8 @@ def write_archive(root: Path, records, label: str):
             json.loads(line)
             verified.update(line)
             verified_count += 1
+            if progress and verified_count % 1000 == 0:
+                progress("archive_verify", verified_count)
     if (verified.hexdigest(), verified_count) != (digest.hexdigest(), count):
         raise RuntimeError("Source archive verification failed")
     pending.rename(target)
