@@ -33,8 +33,13 @@ class Handler(BaseHTTPRequestHandler):
   with lock: body=json.dumps({'port':self.server.server_port,'sequences':sorted(seen)}).encode()
   self.send_response(200); self.end_headers(); self.wfile.write(body)
  def do_POST(self):
-  if self.path=='/api/v1/gateways/heartbeat':
+  path=self.path.split('?')[0].rstrip('/')
+  if path in ('/api/v1/gateways/heartbeat','/api/v1/ingest') and self.headers.get('X-Test-Reset')=='1':
    self.send_response(410); self.end_headers(); self.wfile.write(b'{"detail":{"action":"RESET_TO_SETUP_MODE"}}'); return
+  if self.headers.get('X-Test-Status'):
+   self.send_response(int(self.headers['X-Test-Status'])); self.end_headers(); self.wfile.write(b'{"detail":"original upstream error"}'); return
+  if path=='/api/v1/gateways/heartbeat':
+   self.send_response(200); self.end_headers(); self.wfile.write(b'{"status":"ok"}'); return
   data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
   with lock: seen.add(data['sequence'])
   self.send_response(201); self.end_headers(); self.wfile.write(b'{"accepted":true}')
@@ -125,6 +130,9 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
             "--memory",
             "96m",
             NGINX_IMAGE,
+            "sh",
+            "-c",
+            "while [ ! -f /tmp/greenmind-test-ready ]; do sleep 0.1; done; exec nginx -g 'daemon off;'",
         )
         port = json.loads(execute("inspect", proxy))[0]["NetworkSettings"]["Ports"]["80/tcp"][0][
             "HostPort"
@@ -142,15 +150,16 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
                 data=target.read_text(),
             )
 
+        # Start directly with our config; default nginx workers must never serve probes.
+        install()
+        execute("exec", proxy, "nginx", "-t")
+        execute("exec", proxy, "touch", "/tmp/greenmind-test-ready")  # noqa: S108 - unique isolated test container
         for _attempt in range(30):
             try:
                 execute("exec", proxy, "test", "-s", "/run/nginx.pid")
                 break
             except subprocess.CalledProcessError:
                 time.sleep(0.1)
-        install()
-        execute("exec", proxy, "nginx", "-t")
-        execute("exec", proxy, "nginx", "-s", "reload")
 
         def get(path):
             with urllib.request.urlopen(base + path, timeout=5) as response:  # noqa: S310 - local Docker loopback
@@ -177,11 +186,26 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
                 with pytest.raises(urllib.error.HTTPError) as error:
                     get(path)
                 assert error.value.code == 503
-            request = urllib.request.Request(base + "/api/v1/gateways/heartbeat", data=b"{}")  # noqa: S310 - local test server
-            with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)  # noqa: S310 - local test server
-            assert error.value.code == 503
-            assert b"RESET_TO_SETUP_MODE" not in error.value.read()
+            for path in ("/api/v1/gateways/heartbeat", "/api/v1/ingest"):
+                for suffix in ("", "/", "?probe=1"):
+                    request = urllib.request.Request(  # noqa: S310 - local test server
+                        base + path + suffix, data=b"{}", headers={"X-Test-Reset": "1"}
+                    )
+                    with pytest.raises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(request, timeout=5)  # noqa: S310
+                    assert error.value.code == 503
+                    assert b"RESET_TO_SETUP_MODE" not in error.value.read()
+                for status in (401, 403, 422, 503):
+                    request = urllib.request.Request(  # noqa: S310 - local test server
+                        base + path, data=b"{}", headers={"X-Test-Status": str(status)}
+                    )
+                    with pytest.raises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(request, timeout=5)  # noqa: S310
+                    assert error.value.code == status
+                    assert b"original upstream error" in error.value.read()
+            request = urllib.request.Request(base + "/api/v1/gateways/heartbeat", data=b"{}")  # noqa: S310
+            with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310
+                assert response.status == 200
 
         assert_gateway_shield()
 
@@ -265,6 +289,8 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
                     "invalid_candidate_restored": True,
                     "gateway_controls_blocked": True,
                     "heartbeat_reset_suppressed": True,
+                    "ingest_reset_suppressed": True,
+                    "other_upstream_errors_preserved": True,
                 }
             )
         )

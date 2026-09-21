@@ -31,15 +31,17 @@ def block(environment):
         default_type application/json;
         return 503 '{{"detail":"Gateway remote control paused for server maintenance"}}';
     }}
-    # Old gateways interpret a specific HTTP 410 heartbeat as a factory reset.
-    location = /api/v1/gateways/heartbeat {{
+    # Installed v1.0.9 handles reset responses in heartbeat AND ingest uploads.
+    location ~ ^/api/v1/(gateways/heartbeat|ingest)/?$ {{
         proxy_pass http://127.0.0.1:{port};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 3s;
-        proxy_read_timeout 30s;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
         proxy_intercept_errors on;
         error_page 410 = @gateway_continuity_unavailable;
     }}

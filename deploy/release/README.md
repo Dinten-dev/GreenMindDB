@@ -28,7 +28,7 @@ transfer. Production remains a separate approval.
 ## Keep the existing Raspberry unchanged
 
 The cloud can issue app/config updates, reboot/service commands and a legacy
-heartbeat reset response. A server release must not deliver any of those actions.
+heartbeat or ingest reset response. A server release must not deliver any of those actions.
 Before preparing a release, install the reviewed nginx continuity guard. This
 changes only the cloud proxy; do not update, reboot, reinstall or disconnect the
 production Raspberry. Its existing local health watchdog remains unchanged.
@@ -47,10 +47,11 @@ already executing: a command fetched earlier cannot be revoked by a proxy.
 
 The guard returns HTTP 503 for desired-state polls, remote command polls and
 app/config downloads. Existing gateway workers retry these responses without
-exiting or resetting. Successful heartbeat requests still reach the old API;
-HTTP 410 is converted to HTTP 503, so a backend registration problem cannot
-trigger the old firmware's `RESET_TO_SETUP_MODE` handler. Upload routes stay
-unchanged, including their authentication and actual success/failure responses.
+exiting or resetting. Heartbeat and ingest requests still reach the old API;
+their HTTP 410 responses are converted to HTTP 503, so a backend registration
+problem cannot trigger the old firmware's `RESET_TO_SETUP_MODE` handlers.
+The installed v1.0.9 was inspected read-only on 2026-09-21: both handlers exist.
+Upload destinations, authentication, successes and other error responses stay unchanged.
 No upload is falsely acknowledged. TLS/DNS outages still appear as network errors.
 
 The full-stack maintenance script also checks the installed guard before rsync or builds.
@@ -64,6 +65,13 @@ Only one physical Raspberry is available. Exercise failures in local simulations
 not on that device: continue real local ingestion/health during DNS, timeout,
 401/403 and 502/503 errors, retain queued readings/WAVs, then recover uploads.
 Validate the installed Pi version read-only when its SSH identity is confirmed.
+The inspected v1.0.9 keeps running after ordinary cloud failures, but moves
+aggregate jobs to its dead-letter queue after more than 20 failed attempts;
+these need separate replay. Its WAV uploader retains files on failure but
+accepts HTTP 200/201 without verifying a checksum-bearing acknowledgement.
+The current repository's stronger queue/ACK tests do not prove those properties
+for the unchanged installed release. Do not update the only production Pi as
+part of this server rollout or claim lossless automatic recovery for v1.0.9.
 These checks do not prove unlimited buffering, power-loss survival, or immunity
 to a local disk/hardware failure. They do not authorize a Production rollout.
 
