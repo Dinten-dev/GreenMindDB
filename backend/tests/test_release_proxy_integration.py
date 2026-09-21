@@ -74,7 +74,7 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
             raise error
         return result.stdout.strip()
 
-    original = """pid /run/nginx.pid;\nevents {}\nhttp { server { listen 80;
+    original = """pid /run/nginx.pid;\nerror_log /dev/stderr notice;\nevents {}\nhttp { server { listen 80;
     # API → Backend directly
     location /api/ { proxy_pass http://127.0.0.1:8000; }
     # Frontend (Next.js)
@@ -294,6 +294,15 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
                 }
             )
         )
+    except BaseException as error:
+        diagnostic = subprocess.run(
+            [*docker, "logs", "--tail", "80", proxy],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        error.add_note("Isolated nginx diagnostics:\n" + diagnostic.stdout + diagnostic.stderr)
+        raise
     finally:
         finish.set()
         for name in (proxy, receiver):
