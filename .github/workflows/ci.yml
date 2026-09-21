@@ -51,7 +51,8 @@ jobs:
         run: python -m ruff format --check app/ tests/
 
       - name: Run tests with coverage
-        run: python -m pytest tests/ -v --tb=short -m "not integration" --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60 2>&1 | tee pytest.log
+        timeout-minutes: 10
+        run: python -u -m pytest tests/ -v --tb=short -m "not integration" -o faulthandler_timeout=60 --durations=10 --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60 2>&1 | tee pytest.log
         env:
           SKIP_DOCKER_TESTS: "1"
           JWT_SECRET_KEY: "ci-test-secret-key-that-is-at-least-32-chars"
