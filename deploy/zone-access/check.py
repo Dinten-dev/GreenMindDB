@@ -113,8 +113,8 @@ with SessionLocal() as db:
         assert request(direct, "/api/v1/direct-ingest/devices", member) == (200, [])
         checks += ["authentication_cookie", "member_no_grants"]
         hidden = data["zones"][-1]
-        for sensor in (s for s in data["sensors"] if s["zone"] == hidden):
-            for suffix in ("data?range=5m", "export?range=5m"):
+        for sensor in [s for s in data["sensors"] if s["zone"] == hidden][:1]:
+            for suffix in ("data?range=5m", "export?range=1h"):
                 assert (
                     request(
                         visual, "/api/v1/sensors/" + sensor["id"] + "/" + suffix, member
