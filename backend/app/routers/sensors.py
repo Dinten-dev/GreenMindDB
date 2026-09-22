@@ -32,6 +32,7 @@ from app.schemas.sensor import (
     SensorUpdateRequest,
 )
 from app.services.gateway_service import gateway_commands_cache, generate_pairing_code
+from app.zone_access import zone_access_filter
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 _tenant_manager = require_role([Role.OWNER, Role.ADMIN])
@@ -65,7 +66,7 @@ async def list_sensors(
         db.query(Sensor, Gateway)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
         .join(Zone, Zone.id == Gateway.zone_id)
-        .filter(Zone.organization_id == current_user.organization_id)
+        .filter(zone_access_filter(current_user))
     )
     if zone_id:
         query = query.filter(Gateway.zone_id == zone_id)
@@ -169,7 +170,7 @@ async def update_sensor(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )
@@ -228,7 +229,7 @@ async def move_sensor(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )
@@ -290,7 +291,7 @@ async def delete_sensor(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )
@@ -352,7 +353,7 @@ async def get_sensor_data(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )
@@ -534,7 +535,7 @@ async def export_sensor_data(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_id,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )

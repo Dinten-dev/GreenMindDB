@@ -144,10 +144,14 @@ def live(tmp_path, monkeypatch):
 
     class Legacy:
         def execute(self, *args, **kwargs):
-            return SimpleNamespace(first=lambda: (1,))
+            return SimpleNamespace(
+                first=lambda: (1,), scalar_one_or_none=lambda: SimpleNamespace(id=zone)
+            )
 
     app.dependency_overrides[get_db] = lambda: Legacy()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(organization_id=org)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        organization_id=org, role="admin"
+    )
     yield SimpleNamespace(
         engine=engine,
         store=store,

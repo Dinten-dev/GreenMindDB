@@ -146,6 +146,26 @@ export async function apiListZones(): Promise<Zone[]> {
   return apiFetch<Zone[]>('/zones');
 }
 
+export interface MemberZoneAccess {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  all_zones: boolean;
+  zone_ids: string[];
+}
+
+export function apiListMemberZones(): Promise<MemberZoneAccess[]> {
+  return apiFetch<MemberZoneAccess[]>('/organizations/members');
+}
+
+export function apiUpdateMemberZones(userId: string, zoneIds: string[]): Promise<MemberZoneAccess> {
+  return apiFetch<MemberZoneAccess>(`/organizations/members/${userId}/zones`, {
+    method: 'PUT',
+    body: JSON.stringify({ zone_ids: zoneIds }),
+  });
+}
+
 export async function apiCreateZone(
   name: string,
   zone_type: string = 'GREENHOUSE',

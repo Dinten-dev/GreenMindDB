@@ -19,13 +19,14 @@ def setup(pipeline, monkeypatch):
     p.cfg.dashboard_api_url = "http://backend:8000/api/v1"
     p.cfg.dashboard_origin = ORIGIN
     p.org, p.zone = str(uuid.uuid4()), str(uuid.uuid4())
+    p.allowed_zones = [p.zone]
 
     async def identity(request, cfg, zone_id=None):
         if request.headers.get("authorization") != "Bearer dashboard-session":
             raise pairing.DirectError(401, "dashboard_login_required")
         if zone_id is not None and str(zone_id) != p.zone:
             raise pairing.DirectError(404, "zone_not_found")
-        return {"organization_id": p.org}
+        return {"organization_id": p.org, "allowed_zone_ids": p.allowed_zones}
 
     monkeypatch.setattr(pairing, "dashboard_identity", identity)
     p.headers = {"Origin": ORIGIN, "Authorization": "Bearer dashboard-session"}
@@ -133,3 +134,17 @@ def test_rate_limit(setup):
     for _ in range(10):
         assert p.client.post(PREFIX + "/register", json={}).status_code == 422
     assert p.client.post(PREFIX + "/register", json={}).status_code == 429
+
+
+def test_zone_revocation_hides_device_without_interrupting_reception(setup):
+    p = setup
+    body = registration(p)
+    assert p.client.post(PREFIX + "/register", json=body).status_code == 201
+    assert len(p.client.get(PREFIX + "/devices", headers=p.headers).json()) == 1
+    p.allowed_zones = []
+    assert p.client.get(PREFIX + "/devices", headers=p.headers).json() == []
+    payload = bytes(12)
+    result = p.upload(
+        payload, p.metadata(payload, device_id=body["device_id"]), token_override=body["token"]
+    )
+    assert result.status_code == 201

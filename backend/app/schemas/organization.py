@@ -1,6 +1,21 @@
 """Organization request/response schemas."""
 
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class MemberZoneAccess(BaseModel):
+    id: str
+    name: str | None
+    email: str
+    role: str
+    all_zones: bool
+    zone_ids: list[str]
+
+
+class UpdateMemberZones(BaseModel):
+    zone_ids: list[UUID] = Field(max_length=500)
 
 
 class OrgCreate(BaseModel):

@@ -18,6 +18,7 @@ from app.schemas.plant import (
     PlantSensorAssignmentResponse,
     PlantUpdate,
 )
+from app.zone_access import allowed_zone_ids, zone_access_filter
 
 
 def _require_org(user: User):
@@ -28,7 +29,9 @@ def _require_org(user: User):
 
 def list_plants(db: Session, user: User, zone_id: uuid.UUID | None = None) -> list[PlantResponse]:
     org_id = _require_org(user)
-    query = db.query(Plant).filter(Plant.organization_id == org_id)
+    query = db.query(Plant).filter(
+        Plant.organization_id == org_id, Plant.zone_id.in_(allowed_zone_ids(db, user))
+    )
     if zone_id:
         query = query.filter(Plant.zone_id == zone_id)
 
@@ -38,7 +41,14 @@ def list_plants(db: Session, user: User, zone_id: uuid.UUID | None = None) -> li
         # Find active sensor assignment if any
         active_assignment = (
             db.query(PlantSensorAssignment)
-            .filter(PlantSensorAssignment.plant_id == p.id, PlantSensorAssignment.is_active)
+            .join(Sensor, Sensor.id == PlantSensorAssignment.sensor_id)
+            .join(Gateway, Gateway.id == Sensor.gateway_id)
+            .join(Zone, Zone.id == Gateway.zone_id)
+            .filter(
+                PlantSensorAssignment.plant_id == p.id,
+                PlantSensorAssignment.is_active,
+                zone_access_filter(user),
+            )
             .first()
         )
         current_sensor_id = str(active_assignment.sensor_id) if active_assignment else None
@@ -67,7 +77,7 @@ def create_plant(db: Session, user: User, data: PlantCreate) -> PlantResponse:
     org_id = _require_org(user)
 
     # Verify zone
-    zone = db.query(Zone).filter(Zone.id == data.zone_id, Zone.organization_id == org_id).first()
+    zone = db.query(Zone).filter(Zone.id == data.zone_id, zone_access_filter(user)).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
 
@@ -105,13 +115,28 @@ def create_plant(db: Session, user: User, data: PlantCreate) -> PlantResponse:
 
 def get_plant(db: Session, user: User, plant_id: uuid.UUID | str) -> PlantResponse:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 
     active_assignment = (
         db.query(PlantSensorAssignment)
-        .filter(PlantSensorAssignment.plant_id == p.id, PlantSensorAssignment.is_active)
+        .join(Sensor, Sensor.id == PlantSensorAssignment.sensor_id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(
+            PlantSensorAssignment.plant_id == p.id,
+            PlantSensorAssignment.is_active,
+            zone_access_filter(user),
+        )
         .first()
     )
     current_sensor_id = str(active_assignment.sensor_id) if active_assignment else None
@@ -137,7 +162,15 @@ def update_plant(
     db: Session, user: User, plant_id: uuid.UUID | str, data: PlantUpdate
 ) -> PlantResponse:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 
@@ -162,7 +195,15 @@ def update_plant(
 
 def delete_plant(db: Session, user: User, plant_id: uuid.UUID | str) -> None:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 
@@ -174,7 +215,15 @@ def assign_sensor(
     db: Session, user: User, plant_id: uuid.UUID | str, data: AssignSensorRequest
 ) -> PlantSensorAssignmentResponse:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 
@@ -185,7 +234,7 @@ def assign_sensor(
         .filter(
             Sensor.id == data.sensor_id,
             Gateway.zone_id == p.zone_id,
-            Zone.organization_id == org_id,
+            zone_access_filter(user),
         )
         .first()
     )
@@ -204,7 +253,8 @@ def assign_sensor(
     if conflicting_assignment:
         raise HTTPException(status_code=409, detail="Sensor is already assigned to another plant")
 
-    # Unassign current if any
+    # Unassign current if any. The plant is authorized above; also retire
+    # assignments left behind by a sensor that moved to a different zone.
     active_assignment = (
         db.query(PlantSensorAssignment)
         .filter(PlantSensorAssignment.plant_id == p.id, PlantSensorAssignment.is_active)
@@ -252,13 +302,24 @@ def get_sensor_history(
     db: Session, user: User, plant_id: uuid.UUID | str
 ) -> list[PlantSensorAssignmentResponse]:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 
     assignments = (
         db.query(PlantSensorAssignment)
-        .filter(PlantSensorAssignment.plant_id == p.id)
+        .join(Sensor, Sensor.id == PlantSensorAssignment.sensor_id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(PlantSensorAssignment.plant_id == p.id, zone_access_filter(user))
         .order_by(PlantSensorAssignment.assigned_at.desc())
         .all()
     )
@@ -280,7 +341,15 @@ def get_or_create_observation_access(
     db: Session, user: User, plant_id: uuid.UUID | str
 ) -> ObservationAccessResponse:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 
@@ -315,7 +384,15 @@ def revoke_observation_access(
     db: Session, user: User, plant_id: uuid.UUID | str
 ) -> ObservationAccessResponse:
     org_id = _require_org(user)
-    p = db.query(Plant).filter(Plant.id == plant_id, Plant.organization_id == org_id).first()
+    p = (
+        db.query(Plant)
+        .filter(
+            Plant.id == plant_id,
+            Plant.organization_id == org_id,
+            Plant.zone_id.in_(allowed_zone_ids(db, user)),
+        )
+        .first()
+    )
     if not p:
         raise HTTPException(status_code=404, detail="Plant not found")
 

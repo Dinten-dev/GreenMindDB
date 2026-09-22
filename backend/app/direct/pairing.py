@@ -62,6 +62,11 @@ async def dashboard_identity(request, cfg, zone_id=None):
                 )
                 if zone.status_code != 200:
                     raise DirectError(404, "zone_not_found")
+            if zone_id is None:
+                zones = await client.get(cfg.dashboard_api_url + "/zones", headers=headers)
+                if zones.status_code != 200:
+                    raise DirectError(503, "dashboard_unavailable")
+                user["allowed_zone_ids"] = [str(item["id"]) for item in zones.json()]
             return user
     except (httpx.HTTPError, ValueError, KeyError) as exc:
         raise DirectError(503, "dashboard_unavailable") from exc
@@ -229,7 +234,10 @@ def install_pairing_routes(app):
                     db.query(Device, Enrollment.hardware_id, latest.c.seen)
                     .outerjoin(Enrollment, Enrollment.device_id == Device.id)
                     .outerjoin(latest, latest.c.device_id == Device.id)
-                    .filter(Device.organization_id == user["organization_id"])
+                    .filter(
+                        Device.organization_id == user["organization_id"],
+                        Device.zone_id.in_(user.get("allowed_zone_ids", [])),
+                    )
                     .order_by(Device.id)
                     .limit(200)
                     .all()

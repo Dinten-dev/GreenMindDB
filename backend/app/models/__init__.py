@@ -28,12 +28,14 @@ from app.models.provisioning import ProvisioningJob, ProvisioningStatus
 from app.models.timeseries import SensorReading
 from app.models.user import EmailVerification, Organization, Role, User
 from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
+from app.models.zone_access import ZoneAccess
 
 __all__ = [
     "User",
     "Organization",
     "Role",
     "Zone",
+    "ZoneAccess",
     "Gateway",
     "Sensor",
     "SensorReading",

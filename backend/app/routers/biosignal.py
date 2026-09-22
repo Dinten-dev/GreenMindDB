@@ -138,7 +138,10 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
         if not last_alert or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60:
             import asyncio
 
-            from app.models.user import User
+            from sqlalchemy import or_, select
+
+            from app.models.user import Role, User
+            from app.models.zone_access import ZoneAccess
 
             # Mark alert time
             _last_alert_times[payload.mac_address] = now
@@ -150,6 +153,14 @@ async def ingest_biosignal(payload: BioIngestPayload, db: Session = Depends(get_
                     db.query(User)
                     .filter(
                         User.organization_id == zone.organization_id,
+                        User.is_active.is_(True),
+                        User.is_verified.is_(True),
+                        or_(
+                            User.role.in_([Role.OWNER, Role.ADMIN]),
+                            User.id.in_(
+                                select(ZoneAccess.user_id).where(ZoneAccess.zone_id == zone.id)
+                            ),
+                        ),
                         User.phone_number.isnot(None),
                         User.phone_number != "",
                     )

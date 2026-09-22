@@ -25,6 +25,7 @@ from app.schemas.provisioning import (
     ProvisioningJobResponse,
     ProvisioningJobUpdate,
 )
+from app.zone_access import zone_access_filter
 
 router = APIRouter(prefix="/provisioning", tags=["provisioning"])
 
@@ -83,7 +84,7 @@ async def create_provisioning_job(
             PairingCode.code == job_in.pairing_code,
             PairingCode.used_at.is_(None),
             PairingCode.expires_at > datetime.now(UTC),
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )

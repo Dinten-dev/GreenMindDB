@@ -11,6 +11,7 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.timeseries import SensorReading
 from app.models.user import User
 from app.schemas.zone import ZoneCreate, ZoneOverview, ZoneResponse
+from app.zone_access import zone_access_filter
 
 
 def _require_org(user: User):
@@ -20,8 +21,8 @@ def _require_org(user: User):
 
 
 def list_zones(db: Session, user: User) -> list[ZoneResponse]:
-    org_id = _require_org(user)
-    zones = db.query(Zone).filter(Zone.organization_id == org_id).all()
+    _require_org(user)
+    zones = db.query(Zone).filter(zone_access_filter(user)).all()
     results = []
     for z in zones:
         gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
@@ -48,9 +49,9 @@ def list_zones(db: Session, user: User) -> list[ZoneResponse]:
 
 
 def create_zone(db: Session, user: User, data: ZoneCreate) -> ZoneResponse:
-    org_id = _require_org(user)
+    _require_org(user)
     z = Zone(
-        organization_id=org_id,
+        organization_id=user.organization_id,
         name=data.name,
         location=data.location,
         zone_type=data.zone_type,
@@ -72,8 +73,8 @@ def create_zone(db: Session, user: User, data: ZoneCreate) -> ZoneResponse:
 
 
 def get_zone(db: Session, user: User, zone_id: uuid.UUID | str) -> ZoneResponse:
-    org_id = _require_org(user)
-    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
+    _require_org(user)
+    z = db.query(Zone).filter(Zone.id == zone_id, zone_access_filter(user)).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
     gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
@@ -97,8 +98,8 @@ def get_zone(db: Session, user: User, zone_id: uuid.UUID | str) -> ZoneResponse:
 
 
 def get_zone_overview(db: Session, user: User, zone_id: uuid.UUID | str) -> ZoneOverview:
-    org_id = _require_org(user)
-    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
+    _require_org(user)
+    z = db.query(Zone).filter(Zone.id == zone_id, zone_access_filter(user)).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
 
@@ -136,8 +137,8 @@ def get_zone_overview(db: Session, user: User, zone_id: uuid.UUID | str) -> Zone
 
 
 def delete_zone(db: Session, user: User, zone_id: uuid.UUID | str) -> None:
-    org_id = _require_org(user)
-    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
+    _require_org(user)
+    z = db.query(Zone).filter(Zone.id == zone_id, zone_access_filter(user)).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
 

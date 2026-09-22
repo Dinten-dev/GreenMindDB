@@ -354,6 +354,7 @@ class TestIngestIdempotency:
         """Boundary: bio_signal value <= 10.0 mV triggers SMS alert."""
         # 1. Create a user in the same organization with a phone number
         from app.models.user import User
+        from app.models.zone_access import ZoneAccess
 
         org = setup_test_data["org"]
         user = User(
@@ -362,8 +363,11 @@ class TestIngestIdempotency:
             organization_id=org.id,
             phone_number="+41760000000",
             is_active=True,
+            is_verified=True,
         )
         db.add(user)
+        db.flush()
+        db.add(ZoneAccess(user_id=user.id, zone_id=setup_test_data["zone"].id))
         db.commit()
 
         # Mock notification service

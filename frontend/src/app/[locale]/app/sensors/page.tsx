@@ -4,6 +4,8 @@ import { useLocale } from 'next-intl';
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import {
   apiListSensors,
+  apiListZones,
+  Zone,
   apiGetSensorData,
   apiGetSensorDataAdvanced,
   apiExportSensorData,
@@ -18,7 +20,7 @@ import {
 } from '@/lib/api';
 import SignalChart from './SignalChart';
 import PairSensorDialog from './PairSensorDialog';
-import DirectSensorsPanel from './DirectSensorsPanel';
+import DirectSensorsPanel, { useDirectDevices } from './DirectSensorsPanel';
 
 type TimeRange = 'live' | '1h' | '24h' | '7d' | '30d';
 
@@ -94,7 +96,9 @@ export default function SensorsPage() {
   const [sensors, setSensors] = useState<SensorInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
-  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [selectedZone, setSelectedZone] = useState('');
+  const directFeed = useDirectDevices();
 
   const activeSensors = useMemo(() => sensors.filter((s) => !isSensorArchived(s)), [sensors]);
   const archivedSensors = useMemo(() => sensors.filter((s) => isSensorArchived(s)), [sensors]);
@@ -129,14 +133,27 @@ export default function SensorsPage() {
 
   const REALTIME_DURATION_S = 300; // 5 minutes
 
-  const refreshSensors = useCallback(() => {
-    setLoading(true);
+  const sensorListRequest = useRef(0);
+  const refreshSensors = useCallback((background = false) => {
+    const request = ++sensorListRequest.current;
+    if (!background) setLoading(true);
     setListError(false);
-    apiListSensors()
-      .then((data) => {
+    Promise.all([apiListSensors(), apiListZones()])
+      .then(([sensorRows, allowedZones]) => {
+        if (request !== sensorListRequest.current) return;
+        const allowed = new Set(allowedZones.map((zone) => zone.id));
+        const data = sensorRows.filter((sensor) => sensor.zone_id && allowed.has(sensor.zone_id));
+        setSelectedZone((current) => (current && !allowed.has(current) ? '' : current));
+        setZones(allowedZones.sort((a, b) => a.name.localeCompare(b.name, 'de')));
         setSensors(data);
+        setListError(false);
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
+          const zoneId = params.get('zone');
+          if (zoneId && allowed.has(zoneId)) {
+            setSelectedZone(zoneId);
+            window.history.replaceState({}, '', window.location.pathname);
+          }
           const sensorId = params.get('sensor');
           if (sensorId && data.some((s) => s.id === sensorId)) {
             setSelectedSensor(sensorId);
@@ -147,15 +164,31 @@ export default function SensorsPage() {
         }
       })
       .catch((err) => {
+        if (request !== sensorListRequest.current) return;
         console.error(err);
         setListError(true);
+        setSensors([]);
+        setZones([]);
+        setSelectedSensor(null);
+        setSensorData([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (request === sensorListRequest.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
     refreshSensors();
+    const timer = setInterval(() => refreshSensors(true), 30000);
+    return () => clearInterval(timer);
   }, [refreshSensors]);
+
+  useEffect(() => {
+    if (selectedSensor && !sensors.some((sensor) => sensor.id === selectedSensor)) {
+      setSelectedSensor(null);
+      setSensorData([]);
+    }
+  }, [sensors, selectedSensor]);
 
   const loadSensorData = useCallback(async (sensorId: string, range: TimeRange, silent = false) => {
     if (!silent) {
@@ -456,7 +489,7 @@ export default function SensorsPage() {
           Deine Sensoren konnten nicht geladen werden.
         </p>
         <button
-          onClick={refreshSensors}
+          onClick={() => refreshSensors()}
           className="mt-4 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm"
         >
           Erneut laden
@@ -1041,7 +1074,7 @@ export default function SensorsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Messungen & Sensoren</h1>
           <p className="text-sm text-gray-400 mt-1">
-            Wähle einen Sensor, um Messwerte, Verlauf und Live-Übertragung anzusehen.
+            Deine freigegebenen Zonen mit Sensoren, Messwerten und Originalaufnahmen.
           </p>
         </div>
         <button
@@ -1055,85 +1088,92 @@ export default function SensorsPage() {
         </button>
       </div>
 
-      <DirectSensorsPanel />
-
-      {sensors.length === 0 ? (
-        <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-4">📡</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            Keine Gateway-Sensoren registriert
-          </h3>
-          <p className="text-sm text-gray-400">
-            Sensoren werden automatisch via mDNS erkannt, wenn ein Gateway verbunden ist.
+      {zones.length > 1 && (
+        <label className="block text-sm font-medium text-gray-700">
+          Zone
+          <select
+            value={selectedZone}
+            onChange={(event) => {
+              setSelectedZone(event.target.value);
+              setSelectedSensor(null);
+              setSensorData([]);
+            }}
+            className="mt-2 block w-full max-w-sm rounded-xl border border-gray-200 bg-white px-3 py-2"
+          >
+            <option value="">Alle freigegebenen Zonen</option>
+            {zones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {directFeed.error && (
+        <p role="status" className="text-sm text-amber-800">
+          Direkt verbundene Sensoren konnten nicht aktualisiert werden.
+        </p>
+      )}
+      {zones.length === 0 ? (
+        <div className="glass-card p-10 text-center">
+          <h2 className="font-semibold text-gray-800">Keine Zonen freigegeben</h2>
+          <p className="mt-2 text-sm text-gray-500">
+            Sobald du Zugang zu einer Zone hast, erscheinen ihre Sensoren und Messungen hier.
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Active Sensors Section */}
-          {activeSensors.length > 0 ? (
-            <div className="space-y-4">
-              {renderSensorTable(activeSensors, false)}
-              {renderSensorMobileCards(activeSensors, false)}
-            </div>
-          ) : (
-            <div className="glass-card p-6 text-center text-sm text-gray-400">
-              Keine aktiven Sensoren (alle Sensoren befinden sich im Archiv).
-            </div>
-          )}
-
-          {/* Archived Sensors Section (> 3 Days Inactive) */}
-          <div className="border border-black/[0.06] rounded-2xl bg-gray-50/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
-            <button
-              onClick={() => setIsArchiveOpen((prev) => !prev)}
-              aria-expanded={isArchiveOpen}
-              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-black/[0.02] transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">📁</span>
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                    Archiv (Inaktive Sensoren)
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        archivedSensors.length > 0
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-gray-200/80 text-gray-500'
-                      }`}
-                    >
-                      {archivedSensors.length}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Sensoren, die seit mehr als 3 Tagen (72h) offline sind
-                  </p>
+        zones
+          .filter((zone) => !selectedZone || zone.id === selectedZone)
+          .map((zone) => {
+            const active = activeSensors.filter((sensor) => sensor.zone_id === zone.id);
+            const archived = archivedSensors.filter((sensor) => sensor.zone_id === zone.id);
+            const devices = directFeed.devices.filter((device) => device.zone_id === zone.id);
+            const count = active.length + archived.length + devices.length;
+            return (
+              <section
+                key={zone.id}
+                aria-labelledby={`zone-${zone.id}`}
+                className="space-y-4 rounded-2xl border border-emerald-100 bg-white/60 p-4 sm:p-6"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 pb-4">
+                  <div>
+                    <h2 id={`zone-${zone.id}`} className="text-xl font-semibold text-gray-800">
+                      {zone.name}
+                    </h2>
+                    {zone.location && <p className="mt-1 text-sm text-gray-500">{zone.location}</p>}
+                  </div>
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-800">
+                    {count} {count === 1 ? 'Sensor' : 'Sensoren'}
+                  </span>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
-                <span>{isArchiveOpen ? 'Einklappen' : 'Anzeigen'}</span>
-                <span
-                  className={`transform transition-transform duration-200 text-[10px] ${isArchiveOpen ? 'rotate-180' : ''}`}
-                >
-                  ▼
-                </span>
-              </div>
-            </button>
-
-            {isArchiveOpen && (
-              <div className="p-3 border-t border-black/[0.04] bg-white/40 space-y-4 animate-in fade-in duration-200">
-                {archivedSensors.length > 0 ? (
-                  <>
-                    {renderSensorTable(archivedSensors, true)}
-                    {renderSensorMobileCards(archivedSensors, true)}
-                  </>
-                ) : (
-                  <div className="p-4 text-center text-xs text-gray-400">
-                    Keine inaktiven Sensoren im Archiv vorhanden.
+                {devices.length > 0 && <DirectSensorsPanel feed={{ ...directFeed, devices }} />}
+                {active.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-gray-600">Über Gateway verbunden</h3>
+                    {renderSensorTable(active)}
+                    {renderSensorMobileCards(active)}
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-        </div>
+                {archived.length > 0 && (
+                  <details className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                    <summary className="cursor-pointer text-sm font-medium text-gray-600">
+                      Inaktive Sensoren ({archived.length})
+                    </summary>
+                    <p className="my-3 text-xs text-gray-500">
+                      Seit mehr als drei Tagen offline. Bisherige Messungen bleiben abrufbar.
+                    </p>
+                    {renderSensorTable(archived, true)}
+                    {renderSensorMobileCards(archived, true)}
+                  </details>
+                )}
+                {count === 0 && (
+                  <p className="py-4 text-sm text-gray-500">
+                    In dieser Zone sind noch keine Sensoren registriert.
+                  </p>
+                )}
+              </section>
+            );
+          })
       )}
 
       {/* Delete Sensor Confirmation Modal */}

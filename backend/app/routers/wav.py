@@ -20,6 +20,7 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.models.wav_file import WavFeature, WavFile
 from app.services import wav_service
+from app.zone_access import zone_access_filter
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +222,7 @@ def list_wav_files(
         .join(Sensor, Sensor.id == WavFile.sensor_id)
         .join(Gateway, Gateway.id == Sensor.gateway_id)
         .join(Zone, Zone.id == Gateway.zone_id)
-        .filter(Zone.organization_id == current_user.organization_id)
+        .filter(zone_access_filter(current_user))
     )
 
     if sensor_id:
@@ -296,7 +297,7 @@ def count_wav_files(
         .filter(
             WavFile.sensor_id == sensor_id,
             WavFile.raw_deleted_at.is_(None),
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
     )
 
@@ -334,7 +335,7 @@ def list_wav_features(
         .join(Gateway, Gateway.id == Sensor.gateway_id)
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
             WavFeature.verified_at.isnot(None),
         )
     )
@@ -436,7 +437,7 @@ def download_wav(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             WavFile.id == wav_id,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .first()
     )
@@ -494,7 +495,7 @@ def download_wav_bundle(
             WavFile.raw_deleted_at.is_(None),
             WavFile.started_at >= start_dt,
             WavFile.ended_at <= end_dt,
-            Zone.organization_id == current_user.organization_id,
+            zone_access_filter(current_user),
         )
         .order_by(WavFile.started_at)
         .limit(settings.max_wav_bundle_files + 1)

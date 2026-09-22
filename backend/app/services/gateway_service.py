@@ -24,6 +24,7 @@ from app.schemas.gateway import (
     RegisterGatewayRequest,
     RegisterGatewayResponse,
 )
+from app.zone_access import zone_access_filter
 
 PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_EXPIRY_MINUTES = 10
@@ -48,9 +49,9 @@ def _require_org(user: User):
 def list_gateways(
     db: Session, user: User, *, zone_id: uuid.UUID | None = None
 ) -> list[GatewayResponse]:
-    org_id = _require_org(user)
+    _require_org(user)
 
-    z_ids = [z.id for z in db.query(Zone.id).filter(Zone.organization_id == org_id).all()]
+    z_ids = [z.id for z in db.query(Zone.id).filter(zone_access_filter(user)).all()]
     if not z_ids:
         return []
 
@@ -95,9 +96,9 @@ def list_gateways(
 
 
 def generate_pairing_code(db: Session, user: User, zone_id: uuid.UUID | str) -> PairingCodeResponse:
-    org_id = _require_org(user)
+    _require_org(user)
 
-    z = db.query(Zone).filter(Zone.id == zone_id, Zone.organization_id == org_id).first()
+    z = db.query(Zone).filter(Zone.id == zone_id, zone_access_filter(user)).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
 
@@ -213,12 +214,12 @@ def register_gateway(
 
 
 def delete_gateway(db: Session, user: User, gateway_id: uuid.UUID | str) -> None:
-    org_id = _require_org(user)
+    _require_org(user)
 
     gateway = (
         db.query(Gateway)
         .join(Zone)
-        .filter(Gateway.id == gateway_id, Zone.organization_id == org_id)
+        .filter(Gateway.id == gateway_id, zone_access_filter(user))
         .first()
     )
     if not gateway:

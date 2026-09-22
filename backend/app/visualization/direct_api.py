@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models.user import User
 from app.rate_limit import limiter
 from app.visualization import direct
+from app.zone_access import require_zone_access
 
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
 
@@ -39,14 +40,9 @@ def authorize(db, legacy, user, device_id):
         .mappings()
         .first()
     )
-    if (
-        not row
-        or not legacy.execute(
-            text("SELECT 1 FROM zone WHERE id=:zone AND organization_id=:org"),
-            {"zone": row["zone_id"], "org": user.organization_id},
-        ).first()
-    ):
+    if not row:
         raise HTTPException(404, "Sensor not found")
+    require_zone_access(legacy, user, row["zone_id"])
     return row
 
 

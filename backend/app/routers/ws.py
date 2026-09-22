@@ -6,12 +6,14 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import COOKIE_NAME, decode_token
 from app.config import settings
 from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
+from app.zone_access import zone_access_filter
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
 
@@ -22,6 +24,7 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: dict[str, list[WebSocket]] = {}
         self.sensor_connections: dict[str, list[WebSocket]] = {}
+        self.authorization_checks = {}
         self._metadata: dict[WebSocket, tuple[str, str, str, str]] = {}
         self._user_counts: Counter[str] = Counter()
         self._ip_counts: Counter[str] = Counter()
@@ -83,6 +86,7 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket, zone_id: str | None = None) -> None:
         """Remove a connection once; ``zone_id`` is retained for caller compatibility."""
+        self.authorization_checks.pop(websocket, None)
         metadata = self._metadata.pop(websocket, None)
         if not metadata:
             return
@@ -108,6 +112,13 @@ class ConnectionManager:
 
     async def _send(self, connection: WebSocket, message: dict) -> None:
         try:
+            guard = self.authorization_checks.get(connection)
+            if guard and not await asyncio.wait_for(
+                run_in_threadpool(guard), timeout=settings.websocket_send_timeout_seconds
+            ):
+                self.disconnect(connection)
+                await connection.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
             await asyncio.wait_for(
                 connection.send_json(message),
                 timeout=settings.websocket_send_timeout_seconds,
@@ -184,6 +195,28 @@ async def _reject(websocket: WebSocket) -> None:
     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
 
 
+def live_zone_guard(websocket, bind, zone_id, sensor_id=None):
+    def permitted():
+        # A fresh session also applies revocations to already open subscriptions.
+        with Session(bind=bind) as session:
+            user = _authenticate_websocket(websocket, session)
+            if not user:
+                return False
+            if sensor_id is not None:
+                return bool(
+                    session.query(Sensor.id)
+                    .join(Gateway)
+                    .join(Zone)
+                    .filter(Sensor.id == sensor_id, zone_access_filter(user))
+                    .first()
+                )
+            return bool(
+                session.query(Zone.id).filter(Zone.id == zone_id, zone_access_filter(user)).first()
+            )
+
+    return permitted
+
+
 @router.websocket("/zone/{zone_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -197,9 +230,7 @@ async def websocket_endpoint(
         await _reject(websocket)
         return
     zone = (
-        db.query(Zone)
-        .filter(Zone.id == zone_uuid, Zone.organization_id == user.organization_id)
-        .first()
+        db.query(Zone).filter(Zone.id == zone_uuid, zone_access_filter(user)).first()
         if user and user.organization_id
         else None
     )
@@ -210,6 +241,7 @@ async def websocket_endpoint(
     if not await manager.connect(websocket, str(zone.id), str(user.id), _client_ip(websocket)):
         return
 
+    manager.authorization_checks[websocket] = live_zone_guard(websocket, db.get_bind(), zone.id)
     try:
         while True:
             await asyncio.wait_for(
@@ -241,7 +273,7 @@ async def sensor_websocket_endpoint(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             Sensor.id == sensor_uuid,
-            Zone.organization_id == user.organization_id,
+            zone_access_filter(user),
         )
         .first()
         if user and user.organization_id
@@ -256,6 +288,9 @@ async def sensor_websocket_endpoint(
     ):
         return
 
+    manager.authorization_checks[websocket] = live_zone_guard(
+        websocket, db.get_bind(), sensor.gateway.zone_id, sensor.id
+    )
     try:
         while True:
             await asyncio.wait_for(

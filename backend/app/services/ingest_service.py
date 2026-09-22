@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -134,7 +135,8 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
                     or (now - last_alert).total_seconds() > ALERT_COOLDOWN_MINUTES * 60
                 ):
                     _last_alert_times[reading.sensor_mac] = now
-                    from app.models.user import User
+                    from app.models.user import Role, User
+                    from app.models.zone_access import ZoneAccess
 
                     if sensor.gateway and sensor.gateway.zone:
                         zone = sensor.gateway.zone
@@ -142,6 +144,16 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
                             db.query(User)
                             .filter(
                                 User.organization_id == zone.organization_id,
+                                User.is_active.is_(True),
+                                User.is_verified.is_(True),
+                                or_(
+                                    User.role.in_([Role.OWNER, Role.ADMIN]),
+                                    User.id.in_(
+                                        select(ZoneAccess.user_id).where(
+                                            ZoneAccess.zone_id == zone.id
+                                        )
+                                    ),
+                                ),
                                 User.phone_number.isnot(None),
                                 User.phone_number != "",
                             )

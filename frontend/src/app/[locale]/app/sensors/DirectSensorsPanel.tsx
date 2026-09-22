@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
 import SignalChart from './SignalChart';
 
-type DirectDevice = {
+export type DirectDevice = {
   id: string;
   hardware_id: string | null;
   zone_id: string;
@@ -216,15 +216,18 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
   );
 }
 
-export default function DirectSensorsPanel() {
+export function useDirectDevices(enabled = true) {
   const [devices, setDevices] = useState<DirectDevice[]>([]);
   const [available, setAvailable] = useState(false);
   const [error, setError] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
+    let refreshing = false;
     const controller = new AbortController();
     const refresh = async () => {
+      if (refreshing) return;
+      refreshing = true;
       try {
         const data = await read<DirectDevice[]>('/api/v1/direct-ingest/devices', controller.signal);
         if (active) {
@@ -233,7 +236,12 @@ export default function DirectSensorsPanel() {
           setError(false);
         }
       } catch {
-        if (active) setError(true);
+        if (active) {
+          setDevices([]);
+          setError(true);
+        }
+      } finally {
+        refreshing = false;
       }
     };
     void refresh();
@@ -243,7 +251,16 @@ export default function DirectSensorsPanel() {
       controller.abort();
       clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
+  return { devices, available, error };
+}
+
+export default function DirectSensorsPanel({
+  feed,
+}: { feed?: ReturnType<typeof useDirectDevices> } = {}) {
+  const ownFeed = useDirectDevices(!feed);
+  const { devices, available, error } = feed ?? ownFeed;
+  const [selected, setSelected] = useState<string | null>(null);
   if (!available)
     return error ? (
       <p role="status" className="text-sm text-amber-800">

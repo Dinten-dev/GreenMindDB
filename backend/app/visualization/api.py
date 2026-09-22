@@ -23,8 +23,10 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
+from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.rate_limit import limiter
+from app.zone_access import zone_access_filter
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.state.limiter = limiter
@@ -67,11 +69,13 @@ async def private_response(request, call_next):
 def authorize(db, user, sensor_id):
     if not user.organization_id:
         raise HTTPException(403, "No organization")
-    sensor = db.execute(
-        text("""SELECT s.id FROM sensor s JOIN gateway g ON g.id=s.gateway_id
-      JOIN zone z ON z.id=g.zone_id WHERE s.id=:sid AND z.organization_id=:org"""),
-        {"sid": sensor_id, "org": user.organization_id},
-    ).first()
+    sensor = (
+        db.query(Sensor.id)
+        .join(Gateway, Gateway.id == Sensor.gateway_id)
+        .join(Zone, Zone.id == Gateway.zone_id)
+        .filter(Sensor.id == sensor_id, zone_access_filter(user))
+        .first()
+    )
     if not sensor:
         raise HTTPException(404, "Sensor not found")
 

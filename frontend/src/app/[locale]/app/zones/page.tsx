@@ -1,9 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLocale } from 'next-intl';
+import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import ZoneAccessPanel from './ZoneAccessPanel';
+import { useDirectDevices } from '../sensors/DirectSensorsPanel';
 import { apiListZones, apiCreateZone, apiDeleteZone, Zone, ZONE_TYPES } from '@/lib/api';
 
 export default function ZonesPage() {
+  const locale = useLocale();
+  const directFeed = useDirectDevices();
+  const { user } = useAuth();
+  const canManage = user?.role === 'owner' || user?.role === 'admin';
+  const [showAccess, setShowAccess] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -92,12 +102,14 @@ export default function ZonesPage() {
           <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Zonen</h1>
           <p className="text-sm text-gray-400 mt-1">Verwalte deine Anbauflächen</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm whitespace-nowrap"
-        >
-          + Neue Zone
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm whitespace-nowrap"
+          >
+            + Neue Zone
+          </button>
+        )}
       </div>
 
       {/* Create Modal */}
@@ -200,20 +212,41 @@ export default function ZonesPage() {
         </div>
       )}
 
+      {canManage && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowAccess((open) => !open)}
+            aria-expanded={showAccess}
+            className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800"
+          >
+            Zugänge verwalten
+          </button>
+          {showAccess && (
+            <div className="mt-4">
+              <ZoneAccessPanel zones={zones} />
+            </div>
+          )}
+        </div>
+      )}
       {/* Zone List */}
       {zones.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-4xl mb-4">🌱</div>
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Zonen</h3>
           <p className="text-sm text-gray-400 mb-4">
-            Erstelle deine erste Zone, um Gateways und Sensoren hinzuzufügen.
+            {canManage
+              ? 'Erstelle deine erste Zone, um Gateways und Sensoren hinzuzufügen.'
+              : 'Für dein Konto sind noch keine Zonen freigegeben.'}
           </p>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm"
-          >
-            Zone erstellen
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm"
+            >
+              Zone erstellen
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -233,24 +266,37 @@ export default function ZonesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setDeletingZoneId(z.id);
-                    }}
-                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
-                    title="Zone löschen"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
+                  {canManage && (
+                    <button
+                      onClick={() => {
+                        setDeletingZoneId(z.id);
+                      }}
+                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
+                      title="Zone löschen"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
+              <Link
+                href={`/${locale}/app/sensors?zone=${z.id}`}
+                className="mt-4 inline-block text-sm font-medium text-emerald-800 underline underline-offset-4"
+              >
+                Sensoren und Messungen ansehen →
+              </Link>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mt-4 pointer-events-none">
                 <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
                   <p className="text-gray-400 text-xs">Gateways</p>
@@ -258,7 +304,10 @@ export default function ZonesPage() {
                 </div>
                 <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
                   <p className="text-gray-400 text-xs">Sensoren</p>
-                  <p className="font-semibold text-gray-800">{z.sensor_count}</p>
+                  <p className="font-semibold text-gray-800">
+                    {z.sensor_count +
+                      directFeed.devices.filter((device) => device.zone_id === z.id).length}
+                  </p>
                 </div>
                 {z.latitude != null && z.longitude != null && (
                   <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
