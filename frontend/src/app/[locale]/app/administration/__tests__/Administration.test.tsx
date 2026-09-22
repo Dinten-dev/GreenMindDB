@@ -139,12 +139,10 @@ test('shows effective zones and requires email confirmation before deletion', as
 test('company editing changes the name without editing zone assignments', async () => {
   const { default: Companies } = await import('../companies/page');
   const { adminUpdateCompany } = await import('@/lib/administration-api');
-  jest
-    .mocked(adminCatalog)
-    .mockResolvedValue({
-      companies: [{ id: 'a', name: 'Original' }],
-      zones: [{ id: 'z', name: 'Greenhouse', organization_id: 'a' }],
-    });
+  jest.mocked(adminCatalog).mockResolvedValue({
+    companies: [{ id: 'a', name: 'Original' }],
+    zones: [{ id: 'z', name: 'Greenhouse', organization_id: 'a' }],
+  });
   jest.mocked(adminUpdateCompany).mockResolvedValue({ id: 'a', name: 'Renamed' });
   render(<Companies />);
   fireEvent.click(await screen.findByRole('button', { name: 'Firma bearbeiten' }));
