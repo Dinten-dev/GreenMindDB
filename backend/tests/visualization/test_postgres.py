@@ -282,10 +282,12 @@ def test_sidecar_auth_and_cross_tenant_isolation(fixture):
     route = f"/api/v1/sensors/{ids['sensor']}/data?date={start.date()}"
     assert client.get(route).status_code == 401
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=uuid.uuid4()
+        organization_id=uuid.uuid4(), role="admin"
     )
     assert client.get(route).status_code == 404
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(organization_id=ids["org"])
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        organization_id=ids["org"], role="admin"
+    )
     result = client.get(route)
     assert result.status_code == 200, result.text
     assert result.json()[0]["data"][0]["value"] == 5
@@ -476,7 +478,9 @@ def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monk
             yield db
 
     app.dependency_overrides[get_db] = database
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(organization_id=ids["org"])
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        organization_id=ids["org"], role="admin"
+    )
     client = TestClient(app)
     route = f"/api/v1/visualization/sensors/{ids['sensor']}/waveform"
     response = client.get(route, params={"at": start.isoformat(), "seconds": 2})
@@ -492,7 +496,7 @@ def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monk
         db.execute(text("UPDATE wav_feature SET source_sha256=:sha"), {"sha": "0" * 64})
     assert client.get(route, params={"at": start.isoformat()}).status_code == 503
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=uuid.uuid4()
+        organization_id=uuid.uuid4(), role="admin"
     )
     assert client.get(route, params={"at": start.isoformat()}).status_code == 404
 

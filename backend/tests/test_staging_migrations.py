@@ -73,7 +73,7 @@ def test_upgrade_preserves_old_data_and_accepts_compressed_history(client, monke
             connection.execute(text(statement), params)
     upgrade("head")
     with engine.begin() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0022"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0023"
         assert connection.scalar(text("SELECT value FROM sensor_reading")) == 321.125
         wav = connection.execute(
             text("SELECT s3_key,raw_deleted_at,pcm_encoding_version FROM wav_file")
