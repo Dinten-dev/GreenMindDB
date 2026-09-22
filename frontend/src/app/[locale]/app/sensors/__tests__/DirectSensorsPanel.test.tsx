@@ -16,7 +16,7 @@ const device = {
 const points = [{ timestamp: '2026-09-19T14:49:00Z', value: 1000 }];
 afterEach(() => jest.restoreAllMocks());
 
-test('opens Direct measurements automatically and exposes authenticated WAV/CSV paths', async () => {
+test('loads Direct measurements only when expanded and exposes authenticated WAV/CSV paths', async () => {
   global.fetch = jest.fn(async (url) => ({
     ok: true,
     json: async () =>
@@ -44,6 +44,10 @@ test('opens Direct measurements automatically and exposes authenticated WAV/CSV 
             ],
   })) as jest.Mock;
   render(<DirectSensorsPanel />);
+  const toggle = await screen.findByRole('button', { name: /Biolingo/ });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  fireEvent.click(toggle);
   expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
   expect(screen.getByRole('link', { name: 'CSV herunterladen' })).toHaveAttribute(
     'href',
@@ -60,6 +64,10 @@ test('opens Direct measurements automatically and exposes authenticated WAV/CSV 
       expect.objectContaining({ cache: 'no-store' })
     )
   );
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByTestId('signal-chart')).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'CSV herunterladen' })).not.toBeInTheDocument();
 });
 
 test('shows an explicit data error instead of hiding a device with failing chart requests', async () => {
@@ -68,6 +76,7 @@ test('shows an explicit data error instead of hiding a device with failing chart
     json: async () => [device],
   })) as jest.Mock;
   render(<DirectSensorsPanel />);
+  fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Messdaten konnten nicht aktualisiert werden'
   );

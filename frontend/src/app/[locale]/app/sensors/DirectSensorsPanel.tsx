@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
 import SignalChart from './SignalChart';
+import SensorCard from './SensorCard';
 
 export type DirectDevice = {
   id: string;
@@ -86,10 +87,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
     .at(-1);
   return (
-    <div
-      className="mt-4 rounded-2xl border border-emerald-100 bg-[#fcfdfb] p-4 sm:p-6"
-      aria-label="Direct-Messdaten"
-    >
+    <div className="rounded-xl bg-[#fcfdfb] p-1 sm:p-2" aria-label="Direct-Messdaten">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-semibold text-gray-900">
@@ -267,63 +265,35 @@ export default function DirectSensorsPanel({
         Direkt verbundene Sensoren konnten nicht geladen werden.
       </p>
     ) : null;
-  const chosen =
-    devices.find((device) => device.id === selected) ??
-    (selected === null ? devices[0] : undefined);
   return (
-    <section
-      className="rounded-2xl border border-emerald-100 bg-white p-6"
-      aria-label="Direkt verbundene Sensoren"
-    >
-      <h2 className="text-lg font-semibold text-gray-900">Direkt über WLAN</h2>
-      <p className="mt-1 text-sm text-gray-500">
-        Wähle einen Sensor, um sein Signal, die Datenabdeckung und Originalaufnahmen anzusehen.
-      </p>
+    <div className="space-y-3">
       {error && (
-        <p role="alert" className="mt-3 text-sm text-amber-800">
-          Empfangsstatus konnte nicht aktualisiert werden. Die Anzeige kann veraltet sein.
+        <p role="alert" className="text-sm text-amber-800">
+          Empfangsstatus konnte nicht aktualisiert werden.
         </p>
       )}
-      {devices.length === 0 ? (
-        <p className="mt-5 text-gray-600">
-          Noch kein Sensor verbunden. Wähle beim Hinzufügen „Direkt über WLAN“.
-        </p>
-      ) : (
-        <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {devices.map((device) => (
-              <button
-                type="button"
-                key={device.id}
-                aria-pressed={chosen?.id === device.id}
-                onClick={() => setSelected(device.id)}
-                className={`rounded-xl border p-4 text-left transition-colors ${chosen?.id === device.id ? 'border-emerald-500 bg-emerald-50/60' : 'border-gray-200 hover:bg-gray-50'}`}
-              >
-                <span className="block font-medium text-gray-900">
-                  Biolingo {device.hardware_id?.slice(-5).replace(':', '') || device.id.slice(0, 8)}
-                </span>
-                <span
-                  className={`mt-1 block text-sm ${device.status === 'online' && !error ? 'text-emerald-800' : 'text-gray-500'}`}
-                >
-                  {error
-                    ? 'Status unklar'
-                    : device.status === 'online'
-                      ? 'Empfängt Daten'
-                      : device.status === 'disabled'
-                        ? 'Deaktiviert'
-                        : 'Keine aktuellen Daten'}
-                </span>
-                <span className="mt-2 block text-xs text-gray-500">
-                  {device.last_seen
-                    ? `Letzter Empfang: ${new Date(device.last_seen).toLocaleString('de-CH')}`
-                    : 'Wartet auf erste Messdaten'}
-                </span>
-              </button>
-            ))}
-          </div>
-          {chosen && <DirectMeasurements key={chosen.id} device={chosen} />}
-        </>
-      )}
-    </section>
+      {devices.map((device) => (
+        <SensorCard
+          key={device.id}
+          name={`Biolingo ${device.hardware_id?.slice(-5).replace(':', '') || device.id.slice(0, 8)}`}
+          connection="Direct-to-Cloud · Direkt über WLAN"
+          status={
+            error
+              ? 'Status unklar'
+              : device.status === 'online'
+                ? 'Empfängt Daten'
+                : device.status === 'disabled'
+                  ? 'Deaktiviert'
+                  : 'Offline'
+          }
+          online={device.status === 'online' && !error}
+          lastSeen={device.last_seen}
+          expanded={selected === device.id}
+          onToggle={() => setSelected(selected === device.id ? null : device.id)}
+        >
+          <DirectMeasurements device={device} />
+        </SensorCard>
+      ))}
+    </div>
   );
 }

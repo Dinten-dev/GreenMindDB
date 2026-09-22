@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale } from 'next-intl';
-import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   apiListSensors,
   apiListZones,
@@ -21,6 +21,8 @@ import {
 import SignalChart from './SignalChart';
 import PairSensorDialog from './PairSensorDialog';
 import DirectSensorsPanel, { useDirectDevices } from './DirectSensorsPanel';
+import SensorCard from './SensorCard';
+import ZoneSensorCard from './ZoneSensorCard';
 
 type TimeRange = 'live' | '1h' | '24h' | '7d' | '30d';
 
@@ -900,170 +902,39 @@ export default function SensorsPage() {
     );
   };
 
-  const renderSensorTable = (sensorList: SensorInfo[], isArchivedGroup = false) => (
-    <div className="glass-table hidden xl:block">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-black/[0.04]">
-            <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-              Name
-            </th>
-            <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-              MAC
-            </th>
-            <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-              Gateway
-            </th>
-            <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-              Status
-            </th>
-            <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-              Zuletzt
-            </th>
-            <th className="text-left px-5 py-3.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider w-12"></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-black/[0.03]">
-          {sensorList.map((s) => (
-            <Fragment key={s.id}>
-              <tr
-                onClick={() => handleSensorClick(s.id)}
-                className={`cursor-pointer transition-all duration-200 ${
-                  selectedSensor === s.id ? 'bg-emerald-50/60' : 'hover:bg-white/50'
-                }`}
-              >
-                <td className="px-5 py-3.5 font-medium text-gray-800">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`transition-transform duration-200 text-xs text-gray-300 ${selectedSensor === s.id ? 'rotate-90' : ''}`}
-                    >
-                      ▶
-                    </span>
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleSensorClick(s.id);
-                      }}
-                      aria-expanded={selectedSensor === s.id}
-                      className="text-left py-2"
-                    >
-                      {s.name || s.mac_address}
-                    </button>
-                    {isArchivedGroup && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
-                        Archiviert
-                      </span>
-                    )}
-                    {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
-                      <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-200/50"
-                        title={`Elektrode abgefallen (Signal ${electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})`}
-                      >
-                        ⚠️ Warnung
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-5 py-3.5 font-mono text-gray-400 text-xs">{s.mac_address}</td>
-                <td className="px-5 py-3.5 text-gray-500">{s.gateway_name || '–'}</td>
-                <td className="px-5 py-3.5">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                      s.status === 'online'
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : 'bg-gray-100 text-gray-400'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}
-                    />
-                    {isArchivedGroup ? 'inaktiv (>3d)' : s.status}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5 text-xs text-gray-400">
-                  {s.last_seen ? new Date(s.last_seen).toLocaleString('de-CH') : '–'}
-                </td>
-                <td className="px-5 py-3.5">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeletingSensorId(s.id);
-                    }}
-                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    title="Sensor entfernen"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-              {selectedSensor === s.id && (
-                <tr>
-                  <td colSpan={6} className="p-0 border-b border-black/[0.04] bg-emerald-50/10">
-                    <div className="p-0 sm:p-2 animate-in slide-in-from-top-2 duration-200">
-                      {renderSensorDetailPanel()}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  const renderSensorMobileCards = (sensorList: SensorInfo[], isArchivedGroup = false) => (
-    <div className="space-y-2 xl:hidden">
-      {sensorList.map((s) => (
-        <Fragment key={s.id}>
+  const renderSensorCards = (sensorList: SensorInfo[], archived = false) => (
+    <div className="space-y-3">
+      {sensorList.map((sensor) => (
+        <SensorCard
+          key={sensor.id}
+          name={sensor.name || sensor.mac_address}
+          connection={`Gateway${sensor.gateway_name ? ` · ${sensor.gateway_name}` : ''} · ${sensor.mac_address}`}
+          status={
+            archived
+              ? 'Inaktiv (>3 Tage)'
+              : sensor.status === 'online'
+                ? 'Empfängt Daten'
+                : 'Offline'
+          }
+          online={sensor.status === 'online'}
+          lastSeen={sensor.last_seen}
+          expanded={selectedSensor === sensor.id}
+          onToggle={() => handleSensorClick(sensor.id)}
+          notice={
+            electrodeStatuses[sensor.id] && electrodeStatuses[sensor.id] !== 'ok'
+              ? 'Elektrodenkontakt prüfen'
+              : undefined
+          }
+        >
+          {renderSensorDetailPanel()}
           <button
             type="button"
-            aria-expanded={selectedSensor === s.id}
-            onClick={() => handleSensorClick(s.id)}
-            className={`glass-card w-full text-left p-4 cursor-pointer ${
-              selectedSensor === s.id ? 'border-emerald-500/20' : ''
-            } ${isArchivedGroup ? 'opacity-80 bg-gray-50/40' : ''}`}
+            onClick={() => setDeletingSensorId(sensor.id)}
+            className="mt-3 rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
           >
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-800 break-all">
-                  {s.name || s.mac_address}
-                </span>
-                <span
-                  className={`w-2 h-2 rounded-full ${s.status === 'online' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'bg-gray-300'}`}
-                />
-              </div>
-              {isArchivedGroup && (
-                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
-                  Archiviert
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-gray-500">
-              {s.status === 'online' ? 'Online' : 'Offline'} · {s.gateway_name || 'Kein Gateway'} ·{' '}
-              {s.mac_address}
-            </div>
-            {electrodeStatuses[s.id] && electrodeStatuses[s.id] !== 'ok' && (
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200/50">
-                <span>⚠️</span>
-                Elektrode abgefallen (Signal{' '}
-                {electrodeStatuses[s.id] === 'rail_high' ? 'High' : 'Low'})
-              </div>
-            )}
+            Sensor entfernen
           </button>
-          {selectedSensor === s.id && (
-            <div className="mt-1 mb-2 animate-in slide-in-from-top-2 duration-200">
-              {renderSensorDetailPanel()}
-            </div>
-          )}
-        </Fragment>
+        </SensorCard>
       ))}
     </div>
   );
@@ -1130,30 +1001,30 @@ export default function SensorsPage() {
             const devices = directFeed.devices.filter((device) => device.zone_id === zone.id);
             const count = active.length + archived.length + devices.length;
             return (
-              <section
+              <ZoneSensorCard
                 key={zone.id}
-                aria-labelledby={`zone-${zone.id}`}
-                className="space-y-4 rounded-2xl border border-emerald-100 bg-white/60 p-4 sm:p-6"
+                name={zone.name}
+                location={zone.location}
+                count={count}
+                connections={[
+                  ...Array.from(
+                    new Set(
+                      [...active, ...archived].map((sensor) => sensor.gateway_name || 'Gateway')
+                    )
+                  ).map((name) => (name === 'Gateway' ? name : `Gateway · ${name}`)),
+                  ...(devices.length ? ['Direct-to-Cloud'] : []),
+                ].join(' · ')}
+                reveal={
+                  selectedZone === zone.id ||
+                  [...active, ...archived].some((sensor) => sensor.id === selectedSensor)
+                }
+                onCollapse={() => {
+                  setSelectedSensor(null);
+                  setSensorData([]);
+                }}
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 pb-4">
-                  <div>
-                    <h2 id={`zone-${zone.id}`} className="text-xl font-semibold text-gray-800">
-                      {zone.name}
-                    </h2>
-                    {zone.location && <p className="mt-1 text-sm text-gray-500">{zone.location}</p>}
-                  </div>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-800">
-                    {count} {count === 1 ? 'Sensor' : 'Sensoren'}
-                  </span>
-                </div>
+                {active.length > 0 && renderSensorCards(active)}
                 {devices.length > 0 && <DirectSensorsPanel feed={{ ...directFeed, devices }} />}
-                {active.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-gray-600">Über Gateway verbunden</h3>
-                    {renderSensorTable(active)}
-                    {renderSensorMobileCards(active)}
-                  </div>
-                )}
                 {archived.length > 0 && (
                   <details className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
                     <summary className="cursor-pointer text-sm font-medium text-gray-600">
@@ -1162,8 +1033,7 @@ export default function SensorsPage() {
                     <p className="my-3 text-xs text-gray-500">
                       Seit mehr als drei Tagen offline. Bisherige Messungen bleiben abrufbar.
                     </p>
-                    {renderSensorTable(archived, true)}
-                    {renderSensorMobileCards(archived, true)}
+                    {renderSensorCards(archived, true)}
                   </details>
                 )}
                 {count === 0 && (
@@ -1171,7 +1041,7 @@ export default function SensorsPage() {
                     In dieser Zone sind noch keine Sensoren registriert.
                   </p>
                 )}
-              </section>
+              </ZoneSensorCard>
             );
           })
       )}
