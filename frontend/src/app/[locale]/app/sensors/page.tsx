@@ -1019,8 +1019,10 @@ export default function SensorsPage() {
                   [...active, ...archived].some((sensor) => sensor.id === selectedSensor)
                 }
                 onCollapse={() => {
-                  setSelectedSensor(null);
-                  setSensorData([]);
+                  if ([...active, ...archived].some((sensor) => sensor.id === selectedSensor)) {
+                    setSelectedSensor(null);
+                    setSensorData([]);
+                  }
                 }}
               >
                 {active.length > 0 && renderSensorCards(active)}
