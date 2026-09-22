@@ -10,9 +10,14 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
 
+from app.models.audit_log import AuditLog
 from app.models.master import Zone
 from app.models.user import Organization, Role, User
+from app.routers.organizations import update_member_access
+from app.schemas.organization import UpdateMemberZones
+from app.zone_access import allowed_zone_ids
 
 
 @pytest.mark.integration
@@ -80,6 +85,20 @@ def test_additive_zone_grants_preserve_existing_members_and_deny_new_implicit_ac
                 ).scalar_one()
                 == 0
             )
+            # Exercise the real update path against PostgreSQL, including User's
+            # joined organization relationship and its explicitly scoped row lock.
+            AuditLog.__table__.create(connection)
+            with Session(bind=connection) as session:
+                manager = session.get(User, admin)
+                target = session.get(User, new_member)
+                response = update_member_access(
+                    new_member, UpdateMemberZones(zone_ids=zones[:2]), manager, session
+                )
+                assert set(response.zone_ids) == set(map(str, zones[:2]))
+                assert set(allowed_zone_ids(session, target)) == set(zones[:2])
+                update_member_access(new_member, UpdateMemberZones(zone_ids=[]), manager, session)
+                assert allowed_zone_ids(session, target) == []
+                assert session.query(AuditLog).filter_by(action="zone_access.update").count() == 2
             connection.execute(text("DELETE FROM zone WHERE id=:id"), {"id": zones[0]})
             assert (
                 connection.execute(

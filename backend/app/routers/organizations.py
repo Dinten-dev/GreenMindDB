@@ -64,7 +64,7 @@ def update_member_access(
     member = (
         db.query(User)
         .filter(User.id == user_id, User.organization_id == current_user.organization_id)
-        .with_for_update()
+        .with_for_update(of=User)
         .first()
     )
     if member is None:
