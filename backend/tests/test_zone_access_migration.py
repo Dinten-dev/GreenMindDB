@@ -3,7 +3,7 @@
 import importlib.util
 import os
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic.migration import MigrationContext
@@ -106,6 +106,82 @@ def test_additive_zone_grants_preserve_existing_members_and_deny_new_implicit_ac
                 ).scalar_one()
                 == 0
             )
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        engine.dispose()
+
+
+@pytest.mark.integration
+def test_management_user_creation_and_company_change_on_postgres(monkeypatch):
+    """Exercise real FK ordering, joined-user row locks, grants and company refresh."""
+    from app.config import settings
+    from app.models.zone_access import ZoneAccess
+    from app.routers.administration import create_user, update_user
+    from app.schemas.administration import AdminUserCreate, AdminUserUpdate
+
+    url = os.environ.get("VISUAL_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Disposable local PostgreSQL required")
+    parsed = make_url(url)
+    assert parsed.host in ("127.0.0.1", "localhost") and parsed.database == "visual_test"
+    monkeypatch.setattr(settings, "management_admin_emails", "operator@example.com")
+    engine = create_engine(url)
+    schema = "management_test_" + uuid4().hex
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            connection.execute(text(f'SET LOCAL search_path TO "{schema}",public'))
+            connection = connection.execution_options(schema_translate_map={None: schema})
+            for table in (
+                Organization.__table__,
+                User.__table__,
+                Zone.__table__,
+                ZoneAccess.__table__,
+                AuditLog.__table__,
+            ):
+                table.create(connection)
+            with Session(bind=connection) as session:
+                first, second = Organization(name="A"), Organization(name="B")
+                session.add_all([first, second])
+                session.flush()
+                actor = User(
+                    email="operator@example.com",
+                    password_hash="disabled",
+                    role=Role.ADMIN,
+                    organization_id=first.id,
+                    is_active=True,
+                    is_verified=True,
+                )
+                zone = Zone(name="B zone", organization_id=second.id)
+                session.add_all([actor, zone])
+                session.flush()
+                created = create_user(
+                    AdminUserCreate(
+                        email="pg.member@example.com",
+                        name="PG member",
+                        password="TestLongPassword12",
+                        organization_id=first.id,
+                    ),
+                    actor,
+                    session,
+                )
+                changed = update_user(
+                    UUID(created["id"]),
+                    AdminUserUpdate(
+                        name="PG moved",
+                        organization_id=second.id,
+                        role=Role.MEMBER,
+                        is_active=True,
+                        zone_ids=[zone.id],
+                    ),
+                    actor,
+                    session,
+                )
+                assert changed["organization_name"] == "B"
+                assert changed["zone_ids"] == [str(zone.id)]
+                assert session.query(ZoneAccess).count() == 1
+                assert session.query(AuditLog).count() == 2
     finally:
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))

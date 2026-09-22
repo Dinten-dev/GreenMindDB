@@ -1,6 +1,7 @@
 'use client';
 
 import BrandLogo from '@/components/BrandLogo';
+import AdministrationLink from '@/components/AdministrationLink';
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
@@ -82,6 +83,12 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
                     </Link>
                   );
                 })}
+              {group.label === 'Verwaltung' && (
+                <AdministrationLink
+                  active={localPath.startsWith('/app/administration')}
+                  onNavigate={onNavigate}
+                />
+              )}
             </div>
           </div>
         ))}

@@ -1,0 +1,26 @@
+"""Platform administration payloads. Existing login/password rules are reused."""
+
+import uuid
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.user import Role
+from app.schemas.auth import SignupRequest
+
+
+class AdminUserCreate(SignupRequest):
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(min_length=12, max_length=128)
+    organization_id: uuid.UUID
+    role: Role = Role.MEMBER
+    zone_ids: list[uuid.UUID] = Field(default_factory=list, max_length=1000)
+
+
+class AdminUserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    phone_number: str | None = Field(None, max_length=50)
+    organization_id: uuid.UUID
+    role: Role
+    is_active: bool
+    zone_ids: list[uuid.UUID] = Field(max_length=1000)

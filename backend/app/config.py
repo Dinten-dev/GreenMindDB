@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     storage_capacity_bytes: int = Field(100 * 1024**3, ge=1024**3)
     gateway_offline_minutes: int = Field(15, ge=1, le=10_080)
 
+    # Explicit platform-management allowlist; names/roles alone never grant access.
+    management_admin_emails: str = ""
+    storage_monitor_path: str = ""
+    storage_warning_free_percent: float = Field(5.0, gt=0, le=5)
+
     # PEM Ed25519 public key shared with the gateway agent's release verifier.
     gateway_release_signing_public_key_path: str = Field("", max_length=1_024)
 

@@ -166,6 +166,20 @@ def prepare(args):
         EMBEDDED_BACKGROUND_WORKERS_ENABLED="false",
         RELEASE_REVISION=args.revision,
     )
+    management_emails = getattr(args, "management_admin_emails", None)
+    monitor_directory = getattr(args, "storage_monitor_directory", None)
+    if management_emails is not None:
+        assert args.environment == "staging", (
+            "Management rollout currently approved for Staging only"
+        )
+        assert monitor_directory and monitor_directory.is_dir()
+        assert not any(monitor_directory.iterdir()), (
+            "Bind only an empty statistics directory"
+        )
+        assert monitor_directory.stat().st_dev == Path("/").stat().st_dev
+        application["MANAGEMENT_ADMIN_EMAILS"] = management_emails
+        application["STORAGE_MONITOR_PATH"] = "/host-storage"
+        application["STORAGE_WARNING_FREE_PERCENT"] = "5"
     direct = env("gm-direct-" + args.environment + "-direct-api-1")
     assert direct["DIRECT_ENVIRONMENT"] == args.environment
     # Resolve authorization to the candidate API even before public activation.
@@ -268,6 +282,15 @@ def prepare(args):
         }
         for m in inspect(prefix + "-backend-1")["Mounts"]
     ]
+    if management_emails is not None:
+        services["application"]["volumes"].append(
+            {
+                "type": "bind",
+                "source": str(monitor_directory.resolve()),
+                "target": "/host-storage",
+                "read_only": True,
+            }
+        )
     services["visual"]["volumes"] = [
         f"/home/traver/greenmind-release-{args.environment}/archive:/archive:ro"
     ]
@@ -407,6 +430,8 @@ if __name__ == "__main__":
     p.add_argument("--revision")
     p.add_argument("--backend-image")
     p.add_argument("--frontend-image")
+    p.add_argument("--management-admin-emails")
+    p.add_argument("--storage-monitor-directory", type=Path)
     a = p.parse_args()
     if a.action == "prepare":
         prepare(a)

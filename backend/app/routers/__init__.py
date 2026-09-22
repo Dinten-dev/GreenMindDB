@@ -1,3 +1,4 @@
+from app.routers.administration import router as administration_router
 from app.routers.auth import router as auth_router
 from app.routers.contact import router as contact_router
 from app.routers.firmware import router as firmware_router
@@ -15,6 +16,7 @@ from app.routers.ws import router as ws_router
 from app.routers.zones import router as zones_router
 
 __all__ = [
+    "administration_router",
     "auth_router",
     "contact_router",
     "gateways_router",

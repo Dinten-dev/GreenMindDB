@@ -78,6 +78,7 @@ async def _lifespan(application: FastAPI):
 
 from app.rate_limit import limiter  # noqa: E402
 from app.routers import (  # noqa: E402
+    administration_router,
     auth_router,
     contact_router,
     firmware_router,
@@ -170,6 +171,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_v1_router = APIRouter(prefix="/api/v1")
 
 api_v1_router.include_router(auth_router)
+api_v1_router.include_router(administration_router)
 api_v1_router.include_router(organizations_router)
 api_v1_router.include_router(zones_router)
 api_v1_router.include_router(gateways_router)
