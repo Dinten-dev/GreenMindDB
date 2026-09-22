@@ -18,7 +18,7 @@ def test_zone_proxy_retains_device_guard_and_direct_receiver(environment):
     if "    # Independent Direct receiver;" not in source:
         source = source.replace(
             "    # BEGIN GREENMIND",
-            f"    # Independent Direct receiver;\n    location ^~ /api/v1/direct-ingest/ {{\n        proxy_pass http://127.0.0.1:{direct};\n    }}\n\n    # BEGIN GREENMIND",
+            f"    # Opt-in Direct pilot;\n    location ^~ /api/v1/direct-ingest/ {{\n        proxy_pass http://127.0.0.1:{direct};\n    }}\n\n    # BEGIN GREENMIND",
             1,
         )
     source, _ = RELEASE["proposal"](

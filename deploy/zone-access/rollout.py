@@ -121,7 +121,7 @@ def render(original, environment):
         count=1,
     )
     # Only browser metadata uses the new Direct app. Chunks, pairing and assembly stay on the existing receiver.
-    marker = "    # Independent Direct receiver;"
+    marker = "    location ^~ /api/v1/direct-ingest/ {"
     assert candidate.count(marker) == 1
     block = f"""    location = /api/v1/direct-ingest/devices {{
         proxy_pass http://127.0.0.1:{api + 2};
