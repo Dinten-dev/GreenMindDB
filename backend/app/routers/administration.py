@@ -17,7 +17,13 @@ from app.models.audit_log import AuditLog
 from app.models.master import Zone
 from app.models.user import Organization, Role, User
 from app.models.zone_access import ZoneAccess
-from app.schemas.administration import AdminUserCreate, AdminUserUpdate
+from app.schemas.administration import (
+    AdminCompanyUpdate,
+    AdminUserCreate,
+    AdminUserDelete,
+    AdminUserUpdate,
+)
+from app.zone_access import zone_access_filter
 
 router = APIRouter(prefix="/administration", tags=["administration"])
 
@@ -70,8 +76,26 @@ def storage(response: Response, user: User = Depends(require_management_admin)):
     }
 
 
-def view(user, grants):
+def view(user, grants, db):
+    accessible = user.is_active and user.is_verified
+    zones = (
+        db.query(Zone).filter(zone_access_filter(user)).order_by(Zone.name, Zone.id).all()
+        if accessible
+        else []
+    )
     return {
+        "visible_zones": [{"id": str(z.id), "name": z.name} for z in zones],
+        "access_note": (
+            "Konto deaktiviert: kein Zugang."
+            if not user.is_active
+            else "E-Mail unbestätigt: kein Zugang."
+            if not user.is_verified
+            else "Keine Firma zugeordnet: kein Zonenzugang."
+            if not user.organization_id
+            else "Alle aktuellen und künftigen Zonen dieser Firma."
+            if user.role in (Role.OWNER, Role.ADMIN)
+            else "Nur ausdrücklich freigegebene Zonen dieser Firma."
+        ),
         "id": str(user.id),
         "email": user.email,
         "name": user.name,
@@ -131,7 +155,7 @@ def users(
     grants = {}
     for grant in db.query(ZoneAccess).filter(ZoneAccess.user_id.in_([u.id for u in rows])).all():
         grants.setdefault(grant.user_id, []).append(grant.zone_id)
-    return {"users": [view(u, grants.get(u.id, [])) for u in rows], "total": total}
+    return {"users": [view(u, grants.get(u.id, []), db) for u in rows], "total": total}
 
 
 def validate_zones(db, company, zone_ids, role):
@@ -218,7 +242,7 @@ def create_user(
     )
     commit(db)
     db.refresh(user)
-    return view(user, selected)
+    return view(user, selected, db)
 
 
 @router.put("/users/{user_id}")
@@ -251,29 +275,9 @@ def update_user(
         or data.organization_id != user.organization_id
         or data.role == Role.MEMBER
     )
-    if (
-        user.is_active
-        and user.organization_id
-        and user.role in (Role.OWNER, Role.ADMIN)
-        and loses_management
-    ):
-        remaining = (
-            db.query(User.id)
-            .filter(
-                User.organization_id == user.organization_id,
-                User.id != user.id,
-                User.is_active.is_(True),
-                User.is_verified.is_(True),
-                User.role.in_([Role.OWNER, Role.ADMIN]),
-            )
-            .first()
-        )
-        if not remaining:
-            raise HTTPException(
-                409, "Die Firma benötigt mindestens einen aktiven Eigentümer oder Administrator."
-            )
+    protect_last_manager(db, user, loses_management)
     old_grants = [r[0] for r in db.query(ZoneAccess.zone_id).filter_by(user_id=user.id).all()]
-    before = view(user, old_grants)
+    before = view(user, old_grants, db)
     user.name = data.name
     user.phone_number = data.phone_number
     user.organization_id = data.organization_id
@@ -298,4 +302,84 @@ def update_user(
     )
     commit(db)
     db.refresh(user)
-    return view(user, selected)
+    return view(user, selected, db)
+
+
+def protect_last_manager(db, user, loses_management=True):
+    if (
+        user.is_active
+        and user.organization_id
+        and user.role in (Role.OWNER, Role.ADMIN)
+        and loses_management
+    ):
+        remaining = (
+            db.query(User.id)
+            .filter(
+                User.organization_id == user.organization_id,
+                User.id != user.id,
+                User.is_active.is_(True),
+                User.is_verified.is_(True),
+                User.role.in_([Role.OWNER, Role.ADMIN]),
+            )
+            .first()
+        )
+        if not remaining:
+            raise HTTPException(
+                409, "Die Firma benötigt mindestens einen aktiven Eigentümer oder Administrator."
+            )
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: uuid.UUID,
+    data: AdminUserDelete,
+    actor: User = Depends(require_management_admin),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter_by(id=user_id).with_for_update(of=User).first()
+    if not user:
+        raise HTTPException(404, "Benutzer nicht gefunden.")
+    if (
+        user.id == actor.id
+        or is_management_admin(user)
+        or user.email.casefold()
+        in {e.strip().casefold() for e in settings.management_admin_emails.split(",")}
+    ):
+        raise HTTPException(409, "Administrationskonten können nicht gelöscht werden.")
+    if str(data.confirmation_email).casefold() != user.email.casefold():
+        raise HTTPException(422, "Bitte die E-Mail-Adresse des zu löschenden Kontos bestätigen.")
+    if user.organization_id:
+        db.query(Organization).filter_by(id=user.organization_id).with_for_update().one()
+    protect_last_manager(db, user)
+    grants = [r[0] for r in db.query(ZoneAccess.zone_id).filter_by(user_id=user.id).all()]
+    audit(db, actor, user, "administration.user.delete", view(user, grants, db), None)
+    # PostgreSQL cascades account grants/verification/pairing and keeps recordings,
+    # organizations and historical audit/observation rows (SET NULL actor FKs).
+    db.delete(user)
+    commit(db)
+    return Response(status_code=204)
+
+
+@router.put("/companies/{company_id}")
+def update_company(
+    company_id: uuid.UUID,
+    data: AdminCompanyUpdate,
+    actor: User = Depends(require_management_admin),
+    db: Session = Depends(get_db),
+):
+    company = db.query(Organization).filter_by(id=company_id).with_for_update().first()
+    if not company:
+        raise HTTPException(404, "Firma nicht gefunden.")
+    before = company.name
+    company.name = data.name
+    db.add(
+        AuditLog(
+            user_id=actor.id,
+            action="administration.company.update",
+            entity_type="organization",
+            entity_id=str(company.id),
+            details=json.dumps({"before": {"name": before}, "after": {"name": data.name}}),
+        )
+    )
+    commit(db)
+    return {"id": str(company.id), "name": company.name}

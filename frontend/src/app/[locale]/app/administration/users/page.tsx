@@ -7,6 +7,7 @@ import {
   adminUsers,
   adminCreateUser,
   adminUpdateUser,
+  adminDeleteUser,
   type AdminCatalog,
   type ManagedUser,
 } from '@/lib/administration-api';
@@ -36,6 +37,29 @@ export default function UserManagement() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
+  const [deleting, setDeleting] = useState<ManagedUser | null>(null);
+  const [confirmation, setConfirmation] = useState('');
+  const remove = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!deleting) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await adminDeleteUser(deleting.id, confirmation.trim());
+      setDeleting(null);
+      setConfirmation('');
+      setShowForm(false);
+      setForm(empty);
+      setMessage('Benutzerkonto gelöscht. Messdaten und Firmen bleiben erhalten.');
+      setOffset(0);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Löschen fehlgeschlagen.');
+    } finally {
+      setSaving(false);
+    }
+  };
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -62,6 +86,8 @@ export default function UserManagement() {
     };
   }, [query, offset, reload]);
   const edit = useCallback((user: ManagedUser | null) => {
+    setDeleting(null);
+    setConfirmation('');
     setEditing(user);
     setForm(
       user
@@ -116,7 +142,7 @@ export default function UserManagement() {
         ← Administration
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-800">Benutzerverwaltung</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Kunden &amp; Benutzer</h1>
         <button
           type="button"
           disabled={saving}
@@ -138,6 +164,62 @@ export default function UserManagement() {
         <p role="status" className="text-sm text-emerald-700">
           {message}
         </p>
+      )}
+      <p className="text-sm text-gray-600">
+        Kunden bearbeiten und genau prüfen, welche Zonen sie sehen.{' '}
+        <Link
+          href={`/${locale}/app/administration/companies`}
+          className="text-emerald-700 underline"
+        >
+          Firmen bearbeiten
+        </Link>
+      </p>
+      {deleting && (
+        <form
+          onSubmit={remove}
+          className="glass-card border border-red-200 p-6 space-y-4"
+          aria-label="Kontolöschung bestätigen"
+        >
+          <h2 className="text-lg font-semibold">Benutzerkonto dauerhaft löschen</h2>
+          <p className="text-sm">
+            {deleting.name || deleting.email} ({deleting.email}) verliert den Zugang. Das Konto und
+            seine Zonenfreigaben werden gelöscht. Firmen, Sensoren und Messdaten bleiben erhalten.
+            Dieser Vorgang kann nicht rückgängig gemacht werden.
+          </p>
+          <label className="block text-sm">
+            E-Mail zur Bestätigung
+            <input
+              type="email"
+              required
+              autoComplete="off"
+              disabled={saving}
+              className={input}
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+            />
+          </label>
+          <div className="flex gap-3">
+            <button
+              disabled={
+                saving || confirmation.trim().toLowerCase() !== deleting.email.toLowerCase()
+              }
+              className="rounded-xl bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-40"
+            >
+              Endgültig löschen
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setDeleting(null);
+                setConfirmation('');
+              }}
+              className="rounded-xl border px-4 py-2 text-sm"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </form>
       )}
       {showForm && (
         <form onSubmit={save} className="glass-card p-6 space-y-4">
@@ -341,23 +423,47 @@ export default function UserManagement() {
                 <h2 className="break-words font-medium text-gray-800">{u.name || u.email}</h2>
                 <p className="break-all text-sm text-gray-500">{u.email}</p>
                 <p className="mt-1 text-xs text-gray-500">
-                  {u.organization_name || 'Keine Firma'} · {u.role} ·{' '}
+                  {u.organization_name || 'Keine Firma'} ·{' '}
+                  {{ member: 'Mitglied', owner: 'Eigentümer', admin: 'Administrator' }[u.role]} ·{' '}
                   {u.is_active ? 'Aktiv' : 'Deaktiviert'}
-                  {!u.is_verified ? ' · E-Mail unbestätigt' : ''} ·{' '}
-                  {u.all_zones ? 'Alle Firmenzonen' : `${u.zone_ids.length} Zonen`}
+                  {!u.is_verified ? ' · E-Mail unbestätigt' : ''}
                 </p>
+                <p className="mt-3 text-sm font-medium text-gray-700">Sichtbare Zonen</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {u.visible_zones?.length
+                    ? u.visible_zones.map((z) => z.name).join(' · ')
+                    : 'Keine Zonen sichtbar'}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">{u.access_note}</p>
               </div>
               {u.protected ? (
                 <span className="text-xs text-gray-500">Geschütztes Administrationskonto</span>
               ) : (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => edit(u)}
-                  className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                >
-                  Bearbeiten
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => edit(u)}
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                  >
+                    Bearbeiten
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      setDeleting(u);
+                      setConfirmation('');
+                      setShowForm(false);
+                      setForm(empty);
+                      setError('');
+                      setMessage('');
+                    }}
+                    className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700"
+                  >
+                    Konto löschen
+                  </button>
+                </div>
               )}
             </article>
           ))

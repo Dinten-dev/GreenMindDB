@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
 from app.models.master import Zone
-from app.models.user import Organization, Role, User
+from app.models.user import EmailVerification, Organization, Role, User
 from app.routers.organizations import update_member_access
 from app.schemas.organization import UpdateMemberZones
 from app.zone_access import allowed_zone_ids
@@ -117,8 +118,8 @@ def test_management_user_creation_and_company_change_on_postgres(monkeypatch):
     """Exercise real FK ordering, joined-user row locks, grants and company refresh."""
     from app.config import settings
     from app.models.zone_access import ZoneAccess
-    from app.routers.administration import create_user, update_user
-    from app.schemas.administration import AdminUserCreate, AdminUserUpdate
+    from app.routers.administration import create_user, delete_user, update_user
+    from app.schemas.administration import AdminUserCreate, AdminUserDelete, AdminUserUpdate
 
     url = os.environ.get("VISUAL_TEST_DATABASE_URL")
     if not url:
@@ -139,6 +140,7 @@ def test_management_user_creation_and_company_change_on_postgres(monkeypatch):
                 Zone.__table__,
                 ZoneAccess.__table__,
                 AuditLog.__table__,
+                EmailVerification.__table__,
             ):
                 table.create(connection)
             with Session(bind=connection) as session:
@@ -182,6 +184,32 @@ def test_management_user_creation_and_company_change_on_postgres(monkeypatch):
                 assert changed["zone_ids"] == [str(zone.id)]
                 assert session.query(ZoneAccess).count() == 1
                 assert session.query(AuditLog).count() == 2
+                target_id = UUID(created["id"])
+                session.add(AuditLog(user_id=target_id, action="history.keep", entity_type="user"))
+                session.add(
+                    EmailVerification(
+                        user_id=target_id, token="test-token", expires_at=datetime.now(UTC)
+                    )
+                )
+                session.commit()
+                assert changed["visible_zones"] == [{"id": str(zone.id), "name": zone.name}]
+                assert (
+                    delete_user(
+                        target_id,
+                        AdminUserDelete(confirmation_email=created["email"]),
+                        actor,
+                        session,
+                    ).status_code
+                    == 204
+                )
+                assert session.get(User, target_id) is None
+                assert session.query(ZoneAccess).count() == 0
+                assert session.query(EmailVerification).count() == 0
+                assert (
+                    session.query(AuditLog).filter_by(action="history.keep").one().user_id is None
+                )
+                assert session.get(Zone, zone.id) is not None
+                assert session.get(Organization, second.id) is not None
     finally:
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))

@@ -73,6 +73,8 @@ test('company changes clear previous zone grants before saving', async () => {
     is_active: true,
     is_verified: true,
     zone_ids: ['za'],
+    visible_zones: [{ id: 'za', name: 'Zone A' }],
+    access_note: 'Nur freigegebene Zonen.',
     all_zones: false,
     protected: false,
   };
@@ -95,4 +97,59 @@ test('company changes clear previous zone grants before saving', async () => {
     )
   );
   expect(adminCreateUser).not.toHaveBeenCalled();
+});
+
+test('shows effective zones and requires email confirmation before deletion', async () => {
+  const { adminDeleteUser } = await import('@/lib/administration-api');
+  jest.mocked(adminCatalog).mockResolvedValue({ companies: [], zones: [] });
+  const customer = {
+    id: 'customer',
+    name: 'Customer',
+    email: 'customer@example.com',
+    phone_number: null,
+    organization_id: 'company',
+    organization_name: 'Company',
+    role: 'member' as const,
+    is_active: true,
+    is_verified: true,
+    zone_ids: ['a'],
+    visible_zones: [{ id: 'a', name: 'Peter Büro' }],
+    access_note: 'Nur ausdrücklich freigegebene Zonen dieser Firma.',
+    all_zones: false,
+    protected: false,
+  };
+  jest.mocked(adminUsers).mockResolvedValue({ users: [customer], total: 1 });
+  jest.mocked(adminDeleteUser).mockResolvedValue(undefined);
+  render(<UserManagement />);
+  expect(await screen.findByText('Peter Büro')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Konto löschen' }));
+  expect(screen.getByRole('button', { name: 'Endgültig löschen' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('E-Mail zur Bestätigung'), {
+    target: { value: 'wrong@example.com' },
+  });
+  expect(screen.getByRole('button', { name: 'Endgültig löschen' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('E-Mail zur Bestätigung'), {
+    target: { value: customer.email },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Endgültig löschen' }));
+  await waitFor(() => expect(adminDeleteUser).toHaveBeenCalledWith('customer', customer.email));
+  expect(await screen.findByText(/Benutzerkonto gelöscht/)).toBeInTheDocument();
+});
+
+test('company editing changes the name without editing zone assignments', async () => {
+  const { default: Companies } = await import('../companies/page');
+  const { adminUpdateCompany } = await import('@/lib/administration-api');
+  jest
+    .mocked(adminCatalog)
+    .mockResolvedValue({
+      companies: [{ id: 'a', name: 'Original' }],
+      zones: [{ id: 'z', name: 'Greenhouse', organization_id: 'a' }],
+    });
+  jest.mocked(adminUpdateCompany).mockResolvedValue({ id: 'a', name: 'Renamed' });
+  render(<Companies />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Firma bearbeiten' }));
+  fireEvent.change(screen.getByLabelText('Firmenname'), { target: { value: 'Renamed' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+  await waitFor(() => expect(adminUpdateCompany).toHaveBeenCalledWith('a', 'Renamed'));
+  expect(await screen.findByText(/Zonenzugänge bleiben unverändert/)).toBeInTheDocument();
 });

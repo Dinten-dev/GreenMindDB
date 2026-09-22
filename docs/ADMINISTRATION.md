@@ -6,7 +6,7 @@ Production wird durch diese Veröffentlichung nicht geändert.
 ## Bedienung
 
 Freigegebene Konten sehen unter **Verwaltung → Administration** den Serverspeicher
-und die neue Kachel **Benutzerverwaltung**. Die vorhandenen Verwaltungseinträge
+und die neue Kachel **Kunden & Benutzer**. Die vorhandenen Verwaltungseinträge
 und die Oberfläche normaler Benutzer bleiben erhalten.
 
 Der Speicherstatus zeigt den belegten Anteil sowie den für Dienste verfügbaren
@@ -28,7 +28,7 @@ Neue Konten sind administrativ bestätigt und können sich sofort anmelden. Ihr
 Startpasswort benötigt mindestens zwölf Zeichen sowie Gross-/Kleinbuchstaben und
 eine Zahl. Es wird nur gehasht gespeichert, niemals protokolliert, zurückgegeben
 oder automatisch per E-Mail versendet. Die sichere persönliche Übergabe obliegt
-dem Administrator. Keine automatische Passwort-Rücksetzung oder Benutzerlöschung.
+dem Administrator. Keine automatische Passwort-Rücksetzung.
 
 Zentrale Administrationskonten können hier nicht deaktiviert/umgehängt werden.
 Der letzte aktive, bestätigte Firmenverantwortliche bleibt geschützt.
@@ -101,3 +101,32 @@ vor der Zonenfreigabe ignorieren einzelne Zonenzugänge. Nach echten
 Berechtigungsänderungen darf deshalb nicht blind auf diese Version zurückgestellt
 werden. Im Fehlerfall neue Administration vorübergehend sperren und die
 Zonenprüfung beibehalten, bis ein sicherer Stand bereitsteht.
+
+
+## Kunden bearbeiten, Zonen prüfen und Konten löschen
+
+Unter **Administration → Kunden & Benutzer** zeigt jede Karte die tatsächlich
+sichtbaren **Zonennamen**. Die Anzeige nutzt dieselbe serverseitige Zonenprüfung
+wie Messungen, Sensoren und Aufzeichnungen. Mitglieder sehen ausschliesslich
+freigegebene Zonen ihrer Firma. Eigentümer und Administratoren sehen alle
+aktuellen und künftigen Firmenzonen. Deaktivierte oder unbestätigte Konten haben
+keinen Zugang; dies wird ausdrücklich angezeigt.
+
+**Bearbeiten** öffnet Name, Telefon, Firma, Rolle, Kontoaktivierung und
+Zonenfreigaben. Unter **Firmen verwalten** lässt sich der Firmenname ändern;
+Zuordnungen und Messdaten bleiben erhalten.
+
+**Konto löschen** öffnet zunächst eine Bestätigung mit der betroffenen
+E-Mail-Adresse. Erst nach erneuter Eingabe dieser Adresse kann **Endgültig
+löschen** ausgelöst werden. Dies entfernt das Benutzerkonto und seine
+Zonenfreigaben; bestehende Sitzungen verlieren sofort den API-Zugang.
+Firmen, Zonen, Sensoren, Messungen und bestehende Audit-/Beobachtungshistorie
+bleiben erhalten. Geschützte Administrationskonten, das eigene Konto und der
+letzte aktive Firmenverantwortliche können nicht gelöscht werden.
+
+Neue API-Routen: `DELETE /api/v1/administration/users/{id}` mit JSON
+`confirmation_email` und `PUT /api/v1/administration/companies/{id}` mit JSON
+`name`. Beide erfordern die bestehende zentrale Adminfreigabe. Die Benutzerliste
+enthält zusätzlich `visible_zones` und `access_note`. Keine Datenbankmigration.
+Production-Abnahme erfolgt lesend; Löschtests laufen nur in isolierten
+Testdatenbanken. Die Veröffentlichung selbst löscht keine Kundenkonten.

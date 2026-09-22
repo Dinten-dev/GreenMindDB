@@ -15,9 +15,18 @@ export default function AdministrationPage() {
         href={`/${locale}/app/administration/users`}
         className="glass-card block p-6 transition-colors hover:border-emerald-300"
       >
-        <h2 className="text-lg font-semibold text-gray-800">Benutzerverwaltung →</h2>
+        <h2 className="text-lg font-semibold text-gray-800">Kunden &amp; Benutzer →</h2>
         <p className="mt-2 text-sm text-gray-500">
-          Benutzer anlegen, Firmen und Zonen zuweisen sowie Konten aktivieren oder deaktivieren.
+          Kunden bearbeiten, sichtbare Zonen prüfen und Konten anlegen oder löschen.
+        </p>
+      </Link>
+      <Link
+        href={`/${locale}/app/administration/companies`}
+        className="glass-card block p-6 transition-colors hover:border-emerald-300"
+      >
+        <h2 className="text-lg font-semibold text-gray-800">Firmen verwalten →</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          Firmennamen bearbeiten und zugehörige Zonen ansehen.
         </p>
       </Link>
     </div>

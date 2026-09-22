@@ -2,7 +2,7 @@
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import Role
 from app.schemas.auth import SignupRequest
@@ -24,3 +24,13 @@ class AdminUserUpdate(BaseModel):
     role: Role
     is_active: bool
     zone_ids: list[uuid.UUID] = Field(max_length=1000)
+
+
+class AdminUserDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmation_email: EmailStr
+
+
+class AdminCompanyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=200)

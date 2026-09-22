@@ -21,6 +21,8 @@ export type ManagedUser = {
   is_active: boolean;
   is_verified: boolean;
   zone_ids: string[];
+  visible_zones: { id: string; name: string }[];
+  access_note: string;
   all_zones: boolean;
   protected: boolean;
 };
@@ -51,4 +53,15 @@ export const adminUpdateUser = (
   apiFetch<ManagedUser>(`/administration/users/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+
+export const adminDeleteUser = (id: string, confirmation_email: string) =>
+  apiFetch<void>(`/administration/users/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation_email }),
+  });
+export const adminUpdateCompany = (id: string, name: string) =>
+  apiFetch<{ id: string; name: string }>(`/administration/companies/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
   });
