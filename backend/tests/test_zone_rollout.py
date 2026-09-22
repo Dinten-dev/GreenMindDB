@@ -15,7 +15,7 @@ def test_zone_proxy_retains_device_guard_and_direct_receiver(environment):
     _, _, _, old_api, direct, api, front = OPERATOR["ENVIRONMENTS"][environment]
     name = "green-mind.ch.conf" if environment == "production" else "test.green-mind.ch.conf"
     source = (ROOT / "nginx" / name).read_text()
-    if "    # Independent Direct receiver;" not in source:
+    if "    location ^~ /api/v1/direct-ingest/ {" not in source:
         source = source.replace(
             "    # BEGIN GREENMIND",
             f"    # Opt-in Direct pilot;\n    location ^~ /api/v1/direct-ingest/ {{\n        proxy_pass http://127.0.0.1:{direct};\n    }}\n\n    # BEGIN GREENMIND",
