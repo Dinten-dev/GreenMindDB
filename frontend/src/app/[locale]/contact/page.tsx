@@ -64,7 +64,7 @@ export default function ContactPage() {
                   Trägerorganisation
                 </h3>
                 <p className="text-lg text-apple-gray-800 leading-relaxed">
-                  Galaxyadvisors AG
+                  GreenMind GmbH
                   <br />
                   Laurenzenvorstadt 69
                   <br />
