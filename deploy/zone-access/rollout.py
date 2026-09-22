@@ -216,6 +216,11 @@ def prepare(args):
         "read_only": True,
         "tmpfs": ["/tmp:size=64m,mode=1777"],
         "networks": ["existing"],
+        "extra_hosts": [
+            domain
+            + ":"
+            + ("172.28.20.1" if args.environment == "production" else "172.28.21.1")
+        ],
         "security_opt": ["no-new-privileges:true"],
         "cap_drop": ["ALL"],
         "pids_limit": 96,
