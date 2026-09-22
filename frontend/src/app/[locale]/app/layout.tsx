@@ -1,5 +1,7 @@
 'use client';
 
+import BrandLogo from '@/components/BrandLogo';
+
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
@@ -47,9 +49,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
           className="flex items-center gap-2.5"
           onClick={onNavigate}
         >
-          <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center shadow-sm">
-            <span className="text-white text-sm font-bold">G</span>
-          </div>
+          <BrandLogo size={40} />
           <span className="font-semibold text-[15px] text-gray-800 tracking-tight">GreenMind</span>
         </Link>
       </div>

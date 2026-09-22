@@ -1,5 +1,7 @@
 'use client';
 
+import BrandLogo from '@/components/BrandLogo';
+
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -61,9 +63,7 @@ export default function Navbar() {
         <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between gap-6">
           {/* Logo */}
           <Link href={`/${locale}`} className="flex shrink-0 items-center gap-2 relative z-[110]">
-            <div className="w-7 h-7 rounded-lg bg-gm-green-500 flex items-center justify-center">
-              <span className="text-white text-sm font-bold">G</span>
-            </div>
+            <BrandLogo size={40} />
             <span className="font-semibold text-apple-gray-800 tracking-tight">GreenMind</span>
           </Link>
 

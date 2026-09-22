@@ -1,5 +1,7 @@
 'use client';
 
+import BrandLogo from '@/components/BrandLogo';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { apiSignup } from '@/lib/api';
@@ -37,9 +39,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gm-green-500 flex items-center justify-center">
-              <span className="text-white text-xl font-bold">G</span>
-            </div>
+            <BrandLogo size={40} />
           </Link>
           <h1 className="text-2xl font-bold text-apple-gray-800">Konto erstellen</h1>
           <p className="text-sm text-apple-gray-400 mt-2">
