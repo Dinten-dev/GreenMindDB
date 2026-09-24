@@ -165,6 +165,25 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
             with urllib.request.urlopen(base + path, timeout=5) as response:  # noqa: S310 - local Docker loopback
                 return json.load(response)
 
+        def wait_for_routes(expected):
+            # A graceful reload briefly serves both worker generations. One matching
+            # response does not prove convergence; require a stable observation window.
+            deadline = time.monotonic() + 10
+            stable_since = None
+            observed = {}
+            while time.monotonic() < deadline:
+                observed = {path: get(path)["port"] for path in expected}
+                now = time.monotonic()
+                if observed == expected:
+                    if stable_since is None:
+                        stable_since = now
+                    elif now - stable_since >= 1:
+                        return
+                else:
+                    stable_since = None
+                time.sleep(0.1)
+            pytest.fail(f"Proxy routes did not converge: {observed}; expected {expected}")
+
         for _attempt in range(30):
             try:
                 if get("/")["port"] == 3000:
@@ -211,7 +230,7 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
 
         def continuous():
             sequence = 0
-            deadline = time.monotonic() + 20
+            deadline = time.monotonic() + 60
             while not finish.is_set() and time.monotonic() < deadline:
                 try:
                     request = urllib.request.Request(  # noqa: S310 - local Docker loopback
@@ -252,19 +271,13 @@ def test_nginx_switch_and_failed_switch_keep_old_receiver_alive(tmp_path, monkey
             stream = pool.submit(continuous)
             time.sleep(0.2)
             release.activate_release(tmp_path, manifest, target)
-            for _ in range(30):
-                if get("/")["port"] == 3004 and get("/api/v1/visualization/probe")["port"] == 8004:
-                    break
-                time.sleep(0.1)
+            wait_for_routes({"/": 3004, "/api/v1/visualization/probe": 8004})
             assert get("/")["port"] == 3004
             assert get("/api/v1/visualization/probe")["port"] == 8004
             assert get("/api/v1/ingest")["port"] == 8000
             assert_gateway_shield()
             release.rollback_release(tmp_path, manifest, target)
-            for _ in range(30):
-                if get("/")["port"] == 3000:
-                    break
-                time.sleep(0.1)
+            wait_for_routes({"/": 3000, "/api/v1/visualization/probe": 8000})
             assert get("/")["port"] == 3000
             assert_gateway_shield()
             (tmp_path / "nginx.proposed.conf").write_text("invalid_nginx_directive;\n")
