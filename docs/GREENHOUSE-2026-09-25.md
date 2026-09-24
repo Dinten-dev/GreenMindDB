@@ -9,14 +9,13 @@
 | Unveränderter Cloud-Anwendungscode | Dinten-dev/GreenMindDB | `2fbd207f86637cf21ef2f6f7f3cc40ebf295b423` |
 
 Diese Datei ist Dokumentation, keine Servermigration. Firmware und Gateway sind
-Feldkandidaten auf develop, noch ohne physische Abnahme. Keine laufenden Gateways,
+Feldkandidaten auf main, noch ohne physische Abnahme. Keine laufenden Gateways,
 Sensoren, Empfangsdienste, Datenbanken oder Production-Routen wurden dafür geändert.
 
 ## Heute nachgewiesen
 
 - Alle drei ESP32-Builds erfolgreich, native Transport-/ACK-/Uhrüberlauftests bestanden.
-- Gateway: 142 Tests bestanden, danach drei zusätzliche Tests für geschützten
-  Reset und bewusste lokale Registrierung bestanden; abschließender GitHub-Lauf prüft alles zusammen.
+- Gateway: alle 145 Tests im abschließenden GitHub-Lauf bestanden.
 - Gateway-Lastprüfung: zwölf simulierte Sensoren, 360 Pakete, 36 Wiederholungen,
   genau 136800 WAV-Samples. Auf dem Mac, keine Leistungszusage für Pi/SD-Karte.
 - Cloud-Unit-Tests: 287 bestanden, vier Docker-Prüfungen übersprungen,
@@ -67,3 +66,19 @@ Die Firmware-Anleitung liegt in GreenMindArdu unter
 `docs/GREENHOUSE-2026-09-25.md`, die Pi-Anleitung in GreenMindRPIv1 unter
 `greenmind-gateway/docs/GREENHOUSE-2026-09-25.md`. Feldpakete enthalten
 Quellcommit, Flash-Adressen und SHA-256-Prüfsummen; kein WLAN-Passwort oder Token.
+
+## GitHub-Downloads und Anleitungen
+
+Alle drei Repositories verwenden `main` als Hauptbranch. Die unveränderlichen
+Feldpakete bleiben auf die oben geprüften Quellcommits festgelegt. Die neueren
+Dokumentationscommits ändern keine Firmware-Binärdateien.
+
+- [Direct auf dem Mac herunterladen und flashen](https://github.com/Dinten-dev/GreenMindArdu/blob/main/docs/DIRECT-TO-CLOUD-ANLEITUNG.md)
+- [Sensor-Firmware: Gateway und Direct](https://github.com/Dinten-dev/GreenMindArdu/releases/tag/field-2026-09-25)
+- [Raspberry-Pi-Gateway: Quellpaket](https://github.com/Dinten-dev/GreenMindRPIv1/releases/tag/field-2026-09-25)
+- [Gateway-Installation und Zuordnung](https://github.com/Dinten-dev/GreenMindRPIv1/blob/main/greenmind-gateway/docs/GREENHOUSE-2026-09-25.md)
+- [Cloud-Quellpaket](https://github.com/Dinten-dev/GreenMindDB/releases/tag/field-2026-09-25)
+
+Die Releases sind öffentlich als Vorabversion gekennzeichnet, weil die physische
+Abnahme am neuen Sensor/Pi aussteht. GitHub-Veröffentlichung aktualisiert keine
+laufenden Geräte oder Server.
