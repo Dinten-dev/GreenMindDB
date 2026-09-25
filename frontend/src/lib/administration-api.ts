@@ -34,9 +34,14 @@ export const adminCapabilities = () =>
   apiFetch<{ can_manage: boolean }>('/administration/capabilities');
 export const adminStorage = () => apiFetch<StorageStatus>('/administration/storage');
 export const adminCatalog = () => apiFetch<AdminCatalog>('/administration/catalog');
-export const adminUsers = (search: string, offset: number) =>
+export const adminUsers = (search: string, offset: number, organizationId?: string) =>
   apiFetch<{ users: ManagedUser[]; total: number }>('/administration/users', {
-    params: { search, offset: String(offset), limit: '50' },
+    params: {
+      search,
+      offset: String(offset),
+      limit: '50',
+      ...(organizationId ? { organization_id: organizationId } : {}),
+    },
   });
 export type UserAssignment = {
   name: string;
@@ -64,4 +69,22 @@ export const adminUpdateCompany = (id: string, name: string) =>
   apiFetch<{ id: string; name: string }>(`/administration/companies/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ name }),
+  });
+export const adminCreateCompany = (name: string) =>
+  apiFetch<{ id: string; name: string }>('/administration/companies', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+export const adminDeleteCompany = (id: string, confirmation_name: string) =>
+  apiFetch<void>(`/administration/companies/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation_name }),
+  });
+export const adminCreateCompanyZone = (
+  id: string,
+  data: { name: string; location: string | null; zone_type: string }
+) =>
+  apiFetch<AdminCatalog['zones'][number]>(`/administration/companies/${id}/zones`, {
+    method: 'POST',
+    body: JSON.stringify(data),
   });

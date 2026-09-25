@@ -151,3 +151,76 @@ test('company editing changes the name without editing zone assignments', async 
   await waitFor(() => expect(adminUpdateCompany).toHaveBeenCalledWith('a', 'Renamed'));
   expect(await screen.findByText(/Zonenzugänge bleiben unverändert/)).toBeInTheDocument();
 });
+
+test('creates companies and zones with the selected company', async () => {
+  const { default: Companies } = await import('../companies/page');
+  const { adminCreateCompany, adminCreateCompanyZone } = await import('@/lib/administration-api');
+  jest
+    .mocked(adminCatalog)
+    .mockResolvedValue({ companies: [{ id: 'y', name: 'Company Y' }], zones: [] });
+  jest.mocked(adminCreateCompany).mockResolvedValue({ id: 'new', name: 'New firm' });
+  jest
+    .mocked(adminCreateCompanyZone)
+    .mockResolvedValue({ id: 'z', name: 'Zone Z', organization_id: 'y' });
+  render(<Companies />);
+  await screen.findByRole('heading', { name: 'Company Y' });
+  fireEvent.click(screen.getByRole('button', { name: 'Firma hinzufügen' }));
+  fireEvent.change(screen.getByLabelText('Firmenname'), { target: { value: 'New firm' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+  await waitFor(() => expect(adminCreateCompany).toHaveBeenCalledWith('New firm'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Zone hinzufügen' }));
+  fireEvent.change(screen.getByLabelText('Zonenname'), { target: { value: 'Zone Z' } });
+  fireEvent.change(screen.getByLabelText('Standort (optional)'), { target: { value: 'Basel' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Zone anlegen' }));
+  await waitFor(() =>
+    expect(adminCreateCompanyZone).toHaveBeenCalledWith('y', {
+      name: 'Zone Z',
+      location: 'Basel',
+      zone_type: 'GREENHOUSE',
+    })
+  );
+});
+
+test('company deletion needs its exact name and displays server blockers', async () => {
+  const { default: Companies } = await import('../companies/page');
+  const { adminDeleteCompany } = await import('@/lib/administration-api');
+  jest
+    .mocked(adminCatalog)
+    .mockResolvedValue({ companies: [{ id: 'y', name: 'Company Y' }], zones: [] });
+  jest.mocked(adminDeleteCompany).mockRejectedValue(new Error('Benutzer sind noch zugeordnet.'));
+  render(<Companies />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Firma löschen' }));
+  expect(screen.getByRole('button', { name: 'Endgültig löschen' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Firmenname zur Bestätigung'), {
+    target: { value: 'wrong' },
+  });
+  expect(screen.getByRole('button', { name: 'Endgültig löschen' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Firmenname zur Bestätigung'), {
+    target: { value: 'Company Y' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Endgültig löschen' }));
+  await waitFor(() => expect(adminDeleteCompany).toHaveBeenCalledWith('y', 'Company Y'));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Benutzer sind noch zugeordnet.');
+  expect(screen.getByRole('heading', { name: 'Company Y' })).toBeInTheDocument();
+});
+
+test('companies with zones cannot be deleted from the form', async () => {
+  const { default: Companies } = await import('../companies/page');
+  jest.mocked(adminCatalog).mockResolvedValue({
+    companies: [{ id: 'y', name: 'Company Y' }],
+    zones: [{ id: 'z', name: 'Zone Z', organization_id: 'y' }],
+  });
+  render(<Companies />);
+  expect(await screen.findByRole('button', { name: 'Firma löschen' })).toBeDisabled();
+});
+
+test('company filter is sent to the user listing', async () => {
+  jest
+    .mocked(adminCatalog)
+    .mockResolvedValue({ companies: [{ id: 'y', name: 'Company Y' }], zones: [] });
+  jest.mocked(adminUsers).mockResolvedValue({ users: [], total: 0 });
+  render(<UserManagement />);
+  await screen.findByRole('option', { name: 'Company Y' });
+  fireEvent.change(screen.getByLabelText('Nach Firma filtern'), { target: { value: 'y' } });
+  await waitFor(() => expect(adminUsers).toHaveBeenLastCalledWith('', 0, 'y'));
+});

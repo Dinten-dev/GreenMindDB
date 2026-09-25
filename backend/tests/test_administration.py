@@ -354,3 +354,130 @@ def test_company_rename_keeps_zone_assignments_and_requires_allowlist(
     assert db.query(AuditLog).filter_by(action="administration.company.update").count() == 1
     monkeypatch.setattr(settings, "management_admin_emails", "")
     assert client.put(route, headers=management, json={"name": "Denied"}).status_code == 403
+
+
+def test_company_create_delete_confirmation_and_no_cascades(client, db, management):
+    route = "/api/v1/administration/companies"
+    assert client.post(route, headers=management, json={"name": "  "}).status_code == 422
+    created = client.post(route, headers=management, json={"name": " New firm "})
+    assert created.status_code == 201
+    company = created.json()
+    assert company["name"] == "New firm"
+    target = route + "/" + company["id"]
+    assert (
+        client.request(
+            "DELETE", target, headers=management, json={"confirmation_name": "wrong"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.request(
+            "DELETE", target, headers=management, json={"confirmation_name": "New firm"}
+        ).status_code
+        == 204
+    )
+    assert (
+        client.request(
+            "DELETE", target, headers=management, json={"confirmation_name": "New firm"}
+        ).status_code
+        == 404
+    )
+    assert db.query(AuditLog).filter_by(action="administration.company.create").count() == 1
+    assert db.query(AuditLog).filter_by(action="administration.company.delete").count() == 1
+    original = db.query(Organization).first()
+    before_users = db.query(User).count()
+    assert (
+        client.request(
+            "DELETE",
+            route + "/" + str(original.id),
+            headers=management,
+            json={"confirmation_name": original.name},
+        ).status_code
+        == 409
+    )
+    assert db.query(User).count() == before_users
+    assert db.query(Organization).filter_by(id=original.id).count() == 1
+
+
+def test_company_zone_blocks_deletion_and_member_sees_only_selected_zone(client, db, management):
+    company = client.post(
+        "/api/v1/administration/companies", headers=management, json={"name": "Company Y"}
+    ).json()
+    route = "/api/v1/administration/companies/" + company["id"]
+    z = client.post(route + "/zones", headers=management, json={"name": "Zone Z"})
+    a = client.post(route + "/zones", headers=management, json={"name": "Zone A"})
+    assert z.status_code == a.status_code == 201
+    assert z.json()["organization_id"] == company["id"]
+    assert (
+        client.request(
+            "DELETE", route, headers=management, json={"confirmation_name": "Company Y"}
+        ).status_code
+        == 409
+    )
+    assert db.query(Zone).count() == 2
+    user = client.post(
+        "/api/v1/administration/users",
+        headers=management,
+        json={
+            "email": "person-x@example.com",
+            "name": "Person X",
+            "password": "LongSecurePass12",
+            "organization_id": company["id"],
+            "role": "member",
+            "zone_ids": [z.json()["id"]],
+        },
+    ).json()
+    member_headers = {"Authorization": "Bearer " + create_access_token({"sub": user["id"]})}
+    assert [x["id"] for x in client.get("/api/v1/zones", headers=member_headers).json()] == [
+        z.json()["id"]
+    ]
+    assert client.get("/api/v1/zones/" + a.json()["id"], headers=member_headers).status_code == 404
+    listing = client.get(
+        "/api/v1/administration/users",
+        headers=management,
+        params={"organization_id": company["id"]},
+    ).json()
+    assert listing["total"] == 1
+    assert listing["users"][0]["visible_zones"] == [{"id": z.json()["id"], "name": "Zone Z"}]
+    assert (
+        client.get(
+            "/api/v1/administration/users",
+            headers=management,
+            params={"organization_id": "invalid"},
+        ).status_code
+        == 422
+    )
+
+
+def test_company_mutations_require_platform_admin(client, db, management, monkeypatch):
+    org = db.query(Organization).first()
+    route = "/api/v1/administration/companies"
+    monkeypatch.setattr(settings, "management_admin_emails", "")
+    assert client.post(route, headers=management, json={"name": "Denied"}).status_code == 403
+    assert (
+        client.post(
+            route + "/" + str(org.id) + "/zones", headers=management, json={"name": "Denied"}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.request(
+            "DELETE",
+            route + "/" + str(org.id),
+            headers=management,
+            json={"confirmation_name": org.name},
+        ).status_code
+        == 403
+    )
+
+
+def test_company_zone_validation_and_missing_company(client, management):
+    route = "/api/v1/administration/companies/" + str(uuid4()) + "/zones"
+    assert client.post(route, headers=management, json={"name": "Test"}).status_code == 404
+    assert client.post(route, headers=management, json={"name": "  "}).status_code == 422
+    assert (
+        client.post(
+            route, headers=management, json={"name": "Test", "organization_id": str(uuid4())}
+        ).status_code
+        == 422
+    )

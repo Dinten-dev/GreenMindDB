@@ -26,7 +26,7 @@ export default function AdministrationPage() {
       >
         <h2 className="text-lg font-semibold text-gray-800">Firmen verwalten →</h2>
         <p className="mt-2 text-sm text-gray-500">
-          Firmennamen bearbeiten und zugehörige Zonen ansehen.
+          Firmen anlegen, bearbeiten oder löschen und Firmenzonen einrichten.
         </p>
       </Link>
     </div>

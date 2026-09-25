@@ -214,3 +214,94 @@ def test_management_user_creation_and_company_change_on_postgres(monkeypatch):
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
         engine.dispose()
+
+
+@pytest.mark.integration
+def test_company_management_deletion_preserves_dependents_on_postgres():
+    from fastapi import HTTPException
+
+    from app.models.plant import Plant
+    from app.routers.administration import create_company, create_company_zone, delete_company
+    from app.schemas.administration import (
+        AdminCompanyDelete,
+        AdminCompanyUpdate,
+        AdminCompanyZoneCreate,
+    )
+
+    url = os.environ.get("VISUAL_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Disposable local PostgreSQL required")
+    parsed = make_url(url)
+    assert parsed.host in ("127.0.0.1", "localhost") and parsed.database == "visual_test"
+    engine = create_engine(url)
+    schema = "company_test_" + uuid4().hex
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            connection.execute(text(f'SET LOCAL search_path TO "{schema}",public'))
+            connection = connection.execution_options(schema_translate_map={None: schema})
+            for table in (
+                Organization.__table__,
+                User.__table__,
+                Zone.__table__,
+                Plant.__table__,
+                AuditLog.__table__,
+            ):
+                table.create(connection)
+            with Session(bind=connection) as session:
+                operator_company = Organization(name="Operator")
+                session.add(operator_company)
+                session.flush()
+                actor = User(
+                    email="operator@example.com",
+                    password_hash="disabled",
+                    role=Role.ADMIN,
+                    organization_id=operator_company.id,
+                    is_active=True,
+                    is_verified=True,
+                )
+                session.add(actor)
+                session.flush()
+                empty = create_company(AdminCompanyUpdate(name="Empty"), actor, session)
+                assert (
+                    delete_company(
+                        UUID(empty["id"]),
+                        AdminCompanyDelete(confirmation_name="Empty"),
+                        actor,
+                        session,
+                    ).status_code
+                    == 204
+                )
+                assert session.query(Organization).filter_by(id=UUID(empty["id"])).count() == 0
+                with pytest.raises(HTTPException) as error:
+                    delete_company(
+                        operator_company.id,
+                        AdminCompanyDelete(confirmation_name="Operator"),
+                        actor,
+                        session,
+                    )
+                assert error.value.status_code == 409
+                assert session.query(User).filter_by(id=actor.id).count() == 1
+                company = create_company(AdminCompanyUpdate(name="Has zones"), actor, session)
+                zone = create_company_zone(
+                    UUID(company["id"]), AdminCompanyZoneCreate(name="Keep me"), actor, session
+                )
+                with pytest.raises(HTTPException) as error:
+                    delete_company(
+                        UUID(company["id"]),
+                        AdminCompanyDelete(confirmation_name="Has zones"),
+                        actor,
+                        session,
+                    )
+                assert error.value.status_code == 409
+                assert session.query(Zone).filter_by(id=UUID(zone["id"])).count() == 1
+                assert (
+                    session.query(AuditLog)
+                    .filter_by(action="administration.company.delete")
+                    .count()
+                    == 1
+                )
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        engine.dispose()

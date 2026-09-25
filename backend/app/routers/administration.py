@@ -6,19 +6,21 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import func, or_
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_password_hash
 from app.config import settings
-from app.database import get_db
+from app.database import Base, get_db
 from app.models.audit_log import AuditLog
 from app.models.master import Zone
 from app.models.user import Organization, Role, User
 from app.models.zone_access import ZoneAccess
 from app.schemas.administration import (
+    AdminCompanyDelete,
     AdminCompanyUpdate,
+    AdminCompanyZoneCreate,
     AdminUserCreate,
     AdminUserDelete,
     AdminUserUpdate,
@@ -139,9 +141,12 @@ def users(
     search: str = Query("", max_length=200),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
+    organization_id: uuid.UUID | None = None,
 ):
     response.headers["Cache-Control"] = "private, no-store"
     query = db.query(User)
+    if organization_id is not None:
+        query = query.filter(User.organization_id == organization_id)
     if search.strip():
         term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.filter(
@@ -383,3 +388,85 @@ def update_company(
     )
     commit(db)
     return {"id": str(company.id), "name": company.name}
+
+
+def company_audit(db, actor, company_id, action, before, after):
+    db.add(
+        AuditLog(
+            user_id=actor.id,
+            action=action,
+            entity_type="organization",
+            entity_id=str(company_id),
+            details=json.dumps({"before": before, "after": after}),
+        )
+    )
+
+
+@router.post("/companies", status_code=201)
+def create_company(
+    data: AdminCompanyUpdate,
+    actor: User = Depends(require_management_admin),
+    db: Session = Depends(get_db),
+):
+    company = Organization(id=uuid.uuid4(), name=data.name)
+    db.add(company)
+    company_audit(db, actor, company.id, "administration.company.create", None, {"name": data.name})
+    commit(db)
+    return {"id": str(company.id), "name": company.name}
+
+
+@router.delete("/companies/{company_id}", status_code=204)
+def delete_company(
+    company_id: uuid.UUID,
+    data: AdminCompanyDelete,
+    actor: User = Depends(require_management_admin),
+    db: Session = Depends(get_db),
+):
+    company = db.query(Organization).filter_by(id=company_id).with_for_update().first()
+    if not company:
+        raise HTTPException(404, "Firma nicht gefunden.")
+    if data.confirmation_name != company.name:
+        raise HTTPException(422, "Bitte den Firmennamen zur Bestätigung eingeben.")
+    # Never invoke ORM/database cascades for company deletion. The parent row lock
+    # also blocks concurrent FK inserts on PostgreSQL until this transaction ends.
+    for table in Base.metadata.tables.values():
+        for fk in table.foreign_keys:
+            if (
+                fk.target_fullname == "organization.id"
+                and db.execute(select(fk.parent).where(fk.parent == company_id).limit(1)).first()
+            ):
+                raise HTTPException(
+                    409,
+                    "Firma kann nicht gelöscht werden: Benutzer, Zonen oder andere Daten "
+                    "sind noch zugeordnet. Zuerst die Zuordnungen bereinigen; "
+                    "Messdaten werden nicht automatisch gelöscht.",
+                )
+    company_audit(
+        db, actor, company_id, "administration.company.delete", {"name": company.name}, None
+    )
+    db.execute(delete(Organization.__table__).where(Organization.id == company_id))
+    commit(db)
+    return Response(status_code=204)
+
+
+@router.post("/companies/{company_id}/zones", status_code=201)
+def create_company_zone(
+    company_id: uuid.UUID,
+    data: AdminCompanyZoneCreate,
+    actor: User = Depends(require_management_admin),
+    db: Session = Depends(get_db),
+):
+    if not db.query(Organization).filter_by(id=company_id).with_for_update().first():
+        raise HTTPException(404, "Firma nicht gefunden.")
+    zone = Zone(id=uuid.uuid4(), organization_id=company_id, **data.model_dump())
+    db.add(zone)
+    company_audit(
+        db,
+        actor,
+        company_id,
+        "administration.company.zone.create",
+        None,
+        {"zone_id": str(zone.id), "name": zone.name},
+    )
+    commit(db)
+    return {"id": str(zone.id), "name": zone.name, "organization_id": str(company_id)}

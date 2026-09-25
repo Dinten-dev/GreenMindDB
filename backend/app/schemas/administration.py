@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import Role
 from app.schemas.auth import SignupRequest
+from app.schemas.zone import ZoneCreate
 
 
 class AdminUserCreate(SignupRequest):
@@ -34,3 +35,12 @@ class AdminUserDelete(BaseModel):
 class AdminCompanyUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=200)
+
+
+class AdminCompanyDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    confirmation_name: str = Field(min_length=1, max_length=200)
+
+
+class AdminCompanyZoneCreate(ZoneCreate):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
