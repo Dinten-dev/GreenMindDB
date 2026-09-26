@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import StorageMonitor from './StorageMonitor';
+import ArchiveOverview from './ArchiveOverview';
 export default function AdministrationPage() {
   const locale = useLocale();
   return (
@@ -11,6 +12,7 @@ export default function AdministrationPage() {
         <p className="mt-1 text-sm text-gray-500">Serverspeicher und Benutzerzugänge verwalten.</p>
       </div>
       <StorageMonitor />
+      <ArchiveOverview />
       <Link
         href={`/${locale}/app/administration/users`}
         className="glass-card block p-6 transition-colors hover:border-emerald-300"

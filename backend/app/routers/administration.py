@@ -76,6 +76,47 @@ def storage(response: Response, user: User = Depends(require_management_admin)):
     }
 
 
+@router.get("/archive/status")
+def archive_status(response: Response, user: User = Depends(require_management_admin)):
+    """Return only archive telemetry available to the current environment.
+
+    The copy worker is host-managed and is not connected to the Staging API.
+    Returning nulls is deliberate: never substitute Production data or zeros.
+    """
+    response.headers["Cache-Control"] = "private, no-store"
+    environment = settings.environment.strip().casefold()
+    production = environment in {"prod", "production"}
+    return {
+        "environment": environment,
+        "state": "unavailable",
+        "configured": False,
+        "manual_copy_available": False,
+        "files_copied": None,
+        "pending_bytes": None,
+        "transfer_bytes_per_second": None,
+        "worker_memory_bytes": None,
+        "worker_memory_limit_bytes": None,
+        "worker_memory_reserve_bytes": None,
+        "storage_box_used_bytes": None,
+        "storage_box_total_bytes": None,
+        "sampled_at": None,
+        "message": (
+            "Der Kopierdienst ist auf Production noch nicht mit der Administration verbunden."
+            if production
+            else "Kopieren wird erst nach dem Production-Rollout aktiviert."
+        ),
+    }
+
+
+@router.post("/archive/copy", status_code=503)
+def request_archive_copy(user: User = Depends(require_management_admin)):
+    """Fail closed until a Production-only worker bridge is installed."""
+    environment = settings.environment.strip().casefold()
+    if environment not in {"prod", "production"}:
+        raise HTTPException(409, "Manuelles Kopieren ist erst nach dem Production-Rollout verfügbar.")
+    raise HTTPException(503, "Der sichere Kopierstart ist noch nicht mit dem Dienst verbunden.")
+
+
 def view(user, grants, db):
     accessible = user.is_active and user.is_verified
     zones = (

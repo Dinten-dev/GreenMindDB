@@ -33,6 +33,25 @@ export type AdminCatalog = {
 export const adminCapabilities = () =>
   apiFetch<{ can_manage: boolean }>('/administration/capabilities');
 export const adminStorage = () => apiFetch<StorageStatus>('/administration/storage');
+export type ArchiveOverview = {
+  environment: string;
+  state: 'unavailable' | 'idle' | 'running' | 'paused' | 'failed';
+  configured: boolean;
+  manual_copy_available: boolean;
+  files_copied: number | null;
+  pending_bytes: number | null;
+  transfer_bytes_per_second: number | null;
+  worker_memory_bytes: number | null;
+  worker_memory_limit_bytes: number | null;
+  worker_memory_reserve_bytes: number | null;
+  storage_box_used_bytes: number | null;
+  storage_box_total_bytes: number | null;
+  sampled_at: string | null;
+  message: string;
+};
+export const adminArchiveStatus = () => apiFetch<ArchiveOverview>('/administration/archive/status');
+export const adminRequestArchiveCopy = () =>
+  apiFetch<{ status: string }>('/administration/archive/copy', { method: 'POST' });
 export const adminCatalog = () => apiFetch<AdminCatalog>('/administration/catalog');
 export const adminUsers = (search: string, offset: number) =>
   apiFetch<{ users: ManagedUser[]; total: number }>('/administration/users', {

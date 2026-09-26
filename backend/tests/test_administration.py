@@ -45,6 +45,45 @@ def test_storage_errors_do_not_report_zero_space(client, management, monkeypatch
     assert client.get("/api/v1/administration/storage", headers=management).status_code == 503
 
 
+def test_archive_overview_is_admin_only_and_never_fakes_staging_metrics(
+    client, management, monkeypatch
+):
+    monkeypatch.setattr(settings, "environment", "staging")
+    response = client.get("/api/v1/administration/archive/status", headers=management)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["environment"] == "staging"
+    assert payload["state"] == "unavailable"
+    assert payload["configured"] is False
+    assert payload["manual_copy_available"] is False
+    assert payload["files_copied"] is None
+    assert payload["pending_bytes"] is None
+    assert payload["transfer_bytes_per_second"] is None
+    assert payload["worker_memory_bytes"] is None
+    assert payload["storage_box_used_bytes"] is None
+    assert "Production-Rollout" in payload["message"]
+    assert response.headers["Cache-Control"] == "private, no-store"
+
+
+def test_archive_copy_fails_closed_outside_production(client, management, monkeypatch):
+    monkeypatch.setattr(settings, "environment", "staging")
+    response = client.post("/api/v1/administration/archive/copy", headers=management)
+    assert response.status_code == 409
+    assert "Production-Rollout" in response.json()["detail"]
+
+    monkeypatch.setattr(settings, "environment", "production")
+    response = client.post("/api/v1/administration/archive/copy", headers=management)
+    assert response.status_code == 503
+    assert "nicht mit dem Dienst verbunden" in response.json()["detail"]
+
+
+def test_archive_overview_rejects_non_admin(client, admin_token, monkeypatch):
+    monkeypatch.setattr(settings, "management_admin_emails", "")
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    assert client.get("/api/v1/administration/archive/status", headers=headers).status_code == 403
+    assert client.post("/api/v1/administration/archive/copy", headers=headers).status_code == 403
+
+
 def test_allowlist_required_even_for_role_admin(client, admin_token, monkeypatch):
     monkeypatch.setattr(settings, "management_admin_emails", "")
     headers = {"Authorization": f"Bearer {admin_token}"}
