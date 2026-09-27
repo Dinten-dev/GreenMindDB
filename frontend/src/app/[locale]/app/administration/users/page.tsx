@@ -28,6 +28,7 @@ export default function UserManagement() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [offset, setOffset] = useState(0);
+  const [companyFilter, setCompanyFilter] = useState('');
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -64,7 +65,7 @@ export default function UserManagement() {
     let active = true;
     setLoading(true);
     setError('');
-    Promise.all([adminCatalog(), adminUsers(query, offset)])
+    Promise.all([adminCatalog(), adminUsers(query, offset, companyFilter || undefined)])
       .then(([c, r]) => {
         if (active) {
           setCatalog(c);
@@ -84,7 +85,7 @@ export default function UserManagement() {
     return () => {
       active = false;
     };
-  }, [query, offset, reload]);
+  }, [query, offset, reload, companyFilter]);
   const edit = useCallback((user: ManagedUser | null) => {
     setDeleting(null);
     setConfirmation('');
@@ -409,6 +410,24 @@ export default function UserManagement() {
           Suchen
         </button>
       </form>
+      <label className="block text-sm">
+        Nach Firma filtern
+        <select
+          className={input}
+          value={companyFilter}
+          onChange={(e) => {
+            setCompanyFilter(e.target.value);
+            setOffset(0);
+          }}
+        >
+          <option value="">Alle Firmen</option>
+          {catalog.companies.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <section aria-label="Benutzer" className="glass-card divide-y divide-gray-100">
         {loading ? (
           <p role="status" className="p-6">

@@ -130,3 +130,47 @@ Neue API-Routen: `DELETE /api/v1/administration/users/{id}` mit JSON
 enthält zusätzlich `visible_zones` und `access_note`. Keine Datenbankmigration.
 Production-Abnahme erfolgt lesend; Löschtests laufen nur in isolierten
 Testdatenbanken. Die Veröffentlichung selbst löscht keine Kundenkonten.
+
+## Firmen anlegen, löschen und neue Firmenzonen einrichten
+
+Unter **Administration → Firmen verwalten**:
+
+1. **Firma hinzufügen**: Namen eingeben und speichern.
+2. **Zone hinzufügen** auf der gewünschten Firmenkarte: Name, optionalen Standort
+   und Zonentyp wählen. Die neue Zone gehört unmittelbar dieser Firma.
+3. **Benutzer einer Firma zuordnen und Zonen freigeben**: Konto erstellen oder
+   bearbeiten, Firma auswählen, Rolle **Mitglied – ausgewählte Zonen** wählen
+   und nur die gewünschten Zonen markieren. **Nach Firma filtern** begrenzt
+   die Benutzerliste serverseitig, einschliesslich Trefferzahl und Seitenwechsel.
+4. Beispiel: Person X gehört Firma Y an. Nur Zone Z markieren, Zone A abwählen.
+   X sieht dann Zone Z, auch bei Messungen und Sensoren. Eigentümer und
+   Firmenadministratoren behalten dagegen Zugriff auf alle eigenen Firmenzonen.
+5. **Firma löschen**: vollständigen Firmennamen zur Bestätigung eingeben.
+   Die Löschung ist nur bei einer leeren Firma möglich. Benutzer, Zonen,
+   Pflanzen oder andere referenzierende Datensätze blockieren sie mit HTTP 409.
+   Es gibt keine automatische kaskadierende Löschung von Konten oder Messdaten.
+
+Bestehende Zonen werden mit dieser Erweiterung nicht zwischen Firmen verschoben.
+Ein solcher Transfer muss auch Sensoridentitäten, Direct-Zuordnungen,
+Messhistorie und bestehende Freigaben konsistent migrieren. Die bisherigen
+Empfangspfade, gespeicherten Zugangsdaten und Hintergrunddienste bleiben unverändert.
+
+Zusätzliche API:
+
+- `POST /api/v1/administration/companies` mit `name`.
+- `DELETE /api/v1/administration/companies/{id}` mit `confirmation_name`.
+- `POST /api/v1/administration/companies/{id}/zones` mit `name`, optional
+  `location`, `zone_type`, `latitude`, `longitude` (bestehendes Zonenschema).
+- `GET /api/v1/administration/users?organization_id=<UUID>` für die Firmenfilterung.
+
+Alle Schreibaktionen erfordern die zentrale Adminfreigabe und werden auditiert.
+Keine neuen Konfigurationswerte oder Datenbankmigrationen. Veröffentlichung über
+oben beschriebenen isolierten Release-Weg nach Prüfung der konkreten Änderung;
+kein Neustart der Gateway-/Direct-Empfangsdienste. Frontend und Verwaltungs-API
+müssen gemeinsam veröffentlicht werden. Bei Rücknahme bleiben angelegte Firmen,
+Zonen und Freigaben bestehen; keine ältere Version ohne Zonenprüfung verwenden.
+
+Lokale Prüfungen: `backend/tests/test_administration.py`,
+`backend/tests/test_zone_access.py`, PostgreSQL-Tests in
+`backend/tests/test_zone_access_migration.py` sowie Frontend
+`Administration.test.tsx`, Typprüfung, Lint und vollständiger Build.
