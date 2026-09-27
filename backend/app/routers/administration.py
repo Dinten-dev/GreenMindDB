@@ -10,6 +10,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.archive_monitor import ArchiveBridgeUnavailable, archive_bridge
 from app.auth import get_current_user, get_password_hash
 from app.config import settings
 from app.database import get_db
@@ -80,12 +81,17 @@ def storage(response: Response, user: User = Depends(require_management_admin)):
 def archive_status(response: Response, user: User = Depends(require_management_admin)):
     """Return only archive telemetry available to the current environment.
 
-    The copy worker is host-managed and is not connected to the Staging API.
+    The copy worker is host-managed; only Production may use its private socket.
     Returning nulls is deliberate: never substitute Production data or zeros.
     """
     response.headers["Cache-Control"] = "private, no-store"
     environment = settings.environment.strip().casefold()
     production = environment in {"prod", "production"}
+    if production:
+        try:
+            return archive_bridge("GET", "/status")
+        except ArchiveBridgeUnavailable:
+            pass
     return {
         "environment": environment,
         "state": "unavailable",
@@ -108,13 +114,21 @@ def archive_status(response: Response, user: User = Depends(require_management_a
     }
 
 
-@router.post("/archive/copy", status_code=503)
+@router.post("/archive/copy")
 def request_archive_copy(user: User = Depends(require_management_admin)):
     """Fail closed until a Production-only worker bridge is installed."""
     environment = settings.environment.strip().casefold()
     if environment not in {"prod", "production"}:
-        raise HTTPException(409, "Manuelles Kopieren ist erst nach dem Production-Rollout verfügbar.")
-    raise HTTPException(503, "Der sichere Kopierstart ist noch nicht mit dem Dienst verbunden.")
+        raise HTTPException(
+            409,
+            "Manuelles Kopieren ist erst nach dem Production-Rollout verfügbar.",
+        )
+    try:
+        return archive_bridge("POST", "/copy")
+    except ArchiveBridgeUnavailable:
+        raise HTTPException(
+            503, "Kopierstart derzeit nicht verfügbar. Originale bleiben erhalten."
+        ) from None
 
 
 def view(user, grants, db):

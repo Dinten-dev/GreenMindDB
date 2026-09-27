@@ -393,3 +393,33 @@ def test_company_rename_keeps_zone_assignments_and_requires_allowlist(
     assert db.query(AuditLog).filter_by(action="administration.company.update").count() == 1
     monkeypatch.setattr(settings, "management_admin_emails", "")
     assert client.put(route, headers=management, json={"name": "Denied"}).status_code == 403
+
+
+def test_production_status_uses_bridge(client, management, monkeypatch):
+    from unittest.mock import patch
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "environment", "production")
+    with patch("app.routers.administration.archive_bridge", return_value={"files_copied": 27}):
+        result = client.get("/api/v1/administration/archive/status", headers=management)
+    assert result.status_code == 200
+    assert result.json()["files_copied"] == 27
+
+
+def test_staging_does_not_contact_bridge(client, management, monkeypatch):
+    from unittest.mock import patch
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "environment", "staging")
+    with patch("app.routers.administration.archive_bridge") as bridge:
+        assert (
+            client.post("/api/v1/administration/archive/copy", headers=management).status_code
+            == 409
+        )
+        assert (
+            client.get("/api/v1/administration/archive/status", headers=management).status_code
+            == 200
+        )
+    bridge.assert_not_called()

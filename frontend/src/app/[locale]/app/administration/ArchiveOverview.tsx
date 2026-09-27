@@ -135,7 +135,9 @@ export default function ArchiveOverview() {
 
   const requestCopy = async () => {
     if (!data?.manual_copy_available || requesting) return;
-    if (!window.confirm('WAV-Dateien zur Storage Box kopieren? Lokale Originale bleiben erhalten.')) {
+    if (
+      !window.confirm('WAV-Dateien zur Storage Box kopieren? Lokale Originale bleiben erhalten.')
+    ) {
       return;
     }
     setRequesting(true);
@@ -195,7 +197,7 @@ export default function ArchiveOverview() {
         >
           Archivstatus nicht erreichbar. Es werden keine Werte erfunden oder als 0 bewertet.
         </p>
-      ) : unavailable ? (
+      ) : unavailable || data?.message ? (
         <p
           role="status"
           className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-900"
@@ -216,12 +218,12 @@ export default function ArchiveOverview() {
           icon="pending"
           title="Noch ausstehend"
           value={formatBytes(data?.pending_bytes ?? null)}
-          detail="Katalogisierte Dateien, Schätzwert"
+          detail="– bedeutet: Gesamtgrösse noch nicht bestimmt"
           tone="amber"
         />
         <MetricCard
           icon="speed"
-          title="Übertragung"
+          title="Geprüfte Kopierrate"
           value={formatRate(data?.transfer_bytes_per_second ?? null)}
           detail={stampedAt}
           tone="slate"
