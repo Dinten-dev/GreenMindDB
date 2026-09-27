@@ -82,10 +82,10 @@ def quota():
     c = config()
     output = run(['runuser', '-u', 'greenmind-raw-copy', '--', '/usr/bin/sftp',
                   '-F', '/dev/null', '-q', '-b', '-', '-P', c.get('RAW_ARCHIVE_SFTP_PORT','23'),
-                  '-i', c['SFTP_KEY'], '-oBatchMode=yes', '-oIdentitiesOnly=yes',
+                  '-i', c['RAW_ARCHIVE_SFTP_KEY'], '-oBatchMode=yes', '-oIdentitiesOnly=yes',
                   '-oStrictHostKeyChecking=yes', '-oConnectTimeout=5',
-                  '-oUserKnownHostsFile='+c['SFTP_KNOWN_HOSTS'],
-                  c['SFTP_USER']+'@'+c['SFTP_HOST']], timeout=10, data='df /\n')
+                  '-oUserKnownHostsFile='+c['RAW_ARCHIVE_SFTP_KNOWN_HOSTS'],
+                  c['RAW_ARCHIVE_SFTP_USER']+'@'+c['RAW_ARCHIVE_SFTP_HOST']], timeout=10, data='df .\n')
     for line in output.splitlines():
         parts = line.split()
         if len(parts) >= 5 and all(v.isdigit() for v in parts[:4]):

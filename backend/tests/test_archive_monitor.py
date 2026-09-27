@@ -39,3 +39,28 @@ def test_host_bridge_refuses_enabled_deletion():
         ):
             assert module.copy_safe() is False
         run.assert_not_called()
+
+
+def test_quota_uses_archive_account_home_and_prefixed_configuration():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "host_archive_bridge", Path(__file__).parents[2] / "deploy/archive-monitor/bridge.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    values = {
+        "RAW_ARCHIVE_SFTP_KEY": "/etc/key",
+        "RAW_ARCHIVE_SFTP_KNOWN_HOSTS": "/etc/hosts",
+        "RAW_ARCHIVE_SFTP_USER": "archive",
+        "RAW_ARCHIVE_SFTP_HOST": "example.invalid",
+    }
+    with (
+        patch.object(module, "config", return_value=values),
+        patch.object(
+            module, "run", return_value="1073741824 45771520 1027970304 1027970304 4%\n"
+        ) as run,
+    ):
+        assert module.quota() == (1099511627776, 46870036480)
+    assert run.call_args.kwargs["data"] == "df .\n"
