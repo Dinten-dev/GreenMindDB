@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import os
 import wave
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
@@ -76,12 +77,13 @@ def _get_s3_client():
         config=BotoConfig(signature_version="s3v4"),
     )
 
-    # Ensure bucket exists
-    try:
-        _s3_client.head_bucket(Bucket=_WAV_BUCKET)
-    except ClientError:
-        logger.info("Creating S3 bucket: %s", _WAV_BUCKET)
-        _s3_client.create_bucket(Bucket=_WAV_BUCKET)
+    # Dedicated readers need GetObject only, never bucket provisioning rights.
+    if os.environ.get("S3_READ_ONLY", "false").lower() != "true":
+        try:
+            _s3_client.head_bucket(Bucket=_WAV_BUCKET)
+        except ClientError:
+            logger.info("Creating S3 bucket: %s", _WAV_BUCKET)
+            _s3_client.create_bucket(Bucket=_WAV_BUCKET)
 
     return _s3_client
 
