@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models.user import User
 from app.rate_limit import limiter
 from app.visualization import direct
+from app.visualization.resolution import display_step
 from app.zone_access import require_zone_access
 
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
@@ -46,12 +47,22 @@ def authorize(db, legacy, user, device_id):
     return row
 
 
-def get_series(db, device_id, range):
+def get_series(db, device_id, range, *, resolution=None, from_dt=None, to_dt=None):
     end = datetime.now(UTC).timestamp()
-    seconds = WINDOWS[range]
-    step = 1 if seconds <= 3600 else 60 if seconds <= 604800 else 600
+    start = end - WINDOWS[range]
+    if (from_dt is None) != (to_dt is None):
+        raise HTTPException(400, "Both time bounds are required")
+    if from_dt is not None:
+        if from_dt.tzinfo is None or to_dt.tzinfo is None:
+            raise HTTPException(400, "Time bounds must include a timezone")
+        start, end = from_dt.timestamp(), to_dt.timestamp()
     try:
-        return direct.query_series(db, str(device_id), end - seconds, end, step)
+        step = display_step(datetime.fromtimestamp(start, UTC), datetime.fromtimestamp(end, UTC),
+                            requested=resolution)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        return direct.query_series(db, str(device_id), start, end, step)
     except ValueError as exc:
         raise HTTPException(413, "Bitte kürzeren Zeitraum wählen") from exc
 
@@ -63,7 +74,7 @@ def recordings(db, device_id, start, end):
             text("""SELECT s.id AS segment_id,r.revision,r.manifest FROM direct_segment s
         JOIN direct_revision r ON r.segment_id=s.id AND r.revision=s.published_revision
         WHERE s.device_id=:id AND (s.bucket+1)*600>:start AND s.bucket*600<:end
-          AND r.raw_deleted_at IS NULL ORDER BY s.bucket DESC LIMIT 101"""),
+          ORDER BY s.bucket DESC LIMIT 101"""),
             {"id": str(device_id), "start": start, "end": end},
         )
         .mappings()
@@ -96,12 +107,16 @@ def install(app):
     def data(
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        resolution: int | None = Query(None, ge=1, le=604800),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         device = authorize(db, legacy, user, device_id)
-        result = get_series(db, device_id, range)
+        result = get_series(db, device_id, range, resolution=resolution,
+                            from_dt=from_dt, to_dt=to_dt)
         updated = db.execute(
             text(
                 "SELECT max(v.updated_at) FROM direct_visual_segment v JOIN direct_segment s ON s.id=v.segment_id WHERE s.device_id=:id"
@@ -119,12 +134,16 @@ def install(app):
         request: Request,
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        resolution: int | None = Query(None, ge=1, le=604800),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        series = get_series(db, device_id, range)
+        series = get_series(db, device_id, range, resolution=resolution,
+                            from_dt=from_dt, to_dt=to_dt)
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(
@@ -199,7 +218,7 @@ def install(app):
         authorize(db, legacy, user, device_id)
         row = db.execute(
             text("""SELECT r.manifest FROM direct_revision r JOIN direct_segment s ON s.id=r.segment_id
-            WHERE s.id=:segment AND s.device_id=:device AND r.revision=:revision AND r.raw_deleted_at IS NULL"""),
+            WHERE s.id=:segment AND s.device_id=:device AND r.revision=:revision"""),
             {"segment": str(segment_id), "device": str(device_id), "revision": revision},
         ).scalar()
         if not row or not 0 <= run_index < len(row["runs"]):

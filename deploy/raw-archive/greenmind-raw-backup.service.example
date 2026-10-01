@@ -1,0 +1,42 @@
+[Unit]
+Description=GreenMind verified daily WAV offload (explicit activation required)
+After=network-online.target
+Wants=network-online.target
+# Explicit second activation gate. This file is NOT created by the repository.
+ConditionPathExists=/etc/greenmind/raw-archive/APPROVED
+
+[Service]
+Type=oneshot
+User=greenmind-archive
+Group=greenmind-archive
+WorkingDirectory=/opt/greenmind/raw-archive/current/backend
+EnvironmentFile=/etc/greenmind/raw-archive/storagebox.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/greenmind/raw-archive/venv/bin/python -m app.raw_archive
+StateDirectory=greenmind-raw-archive
+StateDirectoryMode=0700
+UMask=0077
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=25%
+IOWeight=10
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=32
+TimeoutStartSec=75min
+TimeoutStopSec=15s
+KillMode=control-group
+Restart=no
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/greenmind-raw-archive
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# Deliberately no [Install] section: only the separately approved timer starts this.

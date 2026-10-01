@@ -311,12 +311,14 @@ export async function apiUpdateSensor(
 
 export async function apiGetSensorDataAdvanced(
   sensorId: string,
-  opts: { range?: string; resolution?: string; date?: string }
+  opts: { range?: string; resolution?: string; date?: string; from_dt?: string; to_dt?: string }
 ): Promise<SensorDataResponse[]> {
   const params: Record<string, string> = {};
   if (opts.range) params.range = opts.range;
   if (opts.resolution) params.resolution = opts.resolution;
   if (opts.date) params.date = opts.date;
+  if (opts.from_dt) params.from_dt = opts.from_dt;
+  if (opts.to_dt) params.to_dt = opts.to_dt;
   return apiFetch<SensorDataResponse[]>(`/sensors/${sensorId}/data`, { params });
 }
 
@@ -355,8 +357,10 @@ export async function apiSubmitEarlyAccess(
 }
 
 // ── Sensor Data Export ───────────────────────────
-export async function apiExportSensorData(sensorId: string, range: string = '24h'): Promise<void> {
-  const url = `${API_BASE}/sensors/${sensorId}/export?range=${range}`;
+export async function apiExportSensorData(sensorId: string, range: string = '24h',
+  bounds?: { from_dt: string; to_dt: string }): Promise<void> {
+  const params = new URLSearchParams({ range, ...bounds });
+  const url = `${API_BASE}/sensors/${sensorId}/export?${params}`;
   const res = await fetch(url, {
     credentials: 'include',
   });

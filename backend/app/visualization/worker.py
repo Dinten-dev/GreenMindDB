@@ -346,6 +346,7 @@ def prune_chunk(engine, chunk):
 
 
 def process_wav(engine, item, now):
+    from app.raw_archive.reader import get_object
     from app.services.wav_service import _get_s3_client
 
     seconds = 600 if item["ended_at"] <= now - timedelta(days=7) else 60
@@ -359,7 +360,8 @@ def process_wav(engine, item, now):
                 {"id": item["id"], "sha": item["source_sha256"], "seconds": seconds},
             )
         return
-    response = _get_s3_client().get_object(Bucket="greenmind-raw", Key=item["s3_key"])
+    response = get_object(_get_s3_client(), Bucket="greenmind-raw", Key=item["s3_key"],
+                          kind='gateway')
     try:
         if response["ContentLength"] > 16 * 1024**2:
             raise ValueError("WAV exceeds bounded visualization read")

@@ -12,6 +12,7 @@ from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 from app.config import settings
+from app.raw_archive import reader as archive_reader
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str:
 def stream_wav_bytes(s3_key: str) -> Generator[bytes, None, None]:
     """Yield a WAV object without buffering the complete file in application memory."""
     client = _get_s3_client()
-    response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
+    response = archive_reader.get_object(client, Bucket=_WAV_BUCKET, Key=s3_key, kind='gateway')
     body = response["Body"]
     try:
         while chunk := body.read(64 * 1024):
@@ -160,7 +161,17 @@ def download_object(s3_key: str, destination: BinaryIO) -> None:
     client = _get_s3_client()
     destination.seek(0)
     destination.truncate(0)
-    client.download_fileobj(_WAV_BUCKET, s3_key, destination)
+    try:
+        client.download_fileobj(_WAV_BUCKET, s3_key, destination)
+    except ClientError as error:
+        if not archive_reader.should_restore(error, s3_key):
+            raise
+        response = archive_reader.restore_object(kind='gateway', bucket=_WAV_BUCKET, key=s3_key)
+        destination.seek(0)
+        destination.truncate(0)
+        with response['Body'] as body:
+            while chunk := body.read(64 * 1024):
+                destination.write(chunk)
     destination.seek(0)
 
 
@@ -319,14 +330,25 @@ def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes,
     import zipfile
 
     client = _get_s3_client()
-    chunk_queue: queue.Queue[bytes | None] = queue.Queue(maxsize=32)
+    chunk_queue: queue.Queue[bytes | Exception | None] = queue.Queue(maxsize=32)
+    cancelled = threading.Event()
+
+    def enqueue(value):
+        while not cancelled.is_set():
+            try:
+                chunk_queue.put(value, timeout=.2)
+                return True
+            except queue.Full:
+                continue
+        return False
 
     class QueueWriter:
         """File-like object that pushes writes into a queue."""
 
         def write(self, data: bytes) -> int:
             if data:
-                chunk_queue.put(data)
+                if not enqueue(data):
+                    raise BrokenPipeError('WAV bundle client disconnected')
             return len(data)
 
         def flush(self) -> None:
@@ -338,27 +360,36 @@ def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes,
             writer = QueueWriter()
             with zipfile.ZipFile(writer, "w", zipfile.ZIP_STORED) as zf:
                 for s3_key, filename in zip(s3_keys, filenames, strict=True):
+                    if cancelled.is_set():
+                        return
+                    response = archive_reader.get_object(
+                        client, Bucket=_WAV_BUCKET, Key=s3_key, kind='gateway')
                     try:
-                        response = client.get_object(Bucket=_WAV_BUCKET, Key=s3_key)
                         data = response["Body"].read()
                         zf.writestr(filename, data)
-                    except Exception as exc:
-                        logger.warning("Failed to add %s to ZIP: %s", s3_key, exc)
+                    finally:
+                        response['Body'].close()
         except Exception as exc:
-            logger.error("ZIP build error: %s", exc)
+            if not cancelled.is_set():
+                logger.error("ZIP build failed: %s", type(exc).__name__)
+                enqueue(RuntimeError('WAV bundle incomplete; a source could not be verified'))
         finally:
-            chunk_queue.put(None)  # Sentinel: done
+            enqueue(None)  # Sentinel: done
 
-    thread = threading.Thread(target=_build_zip, daemon=True)
+    thread = threading.Thread(target=_build_zip, name='greenmind-wav-zip', daemon=True)
     thread.start()
 
-    while True:
-        chunk = chunk_queue.get()
-        if chunk is None:
-            break
-        yield chunk
-
-    thread.join(timeout=5.0)
+    try:
+        while True:
+            chunk = chunk_queue.get()
+            if chunk is None:
+                break
+            if isinstance(chunk, Exception):
+                raise chunk
+            yield chunk
+    finally:
+        cancelled.set()
+        thread.join(timeout=5.0)
 
 
 def export_wav_from_session(session_id: str, raw_path: str, sample_rate: int) -> None:
