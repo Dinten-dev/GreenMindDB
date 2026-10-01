@@ -18,6 +18,10 @@ def verified_objects(kind, bucket, keys):
     """Read-only availability check for a bounded, authorized listing."""
     if os.environ.get("RAW_ARCHIVE_READS_ENABLED", "false").lower() != "true" or len(keys) > 1000:
         return set()
+    if os.environ.get("RAW_ARCHIVE_READ_BROKER_SOCKET"):
+        from .broker_client import available
+
+        return available(kind, bucket, keys) if keys else set()
     root = Path(os.environ.get("RAW_ARCHIVE_STATE_DIR", "/var/lib/greenmind-raw-archive"))
     path = root / "archive.sqlite3"
     if not path.is_file():
@@ -88,16 +92,21 @@ def restore_object(*, kind, bucket, key):
                 raise ArchiveBlocked("Private existing archive read scratch directory required")
         else:
             scratch = Path(resources.enter_context(TemporaryDirectory(prefix="greenmind-archive-")))
-        path = resources.enter_context(
-            archived_file(
-                config,
-                destination_from_environment(),
-                kind=kind,
-                bucket=bucket,
-                key=key,
-                scratch=scratch,
+        if os.environ.get("RAW_ARCHIVE_READ_BROKER_SOCKET"):
+            from .broker_client import restore
+
+            path = restore(resources, kind=kind, bucket=bucket, key=key, scratch=scratch)
+        else:
+            path = resources.enter_context(
+                archived_file(
+                    config,
+                    destination_from_environment(),
+                    kind=kind,
+                    bucket=bucket,
+                    key=key,
+                    scratch=scratch,
+                )
             )
-        )
         size = path.stat().st_size
         file = resources.enter_context(path.open("rb"))
         return {
