@@ -242,8 +242,10 @@ def list_wav_files(
 
     files = query.order_by(desc(WavFile.started_at)).limit(limit).all()
     from app.raw_archive.reader import verified_objects
-    archived = verified_objects('gateway', 'greenmind-raw',
-                                [f.s3_key for f in files if f.raw_deleted_at is not None])
+
+    archived = verified_objects(
+        "gateway", "greenmind-raw", [f.s3_key for f in files if f.raw_deleted_at is not None]
+    )
 
     return [
         {

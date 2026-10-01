@@ -57,8 +57,11 @@ def get_series(db, device_id, range, *, resolution=None, from_dt=None, to_dt=Non
             raise HTTPException(400, "Time bounds must include a timezone")
         start, end = from_dt.timestamp(), to_dt.timestamp()
     try:
-        step = display_step(datetime.fromtimestamp(start, UTC), datetime.fromtimestamp(end, UTC),
-                            requested=resolution)
+        step = display_step(
+            datetime.fromtimestamp(start, UTC),
+            datetime.fromtimestamp(end, UTC),
+            requested=resolution,
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     try:
@@ -115,8 +118,9 @@ def install(app):
         db: Session = Depends(connection),
     ):
         device = authorize(db, legacy, user, device_id)
-        result = get_series(db, device_id, range, resolution=resolution,
-                            from_dt=from_dt, to_dt=to_dt)
+        result = get_series(
+            db, device_id, range, resolution=resolution, from_dt=from_dt, to_dt=to_dt
+        )
         updated = db.execute(
             text(
                 "SELECT max(v.updated_at) FROM direct_visual_segment v JOIN direct_segment s ON s.id=v.segment_id WHERE s.device_id=:id"
@@ -142,8 +146,9 @@ def install(app):
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        series = get_series(db, device_id, range, resolution=resolution,
-                            from_dt=from_dt, to_dt=to_dt)
+        series = get_series(
+            db, device_id, range, resolution=resolution, from_dt=from_dt, to_dt=to_dt
+        )
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(

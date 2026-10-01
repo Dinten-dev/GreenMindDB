@@ -357,8 +357,11 @@ export async function apiSubmitEarlyAccess(
 }
 
 // ── Sensor Data Export ───────────────────────────
-export async function apiExportSensorData(sensorId: string, range: string = '24h',
-  bounds?: { from_dt: string; to_dt: string }): Promise<void> {
+export async function apiExportSensorData(
+  sensorId: string,
+  range: string = '24h',
+  bounds?: { from_dt: string; to_dt: string }
+): Promise<void> {
   const params = new URLSearchParams({ range, ...bounds });
   const url = `${API_BASE}/sensors/${sensorId}/export?${params}`;
   const res = await fetch(url, {

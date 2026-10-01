@@ -57,10 +57,12 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
     const refresh = async () => {
       try {
         const end = new Date();
-        const duration = { '5m': 300, '1h': 3600, '24h': 86400,
-          '7d': 604800, '30d': 2592000 }[range] ?? 86400;
-        const bounds = { from_dt: new Date(end.getTime() - duration * 1000).toISOString(),
-          to_dt: end.toISOString() };
+        const duration =
+          { '5m': 300, '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range] ?? 86400;
+        const bounds = {
+          from_dt: new Date(end.getTime() - duration * 1000).toISOString(),
+          to_dt: end.toISOString(),
+        };
         const params = new URLSearchParams({ range, ...bounds });
         const [data, files] = await Promise.all([
           read<SensorDataResponse[]>(`${base}/data?${params}`, controller.signal),
@@ -105,7 +107,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           <p className="mt-1 text-xs text-gray-500">Aktualisiert sich alle zehn Sekunden.</p>
         </div>
         <a
-          href={`${base}/export?${new URLSearchParams({ range, ...viewBounds ?? {} })}`}
+          href={`${base}/export?${new URLSearchParams({ range, ...(viewBounds ?? {}) })}`}
           className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-800"
         >
           CSV herunterladen
@@ -220,8 +222,14 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
         )}
       </details>
       <div className="mt-4">
-        {viewBounds && <ArchiveExportPanel kind="direct" sensorId={device.id}
-          from={viewBounds.from_dt} to={viewBounds.to_dt} />}
+        {viewBounds && (
+          <ArchiveExportPanel
+            kind="direct"
+            sensorId={device.id}
+            from={viewBounds.from_dt}
+            to={viewBounds.to_dt}
+          />
+        )}
       </div>
     </div>
   );

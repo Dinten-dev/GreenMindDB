@@ -26,8 +26,8 @@ from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.rate_limit import limiter
-from app.zone_access import zone_access_filter
 from app.visualization.resolution import display_step
+from app.zone_access import zone_access_filter
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.state.limiter = limiter
@@ -268,7 +268,9 @@ def data(
     if start.tzinfo is None or end.tzinfo is None:
         raise HTTPException(400, "Time bounds must include a timezone")
     try:
-        step = display_step(start, end, requested=RESOLUTIONS.get(resolution) if resolution else None)
+        step = display_step(
+            start, end, requested=RESOLUTIONS.get(resolution) if resolution else None
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return query_series(db, sensor_id, start, end, step)
@@ -301,7 +303,9 @@ def export(
     if start.tzinfo is None or end.tzinfo is None:
         raise HTTPException(400, "Time bounds must include a timezone")
     try:
-        step = display_step(start, end, requested=RESOLUTIONS.get(resolution) if resolution else None)
+        step = display_step(
+            start, end, requested=RESOLUTIONS.get(resolution) if resolution else None
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     records = query_series(db, sensor_id, start, end, step, settings.sensor_export_max_rows)
@@ -414,8 +418,9 @@ def waveform(
         raise HTTPException(
             404, "Für diesen Zeitpunkt ist kein zeitlich zuordenbares WAV verfügbar."
         )
-    response = get_object(_get_s3_client(), Bucket="greenmind-raw", Key=item["s3_key"],
-                          kind='gateway')
+    response = get_object(
+        _get_s3_client(), Bucket="greenmind-raw", Key=item["s3_key"], kind="gateway"
+    )
     try:
         if response["ContentLength"] > 16 * 1024**2:
             raise HTTPException(413, "WAV too large for bounded preview")

@@ -80,7 +80,8 @@ class ArtifactStore:
         path = self._path(key)
         if self.client:
             response = archive_reader.get_object(
-                self.client, Bucket=self.settings.s3_bucket, Key=key, kind='direct')
+                self.client, Bucket=self.settings.s3_bucket, Key=key, kind="direct"
+            )
             try:
                 value = response["Body"].read(self.settings.max_segment_bytes + 4097)
             finally:

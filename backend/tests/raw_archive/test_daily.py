@@ -417,10 +417,10 @@ def test_recent_direct_work_cannot_hide_gateway_work(tmp_path):
     ledger = Ledger(tmp_path)
     try:
         queue = Queue(ledger, {"namespace": "test"})
-        queue.enqueue_page("direct", [[f"direct-{n}"] for n in range(100)],
-                           finished=True, recent=True)
-        queue.enqueue_page("gateway", [[f"gateway-{n}"] for n in range(100)],
-                           finished=True)
+        queue.enqueue_page(
+            "direct", [[f"direct-{n}"] for n in range(100)], finished=True, recent=True
+        )
+        queue.enqueue_page("gateway", [[f"gateway-{n}"] for n in range(100)], finished=True)
         for _ in range(8):
             pair = [kind for kind, _ in queue.pending(2)]
             assert pair.count("gateway") == pair.count("direct") == 1
@@ -435,8 +435,14 @@ def test_large_backlog_limits_catalog_scans_but_copies_pending(world):
     # The backlog is durable, even when not all references resolve in this fixture.
     ledger = Ledger(config.root)
     try:
-        queue = Queue(ledger, {"namespace": config.namespace, "destination": remote.identity,
-                               "sources": {"gateway": "test-gateway-db", "direct": "test-direct-db"}})
+        queue = Queue(
+            ledger,
+            {
+                "namespace": config.namespace,
+                "destination": remote.identity,
+                "sources": {"gateway": "test-gateway-db", "direct": "test-direct-db"},
+            },
+        )
         queue.enqueue_page("gateway", [[f"missing-{n}"] for n in range(10001)], finished=False)
     finally:
         ledger.close()

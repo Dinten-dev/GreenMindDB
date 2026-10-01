@@ -147,7 +147,7 @@ def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str:
 def stream_wav_bytes(s3_key: str) -> Generator[bytes, None, None]:
     """Yield a WAV object without buffering the complete file in application memory."""
     client = _get_s3_client()
-    response = archive_reader.get_object(client, Bucket=_WAV_BUCKET, Key=s3_key, kind='gateway')
+    response = archive_reader.get_object(client, Bucket=_WAV_BUCKET, Key=s3_key, kind="gateway")
     body = response["Body"]
     try:
         while chunk := body.read(64 * 1024):
@@ -166,10 +166,10 @@ def download_object(s3_key: str, destination: BinaryIO) -> None:
     except ClientError as error:
         if not archive_reader.should_restore(error, s3_key):
             raise
-        response = archive_reader.restore_object(kind='gateway', bucket=_WAV_BUCKET, key=s3_key)
+        response = archive_reader.restore_object(kind="gateway", bucket=_WAV_BUCKET, key=s3_key)
         destination.seek(0)
         destination.truncate(0)
-        with response['Body'] as body:
+        with response["Body"] as body:
             while chunk := body.read(64 * 1024):
                 destination.write(chunk)
     destination.seek(0)
@@ -336,7 +336,7 @@ def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes,
     def enqueue(value):
         while not cancelled.is_set():
             try:
-                chunk_queue.put(value, timeout=.2)
+                chunk_queue.put(value, timeout=0.2)
                 return True
             except queue.Full:
                 continue
@@ -348,7 +348,7 @@ def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes,
         def write(self, data: bytes) -> int:
             if data:
                 if not enqueue(data):
-                    raise BrokenPipeError('WAV bundle client disconnected')
+                    raise BrokenPipeError("WAV bundle client disconnected")
             return len(data)
 
         def flush(self) -> None:
@@ -363,20 +363,21 @@ def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes,
                     if cancelled.is_set():
                         return
                     response = archive_reader.get_object(
-                        client, Bucket=_WAV_BUCKET, Key=s3_key, kind='gateway')
+                        client, Bucket=_WAV_BUCKET, Key=s3_key, kind="gateway"
+                    )
                     try:
                         data = response["Body"].read()
                         zf.writestr(filename, data)
                     finally:
-                        response['Body'].close()
+                        response["Body"].close()
         except Exception as exc:
             if not cancelled.is_set():
                 logger.error("ZIP build failed: %s", type(exc).__name__)
-                enqueue(RuntimeError('WAV bundle incomplete; a source could not be verified'))
+                enqueue(RuntimeError("WAV bundle incomplete; a source could not be verified"))
         finally:
             enqueue(None)  # Sentinel: done
 
-    thread = threading.Thread(target=_build_zip, name='greenmind-wav-zip', daemon=True)
+    thread = threading.Thread(target=_build_zip, name="greenmind-wav-zip", daemon=True)
     thread.start()
 
     try:

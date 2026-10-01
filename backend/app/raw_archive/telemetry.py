@@ -1,4 +1,5 @@
 """Credential-free timings and bounded pause diagnostics for the isolated copier."""
+
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
 from time import monotonic
@@ -19,8 +20,10 @@ class Metrics:
             self.counts[stage] += 1
 
     def snapshot(self):
-        return {'seconds': {k: round(v, 6) for k, v in self.seconds.items()},
-                'counts': dict(self.counts)}
+        return {
+            "seconds": {k: round(v, 6) for k, v in self.seconds.items()},
+            "counts": dict(self.counts),
+        }
 
 
 def measure(metrics, stage):
