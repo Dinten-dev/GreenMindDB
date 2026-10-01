@@ -100,6 +100,14 @@ def uncovered(start, end, ranges):
 def query_series(db, sensor_id, start, end, requested, limit=20000):
     db.execute(text("SET LOCAL statement_timeout='8s'"))
     db.execute(text("SET LOCAL lock_timeout='150ms'"))
+    if requested >= 600 and os.getenv("VISUAL_WAV_FEATURE_SERIES_ENABLED", "false") == "true":
+        from app.visualization.feature_series import series as feature_series
+
+        summaries = feature_series(db, sensor_id, start, end, requested, limit)
+        if summaries:
+            if len(summaries[0]["data"]) >= limit:
+                raise HTTPException(413, "Choose a coarser resolution")
+            return summaries
     params = {"sid": sensor_id, "start": start, "end": end, "step": requested, "lim": limit}
     # A verified chunk's source rows are represented atomically by its rollups.
     # Late arrivals are incorporated by the next worker pass, never double counted.
@@ -355,6 +363,9 @@ def export(
                     "standard_deviation",
                     "coverage_ratio",
                     "signal_source",
+                    "source_interval_start",
+                    "source_interval_end",
+                    "timing_overlap_seconds",
                 ]
             )
             for row in item["data"]:
@@ -370,6 +381,9 @@ def export(
                         row["standard_deviation"],
                         row["coverage_ratio"],
                         row["signal_source"],
+                        row.get("source_interval_start", ""),
+                        row.get("source_interval_end", ""),
+                        row.get("timing_overlap_seconds", ""),
                     ]
                 )
                 if out.tell() + size > settings.sensor_export_max_bytes:

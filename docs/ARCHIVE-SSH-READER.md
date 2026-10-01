@@ -39,3 +39,25 @@ host broker. Isolation reduces exposure; it does not convert that credential
 into a provider-enforced read-only account. A read-only subaccount can replace
 it later. This mechanism alone does not authorize any deletion or establish
 that all historical files have been synchronized.
+
+## Coarse Gateway views under receiver load
+
+`VISUAL_WAV_FEATURE_SERIES_ENABLED=true` opts the read sidecar into a coarse
+Gateway signal path for display steps of at least ten minutes. It uses only
+verified mV feature rows whose source SHA-256, sample rate and calibration
+match the corresponding WAV, with complete/inferred timing and full coverage.
+The route applies the existing zone authorization first. Fine views and mixed
+or environmental sensors continue to use the original readings path.
+
+Summaries weight mean and mean-square by actual sample count. Min/max remain
+observed extrema; RMS and standard deviation derive from those weighted sums.
+Only complete recordings wholly inside the selected window contribute. No
+statistics are split into invented sub-recording windows, and no median of
+medians is reported. Display points and CSV use the same function. CSV adds
+actual source interval boundaries and observed timestamp-overlap seconds.
+
+Historic Gateway filenames can imply one-second overlaps between consecutive
+recordings. These remain explicitly reported; coverage is unknown for affected
+points rather than falsely claiming continuous or duplicate-free wall time.
+The chart labels full-WAV summaries and exposes overlap in its tooltip. This
+path does not alter stored readings, features, source WAVs or ingestion.

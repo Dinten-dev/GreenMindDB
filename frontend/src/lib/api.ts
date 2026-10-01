@@ -273,7 +273,10 @@ export interface DataPoint {
   rms?: number | null;
   standard_deviation?: number | null;
   coverage_ratio?: number | null;
-  signal_source?: 'wav' | 'readings' | 'pending' | 'overlap';
+  signal_source?: 'wav' | 'wav_features' | 'readings' | 'pending' | 'overlap';
+  source_interval_start?: string;
+  source_interval_end?: string;
+  timing_overlap_seconds?: number;
 }
 
 export interface SensorDataResponse {
