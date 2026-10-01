@@ -87,3 +87,24 @@ def test_corrupt_source_never_publishes_part(tmp_path, monkeypatch):
     assert not list(tmp_path.glob("*.part"))
     assert db.execute("SELECT status FROM jobs").fetchone()[0] != "ready"
     db.close()
+
+
+def test_resource_pause_keeps_export_queued(tmp_path, monkeypatch):
+    db, job = make_job(tmp_path, [b"expected"])
+    with db:
+        db.execute(
+            "UPDATE jobs SET status='queued',created=strftime('%s','now') WHERE id=?",
+            (job["id"],),
+        )
+    db.close()
+    monkeypatch.setattr(worker, "root", lambda: tmp_path)
+    monkeypatch.setattr(worker, "headroom", lambda _: None)
+
+    def pause(*_):
+        raise worker.CapacityPause("host priority")
+
+    monkeypatch.setattr(worker, "make_parts", pause)
+    assert worker.run_once()["status"] == "paused_for_host_load"
+    with jobs.connect(tmp_path) as reopened:
+        row = reopened.execute("SELECT status,completed,error FROM jobs").fetchone()
+        assert tuple(row) == ("queued", 0, None)

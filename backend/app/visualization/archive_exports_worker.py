@@ -15,6 +15,10 @@ from app.services.wav_service import _get_s3_client
 from app.visualization.archive_exports import EXPIRES, PART_BYTES, connect, root
 
 
+class CapacityPause(RuntimeError):
+    """Leave a verified export queued while ingestion needs host resources."""
+
+
 def headroom(path):
     values = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
@@ -26,7 +30,7 @@ def headroom(path):
         or os.getloadavg()[0] > 2.4
         or usage.free < max(2 * 1024**3, usage.total * 0.05)
     ):
-        raise RuntimeError("Server braucht Vorrang; Export später wiederholen")
+        raise CapacityPause("Server braucht Vorrang; Export später wiederholen")
 
 
 def source_for(item, gateway, direct):
@@ -118,7 +122,10 @@ def make_parts(path, job, db):
 
 def run_once():
     path = root()
-    headroom(path)
+    try:
+        headroom(path)
+    except CapacityPause:
+        return {"status": "paused_for_host_load"}
     with connect(path) as db:
         # An interrupted job starts over; no incomplete ZIP can become ready.
         interrupted = db.execute("SELECT id FROM jobs WHERE status='working'").fetchall()
@@ -147,6 +154,13 @@ def run_once():
         try:
             make_parts(path, job, db)
             return {"status": "ready", "id": job["id"]}
+        except CapacityPause:
+            with db:
+                db.execute(
+                    "UPDATE jobs SET status='queued',completed=0,error=NULL WHERE id=?",
+                    (job["id"],),
+                )
+            return {"status": "paused_for_host_load", "id": job["id"]}
         except Exception as exc:
             with db:
                 db.execute(
