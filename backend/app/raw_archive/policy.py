@@ -69,6 +69,9 @@ class Config:
     max_file_bytes: int = 64 * 1024 * 1024
     min_free_bytes: int = 2 * 1024**3
     max_files: int = 10
+    local_grace_days: int = 7
+    deletion_approval_file: Path | None = None
+    deletion_approval_sha256: str = ""
 
     def guard(self, *, deleting: bool = False, reading: bool = False) -> None:
         if not self.enabled and not reading:
@@ -85,6 +88,8 @@ class Config:
             raise ArchiveBlocked("Invalid resource bounds")
         if deleting and not (self.delete_enabled and self.reads_accepted):
             raise ArchiveBlocked("Local deletion and archived reads require separate acceptance")
+        if deleting and not 7 <= self.local_grace_days <= 365:
+            raise ArchiveBlocked("At least seven days of local reserve are required")
         if deleting and any(
             os.environ.get(key, "").lower() in {"1", "true", "yes"}
             for key in (
@@ -301,6 +306,9 @@ def archive_one(
             or timed("checksum", checksum, returned) != recording.sha256
         ):
             raise ArchiveBlocked("Storage Box readback failed; local original retained")
+        # Earlier receipts have only the latest successful verification time.
+        # Using that as the first time is conservative, never backdates consent.
+        receipt.setdefault("first_verified_at", receipt.get("verified_at", now().isoformat()))
         receipt["verified_at"] = now().isoformat()
         receipt["recording"] = json.loads(json.dumps(asdict(recording), default=str))
         ledger.save(recording, previous[0] if pending else "verified", receipt)
@@ -312,6 +320,9 @@ def archive_one(
         config.guard(deleting=True)
         recording.eligible(now(), config)
         timed("catalog_revalidate", revalidate, recording)
+        from .deletion import verify_deletion_evidence
+
+        verify_deletion_evidence(config, recording, receipt, destination, now())
         ledger.save(recording, "deleting", receipt)
         source.evict(recording, snapshot)
         ledger.save(recording, "evicted", receipt)

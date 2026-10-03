@@ -26,6 +26,11 @@ def configuration() -> Config:
         namespace=os.environ.get("RAW_ARCHIVE_ENVIRONMENT", "production"),
         max_file_bytes=int(os.environ.get("RAW_ARCHIVE_MAX_FILE_BYTES", "8388608")),
         max_files=int(os.environ.get("RAW_ARCHIVE_MAX_FILES", "5000")),
+        local_grace_days=int(os.environ.get("RAW_ARCHIVE_LOCAL_GRACE_DAYS", "7")),
+        deletion_approval_file=Path(os.environ["RAW_ARCHIVE_DELETION_APPROVAL_FILE"])
+        if os.environ.get("RAW_ARCHIVE_DELETION_APPROVAL_FILE")
+        else None,
+        deletion_approval_sha256=os.environ.get("RAW_ARCHIVE_DELETION_APPROVAL_SHA256", ""),
     )
 
 

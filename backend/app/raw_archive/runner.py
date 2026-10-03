@@ -224,7 +224,17 @@ def _run(metrics, cleanup):
             ),
         )
         cleanup.callback(client.close)
-        sources[kind] = S3Source(client)
+        diagnostic = None
+        if config.delete_enabled:
+            from .diagnostics import client_from_environment
+
+            diagnostic = client_from_environment()
+            cleanup.callback(diagnostic.close)
+        sources[kind] = S3Source(
+            client,
+            allow_legacy_null=os.environ.get("RAW_ARCHIVE_LEGACY_NULL_ACCEPTED", "false") == "true",
+            diagnostic_client=diagnostic,
+        )
     return run_daily(
         config,
         catalogs,

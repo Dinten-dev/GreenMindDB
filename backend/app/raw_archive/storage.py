@@ -23,8 +23,11 @@ SFTP_TIMEOUT_SECONDS = 300
 
 
 class S3Source:
-    def __init__(self, client):
+    def __init__(self, client, *, allow_legacy_null=False, diagnostic_client=None):
         self.client = client
+        self.diagnostic_client = diagnostic_client if diagnostic_client is not None else client
+        # Remains false until the deployed MinIO implementation is accepted.
+        self.allow_legacy_null = allow_legacy_null
 
     def snapshot(self, recording: Recording) -> dict:
         head = self.client.head_object(Bucket=recording.bucket, Key=recording.key)
@@ -57,14 +60,20 @@ class S3Source:
     def evict(self, recording: Recording, snapshot: dict) -> None:
         # An unversioned delete has a check/delete race. Never use it here.
         version = snapshot.get("VersionId")
-        if version in (None, "", "null"):
+        if version in (None, "", "null") and not self.allow_legacy_null:
             raise ArchiveBlocked("Exact-version deletion needs S3 versioning; keep local WAV")
+        version = "null" if version in (None, "", "null") else version
         if datetime.fromisoformat(snapshot["LastModified"]) >= cutoff(datetime.now(UTC)):
             raise ArchiveBlocked("The object itself is not from a closed Swiss calendar day")
-        if self.client.get_bucket_versioning(Bucket=recording.bucket).get("Status") != "Enabled":
+        if (
+            self.diagnostic_client.get_bucket_versioning(Bucket=recording.bucket).get("Status")
+            != "Enabled"
+        ):
             raise ArchiveBlocked("Source bucket versioning is not enabled")
         try:
-            lifecycle = self.client.get_bucket_lifecycle_configuration(Bucket=recording.bucket)
+            lifecycle = self.diagnostic_client.get_bucket_lifecycle_configuration(
+                Bucket=recording.bucket
+            )
         except ClientError as error:
             if error.response["Error"]["Code"] != "NoSuchLifecycleConfiguration":
                 raise
@@ -78,7 +87,11 @@ class S3Source:
             if error.response["Error"]["Code"] in {"NoSuchKey", "NoSuchVersion", "404"}:
                 return  # Durable deleting receipt + fresh remote readback permits recovery.
             raise
-        if head["ETag"] != snapshot["ETag"] or head["ContentLength"] != snapshot["ContentLength"]:
+        if (
+            head["ETag"] != snapshot["ETag"]
+            or head["ContentLength"] != snapshot["ContentLength"]
+            or head["LastModified"].isoformat() != snapshot["LastModified"]
+        ):
             raise ArchiveBlocked("Immutable source snapshot changed")
         versions = self.client.list_object_versions(Bucket=recording.bucket, Prefix=recording.key)
         exact = [entry for entry in versions.get("Versions", []) if entry["Key"] == recording.key]
@@ -354,6 +367,107 @@ class StorageBox:
         )
         if path.stat().st_size > max_bytes:
             raise ArchiveBlocked("Remote object exceeds allowed size")
+
+    def download_snapshot(self, snapshot, key, path, max_bytes):
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot):
+            raise ArchiveBlocked("Unsafe snapshot name")
+        remote = f"/home/.zfs/snapshot/{snapshot}/" + self.path(key)
+        self._download_path(remote, path, max_bytes)
+
+    def recovery_path(self, key):
+        if not re.fullmatch(r"(?:production|staging)/recovery/[0-9a-f]{64}\.json", key):
+            raise ArchiveBlocked("Unsafe recovery index key")
+        return self.root + "/" + key
+
+    def download_recovery(self, key, path, max_bytes, *, snapshot=None):
+        remote = self.recovery_path(key)
+        if snapshot is not None:
+            if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot):
+                raise ArchiveBlocked("Unsafe snapshot name")
+            remote = f"/home/.zfs/snapshot/{snapshot}/" + remote
+        self._download_path(remote, path, min(max_bytes, 1024**2))
+
+    def _download_path(self, remote, path, max_bytes):
+        if path.exists() or not 0 < max_bytes <= 64 * 1024**2:
+            raise ArchiveBlocked("Download needs an unused path and a bounded size")
+        self.run(
+            f"get {self.quote(remote)} {self.quote(path)}\n",
+            output=path,
+            max_bytes=max_bytes,
+            missing_path=remote,
+        )
+        if path.stat().st_size > max_bytes:
+            raise ArchiveBlocked("Remote object exceeds allowed size")
+
+    def publish_recovery(self, path, key):
+        """Append one hash-addressed index; no existing RAW or index is replaced."""
+        from .policy import checksum
+
+        digest = checksum(path)
+        if key != key.split("/", 1)[0] + "/recovery/" + digest + ".json":
+            raise ArchiveBlocked("Recovery filename must equal its content checksum")
+        if not 0 < path.stat().st_size <= 1024**2:
+            raise ArchiveBlocked("Recovery index exceeds its size budget")
+        remote = self.recovery_path(key)
+        with tempfile.TemporaryDirectory(dir=path.parent, prefix="index-proof-") as folder:
+            previous = Path(folder) / "existing.json"
+            try:
+                self.download_recovery(key, previous, path.stat().st_size)
+            except RemoteMissing:
+                temporary = remote + ".partial-" + uuid.uuid4().hex
+                commands = [
+                    f"-mkdir {self.root}",
+                    f"-mkdir {self.root}/{key.split('/')[0]}",
+                    f"-mkdir {self.root}/{key.split('/')[0]}/recovery",
+                    f"put {self.quote(path)} {temporary}",
+                    f"rename {temporary} {remote}",
+                ]
+                self.run("\n".join(commands) + "\n")
+                self.download_recovery(key, previous, path.stat().st_size)
+            if previous.stat().st_size != path.stat().st_size or checksum(previous) != digest:
+                raise ArchiveBlocked("Recovery index readback mismatch")
+
+    def catalog_path(self, key):
+        if not re.fullmatch(
+            r"(?:production|staging)/catalog-backup/[0-9a-f]{64}\.(?:json|jsonl\.gz|sqlite3\.gz)",
+            key,
+        ):
+            raise ArchiveBlocked("Unsafe catalog backup key")
+        return self.root + "/" + key
+
+    def download_catalog(self, key, path, max_bytes, *, snapshot=None):
+        remote = self.catalog_path(key)
+        if snapshot is not None:
+            if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot):
+                raise ArchiveBlocked("Unsafe snapshot name")
+            remote = f"/home/.zfs/snapshot/{snapshot}/" + remote
+        self._download_path(remote, path, max_bytes)
+
+    def publish_catalog(self, path, key):
+        """Content-addressed metadata only, bounded to the transport's 64 MiB ceiling."""
+        from .policy import checksum
+
+        digest = checksum(path)
+        remote = self.catalog_path(key)
+        if (
+            key.rsplit("/", 1)[1].split(".", 1)[0] != digest
+            or not 0 < path.stat().st_size <= 64 * 1024**2
+        ):
+            raise ArchiveBlocked("Catalog backup must be bounded and hash-addressed")
+        with tempfile.TemporaryDirectory(dir=path.parent, prefix="catalog-proof-") as folder:
+            previous = Path(folder) / "remote"
+            try:
+                self.download_catalog(key, previous, path.stat().st_size)
+            except RemoteMissing:
+                temporary = remote + ".partial-" + uuid.uuid4().hex
+                parent = remote.rsplit("/", 1)[0]
+                self.run(
+                    f"-mkdir {self.root}\n-mkdir {self.root}/{key.split('/')[0]}\n-mkdir {parent}\n"
+                    f"put {self.quote(path)} {temporary}\nrename {temporary} {remote}\n"
+                )
+                self.download_catalog(key, previous, path.stat().st_size)
+            if previous.stat().st_size != path.stat().st_size or checksum(previous) != digest:
+                raise ArchiveBlocked("Catalog backup independent readback mismatch")
 
     def restore(self, key: str, sha256: str, size: int, destination: Path) -> None:
         """Operator restore, verified before visibility; never overwrite an existing file."""

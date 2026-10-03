@@ -97,7 +97,11 @@ def deletion_prefix(stub, record, snapshot, *, lifecycle=False):
         )
         stub.add_response(
             "head_object",
-            {"ETag": snapshot["ETag"], "ContentLength": snapshot["ContentLength"]},
+            {
+                "ETag": snapshot["ETag"],
+                "ContentLength": snapshot["ContentLength"],
+                "LastModified": datetime.fromisoformat(snapshot["LastModified"]),
+            },
             {"Bucket": record.bucket, "Key": record.key, "VersionId": "version-1"},
         )
 

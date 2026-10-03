@@ -479,3 +479,7 @@ install_direct_views(app)
 from app.visualization.archive_exports import install as install_archive_exports  # noqa: E402
 
 install_archive_exports(app)
+
+from app.visualization.compat_downloads import install as install_compat_downloads  # noqa: E402
+
+install_compat_downloads(app)

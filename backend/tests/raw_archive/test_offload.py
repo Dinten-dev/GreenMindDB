@@ -58,16 +58,19 @@ def offload(world, *, features_missing=False, corrupt_second_read=False):
             original_read(key, path, maximum)
 
     destination.download = read
-    result = run_daily(
-        replace(config, delete_enabled=True, reads_accepted=True),
-        catalogs,
-        dict.fromkeys(catalogs, source),
-        destination,
-        healthy=lambda: True,
-        source_identities=dict.fromkeys(catalogs, "test"),
-        eviction_catalogs=features,
-        now=now,
-    )
+    # Isolate daily dispatch; test_deletion_gates exercises the full new gate.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("app.raw_archive.deletion.verify_deletion_evidence", lambda *_: None)
+        result = run_daily(
+            replace(config, delete_enabled=True, reads_accepted=True),
+            catalogs,
+            dict.fromkeys(catalogs, source),
+            destination,
+            healthy=lambda: True,
+            source_identities=dict.fromkeys(catalogs, "test"),
+            eviction_catalogs=features,
+            now=now,
+        )
     return result, record, deletions
 
 
