@@ -1,0 +1,31 @@
+[Unit]
+Description=GreenMind bounded read-only deletion preflight (no deletion)
+After=network-online.target
+ConditionPathExists=/etc/greenmind/delete-preparation/READ_ONLY_REHEARSAL_APPROVED
+
+[Service]
+Type=oneshot
+User=996
+Group=986
+EnvironmentFile=/etc/greenmind/delete-preparation/recovery.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=RAW_ARCHIVE_DELETE_ENABLED=false
+Environment=RAW_ARCHIVE_READS_ACCEPTED=false
+Environment=RAW_ARCHIVE_LEGACY_NULL_ACCEPTED=false
+Environment=PYTHONPATH=FILL_IMMUTABLE_PACKAGE/backend
+ExecStart=/opt/greenmind/raw-copy/20260925/venv/bin/python -m app.raw_archive.preflight --output FILL_PRIVATE_REPORT_DIRECTORY
+MemoryMax=128M
+MemorySwapMax=0
+CPUQuota=10%
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=120
+TasksMax=32
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+UMask=0077
+ReadWritePaths=FILL_PRIVATE_REPORT_DIRECTORY
+ReadWritePaths=/var/lib/greenmind-raw-copy
+BindReadOnlyPaths=/var/lib/greenmind-raw-copy/archive.sqlite3

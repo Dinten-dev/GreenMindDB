@@ -42,7 +42,8 @@ export default function SignalChart({
     setLoading(false);
   }, [series.sensor_id, firstTimestamp]);
   const points = useMemo(() => prepareSignalSeries(series.data, metric), [series.data, metric]);
-  const verified = series.data.some((point) => point.signal_source === 'wav');
+  const summarized = series.data.some((point) => point.signal_source === 'wav_features');
+  const verified = summarized || series.data.some((point) => point.signal_source === 'wav');
   const availableRms = series.data.some((point) => point.rms != null);
   const selected = selectedAt ?? series.data[Math.floor(series.data.length * 0.75)]?.timestamp;
   const preview = async () => {
@@ -141,6 +142,9 @@ export default function SignalChart({
                   {point.coverage_ratio != null && (
                     <p>Datenabdeckung: {(point.coverage_ratio * 100).toFixed(1)} %</p>
                   )}
+                  {point.timing_overlap_seconds > 0 && (
+                    <p>Zeitstempel-Überlappung: {point.timing_overlap_seconds.toFixed(1)} s</p>
+                  )}
                 </div>
               );
             }}
@@ -168,13 +172,15 @@ export default function SignalChart({
         </ComposedChart>
       </ResponsiveContainer>
       <p className="mt-2 text-xs leading-relaxed text-gray-500">
-        {metric === 'rms'
-          ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
-          : verified
-            ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
-            : series.original_signal_available
-              ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
-              : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
+        {summarized
+          ? 'Die Werte fassen vollständig geprüfte WAV-Aufnahmen zusammen. Mittelwerte sind nach Sampleanzahl gewichtet. Zeitstempel-Überlappungen werden ausgewiesen; deren Datenabdeckung bleibt unbekannt. '
+          : metric === 'rms'
+            ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
+            : verified
+              ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
+              : series.original_signal_available
+                ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
+                : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
         Datenlücken werden nicht überbrückt.
       </p>
       {series.original_signal_available && (

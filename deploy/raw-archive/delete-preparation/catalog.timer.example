@@ -1,0 +1,11 @@
+[Unit]
+Description=GreenMind bounded catalog backup retries; expires after 24 hours
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=false
+AccuracySec=30s
+Unit=greenmind-catalog-backup-FILL_REVISION.service
+
+[Install]
+WantedBy=timers.target

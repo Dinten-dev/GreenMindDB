@@ -161,7 +161,7 @@ def load_source(engine, store, segment_id):
             for key in ("id", "device_id", "session_id", "revision", "bucket")
         }
         published = db.get(Revision, (seg.id, seg.revision))
-        if published and not published.raw_deleted_at:
+        if published:
             manifest = published.manifest
             canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
             if hashlib.sha256(canonical).hexdigest() != published.manifest_sha256:

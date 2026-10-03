@@ -241,6 +241,11 @@ def list_wav_files(
             raise HTTPException(status_code=400, detail="Invalid to_dt format") from e
 
     files = query.order_by(desc(WavFile.started_at)).limit(limit).all()
+    from app.raw_archive.reader import verified_objects
+
+    archived = verified_objects(
+        "gateway", "greenmind-raw", [f.s3_key for f in files if f.raw_deleted_at is not None]
+    )
 
     return [
         {
@@ -256,7 +261,8 @@ def list_wav_files(
             "ended_at": f.ended_at.isoformat(),
             "created_at": f.created_at.isoformat(),
             "timestamp_source": f.timestamp_source,
-            "raw_available": f.raw_deleted_at is None,
+            "raw_available": f.raw_deleted_at is None or f.s3_key in archived,
+            "archive_lookup_required": f.raw_deleted_at is not None,
             "raw_deleted_at": f.raw_deleted_at.isoformat() if f.raw_deleted_at else None,
             "feature_status": f.feature_status,
             "feature_verified_at": (
@@ -296,7 +302,6 @@ def count_wav_files(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             WavFile.sensor_id == sensor_id,
-            WavFile.raw_deleted_at.is_(None),
             zone_access_filter(current_user),
         )
     )
@@ -443,9 +448,6 @@ def download_wav(
     )
     if not wav_file:
         raise HTTPException(status_code=404, detail="WAV file not found")
-    if wav_file.raw_deleted_at is not None:
-        raise HTTPException(status_code=410, detail="Raw WAV expired; verified features remain")
-
     sensor_name = _resolve_sensor_name(wav_file.sensor_id, db)
     filename = wav_service.generate_download_filename(
         sensor_name=sensor_name,
@@ -492,7 +494,6 @@ def download_wav_bundle(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             WavFile.sensor_id == sensor_id,
-            WavFile.raw_deleted_at.is_(None),
             WavFile.started_at >= start_dt,
             WavFile.ended_at <= end_dt,
             zone_access_filter(current_user),

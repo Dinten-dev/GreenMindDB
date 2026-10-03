@@ -6,7 +6,6 @@ import {
   apiListSensors,
   apiListZones,
   Zone,
-  apiGetSensorData,
   apiGetSensorDataAdvanced,
   apiExportSensorData,
   apiDeleteSensor,
@@ -19,6 +18,7 @@ import {
   WavCountInfo,
 } from '@/lib/api';
 import SignalChart from './SignalChart';
+import ArchiveExportPanel from './ArchiveExportPanel';
 import PairSensorDialog from './PairSensorDialog';
 import DirectSensorsPanel, { useDirectDevices } from './DirectSensorsPanel';
 import SensorCard from './SensorCard';
@@ -107,6 +107,12 @@ export default function SensorsPage() {
   const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+  const [exportWindow, setExportWindow] = useState<{
+    sensorId: string;
+    range: TimeRange;
+    from_dt: string;
+    to_dt: string;
+  } | null>(null);
   const [electrodeStatuses, setElectrodeStatuses] = useState<Record<string, ElectrodeStatus>>({});
   const hasInitialData = useRef(false);
   const [brushRanges, setBrushRanges] = useState<
@@ -203,7 +209,14 @@ export default function SensorsPage() {
         // Raw data for last 5 minutes — max resolution (~1600 points at 5Hz)
         data = await apiGetSensorDataAdvanced(sensorId, { range: '5m', resolution: 'raw' });
       } else {
-        data = await apiGetSensorData(sensorId, range);
+        const duration = { '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range];
+        const to = new Date();
+        const bounds = {
+          from_dt: new Date(to.getTime() - duration * 1000).toISOString(),
+          to_dt: to.toISOString(),
+        };
+        data = await apiGetSensorDataAdvanced(sensorId, { range, ...bounds });
+        setExportWindow({ sensorId, range, ...bounds });
       }
       setSensorData(data);
       setDataError(false);
@@ -298,7 +311,11 @@ export default function SensorsPage() {
     setExportStatus('loading');
     try {
       setExportStatus('zipping');
-      await apiExportSensorData(selectedSensor, timeRange === 'live' ? '1h' : timeRange);
+      const bounds =
+        exportWindow?.sensorId === selectedSensor && exportWindow.range === timeRange
+          ? { from_dt: exportWindow.from_dt, to_dt: exportWindow.to_dt }
+          : undefined;
+      await apiExportSensorData(selectedSensor, timeRange === 'live' ? '1h' : timeRange, bounds);
       setExportStatus('done');
       setTimeout(() => setExportStatus('idle'), 2000);
     } catch (err) {
@@ -894,6 +911,14 @@ export default function SensorsPage() {
                     )}
                   </div>
                 </div>
+                {selectedSensor && wavFromDate && wavToDate && (
+                  <ArchiveExportPanel
+                    kind="gateway"
+                    sensorId={selectedSensor}
+                    from={new Date(`${wavFromDate}T00:00:00Z`).toISOString()}
+                    to={new Date(`${wavToDate}T23:59:59Z`).toISOString()}
+                  />
+                )}
               </div>
             </div>
           </div>
