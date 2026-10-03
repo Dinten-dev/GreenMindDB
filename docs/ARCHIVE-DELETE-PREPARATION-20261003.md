@@ -37,8 +37,40 @@ Keine Objekt-, Schreib-, Lösch-, Benutzer- oder Administrationsrechte vergeben.
 eingerichteten** MinIO-Admin-Alias und neu bereitgestellte Zugangsdaten.
 Es entdeckt keine Root-Zugangsdaten. Der Diagnosezugang bleibt ausschließlich
 beim privaten Host-Worker und wird nie in öffentliche Reader eingebunden.
+`GREENMIND_MINIO_CLIENT` muss auf eine absolute, ausführbare MinIO-Client-Datei
+zeigen. Vor jeder administrativen Aktion wird ihre Versionskennung geprüft.
+Der vorhandene `/usr/bin/mc` auf Production ist **Midnight Commander**, kein
+MinIO-Client; er wird deshalb ausdrücklich abgewiesen. Die Prüfung funktioniert
+auch unter dem älteren Bash des Macs, ohne sich auf implizites `set -e` für
+`[[ ... ]]` zu verlassen.
 `python -m app.raw_archive.diagnostics` führt nur die zwei erlaubten Abfragen aus.
 `AccessDenied` bedeutet unbekannten Zustand, keinesfalls ausgeschaltete Versionierung.
+
+## Bereits installierte Vorbereitung ergänzen
+
+`deploy/raw-archive/delete-preparation/activate-catalog.py` aktiviert ausschließlich
+eine neue private Katalogsicherung für die bereits installierte Vorbereitung
+`d344695ef260`. Es prüft deren vollständige unveränderte Datei-Prüfsummen,
+Empfangsbaseline, beide Proxy-Prüfsummen, alte Zeitpläne und ausgeschaltete
+Löschungsflags. Ziel ist ausschließlich Storage-Box-Konto `u676312`.
+Die CLI verlangt `--authorize-private-catalog`, `--destination-user u676312`
+und die SHA-256-Prüfsumme der Aktivierungsdatei. Dieser Schalter ersetzt keine
+ausdrückliche menschliche Freigabe des sensiblen Inhalts und des Empfängers.
+
+Der neue Auftrag behält 128 MiB RAM, 10 % CPU, keinen Swap und niedrige
+I/O-Priorität. Sein eigener Speicherschutz ist auf 640 MiB freie Host-RAM erhöht;
+bestehende Kopier- und Empfangsgrenzen werden nicht verändert. Versuche sind
+nur bis zur bestehenden, nicht verlängerten 24-Stunden-Frist möglich. Erfolgreiche
+Publikation oder Ablauf sperren weitere Sicherungen. Teilergebnisse bleiben
+privat erhalten und zählen nicht als vollständige Sicherung.
+
+Die Freigabe wird privat in `catalog-upload-authorization.json` dokumentiert,
+die Aktivierung in `catalog-activation.json`. Es werden keine neuen Adminrechte
+oder Konten erzeugt. Zum Aussetzen nur den neuen
+`greenmind-catalog-backup-d344695ef260.timer` stoppen; Nachweise behalten.
+Eine abgeschlossene Sicherung ist erst mit `reports/catalog-published.json`
+nach vollständiger Rückleseprüfung bestätigt. Der echte Restore bleibt eine
+separate Abnahme. Die Beobachtung, alle alten Dienste und Zeitpläne bleiben erhalten.
 
 Das bisherige Auslesen von MinIO-Root-Zugangsdaten aus einem Container wurde
 durch die automatische Freigabeprüfung abgelehnt. Diesen Weg nicht erneut
