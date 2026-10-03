@@ -141,5 +141,82 @@ Es gibt weiterhin nur die gewählte Storage Box als RAW-Archiv. Ein Snapshot
 schützt gegen manche Dateifehler, nicht gegen Verlust desselben Kontos/Anbieters.
 Die Quellversion bleibt erhalten, solange irgendein erforderlicher Nachweis fehlt.
 
+## Fortsetzung: getrennte Abnahmeumgebung
+
+`snapshot_api` verwendet ausschließlich eine explizite, private Operator-Token-Datei
+und eine benannte Storage-Box-ID. Der HTTPS-Endpunkt ist auf
+`https://api.hetzner.com/v1` festgelegt. Vor einer Erstellung prüft es Benutzer,
+Servernamen und Sichtbarkeit des Snapshot-Verzeichnisses. Es gibt keine Methoden
+zum Löschen, Zurückrollen oder Ändern einer Snapshot-Retention. Ein unbekanntes
+Ergebnis des einmaligen Erstellungsaufrufs wird nicht automatisch wiederholt.
+Eine erfolgreiche API-Antwort ist noch keine Abnahme: `--snapshot-id` liest den
+Snapshot separat und dessen vollständiges Katalogmanifest über SFTP zurück.
+Der vollständige Katalog-Restore und WAV-Rücklesetests bleiben zusätzliche Gates.
+Token-Datei und MinIO-Admin-Konfiguration gehören ausschließlich auf den privaten
+Host; sie werden nie in einen öffentlichen Reader eingebunden.
+
+`provision-diagnostic.sh` validiert die vollständige Policy: exakt zwei Buckets,
+exakt die beiden Metadatenaktionen, keine zusätzlichen Statements oder Wildcards.
+Ein regulär vom Betreiber eingerichteter Admin-Alias bleibt Voraussetzung.
+
+`RAW_ARCHIVE_QUARANTINE_FILE` referenziert ein privates Register mit
+`schema=1`, `environment=production` und `excluded`-Einträgen aus `kind`/`identity`.
+Eine konfigurierte, aber fehlende oder beschädigte Datei blockiert Löschprüfungen.
+Quarantäne bleibt auch nach einer späteren Feature-Neuberechnung wirksam.
+`investigation --gateway-wav UUID --output NEW_PRIVATE_DIRECTORY` liest genau
+ein Original bis 1 MiB, prüft unveränderte Quellidentität, Länge, SHA-256 und
+WAV-Decodierung. Es korrigiert weder SQL-Metadaten noch Originalbytes.
+
+Der Katalog enthält jetzt zusätzlich `direct_enrollment`, damit die Verbindung
+von Hardware-Adresse und Direct-Gerät beim Restore erhalten bleibt. Der bestehende
+isolierte Reader erhält dafür nur `SELECT` auf dieser benannten Tabelle.
+Bestehende Schema-/Migrationsarchive bleiben vollständig erhalten.
+
+`reconcile_backup --manifest PRIVATE_MANIFEST --output NEW_PRIVATE_DIRECTORY`
+vergleicht den vollständigen geprüften Backupstand gegen sein Journal. Es streamt
+JSON/Gzip und verwendet einen eigenen SQLite-Index statt einer großen RAM-Liste.
+Es prüft alle Dateiprüfsummen und Zeilenzahlen, zählt fehlende/mismatched Belege
+und ungültige Metadaten und unterscheidet die sieben Tage lokale Reserve.
+Das ist ein Abgleich des festen Backupstands, kein Beweis für später eingegangene
+Daten oder für den aktuellen physischen Zustand jedes entfernten WAVs.
+Ohne vollständige neue Backups gibt es keinen vollständigen Abgleich.
+
+`prepare-reader.py` erzeugt eine separate Konfiguration für Port 8141 mit dem
+vorhandenen geprüften Dependency-Image und unveränderlichem, schreibgeschütztem
+neuem Quellcode. Dashboard 8140 und alle Empfangsrouten bleiben erhalten.
+`start-reader.py` startet nur diesen Kandidaten nach Codeprüfsummen und mindestens
+704 MiB verfügbarer Hostreserve (512 MiB plus Kandidatenlimit 192 MiB).
+Bei fehlgeschlagenem Start wird ausschließlich der Kandidat gestoppt.
+`switch-reader.py` verlangt einen frischen, privaten und SHA-gepinnten echten
+Abnahmebericht für lokale und reine Archivdownloads, Gateway/Direct, Rechte,
+Anmeldung, WAV-Prüfsummen und fehlende Empfangsrouten. `--rehearse` nimmt den
+minimalen Wechsel sofort vollständig zurück. Eine fehlgeschlagene Nginx-Prüfung
+stellt ebenfalls die ursprünglichen Bytes wieder her. Ohne echten Bericht kein
+Proxywechsel; ausgefüllte Vorlagen sind keine Testnachweise.
+
+Mit `install-prepared.py --start-observation --quarantine-gateway UUID` wird nur
+der neue, auf 96 MiB und zehn Prozent CPU begrenzte Beobachtungsdienst registriert.
+Er sammelt alle fünf Minuten maximal 24 Stunden lang nur lesende Prüfungen.
+Nach Ablauf blockiert `finished.json` weitere Ausführungen. Er prüft Receiver-
+Startzeiten/Neustarts, unveränderte Proxies, Health und bei ausreichender Reserve
+jeweils die letzte tatsächlich gespeicherte Gateway-/Direct-Aufnahme.
+Lücken über zehn Minuten, fehlender Fortschritt, Receiveränderungen oder Fehler
+verhindern PASS. Ressourcenpausen werden gezählt. Der Bericht erteilt niemals
+Löschfreigabe und ersetzt weder Snapshot-/Restore- noch Bestandsabnahme.
+Rücknahme: nur den neu benannten Beobachtungstimer stoppen/deaktivieren;
+Empfangsdienste, Kopierzeitpläne, Reader 8140 und Originaldateien bleiben bestehen.
+
+Alle Optionen sind explizit. Keine Löschung, kein Pruning und keine alte
+Retention werden durch Einrichtung, Diagnose, Kandidatenstart oder Beobachtung aktiviert.
+
+`--start-catalog-backup` registriert zusätzlich einen eigenen Metadatenauftrag,
+der maximal 24 Stunden alle 30 Minuten mit den unveränderten Ressourcenwächtern
+versucht, das vollständige Katalogbackup zu veröffentlichen. Nach Erfolg oder
+Ablauf wird er durch eine private Abschlussdatei blockiert. Ablauf oder Pause
+werden ausdrücklich nicht als erfolgreiches Backup gezählt. `catalog_once`
+startet keinen RAW-Kopierer und führt keinen Restore in Live-Datenbanken aus.
+Vollständige echte Wiederherstellung bleibt nach Veröffentlichung erforderlich.
+
 Snapshot-Verwaltung: [Hetzner-Dokumentation](https://docs.hetzner.com/storage/storage-box/snapshots/).
+API-Pfade und Snapshot-Schema: [offizieller Hetzner-Client](https://github.com/hetznercloud/hcloud-go/blob/main/hcloud/storage_box_snapshot.go).
 Bestehende `null`-Objekte: [S3-Versionierungsablauf](https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).

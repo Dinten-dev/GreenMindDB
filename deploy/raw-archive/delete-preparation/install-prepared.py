@@ -1,4 +1,4 @@
-"""Install an inert, immutable package. Never starts services or changes live routes."""
+"""Install immutable preparation; optionally observe, never restart receivers or change routes."""
 
 import hashlib
 import argparse
@@ -6,7 +6,8 @@ import json
 import os
 import shutil
 import subprocess
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -85,6 +86,9 @@ def main():
         action="store_true",
         help="Use new copy-only code on the next scheduled run; never restarts receivers",
     )
+    parser.add_argument("--start-observation", action="store_true")
+    parser.add_argument("--start-catalog-backup", action="store_true")
+    parser.add_argument("--quarantine-gateway", type=uuid.UUID)
     args = parser.parse_args()
     assert os.geteuid() == 0, "Root installs only the separate private preparation"
     bundle = json.loads((PACKAGE / "bundle.json").read_text())
@@ -108,6 +112,8 @@ def main():
     runtime.mkdir(parents=True, mode=0o755)
     shutil.copytree(PACKAGE / "backend", runtime / "backend")
     shutil.copytree(PACKAGE / "deploy", runtime / "deploy")
+    if (PACKAGE / "docs").exists():
+        shutil.copytree(PACKAGE / "docs", runtime / "docs")
     shutil.copy2(PACKAGE / "bundle.json", runtime / "bundle.json")
     for name in ("adaptive-copy.py", "optimized.py"):
         shutil.copy2(PACKAGE / "deploy/raw-archive" / name, runtime / name)
@@ -121,6 +127,8 @@ def main():
         folder = state / name
         folder.mkdir(mode=0o700)
         os.chown(folder, 996, 986)
+    observation = state / "observation"
+    observation.mkdir(mode=0o700)
     # Explicitly provided existing private configurations; no credential probing
     # of MinIO or receiving container environments.
     values = read_env(Path("/etc/greenmind/raw-copy/storagebox.env"))
@@ -156,7 +164,37 @@ def main():
         ),
         PYTHONPATH=str(runtime / "backend"),
         PYTHONDONTWRITEBYTECODE="1",
+        RAW_ARCHIVE_PREPARATION_DEADLINE=(
+            datetime.now(UTC) + timedelta(hours=24)
+        ).isoformat(),
     )
+    quarantine = Path("/etc/greenmind/delete-preparation/quarantine.json")
+    if args.quarantine_gateway:
+        # Register an explicit known exception; preserve original SQL and WAV bytes.
+        assert not quarantine.exists(), "Inspect the existing exclusion register first"
+        quarantine.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        quarantine.parent.chmod(0o750)
+        os.chown(quarantine.parent, 0, 986)
+        with quarantine.open("x") as body:
+            quarantine.chmod(0o600)
+            os.chown(quarantine, 996, 986)
+            json.dump(
+                {
+                    "schema": 1,
+                    "environment": "production",
+                    "excluded": [
+                        {
+                            "kind": "gateway",
+                            "identity": str(args.quarantine_gateway),
+                            "reason": "Known invalid legacy metadata; independent inspection pending",
+                        }
+                    ],
+                },
+                body,
+                indent=2,
+            )
+    if quarantine.exists():
+        values["RAW_ARCHIVE_QUARANTINE_FILE"] = str(quarantine)
     assert all("\n" not in value and "\r" not in value for value in values.values())
     env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with env_path.open("x") as body:
@@ -178,6 +216,83 @@ def main():
             "FILL_PRIVATE_BACKUP_DIRECTORY", str(state / "backups")
         )
         (state / "units" / (name + ".service.example")).write_text(content)
+    for suffix in ("service", "timer"):
+        content = (templates / ("observation." + suffix + ".example")).read_text()
+        for key, value in {
+            "/etc/greenmind/delete-preparation/recovery.env": str(env_path),
+            "FILL_IMMUTABLE_PACKAGE": str(runtime),
+            "FILL_OBSERVATION_DIRECTORY": str(observation),
+            "FILL_REVISION": revision[:12],
+        }.items():
+            content = content.replace(key, value)
+        (state / "units" / ("observation." + suffix + ".example")).write_text(content)
+        if args.start_observation:
+            target = Path("/etc/systemd/system") / (
+                "greenmind-archive-observation-" + revision[:12] + "." + suffix
+            )
+            assert not target.exists()
+            with target.open("x") as body:
+                target.chmod(0o644)
+                body.write(content)
+    if args.start_observation:
+        subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=15)
+        subprocess.run(
+            [
+                "systemctl",
+                "start",
+                "greenmind-archive-observation-" + revision[:12] + ".service",
+            ],
+            check=True,
+            timeout=65,
+        )
+    if args.start_catalog_backup:
+        report = state / "reports" / "catalog-published.json"
+        expired = state / "reports" / "catalog-expired.json"
+        service = (state / "units" / "recovery.service.example").read_text()
+        service = service.replace(
+            "ConditionPathExists=/etc/greenmind/delete-preparation/CATALOG_BACKUP_APPROVED",
+            f"ConditionPathExists=!{report}\nConditionPathExists=!{expired}",
+        )
+        service = service.replace(
+            f"-m app.raw_archive.recovery --ledger /var/lib/greenmind-raw-copy/archive.sqlite3 --output {state / 'backups'} --publish-catalog",
+            f"-m app.raw_archive.catalog_once --output {state / 'backups'} --report {report}",
+        )
+        service += f"\nReadWritePaths={state / 'reports'}\nSuccessExitStatus=75\n"
+        timer = (
+            (templates / "catalog.timer.example")
+            .read_text()
+            .replace("FILL_REVISION", revision[:12])
+        )
+        for suffix, content in (("service", service), ("timer", timer)):
+            target = Path("/etc/systemd/system") / (
+                f"greenmind-catalog-backup-{revision[:12]}.{suffix}"
+            )
+            assert not target.exists()
+            with target.open("x") as body:
+                target.chmod(0o644)
+                body.write(content)
+        subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=15)
+        subprocess.run(
+            [
+                "systemctl",
+                "enable",
+                "--now",
+                f"greenmind-catalog-backup-{revision[:12]}.timer",
+            ],
+            check=True,
+            timeout=15,
+        )
+    if args.start_observation:
+        subprocess.run(
+            [
+                "systemctl",
+                "enable",
+                "--now",
+                "greenmind-archive-observation-" + revision[:12] + ".timer",
+            ],
+            check=True,
+            timeout=15,
+        )
     if args.activate_copy_code:
         override = Path(
             "/etc/systemd/system/greenmind-raw-copy.service.d/90-first-verification.conf"
@@ -200,7 +315,9 @@ def main():
         "state": str(state),
         "environment_file": str(env_path),
         "at": datetime.now(UTC).isoformat(),
-        "services_started": 0,
+        "services_started": int(args.start_observation),
+        "observation_started": args.start_observation,
+        "catalog_backup_retries_started": args.start_catalog_backup,
         "deleted_files": 0,
         "deletion_enabled": False,
         "copy_code_next_scheduled_run": args.activate_copy_code,

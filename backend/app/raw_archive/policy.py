@@ -72,6 +72,7 @@ class Config:
     local_grace_days: int = 7
     deletion_approval_file: Path | None = None
     deletion_approval_sha256: str = ""
+    quarantine_file: Path | None = None
 
     def guard(self, *, deleting: bool = False, reading: bool = False) -> None:
         if not self.enabled and not reading:

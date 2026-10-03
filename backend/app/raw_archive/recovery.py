@@ -33,6 +33,7 @@ TABLES = {
     ),
     "direct": (
         "direct_device",
+        "direct_enrollment",
         "direct_session",
         "direct_segment",
         "direct_revision",

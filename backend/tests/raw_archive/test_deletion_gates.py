@@ -217,3 +217,31 @@ def test_changed_manifest_and_symlink_are_rejected(guarded):
     with pytest.raises(ArchiveBlocked, match="manifest"):
         execute(guarded, replace(config, deletion_approval_file=target))
     assert not guarded[2].deleted
+
+
+def test_quarantine_blocks_even_if_features_are_repaired(guarded, tmp_path):
+    from dataclasses import replace
+
+    from app.raw_archive.deletion import check_quarantine
+
+    config, record, *_ = guarded
+    path = tmp_path / "quarantine.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "environment": "production",
+                "excluded": [{"kind": record.kind, "identity": record.identity}],
+            }
+        )
+    )
+    path.chmod(0o600)
+    config = replace(config, quarantine_file=path)
+    with pytest.raises(ArchiveBlocked, match="quarantined"):
+        check_quarantine(config, record)
+    path.write_text("corrupt")
+    with pytest.raises(ArchiveBlocked, match="invalid"):
+        check_quarantine(config, record)
+    path.unlink()
+    with pytest.raises(ArchiveBlocked, match="unavailable"):
+        check_quarantine(config, record)

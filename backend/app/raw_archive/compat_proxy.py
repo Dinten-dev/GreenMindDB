@@ -30,18 +30,26 @@ NESTED = (
 )
 
 
-def draft(original, expected_sha256):
+def blocks(reader_port):
+    if reader_port not in {8140, 8141}:
+        raise ArchiveBlocked("Unreviewed archive reader port")
+    return tuple(block.replace(":8140", f":{reader_port}") for block in (BEFORE, NESTED))
+
+
+def draft(original, expected_sha256, *, reader_port=8140):
     if hashlib.sha256(original.encode()).hexdigest() != expected_sha256:
         raise ArchiveBlocked("Production proxy changed; inspect its new configuration first")
     if original.count(ANCHOR) != 1 or "BEGIN GREENMIND ARCHIVE COMPAT READS" in original:
         raise ArchiveBlocked("Unexpected proxy structure")
-    candidate = original.replace(ANCHOR, BEFORE + ANCHOR + NESTED, 1)
-    if rollback(candidate) != original:
+    before, nested = blocks(reader_port)
+    candidate = original.replace(ANCHOR, before + ANCHOR + nested, 1)
+    if rollback(candidate, reader_port=reader_port) != original:
         raise ArchiveBlocked("Proxy draft is not exactly reversible")
     return candidate
 
 
-def rollback(candidate):
-    if candidate.count(BEFORE) != 1 or candidate.count(NESTED) != 1:
+def rollback(candidate, *, reader_port=8140):
+    before, nested = blocks(reader_port)
+    if candidate.count(before) != 1 or candidate.count(nested) != 1:
         raise ArchiveBlocked("Compatibility proxy blocks changed")
-    return candidate.replace(BEFORE, "", 1).replace(NESTED, "", 1)
+    return candidate.replace(before, "", 1).replace(nested, "", 1)

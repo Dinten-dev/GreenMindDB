@@ -15,3 +15,7 @@ ARCHIVE_COMPAT_READS_ENABLED=false
 RETENTION_ENABLED=false
 DIRECT_RETENTION_ENABLED=false
 VISUAL_PRUNE_ENABLED=false
+
+# Private, durable exclusion register; missing/invalid configured file blocks deletion.
+RAW_ARCHIVE_QUARANTINE_FILE=FILL_PRIVATE_QUARANTINE_FILE
+# Snapshot API token is passed explicitly via --token-file; never mount into readers.

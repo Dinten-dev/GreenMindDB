@@ -22,3 +22,11 @@ def test_exact_reversal_preserves_all_existing_bytes():
         draft(original + "# drift", hashlib.sha256(original.encode()).hexdigest())
     with pytest.raises(ArchiveBlocked, match="structure"):
         draft(candidate, hashlib.sha256(candidate.encode()).hexdigest())
+
+
+def test_new_reader_port_preserves_current_dashboard_reader():
+    original = "location /dashboard { proxy_pass http://127.0.0.1:8140; }\n" + ANCHOR + "    }\n"
+    sha = hashlib.sha256(original.encode()).hexdigest()
+    candidate = draft(original, sha, reader_port=8141)
+    assert "location /dashboard { proxy_pass http://127.0.0.1:8140; }" in candidate
+    assert rollback(candidate, reader_port=8141) == original

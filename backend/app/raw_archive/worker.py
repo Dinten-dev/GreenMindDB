@@ -31,6 +31,9 @@ def configuration() -> Config:
         if os.environ.get("RAW_ARCHIVE_DELETION_APPROVAL_FILE")
         else None,
         deletion_approval_sha256=os.environ.get("RAW_ARCHIVE_DELETION_APPROVAL_SHA256", ""),
+        quarantine_file=Path(os.environ["RAW_ARCHIVE_QUARANTINE_FILE"])
+        if os.environ.get("RAW_ARCHIVE_QUARANTINE_FILE")
+        else None,
     )
 
 

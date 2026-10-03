@@ -66,6 +66,7 @@ def approval(config, now):
 
 
 def verify_deletion_evidence(config, recording, receipt, destination, now):
+    check_quarantine(config, recording)
     if now < eligible_after(recording, receipt, config.local_grace_days):
         raise ArchiveBlocked("Seven-day local reserve has not elapsed")
     data = approval(config, now)
@@ -184,3 +185,41 @@ def verify_deletion_evidence(config, recording, receipt, destination, now):
         destination.download_snapshot(name, receipt["remote_key"], wav, recording.size)
         if wav.stat().st_size != recording.size or checksum(wav) != recording.sha256:
             raise ArchiveBlocked("Snapshot WAV readback mismatch")
+
+
+def check_quarantine(config, recording):
+    """A configured exclusion register must remain readable; never silently ignore it."""
+    path = config.quarantine_file
+    if path is None:
+        return
+    if not path.is_absolute() or path.is_symlink():
+        raise ArchiveBlocked("Private quarantine register required")
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as body:
+            info = os.fstat(body.fileno())
+            if (
+                info.st_uid not in {0, os.getuid()}
+                or info.st_mode & 0o077
+                or info.st_size > 1024**2
+            ):
+                raise ArchiveBlocked("Quarantine register must be private and bounded")
+            data = json.loads(body.read(1024**2 + 1))
+        if data.get("schema") != 1 or data.get("environment") != config.namespace:
+            raise ArchiveBlocked("Quarantine identity mismatch")
+        entries = data["excluded"]
+        if not isinstance(entries, list) or any(
+            not isinstance(row, dict)
+            or row.get("kind") not in {"gateway", "direct"}
+            or not isinstance(row.get("identity"), str)
+            or not row["identity"]
+            for row in entries
+        ):
+            raise ArchiveBlocked("Invalid quarantine entries")
+        if any(
+            row["kind"] == recording.kind and row["identity"] == recording.identity
+            for row in entries
+        ):
+            raise ArchiveBlocked("Recording is quarantined; original retained")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ArchiveBlocked("Quarantine register is unavailable or invalid") from error
