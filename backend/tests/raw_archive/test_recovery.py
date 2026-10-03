@@ -91,6 +91,32 @@ def test_metadata_restore_refuses_live_database(tmp_path):
         restore_metadata(tmp_path / "missing", "a" * 64, engine)
 
 
+def test_cli_resource_pause_is_structured_and_never_starts_backup(tmp_path, monkeypatch, capsys):
+    from app.raw_archive import recovery, runner
+
+    class Probe:
+        last = {"reason": "memory", "available_mib": 480, "required_mib": 512}
+
+        def __call__(self):
+            return False
+
+    monkeypatch.setattr(runner, "health_probe", Probe)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "recovery",
+            "--output",
+            str(tmp_path / "untouched"),
+            "--ledger",
+            str(tmp_path / "not-opened.sqlite3"),
+        ],
+    )
+    assert recovery.entrypoint() == 75
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "memory" and result["deleted_files"] == 0 and not result["complete"]
+    assert not (tmp_path / "untouched").exists()
+
+
 def test_offsite_bundle_reads_all_bytes_and_restores_both_catalogs(tmp_path):
     class Box:
         identity = "isolated-box"

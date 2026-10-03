@@ -24,3 +24,7 @@ ProtectSystem=strict
 ProtectHome=read-only
 UMask=0077
 ReadWritePaths=FILL_PRIVATE_BACKUP_DIRECTORY
+# SQLite may create its WAL shared-memory index even for mode=ro readers.
+# Keep the actual source database bind-mounted read-only.
+ReadWritePaths=/var/lib/greenmind-raw-copy
+BindReadOnlyPaths=/var/lib/greenmind-raw-copy/archive.sqlite3

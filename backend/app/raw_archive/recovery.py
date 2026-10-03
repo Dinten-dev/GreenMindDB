@@ -400,7 +400,7 @@ def main():
 
     def checkpoint():
         if not probe():
-            raise SafetyPause("Recovery backup paused to preserve receiver headroom")
+            raise SafetyPause(probe.last.get("reason", "receiver_headroom"), probe.last)
 
     checkpoint()
     private_directory(args.output)
@@ -500,5 +500,26 @@ def main():
     print(json.dumps(result))
 
 
+def entrypoint():
+    from .health import SafetyPause
+
+    try:
+        main()
+        return 0
+    except SafetyPause as error:
+        print(
+            json.dumps(
+                {
+                    "status": "paused",
+                    "reason": error.code,
+                    "details": error.details,
+                    "deleted_files": 0,
+                    "complete": False,
+                }
+            )
+        )
+        return 75
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(entrypoint())

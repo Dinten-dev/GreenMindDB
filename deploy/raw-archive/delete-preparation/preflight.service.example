@@ -27,3 +27,5 @@ ProtectSystem=strict
 ProtectHome=read-only
 UMask=0077
 ReadWritePaths=FILL_PRIVATE_REPORT_DIRECTORY
+ReadWritePaths=/var/lib/greenmind-raw-copy
+BindReadOnlyPaths=/var/lib/greenmind-raw-copy/archive.sqlite3

@@ -52,6 +52,10 @@ einschließlich WAL. PostgreSQL-Kataloge werden getrennt in nur lesenden,
 wiederholbar konsistenten Transaktionen gesichert: Organisationen, Benutzer,
 Zonenrechte, Sensoren, WAV-Metadaten, Features und verdichtete Visualisierung.
 Rohmessungen und laufende Direct-Payloads werden nicht kopiert.
+SQLite benötigt für einen WAL-Leser gegebenenfalls Zugriff auf seine
+Shared-Memory-Laufzeitdateien. Die Service-Vorlagen erlauben diesen im privaten
+Journalverzeichnis, binden aber die eigentliche Quelldatenbank schreibgeschützt
+ein; zusätzlich erzwingen die Verbindungen `mode=ro` und `query_only=ON`.
 Die zwei PostgreSQL-Snapshots und das Journal sind jeweils konsistent, aber
 **kein atomarer gemeinsamer Snapshot aller drei Datenbanken**; per-Datei-Belege
 und erneute Quellprüfungen bleiben notwendig.
