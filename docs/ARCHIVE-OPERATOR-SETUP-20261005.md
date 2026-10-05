@@ -92,6 +92,21 @@ und könnte weitere Ressourcen verändern. Für diese Abnahme ist ein von Peter
 erstellter manueller Snapshot plus Read-only Token vorzuziehen. API-Zugriff
 ersetzt keine vollständigen Snapshot-Rücklesetests.
 
+Der vorbereitete Host-Broker unterstützt dafür einen getrennten Read-only-
+Transport mit vier privaten Einstellungen: `RAW_ARCHIVE_READ_ONLY_SFTP_USER`,
+`RAW_ARCHIVE_READ_ONLY_SFTP_HOST`, `RAW_ARCHIVE_READ_ONLY_SFTP_KEY` und
+`RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS`. Diese gehören ausschließlich in seine
+private Konfiguration. Beispielnutzer `u676312-sub1` muss den passenden Host
+`u676312-sub1.your-storagebox.de` verwenden und exakt im Verzeichnis
+`greenmind-raw` verwurzelt sein. Der Adapter übersetzt die Unterkonto-Pfade,
+bewahrt die ursprüngliche Archividentität in den Kopierbelegen und prüft die
+heruntergeladenen Bytes wie bisher vollständig. Teilweise konfigurierte
+Read-only-Werte oder Wiederverwendung des Upload-Schlüssels blockieren;
+es erfolgt dann kein stiller Rückfall auf den Upload-Zugang.
+Es gibt keinen Upload-, Lösch-, Snapshot- oder allgemeinen Befehlsaufruf auf
+diesem Adapter. Tatsächliche schreibgeschützte Providerrechte müssen zusätzlich
+über Hetzner bestätigt werden. Der aktive Broker wurde damit nicht ersetzt.
+
 Hetzner-Dokumentation: [Snapshots](https://docs.hetzner.com/storage/storage-box/snapshots/),
 [Unterkonten und schreibgeschützter Zugriff](https://docs.hetzner.com/storage/storage-box/general/),
 [API-Token](https://docs.hetzner.com/cloud/api/getting-started/generating-api-token/).

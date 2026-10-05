@@ -170,7 +170,9 @@ def main():
     config.guard(reading=True)
     if config.delete_enabled:
         raise ArchiveBlocked("Read broker never enables deletion")
-    destination = StorageBox(
+    from .read_only_box import configured_read_only_box
+
+    destination = configured_read_only_box() or StorageBox(
         host=os.environ["RAW_ARCHIVE_SFTP_HOST"],
         user=os.environ["RAW_ARCHIVE_SFTP_USER"],
         key=Path(os.environ["RAW_ARCHIVE_SFTP_KEY"]),
