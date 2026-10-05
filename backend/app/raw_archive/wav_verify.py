@@ -3,7 +3,7 @@
 import argparse
 import json
 import os
-import pwd
+import pwd as accounts
 import sqlite3
 import subprocess
 import time
@@ -28,7 +28,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    expected = pwd.getpwnam("greenmind-raw-copy")
+    expected = accounts.getpwnam("greenmind-raw-copy")
     if os.geteuid() != expected.pw_uid:
         raise ArchiveBlocked("Run verification as the configured greenmind-raw-copy account")
     private_directory(args.output)

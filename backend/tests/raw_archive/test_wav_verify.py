@@ -12,7 +12,7 @@ from app.raw_archive.policy import ArchiveBlocked
 
 def test_wrong_account_rejected_before_output_or_connections(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        wav_verify.pwd, "getpwnam", lambda _: SimpleNamespace(pw_uid=os.geteuid() + 1)
+        wav_verify.accounts, "getpwnam", lambda _: SimpleNamespace(pw_uid=os.geteuid() + 1)
     )
     monkeypatch.setattr("sys.argv", ["wav_verify", "--output", str(tmp_path / "new")])
     with pytest.raises(ArchiveBlocked, match="account"):
@@ -30,7 +30,9 @@ def test_memory_pause_has_no_upload_or_readback(tmp_path, monkeypatch, capsys):
         def close(self):
             pass
 
-    monkeypatch.setattr(wav_verify.pwd, "getpwnam", lambda _: SimpleNamespace(pw_uid=os.geteuid()))
+    monkeypatch.setattr(
+        wav_verify.accounts, "getpwnam", lambda _: SimpleNamespace(pw_uid=os.geteuid())
+    )
     monkeypatch.setattr(runner, "health_probe", Probe)
     monkeypatch.setattr(
         runner,
