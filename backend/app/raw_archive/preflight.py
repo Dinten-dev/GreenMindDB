@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .deletion import eligible_after, verify_deletion_evidence
+from .deletion import approval, check_quarantine, eligible_after, verify_deletion_evidence
 from .policy import ArchiveBlocked, Recording
 from .recovery import private_directory, recovery_index
 
@@ -99,7 +99,16 @@ def main():
             ledger = ReadLedger(db)
             # Five slots per pipeline prevent a Gateway-only pilot. Discovery
             # is deliberately bounded; this is not an all-files reconciliation.
-            query = db.execute("""SELECT receipt FROM (
+            if args.verify_proof:
+                reviewed = approval(config, now)
+                query = db.execute(
+                    "SELECT receipt FROM archive WHERE state='verified' AND id IN ("
+                    + ",".join("?" for _ in reviewed["candidates"])
+                    + ") ORDER BY id",
+                    tuple(reviewed["candidates"]),
+                )
+            else:
+                query = db.execute("""SELECT receipt FROM (
                 SELECT receipt FROM archive WHERE state='verified'
                 AND json_extract(receipt,'$.recording.kind')='gateway' LIMIT 500)
                 UNION ALL SELECT receipt FROM (
@@ -111,13 +120,14 @@ def main():
                     raise ArchiveBlocked("Preflight reached its time budget")
                 receipt = json.loads(encoded)
                 record = Recording.from_receipt(receipt["recording"])
-                if per_kind.get(record.kind, 5) >= 5:
+                if not args.verify_proof and per_kind.get(record.kind, 5) >= 5:
                     continue
                 if eligible_after(record, receipt) > now:
                     continue
                 if not healthy():
                     raise SafetyPause("Preflight paused for receiver headroom")
                 try:
+                    check_quarantine(config, record)
                     catalog = catalogs[record.kind]
                     if record.kind == "gateway":
                         current = catalog.inspect(uuid.UUID(record.identity))
@@ -160,6 +170,9 @@ def main():
                     report["recovery_index"]["published_verified"] = True
                 if args.verify_proof:
                     report["proof_passed"] = []
+                    reviewed = approval(config, now)
+                    if set(reviewed["candidates"]) != {item.archive_id for item in selected}:
+                        raise ArchiveBlocked("Rehearsal must cover the entire reviewed pilot")
                     for recording in selected:
                         if not healthy():
                             raise SafetyPause("Proof readback paused for receiver headroom")

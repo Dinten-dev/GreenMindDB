@@ -1,5 +1,10 @@
 # Archiv-Abnahme: Zugänge und tatsächlicher Stand
 
+**Aktualisierung 5. Oktober:** [Aktuelle WAV-Metadatenvorbereitung und
+Zugangsübersicht](ARCHIVE-WAV-METADATA-20261005.md). Die unten genannten
+Wiederherstellungsanforderungen des Vollkatalogs sind durch einen separat
+geprüften WAV-Katalog zu ersetzen; sein Export bleibt inaktiv.
+
 Stand 3. Oktober 2026, 17:35 UTC. Keine WAV-Löschung freigegeben.
 Keine neuen administrativen Identitäten wurden in dieser Folgearbeit angelegt.
 Keine Empfangsdienste, Proxy-Konfigurationen oder bestehenden Kopierzeitpläne

@@ -1,5 +1,10 @@
 # Löschung vorbereiten; Originale behalten
 
+**Aktualisierung 5. Oktober:** Für zukünftige WAV-Löschfreigaben gilt
+[die getrennte WAV-Metadatensicherung](ARCHIVE-WAV-METADATA-20261005.md).
+Der unten beschriebene sensible Vollkatalog ist eine ältere, inaktive Vorbereitung
+und wird weder aktiviert noch als neuer WAV-Wiederherstellungsnachweis verwendet.
+
 Die neue Schutzlogik ist vorbereitet. **Keine WAV-Löschung ist freigegeben.**
 Bestehende Storage-Box-WAVs werden weder ersetzt noch erneut gesammelt hochgeladen.
 Gateway, Direct und Legacy behalten ihre Empfangsdienste und Endpunkte.

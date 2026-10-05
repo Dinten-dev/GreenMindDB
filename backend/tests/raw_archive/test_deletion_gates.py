@@ -9,7 +9,9 @@ import pytest
 
 from app.raw_archive.deletion import eligible_after
 from app.raw_archive.policy import ArchiveBlocked, Config, Ledger, Recording, archive_one
+from app.raw_archive.readiness import REQUIRED_TESTS
 from app.raw_archive.recovery import recovery_index
+from app.raw_archive.wav_catalog import ALLOWLIST_SHA256, COLUMNS, FORMAT
 from app.raw_archive.worker import configuration
 
 from .test_policy import PAYLOAD, Destination, Source
@@ -58,13 +60,30 @@ def guarded(tmp_path):
     index, digest = recovery_index([record], ledger, config.namespace, destination)
     destination.download_recovery = lambda key, path, limit, snapshot: path.write_bytes(index)
     destination.download_snapshot = lambda name, key, path, limit: path.write_bytes(PAYLOAD)
+    tables = {kind: dict.fromkeys(names, 0) for kind, names in COLUMNS.items()}
+    tables["gateway"]["wav_file"] = 1
+    tables["direct"]["direct_revision"] = 1
+    files = [
+        {
+            "kind": kind,
+            "file": kind + "-000000.jsonl.gz",
+            "sha256": "a" * 64,
+            "rows": 1,
+            "bytes": 100,
+            "decoded_bytes": 100,
+        }
+        for kind in ("ledger", "gateway", "direct")
+    ]
     catalog = json.dumps(
         {
-            "schema": 1,
+            "schema": 2,
+            "format": FORMAT,
+            "allowlist_sha256": ALLOWLIST_SHA256,
+            "tables": tables,
             "environment": "production",
             "destination": destination.identity,
             "created_at": (NOW - timedelta(minutes=10)).isoformat(),
-            "files": [{"sha256": "a" * 64, "rows": 1} for _ in range(3)],
+            "files": files,
         }
     ).encode()
     catalog_ref = {
@@ -74,14 +93,17 @@ def guarded(tmp_path):
     }
     proof = json.dumps(
         {
-            "schema": 1,
+            "schema": 2,
+            "format": FORMAT,
+            "allowlist_sha256": ALLOWLIST_SHA256,
+            "tables": tables,
             "environment": "production",
             "destination": destination.identity,
             "created_at": NOW.isoformat(),
             "deleted_files": 0,
             "catalog_manifest": catalog_ref,
             "restored": [
-                {"kind": kind, "rows": 1, "sha256": "a" * 64}
+                {"kind": kind, "rows": 1, "sha256": "a" * 64, "file": kind + "-000000.jsonl.gz"}
                 for kind in ("ledger", "gateway", "direct")
             ],
         }
@@ -95,7 +117,7 @@ def guarded(tmp_path):
         proof if key == proof_ref["key"] else catalog
     )
     data = {
-        "schema": 1,
+        "schema": 2,
         "environment": "production",
         "created_at": NOW.isoformat(),
         "expires_at": (NOW + timedelta(hours=1)).isoformat(),
@@ -103,11 +125,60 @@ def guarded(tmp_path):
         "candidates": json.loads(index)["candidates"],
         "catalog_manifest": catalog_ref,
         "catalog_restore": proof_ref,
-        "snapshot": {"name": "daily-20261003", "created_at": NOW.isoformat()},
+        "snapshot": {
+            "name": "daily-20261003",
+            "created_at": NOW.isoformat(),
+            "provider_id": 123,
+            "storage_box_id": 456,
+            "provider_verified": True,
+        },
         "recovery_index": {
             "key": f"production/recovery/{digest}.json",
             "sha256": digest,
             "size": len(index),
+        },
+    }
+    data["release_acceptance"] = {
+        "schema": 2,
+        "environment": "production",
+        "destination": destination.identity,
+        "revision": "a" * 40,
+        "checked_at": NOW.isoformat(),
+        "deployed_at": (NOW - timedelta(days=2)).isoformat(),
+        "reader_live": True,
+        "catalog_manifest": catalog_ref,
+        "snapshot": data["snapshot"],
+        "recovery_index": data["recovery_index"],
+        "tests": dict.fromkeys(REQUIRED_TESTS, True),
+        "evidence_sha256": dict.fromkeys(
+            ("downloads", "observation", "reconciliation", "diagnostic", "provider"), "a" * 64
+        ),
+        "observation": {
+            "receiver_observation_passed": True,
+            "samples": 289,
+            "elapsed_seconds": 86400,
+            "maximum_gap_seconds": 310,
+            "errors": 0,
+            "protected_changes": 0,
+            "unhealthy_samples": 0,
+            "source_progress": {"gateway": True, "direct": True},
+            "started_at": (NOW - timedelta(days=1)).isoformat(),
+            "finished_at": NOW.isoformat(),
+        },
+        "reconciliation": {
+            "complete": True,
+            "eligible_pending_files": 0,
+            "receipt_mismatches": 0,
+            "unknown_eligible_files": 0,
+            "inventory_sha256": "a" * 64,
+            "cutoff": NOW.isoformat(),
+        },
+        "buckets": {
+            record.bucket: {
+                "versioning": "Enabled",
+                "enabled_lifecycle_rules": 0,
+                "checked_at": NOW.isoformat(),
+            }
         },
     }
     path = tmp_path / "reviewed.json"
@@ -245,3 +316,31 @@ def test_quarantine_blocks_even_if_features_are_repaired(guarded, tmp_path):
     path.unlink()
     with pytest.raises(ArchiveBlocked, match="unavailable"):
         check_quarantine(config, record)
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        "reader_live",
+        "tests",
+        "observation",
+        "reconciliation",
+        "buckets",
+        "evidence_sha256",
+        "snapshot",
+        "revision",
+    ],
+)
+def test_missing_release_gate_never_removes_original(guarded, gate):
+    def change(data):
+        del data["release_acceptance"][gate]
+
+    with pytest.raises(ArchiveBlocked):
+        execute(guarded, guarded[-1](change))
+    assert not guarded[2].deleted
+
+
+def test_old_full_catalog_approval_is_rejected(guarded):
+    with pytest.raises(ArchiveBlocked, match="schema"):
+        execute(guarded, guarded[-1](lambda data: data.update(schema=1)))
+    assert not guarded[2].deleted

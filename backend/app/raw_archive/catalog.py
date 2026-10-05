@@ -194,6 +194,7 @@ class DirectCatalog:
                 or revision.raw_deleted_at is not None
                 or not revision.verified_at
                 or segment.published_revision != segment.revision
+                or revision_number != segment.published_revision
             ):
                 raise ArchiveBlocked("Direct segment is not sealed and verified")
             manifest = revision.manifest

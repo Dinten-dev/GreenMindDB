@@ -50,7 +50,7 @@ def approval(config, now):
     created, expires = stamp(data.get("created_at")), stamp(data.get("expires_at"))
     if not created <= now < expires <= created + timedelta(hours=24):
         raise ArchiveBlocked("Deletion manifest expired or has an invalid validity window")
-    if data.get("schema") != 1 or data.get("environment") != config.namespace:
+    if data.get("schema") != 2 or data.get("environment") != config.namespace:
         raise ArchiveBlocked("Wrong deletion manifest schema or environment")
     candidates = data.get("candidates")
     if not isinstance(candidates, dict) or not 1 <= len(candidates) <= 10:
@@ -78,6 +78,9 @@ def verify_deletion_evidence(config, recording, receipt, destination, now):
     }
     if candidate != expected or data.get("destination") != destination.identity:
         raise ArchiveBlocked("File is outside the reviewed immutable deletion set")
+    from .readiness import validate_release
+
+    validate_release(data, recording, now)
     if (
         receipt["snapshot"].get("VersionId") in {None, "", "null"}
         and data.get("legacy_null_accepted") is not True
@@ -134,19 +137,12 @@ def verify_deletion_evidence(config, recording, receipt, destination, now):
             raise ArchiveBlocked("Catalog restoration proof readback mismatch")
         proof = json.loads(proof_path.read_text())
         if (
-            proof.get("schema") != 1
+            proof.get("schema") != 2
             or proof.get("environment") != config.namespace
             or proof.get("destination") != destination.identity
             or proof.get("deleted_files") != 0
         ):
             raise ArchiveBlocked("Catalog restoration proof identity mismatch")
-        restored = proof.get("restored", [])
-        if (
-            len(restored) != 3
-            or {item.get("kind") for item in restored} != {"ledger", "gateway", "direct"}
-            or any(type(item.get("rows")) is not int or item["rows"] <= 0 for item in restored)
-        ):
-            raise ArchiveBlocked("Complete journal and catalog restore is required")
         proof_at = stamp(proof.get("created_at"))
         if not now - timedelta(hours=24) <= proof_at <= snapshot_at:
             raise ArchiveBlocked("Catalog restore must be recent and included in snapshot")
@@ -175,12 +171,9 @@ def verify_deletion_evidence(config, recording, receipt, destination, now):
             <= proof_at
         ):
             raise ArchiveBlocked("Catalog backup predates the verified recording")
-        files = catalog.get("files", [])
-        if len(files) != 3:
-            raise ArchiveBlocked("Catalog manifest does not cover all three sources")
-        expected_restore = {(item.get("sha256"), item.get("rows")) for item in files}
-        if expected_restore != {(item.get("sha256"), item.get("rows")) for item in restored}:
-            raise ArchiveBlocked("Restored rows and hashes differ from catalog manifest")
+        from .readiness import validate_metadata_restore
+
+        validate_metadata_restore(catalog, proof)
         wav = Path(folder) / "snapshot.wav"
         destination.download_snapshot(name, receipt["remote_key"], wav, recording.size)
         if wav.stat().st_size != recording.size or checksum(wav) != recording.sha256:
