@@ -2,6 +2,8 @@
 
 import os
 import runpy
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -31,3 +33,26 @@ def test_copy_entry_overrides_every_destructive_flag(monkeypatch):
     with pytest.raises(SystemExit) as result:
         runpy.run_path(str(script), run_name="__main__")
     assert result.value.code == 0
+
+
+def test_adaptive_launcher_ignores_stale_environment_and_working_directory(tmp_path):
+    stale = tmp_path / "backend"
+    (stale / "app/raw_archive").mkdir(parents=True)
+    (stale / "app/__init__.py").write_text("")
+    (stale / "app/raw_archive/__init__.py").write_text("")
+    script = Path(__file__).resolve().parents[3] / "deploy/raw-archive/adaptive-copy.py"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import runpy,sys;runpy.run_path(sys.argv[1]);import app;print(app.__file__)",
+            str(script),
+        ],
+        cwd=stale,
+        env={**os.environ, "PYTHONPATH": str(stale)},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert Path(result.stdout.strip()) == script.parents[2] / "backend/app/__init__.py"

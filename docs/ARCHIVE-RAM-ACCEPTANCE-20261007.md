@@ -11,6 +11,12 @@ Resumable pauses return 75, accepted by the archive job service; their report
 still says paused/blocked/incomplete and does not claim a completed backup.
 Real metadata failures remain nonzero failures.
 
+The deployed EnvironmentFile supplied an older PYTHONPATH, overriding systemd's
+release setting. Actual scheduled-run logs exposed this import failure. The
+adaptive launcher now selects its own repository/flat-package backend before
+importing archive modules. A subprocess regression test supplies both a stale
+PYTHONPATH and stale working directory. No credential file is rewritten.
+
 ## Runtime changes
 
 - One private host lease covers copying, catalog extraction and ZIP generation.
@@ -107,3 +113,24 @@ database or Staging shutdown and no reduced safety threshold is a workaround.
 Operator-created final snapshots remain required while only a read-only provider
 API token is configured. Do not report deletion readiness before every real gate
 passes.
+
+## Operator evidence on 07.10.2026
+
+The regular MinIO operator alias is human-configured. The diagnostic identity
+`greenmind-diagnostic-20261007-48d6f68755ae94ac` can inspect only versioning and
+lifecycle on the two production WAV buckets. Actual queries found neither
+versioning nor lifecycle enabled; a later guarded versioning attempt paused
+before making any change. Bucket readiness is therefore **not passed**.
+
+The narrow SQL role `greenmind_wav_metadata_b4ae52d674aa` was created and its real
+column grants/read-only/non-administrative properties were verified. It exports
+no users, emails, password hashes or device credentials. The dedicated
+`u676312-sub1` key produced successful SHA-256/full-WAV readbacks for two
+previously approved recordings. Those samples do not accept a complete catalog.
+
+Protected receiver start times/restart counts and Production/Staging proxy
+hashes stayed unchanged. Job definitions were updated without restarting any
+receiver. The read-only broker replacement is prepared, not activated. The new
+reader is not accepted/live. Full catalog publication/restore/reconciliation,
+the final provider snapshot, accepted reader/proxy and fresh 24-hour proof
+remain mandatory; no activation-only readiness is claimed.

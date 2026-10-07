@@ -8,9 +8,13 @@ import os
 import sys
 from pathlib import Path
 
-# Packaged releases import only their own code, including SFTP subprocesses.
-release_backend = Path(__file__).resolve().parent / "backend"
-if release_backend.is_dir():
+# EnvironmentFile may override systemd's PYTHONPATH with an older release.
+# Resolve either repository or flat-package layout from this immutable script.
+script = Path(__file__).resolve()
+release_backend = script.parents[2] / "backend"
+if not (release_backend / "app/raw_archive/health.py").is_file():
+    release_backend = script.parent / "backend"
+if (release_backend / "app/raw_archive/health.py").is_file():
     sys.path.insert(0, str(release_backend))
     os.environ["PYTHONPATH"] = str(release_backend)
 
