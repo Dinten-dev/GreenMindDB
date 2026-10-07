@@ -1,5 +1,8 @@
 """Both-bucket preflight and absent lifecycle are mandatory before any write."""
 
+import runpy
+from pathlib import Path
+
 import pytest
 from botocore.exceptions import ClientError
 
@@ -73,3 +76,15 @@ def test_resource_pause_never_suspends_or_deletes_versions():
         enable_reviewed(client, checkpoint=checkpoint)
     assert client.changed == [BUCKETS[0]]
     assert client.states[BUCKETS[0]] == "Enabled"
+
+
+def test_operator_head_comparison_keeps_legacy_bytes_and_new_versions_distinct():
+    script = (
+        Path(__file__).resolve().parents[3] / "deploy/raw-archive/acceptance/enable-versioning.py"
+    )
+    identity = runpy.run_path(str(script))["head_identity"]
+    old = dict(ETag="fixed", ContentLength=456044, LastModified="fixed")
+    assert identity(old) == identity(dict(old, VersionId="null"))
+    assert identity(old) != identity(dict(old, VersionId="new-version"))
+    assert identity(old) != identity(dict(old, ContentLength=456046))
+    assert identity(old) != identity(dict(old, ETag="replaced"))

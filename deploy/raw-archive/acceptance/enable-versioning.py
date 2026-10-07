@@ -57,6 +57,18 @@ def protected():
     )
 
 
+def head_identity(head):
+    # Enabling versioning exposes existing unversioned objects as version "null".
+    # This read-only comparison does not permit deletion of those objects.
+    version = head.get("VersionId")
+    return {
+        "VersionId": None if version in (None, "null") else str(version),
+        **{
+            key: str(head.get(key)) for key in ("ETag", "ContentLength", "LastModified")
+        },
+    }
+
+
 def main():
     import boto3
     from botocore.config import Config
@@ -118,17 +130,14 @@ def main():
         for kind, record in selected.items():
             assert record["bucket"] in BUCKETS
             h = client.head_object(Bucket=record["bucket"], Key=record["key"])
-            heads[kind] = {
-                key: str(h.get(key))
-                for key in ("VersionId", "ETag", "ContentLength", "LastModified")
-            }
+            heads[kind] = head_identity(h)
         if args.enable:
             report.update(enable_reviewed(client, checkpoint=guard))
         else:
             report["buckets"] = [inspected(client, bucket) for bucket in BUCKETS]
         for kind, record in selected.items():
             h = client.head_object(Bucket=record["bucket"], Key=record["key"])
-            assert heads[kind] == {key: str(h.get(key)) for key in heads[kind]}
+            assert heads[kind] == head_identity(h)
         guard()
         assert protected() == before
         report.update(

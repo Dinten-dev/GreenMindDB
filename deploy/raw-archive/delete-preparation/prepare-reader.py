@@ -86,7 +86,9 @@ def main():
             "ON_ERROR_STOP=1",
         ],
         input="SET lock_timeout='150ms'; SET statement_timeout='3s'; "
-        "GRANT SELECT ON direct_enrollment TO " + role + ";\n",
+        "GRANT SELECT (hardware_id,device_id,created_at) ON direct_enrollment TO "
+        + role
+        + ";\n",
         text=True,
         capture_output=True,
         timeout=8,
