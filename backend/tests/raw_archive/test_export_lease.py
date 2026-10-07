@@ -15,6 +15,7 @@ def test_resource_pause_withdraws_ready_marker_before_unlock(tmp_path, monkeypat
     main = scope["main"]
     settings = main.__globals__
     settings["ROOT"] = tmp_path
+    monkeypatch.setenv("RAW_ARCHIVE_COORDINATION_DIR", str(tmp_path))
     monkeypatch.setattr(settings["os"], "geteuid", lambda: 0)
     monkeypatch.setattr(settings["os"], "chown", lambda *args: None)
     monkeypatch.setattr(settings["pwd"], "getpwnam", lambda _: SimpleNamespace(pw_gid=0))
