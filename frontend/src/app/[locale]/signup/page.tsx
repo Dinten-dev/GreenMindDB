@@ -1,5 +1,7 @@
 'use client';
 
+import { useLocale, useTranslations } from 'next-intl';
+
 import BrandLogo from '@/components/BrandLogo';
 
 import { useState } from 'react';
@@ -7,6 +9,8 @@ import Link from 'next/link';
 import { apiSignup } from '@/lib/api';
 
 export default function SignupPage() {
+  const copy = useTranslations('Content');
+  const locale = useLocale();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,9 +29,9 @@ export default function SignupPage() {
       setPassword('');
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message || 'Registrierung fehlgeschlagen');
+        setError(err.message || copy('registrationFailed'));
       } else {
-        setError('Registrierung fehlgeschlagen');
+        setError(copy('registrationFailed'));
       }
     } finally {
       setLoading(false);
@@ -38,12 +42,12 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center px-6 bg-apple-gray-100">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-6">
+          <Link href={`/${locale}`} className="inline-flex items-center gap-2 mb-6">
             <BrandLogo size={40} />
           </Link>
-          <h1 className="text-2xl font-bold text-apple-gray-800">Konto erstellen</h1>
+          <h1 className="text-2xl font-bold text-apple-gray-800">{copy('createAnAccount')}</h1>
           <p className="text-sm text-apple-gray-400 mt-2">
-            Beginnen Sie noch heute mit der Überwachung Ihres Gewächshauses.
+            {copy('startMonitoringYourGreenhouseToday')}
           </p>
         </div>
 
@@ -58,30 +62,34 @@ export default function SignupPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">Name</label>
+              <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">
+                {copy('nameText')}
+              </label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                placeholder="Ihr Name"
+                placeholder={copy('yourName')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">E-Mail</label>
+              <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">
+                {copy('emailText')}
+              </label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                placeholder="sie@beispiel.com"
+                placeholder={copy('emailExample')}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">
-                Passwort
+                {copy('password')}
               </label>
               <input
                 type="password"
@@ -89,7 +97,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                placeholder="Mind. 8 Zeichen, Gross- + Kleinbuchstaben + Zahl"
+                placeholder={copy('atLeast8CharactersWithUppercaseLowercaseAnd')}
               />
             </div>
             <button
@@ -97,18 +105,18 @@ export default function SignupPage() {
               disabled={loading}
               className="w-full py-2.5 bg-gm-green-500 text-white rounded-apple font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
-              {loading ? 'Konto wird erstellt…' : 'Konto erstellen'}
+              {loading ? copy('creatingAccount') : copy('createAnAccount')}
             </button>
           </form>
         </div>
 
         <p className="text-center text-sm text-apple-gray-400 mt-6">
-          Bereits ein Konto?{' '}
+          {copy('alreadyHaveAnAccount')}{' '}
           <Link
-            href="/login"
+            href={`/${locale}/login`}
             className="text-gm-green-500 font-medium hover:text-gm-green-600 transition-colors"
           >
-            Anmelden
+            {copy('signIn')}
           </Link>
         </p>
       </div>

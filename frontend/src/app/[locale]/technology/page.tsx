@@ -1,25 +1,27 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import ScrollReveal from '@/components/ScrollReveal';
 
 export default function TechnologyPage() {
+  const copy = useTranslations('Content');
   return (
     <div className="min-h-screen">
       <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
         <ScrollReveal>
           <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-            Technologie
+            {copy('technology')}
           </p>
           <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-            Die Wissenschaft
+            {copy('theScience')}
             <br />
-            hinter GreenMind.
+            {copy('behindGreenMind')}
           </h1>
         </ScrollReveal>
         <ScrollReveal delay={200}>
           <p className="text-xl text-apple-gray-500 max-w-2xl mb-12 md:mb-20 leading-relaxed">
-            Wie wir bioelektrische Pflanzensignale erfassen, verarbeiten und in verwertbare
-            Erkenntnisse für den Anbau umwandeln.
+            {copy('howWeCaptureAndProcessPlantBioelectricalSignals')}
           </p>
         </ScrollReveal>
 
@@ -27,19 +29,13 @@ export default function TechnologyPage() {
           <ScrollReveal>
             <section className="max-w-3xl">
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-6">
-                Bioelektrische Signale
+                {copy('bioelectricalSignals')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed mb-4">
-                Pflanzen reagieren auf Veränderungen in ihrer Umgebung mit messbaren elektrischen
-                Signalen — auf Licht, Wasserverfügbarkeit, Temperatur, Nährstoffe und
-                Schädlingsbefall. Wissenschaftliche Studien zeigen, dass diese Signale
-                Stressinformationen enthalten, die herkömmliche Umgebungssensoren nicht liefern
-                können.
+                {copy('plantsRespondToChangesInTheirEnvironmentWith')}
               </p>
               <p className="text-apple-gray-500 leading-relaxed">
-                GreenMind erfasst diese Signale direkt an der Pflanze — nicht-invasiv und
-                kontinuierlich. In Kombination mit klassischen Umweltdaten wie Temperatur und
-                Bodenfeuchtigkeit entsteht ein umfassendes Bild des Pflanzenzustands.
+                {copy('greenmindRecordsTheseSignalsDirectlyFromThePlant')}
               </p>
             </section>
           </ScrollReveal>
@@ -47,22 +43,22 @@ export default function TechnologyPage() {
           <section>
             <ScrollReveal>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-8">
-                Drei Schichten, ein System
+                {copy('threeLayersOneSystem')}
               </h2>
             </ScrollReveal>
             <div className="flex flex-col gap-4 md:grid md:grid-cols-3 md:gap-6">
               {[
                 {
-                  title: 'Sensorik',
-                  desc: 'Sensoren an der Pflanze erfassen bioelektrische Signale und zeichnen parallel Umgebungsdaten auf — Temperatur, Licht, Luftfeuchtigkeit, Bodenfeuchtigkeit. Alles synchron auf einer gemeinsamen Zeitachse.',
+                  title: copy('sensing'),
+                  desc: copy('sensorsAttachedToThePlantCaptureBioelectricalSignals'),
                 },
                 {
-                  title: 'Datenverarbeitung',
-                  desc: 'Rohdaten werden automatisch gefiltert, normalisiert und in analysierbare Zeitreihen aufbereitet. Muster und Abweichungen werden identifiziert — als Basis für die Interpretation.',
+                  title: copy('dataProcessing'),
+                  desc: copy('rawDataIsAutomaticallyFilteredNormalizedAndPrepared'),
                 },
                 {
-                  title: 'Auswertung',
-                  desc: 'Signalmuster werden mit dokumentierten Stressereignissen abgeglichen. So entstehen Erkenntnisse über Zusammenhänge zwischen Pflanzensignalen und realen Bedingungen im Feld.',
+                  title: copy('analysis'),
+                  desc: copy('signalPatternsAreComparedWithDocumentedStressEvents'),
                 },
               ].map((item, i) => (
                 <ScrollReveal key={item.title} delay={i * 150}>
@@ -78,17 +74,13 @@ export default function TechnologyPage() {
           <ScrollReveal>
             <section className="max-w-3xl">
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-6">
-                Hardware
+                {copy('hardware')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed mb-4">
-                Das System besteht aus drei Ebenen: ESP32-basierte Sensoreinheiten im Feld erfassen
-                die Daten und übermitteln sie an Raspberry Pi Gateways. Diese speichern lokal und
-                leiten die Daten an den zentralen Server weiter. Lokale Datenhaltung garantiert,
-                dass keine Messwerte verloren gehen — auch bei Verbindungsunterbrüchen.
+                {copy('theSystemHasThreeLayersESP32BasedSensor')}
               </p>
               <p className="text-apple-gray-500 leading-relaxed">
-                Die Kommunikation zwischen Feld-Gateways und Server läuft verschlüsselt (HTTPS).
-                Jedes Gateway authentifiziert sich mit einem individuellen API-Schlüssel.
+                {copy('communicationBetweenFieldGatewaysAndTheServerIs')}
               </p>
             </section>
           </ScrollReveal>
