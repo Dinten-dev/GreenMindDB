@@ -286,7 +286,7 @@ def export_metadata(engine, kind, output, checkpoint):
                     count = 0
                     statement = "SELECT " + ",".join('"' + name + '"' for name in fields)
                     result = (
-                        db.execution_options(stream_results=True, yield_per=100)
+                        db.execution_options(stream_results=True, yield_per=10)
                         .execute(text(statement + ' FROM "' + table + '"'))
                         .mappings()
                     )
@@ -453,7 +453,7 @@ def restore_bundle(
 def main():
     from sqlalchemy import create_engine
 
-    from .runner import destination_from_environment, health_probe, source_settings
+    from .runner import destination_from_environment, health_probe, metadata_source_settings
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -535,11 +535,11 @@ def main():
                 "files": [],
                 "tables": {},
             }
-            manifest["direct_bucket"] = source_settings("direct", namespace)["bucket"]
+            manifest["direct_bucket"] = metadata_source_settings("direct", namespace)["bucket"]
             manifest["files"].extend(export_ledger(args.ledger, args.output, checkpoint))
             for kind in COLUMNS:
                 engine = create_engine(
-                    source_settings(kind, namespace)["database"],
+                    metadata_source_settings(kind, namespace)["database"],
                     pool_size=1,
                     max_overflow=0,
                     connect_args={

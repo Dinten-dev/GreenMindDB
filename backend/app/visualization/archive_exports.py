@@ -2,12 +2,9 @@
 
 import hashlib
 import json
-import os
-import sqlite3
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -21,35 +18,7 @@ from app.models.user import User
 from app.models.wav_file import WavFile
 from app.rate_limit import limiter
 from app.zone_access import zone_access_filter
-
-MAX_FILES = 5000
-MAX_BYTES = 2 * 1024**3
-PART_BYTES = 500 * 1024**2
-EXPIRES = 24 * 3600
-
-
-def root():
-    if os.getenv("ARCHIVE_EXPORTS_ENABLED", "false").lower() != "true":
-        raise HTTPException(503, "Archivexporte sind noch nicht aktiviert")
-    path = Path(os.environ["ARCHIVE_EXPORT_STATE_DIR"])
-    if not path.is_absolute() or path.is_symlink() or not path.is_dir():
-        raise HTTPException(503, "Exportbereich nicht verfügbar")
-    stat = path.stat()
-    if stat.st_uid != os.getuid() or stat.st_mode & 0o077:
-        raise HTTPException(503, "Exportbereich nicht privat")
-    return path
-
-
-def connect(path):
-    db = sqlite3.connect(path / "jobs.sqlite3", timeout=3)
-    db.row_factory = sqlite3.Row
-    db.execute("""CREATE TABLE IF NOT EXISTS jobs (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL,
-      sensor_id TEXT NOT NULL, created REAL NOT NULL, status TEXT NOT NULL,
-      items TEXT NOT NULL, parts TEXT NOT NULL DEFAULT '[]',
-      completed INTEGER NOT NULL DEFAULT 0, error TEXT)""")
-    return db
-
+from app.visualization.archive_jobs import MAX_FILES, MAX_BYTES, PART_BYTES, EXPIRES, connect, root
 
 def authorize_gateway(db, user, sensor_id):
     if (
@@ -77,7 +46,7 @@ def select_gateway(db, sensor_id, start, end):
         .filter(WavFile.sensor_id == sensor_id, WavFile.started_at < end, WavFile.ended_at > start)
         .order_by(WavFile.started_at, WavFile.id)
         .limit(MAX_FILES + 1)
-        .all()
+        .yield_per(10)
     )
     return [
         {
@@ -118,14 +87,18 @@ def select_direct(device_id, start, end):
                 "end": end.timestamp(),
                 "limit": 501,
             },
-        ).all()
-    if len(rows) > 500:
-        raise HTTPException(413, "Zeitraum aufteilen: zu viele Direct-Segmente")
+        ).yield_per(10)
+        return _direct_items(rows, start, end)
+
+
+def _direct_items(rows, start, end):
     items = []
     from app.direct.config import DirectSettings
 
     bucket = DirectSettings().s3_bucket
-    for manifest, digest in rows:
+    for position, (manifest, digest) in enumerate(rows):
+        if position >= 500:
+            raise HTTPException(413, "Zeitraum aufteilen: zu viele Direct-Segmente")
         canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
         if hashlib.sha256(canonical).hexdigest() != digest:
             raise HTTPException(503, "Direct-Manifest nicht verifiziert")

@@ -284,6 +284,10 @@ def run_daily(
     )
 
     def checkpoint():
+        from .coordination import yield_requested
+
+        if yield_requested():
+            raise SafetyPause("archive_job_yield")
         if (config.root / "PAUSE").exists():
             raise SafetyPause("manual_pause")
         if monotonic() - started >= limits.seconds:

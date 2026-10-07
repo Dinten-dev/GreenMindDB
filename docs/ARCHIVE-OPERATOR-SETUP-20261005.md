@@ -3,6 +3,9 @@
 Stand: 5. Oktober 2026. Keine Löschfreigabe. Ein bestandener 24-Stunden-Test
 allein reicht nicht; sämtliche folgenden Nachweise müssen tatsächlich vorliegen.
 
+Aktualisierte Betreiberanleitung und tatsächlicher Stand vom 7. Oktober:
+[WAV-Archiv-Abnahme](ARCHIVE-ACCEPTANCE-20261007.md).
+
 ## Was MinIO ist und welcher Zugang benötigt wird
 
 MinIO ist der bereits auf dem GreenMind-Hetzner-Server laufende S3-kompatible
@@ -44,6 +47,10 @@ Hersteller-GitHub-Asset-Digest und übertragenes Binary wurden verglichen;
 `--version` wurde ausgeführt. Kein vorhandenes Programm wurde ersetzt und
 keine Anmeldung oder Benutzeranlage damit durchgeführt. Dieser Pfad kann
 als `GREENMIND_MINIO_CLIENT` verwendet werden.
+Die neue Provisionierung verlangt außerdem den exakten Bucket als
+`GREENMIND_DIAGNOSTIC_DIRECT_BUCKET=greenmind-direct-production-hotspot`.
+Sie verweigert vorhandene Diagnosekonten und erzeugt eine eigene neue
+Richtlinie; bei fehlendem Abwesenheitsnachweis wird nichts verändert.
 Die administrativen CLI-Aufrufe müssen ausschließlich in einer privaten
 Betreibersitzung ohne Shell-Tracing laufen. Secrets nicht als ausgeschriebene
 Befehle in die Shell-History schreiben. Nach Einrichtung nur die eng begrenzte

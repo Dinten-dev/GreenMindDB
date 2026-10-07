@@ -43,6 +43,19 @@ class ReadOnlyBox:
         self.__transport.close()
 
 
+class CatalogReadOnlyBox(ReadOnlyBox):
+    """Verification-host catalog GETs; not used as the public WAV reader."""
+
+    def download_catalog(self, key, path, max_bytes, *, snapshot=None):
+        if snapshot is not None:
+            raise ArchiveBlocked("Snapshot restore requires the separately verified operator path")
+        if not re.fullmatch(r"(production|staging)/catalog-backup/[0-9a-f]{64}\.json(l\.gz)?", key):
+            raise ArchiveBlocked("Only hash-addressed WAV catalog parts can be read")
+        if not 0 < max_bytes <= 17 * 1024**2:
+            raise ArchiveBlocked("Catalog part exceeds its verified bound")
+        self.download(key, path, max_bytes)
+
+
 def configured_read_only_box():
     """Partial configuration blocks instead of falling back to upload credentials."""
     if not any(name.startswith(PREFIX) for name in os.environ):

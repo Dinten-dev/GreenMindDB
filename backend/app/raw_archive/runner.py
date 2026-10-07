@@ -34,14 +34,29 @@ def limits_from_environment():
     return limits
 
 
-def source_settings(kind, namespace):
+def metadata_source_settings(kind, namespace):
     from sqlalchemy.engine import make_url
 
+    if kind not in {"gateway", "direct"} or namespace not in {"production", "staging"}:
+        raise ArchiveBlocked("Explicit metadata source and environment required")
     prefix = kind.upper()
     database = required(prefix + "_DATABASE_URL")
     url = make_url(database)
     if url.get_backend_name() != "postgresql":
         raise ArchiveBlocked("Dedicated read-only PostgreSQL access is required")
+    bucket = "greenmind-raw" if kind == "gateway" else required("DIRECT_S3_BUCKET")
+    if kind == "direct" and not bucket.startswith(f"greenmind-direct-{namespace}"):
+        raise ArchiveBlocked("Direct source bucket must match the selected environment")
+    return {"database": database, "bucket": bucket}
+
+
+def source_settings(kind, namespace):
+    from sqlalchemy.engine import make_url
+
+    metadata = metadata_source_settings(kind, namespace)
+    database, bucket = metadata["database"], metadata["bucket"]
+    url = make_url(database)
+    prefix = kind.upper()
     endpoint = required(prefix + "_S3_ENDPOINT")
     parsed = urlparse(endpoint)
     if parsed.scheme != "https" and not (
@@ -50,9 +65,6 @@ def source_settings(kind, namespace):
         raise ArchiveBlocked("S3 requires HTTPS or explicit loopback transport")
     if parsed.username or parsed.password or parsed.query or parsed.fragment or not parsed.hostname:
         raise ArchiveBlocked("Invalid S3 endpoint")
-    bucket = "greenmind-raw" if kind == "gateway" else required("DIRECT_S3_BUCKET")
-    if kind == "direct" and not bucket.startswith(f"greenmind-direct-{namespace}"):
-        raise ArchiveBlocked("Direct source bucket must match the selected environment")
     # Exclude credentials from the journal; include DB identity to reject wrong source reuse.
     identity = hashlib.sha256(
         json.dumps(
@@ -144,8 +156,10 @@ def destination_from_environment():
 
 
 def run(metrics=None):
+    from .coordination import lease
+
     metrics = metrics or Metrics()
-    with ExitStack() as cleanup:
+    with lease("copy"), ExitStack() as cleanup:
         return _run(metrics, cleanup)
 
 
@@ -158,7 +172,6 @@ def _run(metrics, cleanup):
     if config.delete_enabled:
         config.guard(deleting=True)
     limits = limits_from_environment()
-    settings = {kind: source_settings(kind, config.namespace) for kind in ("gateway", "direct")}
     healthy = health_probe(allow_low_source_space=config.delete_enabled, metrics=metrics)
     cleanup.callback(healthy.close)
     if (config.root / "PAUSE").exists():
@@ -168,6 +181,9 @@ def _run(metrics, cleanup):
         state = healthy.last
         healthy.close()
         raise SafetyPause(state["reason"], state)
+
+    # Do not import SQL drivers or open connections during a resource pause.
+    settings = {kind: source_settings(kind, config.namespace) for kind in ("gateway", "direct")}
 
     import boto3
     from botocore.config import Config as BotoConfig

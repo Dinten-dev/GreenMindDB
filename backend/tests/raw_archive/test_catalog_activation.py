@@ -106,7 +106,7 @@ def test_provision_requires_real_minio_client_before_admin_calls(tmp_path, versi
     client = tmp_path / "client"
     log = tmp_path / "calls"
     client.write_text(
-        '#!/bin/sh\nif [ "$1" = "--version" ]; then\n  printf "%s\\n" "$FAKE_VERSION"\nelse\n  printf "%s\\n" "$1 $2 $3" >> "$CALL_LOG"\nfi\n'
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then\n  printf "%s\\n" "$FAKE_VERSION"\nelif [ "$1" = "--json" ]; then\n  if [ "$3" = "user" ]; then code=XMinioAdminNoSuchUser; else code=XMinioAdminNoSuchPolicy; fi\n  printf \'{"status":"error","error":{"cause":{"error":{"Code":"%s"}}}}\\n\' "$code"\n  exit 1\nelse\n  printf "%s\\n" "$1 $2 $3" >> "$CALL_LOG"\nfi\n'
     )
     client.chmod(0o700)
     policy = tmp_path / "policy.json"
@@ -118,6 +118,7 @@ def test_provision_requires_real_minio_client_before_admin_calls(tmp_path, versi
         "GREENMIND_MINIO_CLIENT": str(client),
         "GREENMIND_DIAGNOSTIC_ACCESS": "greenmind-diagnostic-fixture",
         "GREENMIND_DIAGNOSTIC_SECRET": "isolated-fixture-secret",
+        "GREENMIND_DIAGNOSTIC_DIRECT_BUCKET": "greenmind-direct-production-test",
         "FAKE_VERSION": version,
         "CALL_LOG": str(log),
     }
@@ -136,3 +137,49 @@ def test_provision_requires_real_minio_client_before_admin_calls(tmp_path, versi
         ]
     else:
         assert not log.exists()
+
+
+@pytest.mark.parametrize('lookup', ['exists', 'denied', 'malformed', 'policy_exists'])
+def test_diagnostic_provision_never_overwrites_unknown_user_or_policy(tmp_path, lookup):
+    client = tmp_path / 'client'
+    log = tmp_path / 'writes'
+    client.write_text('''#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'mc version RELEASE.2026-01-01T00-00-00Z'; exit 0; fi
+if [ "$1" = "--json" ]; then
+  if [ "$LOOKUP" = "malformed" ]; then echo invalid; exit 1; fi
+  if [ "$LOOKUP" = "denied" ]; then echo '{"status":"error","error":{"Code":"AccessDenied"}}'; exit 1; fi
+  if [ "$LOOKUP" = "exists" ] || [ "$3" = "policy" ]; then echo '{"status":"success"}'; exit 0; fi
+  echo '{"status":"error","error":{"Code":"XMinioAdminNoSuchUser"}}'; exit 1
+fi
+echo mutation >> "$CALL_LOG"
+''')
+    client.chmod(0o700)
+    env = os.environ | {
+        'PATH': str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'],
+        'GREENMIND_MINIO_CLIENT': str(client),
+        'GREENMIND_DIAGNOSTIC_ACCESS': 'greenmind-diagnostic-fixture',
+        'GREENMIND_DIAGNOSTIC_SECRET': 'isolated-fixture-secret',
+        'GREENMIND_DIAGNOSTIC_DIRECT_BUCKET': 'greenmind-direct-production-hotspot',
+        'CALL_LOG': str(log), 'LOOKUP': lookup,
+    }
+    result = subprocess.run(['/bin/bash', str(DEPLOY/'provision-diagnostic.sh'), 'operator', str(DEPLOY/'diagnostic-policy.production.json')], env=env, capture_output=True, timeout=15)
+    assert result.returncode != 0
+    assert not log.exists()
+
+
+def test_diagnostic_policy_refuses_another_direct_bucket(tmp_path):
+    client = tmp_path / 'client'
+    log = tmp_path / 'calls'
+    client.write_text('#!/bin/sh\nif [ "$1" = "--version" ]; then echo "mc version RELEASE.2026-01-01T00-00-00Z"; else echo called >> "$CALL_LOG"; fi\n')
+    client.chmod(0o700)
+    env = os.environ | {
+        'PATH': str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'],
+        'GREENMIND_MINIO_CLIENT': str(client),
+        'GREENMIND_DIAGNOSTIC_ACCESS': 'greenmind-diagnostic-fixture',
+        'GREENMIND_DIAGNOSTIC_SECRET': 'isolated-fixture-secret',
+        'GREENMIND_DIAGNOSTIC_DIRECT_BUCKET': 'greenmind-direct-production-other',
+        'CALL_LOG': str(log),
+    }
+    result = subprocess.run(['/bin/bash', str(DEPLOY/'provision-diagnostic.sh'), 'operator', str(DEPLOY/'diagnostic-policy.production.json')], env=env, capture_output=True, timeout=10)
+    assert result.returncode != 0
+    assert not log.exists()

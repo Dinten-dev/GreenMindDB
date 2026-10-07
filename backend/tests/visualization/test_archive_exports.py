@@ -84,7 +84,7 @@ def test_corrupt_source_never_publishes_part(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="Prüfsumme"):
         worker.make_parts(tmp_path, job, db)
     assert not list(tmp_path.glob("*.zip"))
-    assert not list(tmp_path.glob("*.part"))
+    assert list(tmp_path.glob("*.part"))  # Private failed evidence is retained.
     assert db.execute("SELECT status FROM jobs").fetchone()[0] != "ready"
     db.close()
 
@@ -107,4 +107,35 @@ def test_resource_pause_keeps_export_queued(tmp_path, monkeypatch):
     assert worker.run_once()["status"] == "paused_for_host_load"
     with jobs.connect(tmp_path) as reopened:
         row = reopened.execute("SELECT status,completed,error FROM jobs").fetchone()
-        assert tuple(row) == ("queued", 0, None)
+    assert tuple(row) == ("queued", 0, None)
+
+
+def test_mid_file_pause_preserves_prior_verified_part_and_resumes(tmp_path, monkeypatch):
+    db, job = make_job(tmp_path, [b"first", b"second"])
+    values = {"wav/0": b"first", "wav/1": b"second"}
+    monkeypatch.setattr(worker, "_get_s3_client", lambda: object())
+    monkeypatch.setattr(worker, "DirectSettings", lambda: object())
+    monkeypatch.setattr(worker, "ArtifactStore", lambda _: object())
+    calls = []
+    def source(item, *_):
+        calls.append(item["key"])
+        return Body(values[item["key"]])
+    monkeypatch.setattr(worker, "source_for", source)
+    checks = 0
+    def guard(_):
+        nonlocal checks
+        checks += 1
+        if checks == 4:
+            raise worker.CapacityPause("memory")
+    monkeypatch.setattr(worker, "headroom", guard)
+    with pytest.raises(worker.CapacityPause):
+        worker.make_parts(tmp_path, job, db)
+    saved = db.execute("SELECT * FROM jobs").fetchone()
+    assert saved["completed"] == 1 and len(json.loads(saved["parts"])) == 1
+    monkeypatch.setattr(worker, "headroom", lambda _: None)
+    worker.make_parts(tmp_path, saved, db)
+    result = db.execute("SELECT * FROM jobs").fetchone()
+    assert result["status"] == "ready" and result["completed"] == 2
+    assert calls.count("wav/0") == 1
+    assert worker.saved_progress([tmp_path / p for p in json.loads(result["parts"])], json.loads(job["items"])) == 2
+    db.close()
