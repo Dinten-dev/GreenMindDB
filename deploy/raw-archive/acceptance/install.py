@@ -72,7 +72,7 @@ def main():
     py = "/opt/greenmind/raw-copy/20260925/venv/bin/python"
     overrides = {}
     values = {
-        "greenmind-raw-copy.service": f"[Service]\nEnvironment=PYTHONPATH={runtime}/backend\nEnvironment=RAW_ARCHIVE_COORDINATION_DIR={coordinate}\nReadWritePaths={coordinate}\nExecStart=\nExecStart={py} {runtime}/deploy/raw-archive/optimized.py\n",
+        "greenmind-raw-copy.service": f"[Service]\nEnvironment=PYTHONPATH={runtime}/backend\nEnvironment=RAW_ARCHIVE_COORDINATION_DIR={coordinate}\nReadWritePaths={coordinate}\nSuccessExitStatus=75\nExecStart=\nExecStart={py} {runtime}/deploy/raw-archive/optimized.py\n",
         "greenmind-archive-export.service": f"[Service]\nUser=root\nGroup={account.pw_gid}\nEnvironment=PYTHONPATH={runtime}/backend\nEnvironment=RAW_ARCHIVE_COORDINATION_DIR={coordinate}\nMemoryMax=128M\nSuccessExitStatus=75\nExecStart=\nExecStart={py} {runtime}/deploy/raw-archive/acceptance/dispatch-export.py --state /mnt/HC_Volume_106755700/greenmind-archive-exports/33fe395 --compose {compose}\n",
     }
     try:

@@ -17,15 +17,40 @@ def main():
     state = Path(data["state"])
     assert state == args.manifest.parent
     for unit, item in data["overrides"].items():
-        assert unit in {"greenmind-raw-copy.service", "greenmind-archive-export.service"}
+        assert unit in {
+            "greenmind-raw-copy.service",
+            "greenmind-archive-export.service",
+        }
         path = Path(item["path"])
         assert path.parent == Path("/etc/systemd/system") / (unit + ".d")
-        assert not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"]
+        assert (
+            not path.is_symlink()
+            and hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"]
+        )
+    previous = data.get("previous_overrides", {})
+    for unit, item in previous.items():
+        assert (
+            unit in data["overrides"]
+            and item["original_path"] == data["overrides"][unit]["path"]
+        )
+        path = Path(item["backup_path"])
+        assert path.parent == state and not path.is_symlink()
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"]
     for item in data["overrides"].values():
         path = Path(item["path"])
         path.rename(state / (path.name + ".reverted"))
+    for item in previous.values():
+        Path(item["backup_path"]).rename(item["original_path"])
     subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=10)
-    print(json.dumps({"status": "overrides_reverted", "running_jobs_untouched": True, "deleted_files": 0}))
+    print(
+        json.dumps(
+            {
+                "status": "overrides_reverted",
+                "running_jobs_untouched": True,
+                "deleted_files": 0,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

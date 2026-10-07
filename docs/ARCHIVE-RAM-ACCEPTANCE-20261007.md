@@ -3,6 +3,14 @@
 Deletion, pruning, source retention and legacy-null removal remain disabled.
 This release coordinates archive jobs; it does not authorize removal.
 
+The adaptive launcher now reserves **at least 512 MiB**, or a larger configured
+reserve, or 20% of available RAM, whichever is largest. Its older 128 MiB floor
+could override the configured guard; this was found and corrected during the
+operator review. Load is capped at 2.4 or the stricter configured limit.
+Resumable pauses return 75, accepted by the archive job service; their report
+still says paused/blocked/incomplete and does not claim a completed backup.
+Real metadata failures remain nonzero failures.
+
 ## Runtime changes
 
 - One private host lease covers copying, catalog extraction and ZIP generation.
@@ -51,6 +59,26 @@ overrides, applied on the next scheduled run. It never interrupts a running job
 or receiver. Installation failure moves its overrides into private evidence and
 reloads systemd definitions. `acceptance/rollback.py --manifest INSTALLATION`
 does the same for a completed installation. It never rolls back the journal.
+
+`upgrade-jobs.py --previous PREVIOUS_INSTALLATION_JSON` verifies each existing
+override's SHA-256, retains its original file privately, installs a new immutable
+package, and updates only the next archive job execution. Rollback verifies the
+new hashes and restores the retained previous overrides. No running service is
+restarted by either job installer.
+
+`prepare-readonly-broker.py` creates a private whitelist of broker configuration
+using only the existing `u676312-sub1` service key. Its prepared override clears
+the old environment-file list completely, so upload credentials are absent.
+Preparation alone does not register an override or restart the broker.
+
+`enable-versioning.py` defaults to inspection. Its explicitly requested `--enable`
+operation can only enable versioning on the two exact production buckets, after
+both metadata states are readable and lifecycle is absent. It uses only the
+regular human-configured operator alias. It pins the deployed image ID and the
+unchanged contract/test hashes from the successful real 03.10.2026 fixtures.
+Reuse of that proof is distinct from a fresh container-test execution. Original
+WAV heads are compared before/after; no original is rewritten. A partial failure
+never suspends versioning or removes a version. Legacy-null deletion remains off.
 
 ## Required acceptance before any pilot
 

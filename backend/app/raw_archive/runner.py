@@ -277,4 +277,8 @@ def main():
             report["pause_code"], report["guard"] = error.code, error.details
     report["telemetry"] = metrics.snapshot()
     print(json.dumps(report, sort_keys=True))
+    if report.get("pause_code") or (
+        report["status"] == "incomplete" and not report.get("failed") and not report.get("errors")
+    ):
+        return 75  # Resumable pause/incomplete work is not a completed backup.
     return 0 if report["status"] in {"disabled", "complete"} else 1

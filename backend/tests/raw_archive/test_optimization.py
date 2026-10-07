@@ -9,7 +9,7 @@ import pytest
 
 from app.raw_archive.daily import Limits, Queue
 from app.raw_archive.health import HealthProbe, SafetyPause, await_headroom
-from app.raw_archive.policy import Ledger
+from app.raw_archive.policy import ArchiveBlocked, Ledger
 from app.raw_archive.telemetry import Metrics
 
 
@@ -152,10 +152,24 @@ def test_adaptive_transfer_budget_is_not_a_ram_allocation():
 
     script = Path(__file__).resolve().parents[3] / "deploy/raw-archive/adaptive-copy.py"
     plan = runpy.run_path(str(script))["plan"]
-    result = plan(512 * 1024, 3, 1024**3)
+    result = plan(1024 * 1024, 3, 1024**3)
     assert result["copy_budget_bytes"] == 1024**3
-    assert result["reserve_mib"] == 128
+    assert result["reserve_mib"] == 512
     assert result["maximum_host_load"] == pytest.approx(2.4)
+
+
+def test_adaptive_reserve_never_overrides_stricter_protection():
+    import runpy
+
+    script = Path(__file__).resolve().parents[3] / "deploy/raw-archive/adaptive-copy.py"
+    plan = runpy.run_path(str(script))["plan"]
+    assert plan(4096 * 1024, 8, 1024**3)["reserve_mib"] == 820
+    assert plan(2048 * 1024, 8, 1024**3, 1024, 1.5)["reserve_mib"] == 1024
+    assert plan(2048 * 1024, 8, 1024**3, 1024, 1.5)["maximum_host_load"] == 1.5
+    with pytest.raises(SafetyPause, match="memory"):
+        plan(512 * 1024, 3, 1024**3)
+    with pytest.raises(ArchiveBlocked, match="weakened"):
+        plan(2048 * 1024, 3, 1024**3, 128)
 
 
 def test_legacy_queue_upgrade_preserves_pending_work(tmp_path):
