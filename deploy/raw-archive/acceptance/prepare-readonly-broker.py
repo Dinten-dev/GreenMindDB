@@ -6,18 +6,29 @@ import os
 import pwd
 from pathlib import Path
 
-REVISION = "b4ae52d674aa"
-RUNTIME = Path("/opt/greenmind/archive-acceptance") / REVISION
-STATE = Path("/mnt/HC_Volume_106755700/greenmind-archive-acceptance") / REVISION
+PACKAGE = Path(__file__).resolve().parents[3]
 READONLY = Path("/etc/greenmind/archive-readonly-20261007")
 LIVE = Path("/home/traver/greenmind-archive-production/33fe395")
 
 
 def main():
     assert os.geteuid() == 0
-    target = STATE / "readonly-broker"
-    assert not target.exists()
-    target.mkdir(mode=0o700)
+    revision = json.loads((PACKAGE / "bundle.json").read_text())["revision"][:12]
+    assert len(revision) == 12 and all(c in "0123456789abcdef" for c in revision)
+    runtime = Path("/opt/greenmind/archive-acceptance") / revision
+    state = Path("/mnt/HC_Volume_106755700/greenmind-archive-acceptance") / revision
+    target = state / "readonly-broker"
+    target.mkdir(mode=0o700, exist_ok=True)
+    assert (
+        not target.is_symlink()
+        and target.stat().st_uid == 0
+        and target.stat().st_mode & 0o077 == 0
+    )
+    assert set(path.name for path in target.iterdir()) <= {
+        "broker.env",
+        "manifest.json",
+        "zz-readonly-" + revision + ".conf",
+    }
     account = pwd.getpwnam("greenmind-raw-copy")
     assert account.pw_uid == 996 and account.pw_gid == 986
     values = dict(
@@ -71,11 +82,28 @@ def main():
         VISUAL_PRUNE_ENABLED="false",
     )
     assert not any(key.startswith("RAW_ARCHIVE_SFTP_") for key in safe)
+
+    def checked_write(path, content, mode):
+        if path.exists():
+            assert (
+                not path.is_symlink()
+                and path.stat().st_uid == 0
+                and path.read_text() == content
+            )
+            assert path.stat().st_mode & 0o777 == mode
+        else:
+            with path.open("x") as body:
+                os.fchmod(body.fileno(), mode)
+                body.write(content)
+                body.flush()
+                os.fsync(body.fileno())
+
     env = target / "broker.env"
-    with env.open("x") as body:
-        body.write(
-            "".join(key + "=" + value + "\n" for key, value in sorted(safe.items()))
-        )
+    checked_write(
+        env,
+        "".join(key + "=" + value + "\n" for key, value in sorted(safe.items())),
+        0o640,
+    )
     os.chown(env, 0, 986)
     env.chmod(0o640)
     # The process's existing access paths and 64 MiB cap are unchanged.
@@ -83,14 +111,13 @@ def main():
         "[Service]\nEnvironmentFile=\nEnvironmentFile="
         + str(env)
         + "\nEnvironment=PYTHONPATH="
-        + str(RUNTIME / "backend")
+        + str(runtime / "backend")
         + "\n"
     )
-    override = target / "zz-readonly-" + REVISION + ".conf"
-    override.write_text(content)
-    override.chmod(0o600)
+    override = target / ("zz-readonly-" + revision + ".conf")
+    checked_write(override, content, 0o600)
     manifest = {
-        "revision": REVISION,
+        "revision": revision,
         "environment_file": str(env),
         "environment_sha256": hashlib.sha256(env.read_bytes()).hexdigest(),
         "override": str(override),
@@ -100,7 +127,9 @@ def main():
         "activated": False,
         "deleted_files": 0,
     }
-    (target / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    checked_write(
+        target / "manifest.json", json.dumps(manifest, indent=2) + "\n", 0o600
+    )
     print(json.dumps(manifest))
 
 
