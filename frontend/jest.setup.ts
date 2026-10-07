@@ -43,6 +43,13 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock next-intl
 jest.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: (namespace: string) => (key: string, values?: Record<string, string>) => {
+    if (!['Content', 'Research', 'Metadata'].includes(namespace)) return key;
+    const catalog = require('./messages/de.json');
+    let text = catalog[namespace][key] ?? key;
+    for (const [name, value] of Object.entries(values ?? {}))
+      text = text.replace('{' + name + '}', value);
+    return text;
+  },
   useLocale: () => 'de',
 }));

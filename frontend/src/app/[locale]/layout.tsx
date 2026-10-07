@@ -4,25 +4,32 @@ import GlobalBackground from '@/components/GlobalBackground';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getMessages, getTranslations } from 'next-intl/server';
 
-export const metadata: Metadata = {
-  title: 'GreenMind — Forschungsplattform für bioelektrische Phytosensorik',
-  description:
-    'Forschungs- und Entwicklungsplattform der Galaxyadvisors AG für die datenbasierte Analyse bioelektrischer Pflanzensignale.',
-  openGraph: {
-    title: 'GreenMind — Forschungsplattform',
-    description: 'Datenbasierte Analyse bioelektrischer Pflanzensignale in der Schweiz.',
-    url: 'https://green-mind.ch',
-    siteName: 'GreenMind',
-    locale: 'de_CH',
-    type: 'website',
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'Metadata' });
+  return {
+    title: t('title'),
+    description: t('description'),
+    openGraph: {
+      title: t('ogTitle'),
+      description: t('ogDescription'),
+      url: 'https://green-mind.ch',
+      siteName: 'GreenMind',
+      locale: `${locale}_CH`,
+      type: 'website',
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
+  };
+}
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -57,7 +64,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col bg-apple-gray-50 text-apple-gray-800">
-        <NextIntlClientProvider messages={messages}>
+        <NextIntlClientProvider locale={locale} messages={messages}>
           <GlobalBackground />
           <Navbar />
           <main className="flex-1">{children}</main>

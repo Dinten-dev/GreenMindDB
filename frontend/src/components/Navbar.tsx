@@ -9,6 +9,7 @@ import { apiGetMe, AuthUser } from '@/lib/api';
 import { useTranslations, useLocale } from 'next-intl';
 
 export default function Navbar() {
+  const copy = useTranslations('Content');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const pathname = usePathname();
@@ -49,7 +50,10 @@ export default function Navbar() {
   ];
 
   const switchLocale = (newLocale: string) => {
-    const newPath = pathname.replace(`/${locale}`, `/${newLocale}`);
+    const newPath =
+      pathname.replace(new RegExp(`^/${locale}(?=/|$)`), `/${newLocale}`) +
+      window.location.search +
+      window.location.hash;
     router.push(newPath);
   };
 
@@ -82,6 +86,22 @@ export default function Navbar() {
 
           {/* Desktop CTAs */}
           <div className="hidden xl:flex shrink-0 items-center gap-3 whitespace-nowrap relative z-[110]">
+            <select
+              aria-label={t('language')}
+              value={locale}
+              onChange={(e) => switchLocale(e.target.value)}
+              className="bg-transparent text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
+              style={{
+                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right center',
+                backgroundSize: '1em',
+              }}
+            >
+              <option value="de">{copy('de')}</option>
+              <option value="en">{copy('en')}</option>
+              <option value="fr">{copy('fr')}</option>
+            </select>
             {user ? (
               <Link
                 href={`/${locale}/app/dashboard`}
@@ -94,32 +114,17 @@ export default function Navbar() {
               </Link>
             ) : (
               <>
-                <select
-                  value={locale}
-                  onChange={(e) => switchLocale(e.target.value)}
-                  className="bg-transparent text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right center',
-                    backgroundSize: '1em',
-                  }}
-                >
-                  <option value="de">DE</option>
-                  <option value="en">EN</option>
-                  <option value="fr">FR</option>
-                </select>
                 <Link
                   href={`/${locale}/login`}
                   className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 ml-2"
                 >
-                  Anmelden
+                  {copy('signIn')}
                 </Link>
                 <Link
                   href={`/${locale}/early-access`}
                   className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
                 >
-                  Zugang anfragen
+                  {copy('requestAccess')}
                 </Link>
               </>
             )}
@@ -129,7 +134,7 @@ export default function Navbar() {
           <button
             className="xl:hidden p-3 -mr-3 relative z-[110] text-apple-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Menü umschalten"
+            aria-label={copy('toggleMenu')}
             aria-expanded={isMenuOpen}
             aria-controls="public-mobile-menu"
           >
@@ -188,7 +193,7 @@ export default function Navbar() {
               href={`/${locale}/app/dashboard`}
               className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
             >
-              Dashboard · {user.name || user.email.split('@')[0]}
+              {copy('dashboard')} {user.name || user.email.split('@')[0]}
             </Link>
           ) : (
             <>
@@ -196,13 +201,13 @@ export default function Navbar() {
                 href={`/${locale}/login`}
                 className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
               >
-                Anmelden
+                {copy('signIn')}
               </Link>
               <Link
                 href={`/${locale}/early-access`}
                 className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
               >
-                Zugang anfragen
+                {copy('requestAccess')}
               </Link>
             </>
           )}

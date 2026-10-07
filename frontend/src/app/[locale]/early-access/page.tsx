@@ -1,10 +1,13 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import { useState } from 'react';
 import ScrollReveal from '@/components/ScrollReveal';
 import { apiSubmitEarlyAccess } from '@/lib/api';
 
 export default function EarlyAccessPage() {
+  const copy = useTranslations('Content');
   const [formData, setFormData] = useState({
     name: '',
     company: '',
@@ -28,9 +31,7 @@ export default function EarlyAccessPage() {
       setFormData({ name: '', company: '', email: '', country: '', message: '', website: '' });
     } catch (err: unknown) {
       setStatus('error');
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Ein unerwarteter Fehler ist aufgetreten.'
-      );
+      setErrorMessage(err instanceof Error ? err.message : copy('anUnexpectedErrorOccurred'));
     }
   };
 
@@ -65,13 +66,12 @@ export default function EarlyAccessPage() {
 
           <ScrollReveal delay={150}>
             <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-              Zugang anfragen
+              {copy('requestAccess')}
             </h1>
           </ScrollReveal>
           <ScrollReveal delay={300}>
             <p className="text-xl text-apple-gray-500 leading-relaxed">
-              GreenMind befindet sich in Entwicklung. Sie möchten die Plattform testen oder Teil des
-              Projekts werden? Wir freuen uns auf Ihre Anfrage.
+              {copy('greenmindIsInDevelopmentWouldYouLikeTo')}
             </p>
           </ScrollReveal>
         </div>
@@ -97,16 +97,16 @@ export default function EarlyAccessPage() {
                   </svg>
                 </div>
                 <h3 className="text-3xl font-bold text-apple-gray-800 mb-4">
-                  Anfrage eingegangen!
+                  {copy('requestReceived')}
                 </h3>
                 <p className="text-lg text-apple-gray-500 mb-8 max-w-md mx-auto">
-                  Vielen Dank für Ihr Interesse. Wir melden uns in Kürze bei Ihnen.
+                  {copy('thankYouForYourInterestWeWillGet')}
                 </p>
                 <button
                   onClick={() => setStatus('idle')}
                   className="px-8 py-3 bg-apple-gray-100 text-apple-gray-800 rounded-full font-medium hover:bg-apple-gray-200 transition-colors"
                 >
-                  Weitere Anfrage stellen
+                  {copy('sendAnotherRequest')}
                 </button>
               </div>
             ) : (
@@ -130,7 +130,7 @@ export default function EarlyAccessPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      Name *
+                      {copy('name')}
                     </label>
                     <input
                       required
@@ -139,12 +139,12 @@ export default function EarlyAccessPage() {
                       value={formData.name}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                      placeholder="Ihr Name"
+                      placeholder={copy('yourName')}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      E-Mail *
+                      {copy('email')}
                     </label>
                     <input
                       required
@@ -153,7 +153,7 @@ export default function EarlyAccessPage() {
                       value={formData.email}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                      placeholder="sie@beispiel.com"
+                      placeholder={copy('emailExample')}
                     />
                   </div>
                 </div>
@@ -161,7 +161,7 @@ export default function EarlyAccessPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      Organisation / Betrieb *
+                      {copy('organizationFarm')}
                     </label>
                     <input
                       required
@@ -170,12 +170,12 @@ export default function EarlyAccessPage() {
                       value={formData.company}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                      placeholder="Unternehmen oder Betrieb"
+                      placeholder={copy('companyOrFarm')}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      Land *
+                      {copy('country')}
                     </label>
                     <select
                       required
@@ -185,19 +185,19 @@ export default function EarlyAccessPage() {
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm appearance-none"
                     >
                       <option value="" disabled>
-                        Bitte wählen...
+                        {copy('pleaseSelect')}
                       </option>
-                      <option value="Schweiz">Schweiz</option>
-                      <option value="Deutschland">Deutschland</option>
-                      <option value="Österreich">Österreich</option>
-                      <option value="Andere">Andere</option>
+                      <option value="Schweiz">{copy('switzerland')}</option>
+                      <option value="Deutschland">{copy('germany')}</option>
+                      <option value="Österreich">{copy('austria')}</option>
+                      <option value="Andere">{copy('other')}</option>
                     </select>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                    Was interessiert Sie?
+                    {copy('whatInterestsYou')}
                   </label>
                   <textarea
                     name="message"
@@ -205,7 +205,7 @@ export default function EarlyAccessPage() {
                     onChange={handleChange}
                     rows={4}
                     className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm resize-none"
-                    placeholder="Was bauen Sie an? Wie möchten Sie GreenMind einsetzen?"
+                    placeholder={copy('whatDoYouGrowHowWouldYouLike')}
                   ></textarea>
                 </div>
 
@@ -237,7 +237,7 @@ export default function EarlyAccessPage() {
                         ></path>
                       </svg>
                     ) : (
-                      'Zugang anfragen'
+                      copy('requestAccess')
                     )}
                   </button>
                 </div>

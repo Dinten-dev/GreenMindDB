@@ -1,26 +1,9 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import Image from 'next/image';
 import ScrollReveal from '@/components/ScrollReveal';
-
-const team = [
-  {
-    name: 'Prof. Dr. Peter Gloor',
-    role: 'Wissenschaftliche Leitung & Forschung',
-    image: '/team/peter-gloor.webp',
-    imagePosition: 'center 25%',
-    linkedin: 'https://www.linkedin.com/in/petergloor/',
-    bio: 'Peter war über zwei Jahrzehnte Research Scientist am MIT Sloan School of Management und ist Honorarprofessor an der Universität Köln. Sein aktueller Forschungsschwerpunkt bei Galaxylabs.org liegt auf Wohlbefinden, Mensch-Tier- und Mensch-Pflanze-Kommunikation. Mit einem PhD in Informatik der Universität Zürich und Post-Doc am MIT bringt er einzigartige Expertise in Collaborative Intelligence und datengetriebener Forschung in das GreenMind-Projekt ein.',
-  },
-  {
-    name: 'Traver Dinten',
-    role: 'Technische Entwicklung & Data Science',
-    image: '/team/traver-dinten.jpg',
-    imagePosition: 'center 10%',
-    linkedin: 'https://www.linkedin.com/in/traver-dinten-039532276/',
-    bio: 'Traver studiert Data Science an der FHNW und verbindet sein Studium mit praktischer Forschungsarbeit bei GreenMind. Mit einer abgeschlossenen Ausbildung als Physiklaborant EFZ bei armasuisse und Erfahrung in Datenanalyse, Elektronik und Sensorik bildet er die technische Brücke zwischen Hardware-Sensorik und intelligenter Datenauswertung. Er verantwortet die Plattformentwicklung, Sensorintegration und Daten-Pipeline.',
-  },
-];
 
 function LinkedInIcon() {
   return (
@@ -31,20 +14,39 @@ function LinkedInIcon() {
 }
 
 export default function AboutPage() {
+  const copy = useTranslations('Content');
+  const team = [
+    {
+      name: 'Prof. Dr. Peter Gloor',
+      role: copy('scientificLeadershipAndResearch'),
+      image: '/team/peter-gloor.webp',
+      imagePosition: 'center 25%',
+      linkedin: 'https://www.linkedin.com/in/petergloor/',
+      bio: copy('peterSpentMoreThanTwoDecadesAsA'),
+    },
+    {
+      name: 'Traver Dinten',
+      role: copy('engineeringAndDataScience'),
+      image: '/team/traver-dinten.jpg',
+      imagePosition: 'center 10%',
+      linkedin: 'https://www.linkedin.com/in/traver-dinten-039532276/',
+      bio: copy('traverStudiesDataScienceAtFHNWAndCombines'),
+    },
+  ];
   return (
     <div className="min-h-screen">
       <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
         <ScrollReveal>
           <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-            Über uns
+            {copy('aboutUs')}
           </p>
           <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-            Über GreenMind.
+            {copy('aboutGreenMind')}
           </h1>
         </ScrollReveal>
         <ScrollReveal delay={200}>
           <p className="text-xl text-apple-gray-500 max-w-2xl mb-12 md:mb-20 leading-relaxed">
-            Bioelektrische Pflanzensignale verstehen, um den Anbau gezielt zu verbessern.
+            {copy('understandingPlantBioelectricalSignalsToImproveCultivationDecisions')}
           </p>
         </ScrollReveal>
 
@@ -52,14 +54,10 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">
-                Unsere Mission
+                {copy('ourMission')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
-                Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber
-                nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein
-                System, das bioelektrische Pflanzensignale erfasst und für bessere
-                Anbauentscheidungen nutzbar macht. Ein Projekt der Galaxyadvisors AG in
-                Zusammenarbeit mit der FHNW.
+                {copy('agricultureCurrentlyMonitorsTemperatureLightAndSoilMoisture')}
               </p>
             </section>
           </ScrollReveal>
@@ -67,14 +65,10 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">
-                Warum es wichtig ist
+                {copy('whyItMatters')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
-                Der weltweite Nahrungsmittelbedarf steigt. Wasser und Anbauflächen stehen unter
-                Druck. Klimatische Schwankungen machen konventionelle Anbaumethoden weniger
-                vorhersehbar. Pflanzen senden dabei ständig elektrische Signale, die auf Stress
-                hinweisen — oft bevor äussere Schäden sichtbar werden. GreenMind untersucht, ob
-                diese Signale als Grundlage für bessere Entscheidungen im Anbau dienen können.
+                {copy('globalDemandForFoodIsRisingWhileWater')}
               </p>
             </section>
           </ScrollReveal>
@@ -83,7 +77,7 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-8">
-                Das Team
+                {copy('theTeam')}
               </h2>
               <div className="space-y-10">
                 {team.map((member, i) => (
@@ -109,7 +103,7 @@ export default function AboutPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-apple-gray-400 hover:text-[#0A66C2] transition-colors"
-                            aria-label={`${member.name} auf LinkedIn`}
+                            aria-label={copy('viewOnLinkedIn', { name: member.name })}
                           >
                             <LinkedInIcon />
                           </a>
@@ -127,13 +121,10 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">
-                Wie wir arbeiten
+                {copy('howWeWork')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
-                Jede Komponente wird unter realen Anbaubedingungen getestet — in Gewächshäusern und
-                im Freiland, gemeinsam mit der FHNW und landwirtschaftlichen Partnerbetrieben.
-                Unsere Ergebnisse dokumentieren wir im Science Center und gleichen sie mit aktueller
-                wissenschaftlicher Literatur ab.
+                {copy('eachComponentIsTestedUnderRealCultivationConditions')}
               </p>
             </section>
           </ScrollReveal>

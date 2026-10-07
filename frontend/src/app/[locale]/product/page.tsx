@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import ScrollReveal from '@/components/ScrollReveal';
 
 /* ── Professional SVG Icons ──────────────── */
@@ -120,61 +122,60 @@ function IconFleet() {
   );
 }
 
-const researchAreas: { title: string; desc: string; icon: React.ReactNode }[] = [
-  {
-    title: 'Stresserkennung',
-    desc: 'Unterscheidung verschiedener Stresstypen anhand bioelektrischer Signale — Dürre, Schädlingsbefall, Nährstoffmangel. Ziel: Automatische Klassifizierung auf Basis gesammelter Langzeitdaten.',
-    icon: <IconClassification />,
-  },
-  {
-    title: 'Robuste Hardware',
-    desc: 'Sensorik, die unter realen Bedingungen funktioniert — hohe Luftfeuchtigkeit, UV-Einstrahlung, Staub und Temperaturschwankungen von -5 °C bis +50 °C.',
-    icon: <IconResilience />,
-  },
-  {
-    title: 'Automatische Datenerfassung',
-    desc: 'Skalierbare Pipeline für die kontinuierliche Erfassung, Aufbereitung und Langzeitspeicherung aller Messdaten — für Langzeitstudien und kontrollierte Versuche.',
-    icon: <IconPipeline />,
-  },
-  {
-    title: 'Echtzeit-Dashboard',
-    desc: 'Visualisierung aller Messdaten mit konfigurierbarer Auflösung — von Rohdaten bis Tagesmittel, mit synchronisierter Darstellung und interaktiver Zeitnavigation.',
-    icon: <IconDashboard />,
-  },
-  {
-    title: 'Datenexport',
-    desc: 'Strukturierter CSV/ZIP-Export aller Sensordaten für die Weiterverarbeitung in Analyse-Tools — mit definierten Formaten für Reproduzierbarkeit.',
-    icon: <IconExport />,
-  },
-  {
-    title: 'Gateway-Verwaltung',
-    desc: 'Zentrale Verwaltung aller Messstationen — mit Liveness-Monitoring, Remote-Konfiguration und automatischem Reset bei Hardware-Tausch.',
-    icon: <IconFleet />,
-  },
-];
-
 export default function ProductPage() {
+  const copy = useTranslations('Content');
+  const researchAreas: { title: string; desc: string; icon: React.ReactNode }[] = [
+    {
+      title: copy('stressDetection'),
+      desc: copy('distinguishingTypesOfStressThroughBioelectricalSignalsIncluding'),
+      icon: <IconClassification />,
+    },
+    {
+      title: copy('robustHardware'),
+      desc: copy('sensorsDesignedForRealConditionsHighHumidityUV'),
+      icon: <IconResilience />,
+    },
+    {
+      title: copy('automaticDataAcquisition'),
+      desc: copy('aScalablePipelineForContinuousAcquisitionProcessingAnd'),
+      icon: <IconPipeline />,
+    },
+    {
+      title: copy('liveDashboard'),
+      desc: copy('visualizeMeasurementDataAtAConfigurableResolutionFrom'),
+      icon: <IconDashboard />,
+    },
+    {
+      title: copy('dataExport'),
+      desc: copy('structuredCSVAndZIPExportsOfSensorData'),
+      icon: <IconExport />,
+    },
+    {
+      title: copy('gatewayManagement'),
+      desc: copy('centralManagementOfMeasurementStationsWithConnectivityMonitoring'),
+      icon: <IconFleet />,
+    },
+  ];
   return (
     <div className="min-h-screen">
       <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
         <ScrollReveal>
           <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-            Plattform
+            {copy('platform')}
           </p>
           <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-            Was GreenMind kann.
+            {copy('whatGreenMindCanDo')}
           </h1>
         </ScrollReveal>
         <ScrollReveal delay={200}>
           <p className="text-xl text-apple-gray-500 max-w-2xl mb-8 leading-relaxed">
-            Von der Datenerfassung im Feld bis zur Analyse im Dashboard — die Bereiche, an denen wir
-            arbeiten.
+            {copy('fromDataAcquisitionInTheFieldToAnalysis')}
           </p>
         </ScrollReveal>
         <ScrollReveal delay={300}>
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50/80 text-amber-700 text-sm font-medium mb-10 md:mb-16 border border-amber-200/40">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            In Entwicklung — nicht kommerziell verfügbar
+            {copy('inDevelopmentNotCommerciallyAvailable')}
           </div>
         </ScrollReveal>
 

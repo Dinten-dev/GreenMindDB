@@ -1,10 +1,13 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import { useState } from 'react';
 import ScrollReveal from '@/components/ScrollReveal';
 import { apiSubmitContact } from '@/lib/api';
 
 export default function ContactPage() {
+  const copy = useTranslations('Content');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,9 +30,7 @@ export default function ContactPage() {
       setFormData({ name: '', email: '', company: '', message: '', website: '' });
     } catch (err: unknown) {
       setStatus('error');
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Ein unerwarteter Fehler ist aufgetreten.'
-      );
+      setErrorMessage(err instanceof Error ? err.message : copy('anUnexpectedErrorOccurred'));
     }
   };
 
@@ -44,24 +45,22 @@ export default function ContactPage() {
           <div className="flex-1 max-w-2xl">
             <ScrollReveal>
               <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                Kontakt
+                {copy('contact')}
               </p>
               <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-                Kontaktieren Sie uns.
+                {copy('contactUs')}
               </h1>
             </ScrollReveal>
             <ScrollReveal delay={200}>
               <p className="text-xl text-apple-gray-500 mb-10 md:mb-16 leading-relaxed">
-                Sie forschen an bioelektrischen Pflanzensignalen oder betreiben eine Anbauumgebung,
-                die als Forschungsstandort in Frage kommt? Wir freuen uns auf den wissenschaftlichen
-                Austausch.
+                {copy('areYouResearchingPlantBioelectricalSignalsOrOperating')}
               </p>
             </ScrollReveal>
 
             <ScrollReveal delay={350}>
               <div className="bg-apple-gray-100 rounded-apple-lg p-6 md:p-10 border border-apple-gray-200/50">
                 <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">
-                  Trägerorganisation
+                  {copy('operatingOrganization')}
                 </h3>
                 <p className="text-lg text-apple-gray-800 leading-relaxed">
                   GreenMind GmbH
@@ -104,16 +103,16 @@ export default function ContactPage() {
                       </svg>
                     </div>
                     <h3 className="text-2xl font-bold text-apple-gray-800 mb-4">
-                      Nachricht gesendet!
+                      {copy('messageSent')}
                     </h3>
                     <p className="text-apple-gray-500 mb-8">
-                      Vielen Dank für Ihre Nachricht. Wir werden uns in Kürze bei Ihnen melden.
+                      {copy('thankYouForYourMessageWeWillGet')}
                     </p>
                     <button
                       onClick={() => setStatus('idle')}
                       className="px-8 py-3 bg-apple-gray-100 text-apple-gray-800 rounded-full font-medium hover:bg-apple-gray-200 transition-colors"
                     >
-                      Weitere Nachricht senden
+                      {copy('sendAnotherMessage')}
                     </button>
                   </div>
                 ) : (
@@ -137,7 +136,7 @@ export default function ContactPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                          Name *
+                          {copy('name')}
                         </label>
                         <input
                           required
@@ -146,12 +145,12 @@ export default function ContactPage() {
                           value={formData.name}
                           onChange={handleChange}
                           className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                          placeholder="Ihr Name"
+                          placeholder={copy('yourName')}
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                          Unternehmen
+                          {copy('company')}
                         </label>
                         <input
                           type="text"
@@ -159,14 +158,14 @@ export default function ContactPage() {
                           value={formData.company}
                           onChange={handleChange}
                           className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                          placeholder="Optional"
+                          placeholder={copy('optional')}
                         />
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                        E-Mail *
+                        {copy('email')}
                       </label>
                       <input
                         required
@@ -175,13 +174,13 @@ export default function ContactPage() {
                         value={formData.email}
                         onChange={handleChange}
                         className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                        placeholder="sie@beispiel.com"
+                        placeholder={copy('emailExample')}
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                        Nachricht *
+                        {copy('message')}
                       </label>
                       <textarea
                         required
@@ -190,7 +189,7 @@ export default function ContactPage() {
                         onChange={handleChange}
                         rows={5}
                         className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm resize-none"
-                        placeholder="Wie können wir helfen?"
+                        placeholder={copy('howCanWeHelp')}
                       ></textarea>
                     </div>
 
@@ -221,7 +220,7 @@ export default function ContactPage() {
                           ></path>
                         </svg>
                       ) : (
-                        'Nachricht senden'
+                        copy('sendMessage')
                       )}
                     </button>
                   </form>
