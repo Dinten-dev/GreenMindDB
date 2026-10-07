@@ -51,6 +51,8 @@ uses a loopback SSH database tunnel and `app.raw_archive.isolated_catalog`.
 Ten-row cursors and gzip parts bound memory. Each database has its own read-only
 REPEATABLE READ snapshot; cross-database consistency must be reconciled rather
 than claimed atomic. Only the complete export creates `manifest.json`.
+Resource pauses withdraw the ready marker before releasing the lease. Reports
+distinguish the unchanged 640 MiB reserve from the 2.4 load limit.
 
 The Mac performs full catalog restore and reconciliation into a new SQLite
 database. Catalog downloads use the provider's read-only subaccount. Upload
@@ -119,8 +121,13 @@ passes.
 The regular MinIO operator alias is human-configured. The diagnostic identity
 `greenmind-diagnostic-20261007-48d6f68755ae94ac` can inspect only versioning and
 lifecycle on the two production WAV buckets. Actual queries found neither
-versioning nor lifecycle enabled; a later guarded versioning attempt paused
-before making any change. Bucket readiness is therefore **not passed**.
+versioning nor lifecycle enabled initially. After the guarded inspection and
+contract checks, versioning was enabled on both buckets at 17:12 UTC. Independent
+queries through the diagnostic identity confirmed `Enabled` and absent lifecycle
+at 17:13:41 UTC. Existing sample heads were unchanged apart from the expected
+absent-to-null version header. No original was rewritten and legacy-null deletion
+stays disabled. Copier credentials could still HEAD both exact legacy objects
+with explicit null versions at 17:16:30 UTC; this is not an all-object GET proof.
 
 The narrow SQL role `greenmind_wav_metadata_b4ae52d674aa` was created and its real
 column grants/read-only/non-administrative properties were verified. It exports
@@ -131,6 +138,33 @@ previously approved recordings. Those samples do not accept a complete catalog.
 Protected receiver start times/restart counts and Production/Staging proxy
 hashes stayed unchanged. Job definitions were updated without restarting any
 receiver. The read-only broker replacement is prepared, not activated. The new
-reader is not accepted/live. Full catalog publication/restore/reconciliation,
+reader is not accepted/live. Its actual startup paused at 608.7 MiB available,
+below the unchanged 704 MiB startup reserve. A consistent 295,194,624-byte journal
+backup was created; the lease then paused on receiver headroom before SQL export
+began. It is retained and does not constitute a complete catalog.
+
+The existing private quarantine entry was already independently investigated on
+03.10.2026: incomplete WAV and missing source checksum. It remains excluded,
+with the original untouched. Full catalog publication/restore/reconciliation,
 the final provider snapshot, accepted reader/proxy and fresh 24-hour proof
 remain mandatory; no activation-only readiness is claimed.
+
+## Safe continuation
+
+1. Provide sufficient sustained host headroom, or an approved isolated read host.
+   The prepared SQL role and loopback tunnel support isolated verification.
+   Do not stop receivers/Staging or reduce the safety reserves to obtain capacity.
+2. Complete the bounded catalog workflow above. Retain failed/partial evidence;
+   only a completed manifest plus independent full restore accepts publication.
+3. Accept and activate the prepared dedicated read-only broker and candidate.
+   Run every required real download/authorization/CSV check before the minimal
+   proxy rehearsal and switch. Current candidate manifests remain inactive.
+4. Observe the accepted live release for 24 hours, then finish fresh fixed-cohort
+   reconciliation, catalog/restore-proof/pilot-index publication and operator
+   creation of the final snapshot. The configured provider API token is read-only.
+5. Independently restore the complete catalog and all proposed pilot WAVs from
+   that snapshot. Refresh metadata/provider evidence and obtain separately
+   explicit human approval for the named ten-file/five-MiB maximum pilot.
+
+There is intentionally no unrestricted deletion toggle in the ordinary copier.
+An instruction to activate cannot substitute for missing or stale real evidence.
