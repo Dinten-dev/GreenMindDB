@@ -7,6 +7,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from config_files import withdraw
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -36,11 +38,17 @@ def main():
         path = Path(item["backup_path"])
         assert path.parent == state and not path.is_symlink()
         assert hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"]
+        inactive = Path(item["rollback_path"])
+        assert (
+            inactive.parent == Path(item["original_path"]).parent
+            and not inactive.is_symlink()
+        )
+        assert hashlib.sha256(inactive.read_bytes()).hexdigest() == item["sha256"]
     for item in data["overrides"].values():
         path = Path(item["path"])
-        path.rename(state / (path.name + ".reverted"))
+        withdraw(path, state / (path.name + ".reverted"), item["sha256"])
     for item in previous.values():
-        Path(item["backup_path"]).rename(item["original_path"])
+        Path(item["rollback_path"]).rename(item["original_path"])
     subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=10)
     print(
         json.dumps(

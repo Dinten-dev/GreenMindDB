@@ -9,6 +9,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from config_files import publish_new, withdraw
+
 PACKAGE = Path(__file__).resolve().parents[3]
 
 
@@ -93,15 +95,14 @@ def main():
             pending.chmod(0o644)
             overrides[unit] = {"path": str(path), "sha256": digest(pending)}
             backup = state / (unit + ".previous.conf")
-            path.rename(backup)
+            inactive = withdraw(path, backup, item["sha256"])
             backups[unit] = {
                 "original_path": str(path),
                 "backup_path": str(backup),
+                "rollback_path": str(inactive),
                 "sha256": item["sha256"],
             }
-            os.link(
-                pending, path
-            )  # Atomic publication; never overwrite concurrent edits.
+            publish_new(pending, path, overrides[unit]["sha256"])
             updated.append((unit, path))
         subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=10)
         for unit in overrides:
@@ -115,13 +116,14 @@ def main():
     except Exception:
         for unit, path in updated:
             assert digest(path) == overrides[unit]["sha256"]
-            path.rename(state / (path.name + ".failed"))
+            withdraw(path, state / (path.name + ".failed"), overrides[unit]["sha256"])
         for item in backups.values():
             assert (
                 digest(Path(item["backup_path"])) == item["sha256"]
                 and not Path(item["original_path"]).exists()
             )
-            Path(item["backup_path"]).rename(item["original_path"])
+            assert digest(Path(item["rollback_path"])) == item["sha256"]
+            Path(item["rollback_path"]).rename(item["original_path"])
         subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=10)
         raise
     manifest = {

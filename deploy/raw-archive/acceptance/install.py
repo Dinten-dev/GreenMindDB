@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from config_files import withdraw
+
 PACKAGE = Path(__file__).resolve().parents[3]
 
 
@@ -16,11 +18,41 @@ def digest(path):
 
 
 def protected():
-    names = ["gm-zones-production-2e687bec010a-application-1", "gm-direct-production-direct-api-1", "greenminddb-backend-1"]
-    rows = subprocess.check_output(["docker", "inspect", "--format", "{{.Name}} {{.State.StartedAt}} {{.RestartCount}}", *names], text=True, timeout=8)
+    names = [
+        "gm-zones-production-2e687bec010a-application-1",
+        "gm-direct-production-direct-api-1",
+        "greenminddb-backend-1",
+    ]
+    rows = subprocess.check_output(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{.Name}} {{.State.StartedAt}} {{.RestartCount}}",
+            *names,
+        ],
+        text=True,
+        timeout=8,
+    )
     for port in (8120, 8003, 8000):
-        subprocess.run(["curl", "--max-time", "3", "-fsS", "-o", "/dev/null", f"http://127.0.0.1:{port}/health"], check=True, timeout=4)
-    return {"receivers": rows, "production_proxy": digest(Path("/etc/nginx/sites-available/greenmind-prod")), "staging_proxy": digest(Path("/etc/nginx/sites-available/greenmind-staging"))}
+        subprocess.run(
+            [
+                "curl",
+                "--max-time",
+                "3",
+                "-fsS",
+                "-o",
+                "/dev/null",
+                f"http://127.0.0.1:{port}/health",
+            ],
+            check=True,
+            timeout=4,
+        )
+    return {
+        "receivers": rows,
+        "production_proxy": digest(Path("/etc/nginx/sites-available/greenmind-prod")),
+        "staging_proxy": digest(Path("/etc/nginx/sites-available/greenmind-staging")),
+    }
 
 
 def main():
@@ -30,7 +62,11 @@ def main():
     assert len(revision) == 40 and all(c in "0123456789abcdef" for c in revision)
     for name, expected in bundle["files"].items():
         path = PACKAGE / name
-        assert not path.is_symlink() and PACKAGE in path.resolve().parents and digest(path) == expected
+        assert (
+            not path.is_symlink()
+            and PACKAGE in path.resolve().parents
+            and digest(path) == expected
+        )
     before = protected()
     assert before["production_proxy"] == bundle["proxy_before_sha256"]
     runtime = Path("/opt/greenmind/archive-acceptance") / revision[:12]
@@ -55,14 +91,20 @@ def main():
                 json.dump({"expires": 0}, body)
         os.chown(path, 0, account.pw_gid)
         path.chmod(0o660)
-    state = Path("/mnt/HC_Volume_106755700/greenmind-archive-acceptance") / revision[:12]
+    state = (
+        Path("/mnt/HC_Volume_106755700/greenmind-archive-acceptance") / revision[:12]
+    )
     state.mkdir(parents=True, mode=0o700)
     source = Path("/home/traver/greenmind-archive-production/33fe395/compose.json")
     config = json.loads(source.read_text())
     worker = config["services"]["export-worker"]
     worker["volumes"].append(str(runtime / "backend/app") + ":/app/app:ro")
     worker["volumes"].append(str(coordinate) + ":/archive-coordination:ro")
-    worker["environment"] = dict(worker.get("environment", {}), RAW_ARCHIVE_COORDINATION_DIR="/archive-coordination", RAW_ARCHIVE_COORDINATION_LEASE_EXTERNAL="true")
+    worker["environment"] = dict(
+        worker.get("environment", {}),
+        RAW_ARCHIVE_COORDINATION_DIR="/archive-coordination",
+        RAW_ARCHIVE_COORDINATION_LEASE_EXTERNAL="true",
+    )
     worker["mem_limit"] = "64m"
     config["name"] = "gm-archive-jobs-" + revision[:12]
     config["services"] = {"export-worker": worker}
@@ -86,17 +128,33 @@ def main():
             overrides[unit] = {"path": str(path), "sha256": digest(path)}
         subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=10)
         for unit in values:
-            actual = subprocess.check_output(["systemctl", "show", unit, "--property=ExecStart", "--value"], text=True, timeout=4)
+            actual = subprocess.check_output(
+                ["systemctl", "show", unit, "--property=ExecStart", "--value"],
+                text=True,
+                timeout=4,
+            )
             assert str(runtime) in actual
         assert protected() == before
     except Exception:
         for item in overrides.values():
             path = Path(item["path"])
-            assert digest(path) == item["sha256"], "Inspect a concurrently changed override"
-            path.rename(state / (path.name + ".reverted"))
+            assert digest(path) == item["sha256"], (
+                "Inspect a concurrently changed override"
+            )
+            withdraw(path, state / (path.name + ".reverted"), item["sha256"])
         subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=10)
         raise
-    manifest = {"revision": revision, "runtime": str(runtime), "state": str(state), "protected": before, "overrides": overrides, "receivers_unchanged": True, "destructive_flags_enabled": False, "deleted_files": 0, "applies_to_next_scheduled_run": True}
+    manifest = {
+        "revision": revision,
+        "runtime": str(runtime),
+        "state": str(state),
+        "protected": before,
+        "overrides": overrides,
+        "receivers_unchanged": True,
+        "destructive_flags_enabled": False,
+        "deleted_files": 0,
+        "applies_to_next_scheduled_run": True,
+    }
     result = state / "installation.json"
     result.write_text(json.dumps(manifest, indent=2) + "\n")
     result.chmod(0o600)
