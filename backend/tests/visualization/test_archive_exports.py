@@ -117,16 +117,20 @@ def test_mid_file_pause_preserves_prior_verified_part_and_resumes(tmp_path, monk
     monkeypatch.setattr(worker, "DirectSettings", lambda: object())
     monkeypatch.setattr(worker, "ArtifactStore", lambda _: object())
     calls = []
+
     def source(item, *_):
         calls.append(item["key"])
         return Body(values[item["key"]])
+
     monkeypatch.setattr(worker, "source_for", source)
     checks = 0
+
     def guard(_):
         nonlocal checks
         checks += 1
         if checks == 4:
             raise worker.CapacityPause("memory")
+
     monkeypatch.setattr(worker, "headroom", guard)
     with pytest.raises(worker.CapacityPause):
         worker.make_parts(tmp_path, job, db)
@@ -137,5 +141,10 @@ def test_mid_file_pause_preserves_prior_verified_part_and_resumes(tmp_path, monk
     result = db.execute("SELECT * FROM jobs").fetchone()
     assert result["status"] == "ready" and result["completed"] == 2
     assert calls.count("wav/0") == 1
-    assert worker.saved_progress([tmp_path / p for p in json.loads(result["parts"])], json.loads(job["items"])) == 2
+    assert (
+        worker.saved_progress(
+            [tmp_path / p for p in json.loads(result["parts"])], json.loads(job["items"])
+        )
+        == 2
+    )
     db.close()

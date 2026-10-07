@@ -126,7 +126,10 @@ def make_parts(path, job, db):
                 body.close()
             if count != item["size"] or digest.hexdigest() != item["sha256"]:
                 raise RuntimeError("Original oder Archivkopie stimmt nicht mit Prüfsumme überein")
-            with spool.open("rb") as source, zipper.open(item["name"], "w", force_zip64=True) as target:
+            with (
+                spool.open("rb") as source,
+                zipper.open(item["name"], "w", force_zip64=True) as target,
+            ):
                 shutil.copyfileobj(source, target, 64 * 1024)
             manifest.append({k: v for k, v in item.items() if k != "key" and k != "bucket"})
             in_part += count
@@ -160,8 +163,10 @@ def saved_progress(parts, items):
             if info.file_size > 8 * 1024**2:
                 raise RuntimeError("Exportmanifest zu groß")
             entries = json.loads(bundle.read(info))
-            expected = [{k: v for k, v in item.items() if k not in {"key", "bucket"}}
-                        for item in items[completed:completed + len(entries)]]
+            expected = [
+                {k: v for k, v in item.items() if k not in {"key", "bucket"}}
+                for item in items[completed : completed + len(entries)]
+            ]
             if not entries or entries != expected or len(bundle.infolist()) != len(entries) + 1:
                 raise RuntimeError("Exportteil gehört nicht zum Auftrag")
             for item in entries:
@@ -190,7 +195,11 @@ def run_once():
     if not pending:
         return {"status": "idle"}
     try:
-        context = nullcontext() if os.getenv("RAW_ARCHIVE_COORDINATION_LEASE_EXTERNAL") == "true" else lease("export")
+        context = (
+            nullcontext()
+            if os.getenv("RAW_ARCHIVE_COORDINATION_LEASE_EXTERNAL") == "true"
+            else lease("export")
+        )
         with context:
             return _run_once()
     except SafetyPause as error:
@@ -205,7 +214,9 @@ def _run_once():
         return {"status": "paused_for_host_load"}
     with connect(path) as db:
         # An interrupted job starts over; no incomplete ZIP can become ready.
-        db.execute("UPDATE jobs SET completed=0 WHERE status IN ('queued','working') AND parts='[]'")
+        db.execute(
+            "UPDATE jobs SET completed=0 WHERE status IN ('queued','working') AND parts='[]'"
+        )
         db.execute("UPDATE jobs SET status='queued' WHERE status='working'")
         db.commit()
         job = db.execute(

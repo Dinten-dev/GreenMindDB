@@ -31,7 +31,11 @@ def open_private(path, *, readonly=False):
     flags = os.O_RDONLY if readonly else os.O_RDWR | os.O_CREAT
     fd = os.open(path, flags | os.O_NOFOLLOW, 0o660)
     info = os.fstat(fd)
-    if not stat.S_ISREG(info.st_mode) or info.st_uid not in {0, os.getuid()} or info.st_mode & 0o007:
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid not in {0, os.getuid()}
+        or info.st_mode & 0o007
+    ):
         os.close(fd)
         raise ArchiveBlocked("Untrusted archive coordination file")
     return os.fdopen(fd, "r" if readonly else "r+")
@@ -65,7 +69,7 @@ def yield_requested(kinds=("export", "catalog")):
             if len(raw) > 1024 or type(expires) not in {int, float}:
                 raise ValueError
         except (ValueError, KeyError, TypeError):
-            raise ArchiveBlocked("Invalid archive coordination request")
+            raise ArchiveBlocked("Invalid archive coordination request") from None
         if time.time() < expires <= time.time() + 330:
             return True
     return False

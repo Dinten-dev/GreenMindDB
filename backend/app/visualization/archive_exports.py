@@ -17,8 +17,10 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.models.wav_file import WavFile
 from app.rate_limit import limiter
+from app.visualization.archive_jobs import EXPIRES, MAX_BYTES, MAX_FILES, connect, root
+from app.visualization.archive_jobs import PART_BYTES as PART_BYTES
 from app.zone_access import zone_access_filter
-from app.visualization.archive_jobs import MAX_FILES, MAX_BYTES, PART_BYTES, EXPIRES, connect, root
+
 
 def authorize_gateway(db, user, sensor_id):
     if (
