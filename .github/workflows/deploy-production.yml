@@ -7,6 +7,11 @@ on:
         description: Reviewed full commit SHA with successful CI
         required: true
         type: string
+      archive_exports_enabled:
+        description: Include the prepared original-WAV export panel
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,3 +23,4 @@ jobs:
     with:
       revision: ${{ inputs.revision }}
       environment: production
+      archive_exports_enabled: ${{ inputs.archive_exports_enabled }}

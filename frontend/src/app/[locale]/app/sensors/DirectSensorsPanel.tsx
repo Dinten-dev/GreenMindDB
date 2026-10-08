@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
 import SignalChart from './SignalChart';
 import SensorCard from './SensorCard';
+import ArchiveExportPanel from './ArchiveExportPanel';
 
 export type DirectDevice = {
   id: string;
@@ -43,6 +44,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
+  const [viewBounds, setViewBounds] = useState<{ from_dt: string; to_dt: string } | null>(null);
   const base = `/api/v1/visualization/direct/${device.id}`;
   useEffect(() => {
     const controller = new AbortController();
@@ -54,12 +56,21 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
     setError('');
     const refresh = async () => {
       try {
+        const end = new Date();
+        const duration =
+          { '5m': 300, '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range] ?? 86400;
+        const bounds = {
+          from_dt: new Date(end.getTime() - duration * 1000).toISOString(),
+          to_dt: end.toISOString(),
+        };
+        const params = new URLSearchParams({ range, ...bounds });
         const [data, files] = await Promise.all([
-          read<SensorDataResponse[]>(`${base}/data?range=${range}`, controller.signal),
+          read<SensorDataResponse[]>(`${base}/data?${params}`, controller.signal),
           read<Recording[]>(`${base}/recordings?range=${range}`, controller.signal),
         ]);
         if (controller.signal.aborted) return;
         setSeries(data);
+        setViewBounds(bounds);
         setRecordings(files);
         setError('');
       } catch {
@@ -96,7 +107,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           <p className="mt-1 text-xs text-gray-500">Aktualisiert sich alle zehn Sekunden.</p>
         </div>
         <a
-          href={`${base}/export?range=${range}`}
+          href={`${base}/export?${new URLSearchParams({ range, ...(viewBounds ?? {}) })}`}
           className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-800"
         >
           CSV herunterladen
@@ -210,6 +221,16 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           </ul>
         )}
       </details>
+      <div className="mt-4">
+        {viewBounds && (
+          <ArchiveExportPanel
+            kind="direct"
+            sensorId={device.id}
+            from={viewBounds.from_dt}
+            to={viewBounds.to_dt}
+          />
+        )}
+      </div>
     </div>
   );
 }

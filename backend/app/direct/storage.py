@@ -8,6 +8,8 @@ import tempfile
 import boto3
 from botocore.config import Config
 
+from app.raw_archive import reader as archive_reader
+
 KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
 
 
@@ -77,7 +79,9 @@ class ArtifactStore:
     def get(self, key):
         path = self._path(key)
         if self.client:
-            response = self.client.get_object(Bucket=self.settings.s3_bucket, Key=key)
+            response = archive_reader.get_object(
+                self.client, Bucket=self.settings.s3_bucket, Key=key, kind="direct"
+            )
             try:
                 value = response["Body"].read(self.settings.max_segment_bytes + 4097)
             finally:

@@ -9,6 +9,10 @@ on:
       environment:
         required: true
         type: string
+      archive_exports_enabled:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,6 +44,8 @@ jobs:
           assert any(r['head_sha']==os.environ['REVISION'] and r['conclusion']=='success' and r['head_repository']['full_name']==os.environ['GITHUB_REPOSITORY'] for r in runs), 'Exact commit has no successful CI run'
           PY
       - name: Build immutable images away from the receiving server
+        env:
+          GREENMIND_RELEASE_ARCHIVE_EXPORTS_ENABLED: ${{ inputs.archive_exports_enabled }}
         run: bash deploy/release/build-bundle.sh "$RUNNER_TEMP/greenmind-release"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
