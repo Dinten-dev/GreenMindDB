@@ -29,6 +29,11 @@ def fixture_stages(tmp_path):
             manifest["tables"].get(kind),
             direct_bucket="greenmind-direct-production-hotspot",
         )
+        if kind == "ledger":
+            stage.update(
+                source_sha256=catalog.checksum(tmp_path / "source/archive.sqlite3"),
+                processed_at=datetime.now(UTC).isoformat(),
+            )
         catalog.save_json(folder / "stage.json", stage)
         result[kind] = folder
     return result
@@ -111,3 +116,81 @@ def test_expired_sql_window_and_missing_table_are_rejected(tmp_path):
 def test_mac_fetch_budget_is_bounded(tmp_path, value):
     with pytest.raises(ArchiveBlocked, match="cursor batch"):
         catalog.export_metadata(None, "gateway", tmp_path, lambda: None, fetch_rows=value)
+
+
+def test_source_journal_time_cannot_be_replaced_by_local_processing(tmp_path, monkeypatch):
+    from app.raw_archive import isolated_catalog
+    from app.raw_archive.policy import checksum
+
+    fixture_bundle(tmp_path)
+    database = tmp_path / "source/archive.sqlite3"
+    at = datetime.now(UTC) - timedelta(days=2)
+    proof = tmp_path / "backup-proof.json"
+    catalog.save_json(
+        proof,
+        {
+            "schema": 1,
+            "environment": "production",
+            "complete": True,
+            "created_by_uid": 0,
+            "started_at": at.isoformat(),
+            "finished_at": (at + timedelta(seconds=1)).isoformat(),
+            "bytes": database.stat().st_size,
+            "sha256": checksum(database),
+        },
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "catalog",
+            "--kind",
+            "ledger",
+            "--ledger",
+            str(database),
+            "--ledger-proof",
+            str(proof),
+            "--output",
+            str(tmp_path / "stage"),
+        ],
+    )
+    isolated_catalog.main()
+    captured = stages.load_stage(tmp_path / "stage", "ledger")
+    assert captured["started_at"] == at.isoformat()
+    assert captured["finished_at"] == (at + timedelta(seconds=1)).isoformat()
+    assert datetime.fromisoformat(captured["processed_at"]) > at + timedelta(days=1)
+    database.write_bytes(b"changed")
+    with pytest.raises(ArchiveBlocked, match="differs"):
+        stages.ledger_proof(proof, database)
+
+
+def test_old_ledger_stage_without_provenance_cannot_be_reused(tmp_path):
+    inputs = fixture_stages(tmp_path)
+    path = inputs["ledger"] / "stage.json"
+    stage = json.loads(path.read_text())
+    del stage["source_sha256"]
+    path.write_text(json.dumps(stage))
+    with pytest.raises(ArchiveBlocked, match="provenance"):
+        stages.load_stage(inputs["ledger"], "ledger")
+
+
+def test_combined_export_requires_journal_provenance_before_connections(tmp_path, monkeypatch):
+    from app.raw_archive import isolated_catalog
+
+    monkeypatch.setattr(isolated_catalog, "load_credentials", lambda _: pytest.fail("credentials"))
+    monkeypatch.setattr(isolated_catalog, "create_engine", lambda *a, **kw: pytest.fail("SQL"))
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "catalog",
+            "--session",
+            "a" * 24,
+            "--credentials",
+            str(tmp_path / "absent"),
+            "--ledger",
+            str(tmp_path / "ledger"),
+            "--output",
+            str(tmp_path / "output"),
+        ],
+    )
+    with pytest.raises(ArchiveBlocked, match="provenance"):
+        isolated_catalog.main()

@@ -87,7 +87,21 @@ def test_sql_lease_never_repeats_journal_backup(tmp_path, monkeypatch):
 def test_journal_backup_releases_lease_before_local_processing(tmp_path, monkeypatch):
     main, settings = operation_scope(tmp_path, monkeypatch, "backup")
     settings["healthy"] = lambda: None
-    settings["backup_ledger"] = lambda source, dest, checkpoint: dest.write_bytes(b"backup")
+
+    def backup(source, dest, checkpoint):
+        import hashlib
+
+        dest.write_bytes(b"backup")
+        return {
+            "file": dest.name,
+            "sha256": hashlib.sha256(b"backup").hexdigest(),
+            "bytes": 6,
+            "rows": 0,
+        }
+
+    settings["backup_ledger"] = backup
     assert main() == 0
     assert len(list(tmp_path.glob("session-*/ledger.sqlite3"))) == 1
     assert not list(tmp_path.glob("session-*/lease.json"))
+    proof = json.loads(next(tmp_path.glob("session-*/backup-proof.json")).read_text())
+    assert proof["complete"] and proof["created_by_uid"] == 0 and proof["bytes"] == 6

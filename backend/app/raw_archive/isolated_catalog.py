@@ -13,7 +13,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 
-from .catalog_stages import completed_stage, load_stage, validate_stage
+from .catalog_stages import completed_stage, ledger_proof, load_stage, validate_stage
 from .policy import ArchiveBlocked
 from .runner import metadata_source_settings
 from .wav_catalog import (
@@ -61,6 +61,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--ledger", type=Path)
+    parser.add_argument("--ledger-proof", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--session", default="")
     parser.add_argument("--kind", choices=("ledger", "gateway", "direct"))
@@ -73,10 +74,16 @@ def main():
             load_stage(args.output, "ledger")
             print(json.dumps({"status": "reused", "kind": "ledger", "deleted_files": 0}))
             return
+        if args.ledger_proof is None:
+            raise ArchiveBlocked("The completed root-owned journal backup provenance is required")
+        source = ledger_proof(args.ledger_proof, args.ledger)
         stage = completed_stage(
             "ledger",
-            datetime.now(UTC).isoformat(),
+            source["started_at"],
             export_ledger(args.ledger, args.output, lambda: None),
+            finished_at=source["finished_at"],
+            source_sha256=source["sha256"],
+            processed_at=datetime.now(UTC).isoformat(),
         )
         validate_stage(stage, "ledger", args.output)
         save_json(args.output / "stage.json", stage)
@@ -90,6 +97,11 @@ def main():
         load_stage(args.output, args.kind)
         print(json.dumps({"status": "reused", "kind": args.kind, "deleted_files": 0}))
         return
+    source = None
+    if args.kind is None:
+        if args.ledger_proof is None:
+            raise ArchiveBlocked("The completed source backup provenance is required")
+        source = ledger_proof(args.ledger_proof, args.ledger)
     load_credentials(args.credentials)
     started = time.monotonic()
     started_at = datetime.now(UTC).isoformat()
@@ -128,7 +140,7 @@ def main():
         "format": FORMAT,
         "allowlist_sha256": ALLOWLIST_SHA256,
         "environment": namespace,
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": source["started_at"] if source else started_at,
         "files": [],
         "tables": {},
         "direct_bucket": metadata_source_settings("direct", namespace)["bucket"],

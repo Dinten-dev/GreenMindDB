@@ -37,8 +37,19 @@ def validate_stage(stage, kind, folder):
         raise ArchiveBlocked("Invalid source snapshot window") from error
     if any(value.tzinfo is None for value in times) or times[1] < times[0]:
         raise ArchiveBlocked("Invalid source snapshot window")
-    if kind != "ledger" and (times[1] - times[0]).total_seconds() > 120:
+    if (times[1] - times[0]).total_seconds() > 120:
         raise ArchiveBlocked("Source snapshot exceeded its two-minute budget")
+    if kind == "ledger":
+        try:
+            processed = datetime.fromisoformat(stage["processed_at"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ArchiveBlocked("Journal checkpoint lacks source backup provenance") from error
+        if (
+            processed.tzinfo is None
+            or processed < times[1]
+            or not re.fullmatch(r"[a-f0-9]{64}", stage.get("source_sha256", ""))
+        ):
+            raise ArchiveBlocked("Journal checkpoint lacks source backup provenance")
     if kind != "ledger" and set(stage.get("tables", {})) != set(COLUMNS[kind]):
         raise ArchiveBlocked("Source stage omits required tables")
     if any(type(count) is not int or count < 0 for count in stage.get("tables", {}).values()):
@@ -72,6 +83,42 @@ def load_stage(folder, kind):
     return validate_stage(json.loads(path.read_text()), kind, folder)
 
 
+def ledger_proof(path, ledger):
+    """Use the source backup window, never the later Mac processing timestamp."""
+    info = path.stat()
+    if (
+        path.is_symlink()
+        or not path.is_file()
+        or info.st_uid != os.getuid()
+        or info.st_mode & 0o077
+        or info.st_size > ROW_BYTES
+    ):
+        raise ArchiveBlocked("Private bounded journal provenance is required")
+    data = json.loads(path.read_text())
+    if (
+        type(data.get("schema")) is not int
+        or data.get("schema") != 1
+        or data.get("environment") != "production"
+        or data.get("complete") is not True
+        or type(data.get("created_by_uid")) is not int
+        or data.get("created_by_uid") != 0
+        or ledger.is_symlink()
+        or not ledger.is_file()
+        or type(data.get("bytes")) is not int
+        or data.get("bytes") != ledger.stat().st_size
+        or not 0 < data.get("bytes", 0) <= 512 * 1024**2
+        or data.get("sha256") != checksum(ledger)
+    ):
+        raise ArchiveBlocked("Journal differs from its completed source backup")
+    try:
+        begin, end = (datetime.fromisoformat(data[key]) for key in ("started_at", "finished_at"))
+    except (KeyError, TypeError, ValueError) as error:
+        raise ArchiveBlocked("Invalid journal source window") from error
+    if begin.tzinfo is None or end.tzinfo is None or not 0 <= (end - begin).total_seconds() <= 120:
+        raise ArchiveBlocked("Invalid journal source window")
+    return data
+
+
 def assemble(stages, output):
     """Full local decoding/restore precedes a final manifest; no source connections."""
     if set(stages) != set(KINDS):
@@ -87,7 +134,9 @@ def assemble(stages, output):
         "allowlist_sha256": ALLOWLIST_SHA256,
         "environment": "production",
         # Conservative cutoff: distinct source snapshots are not one atomic snapshot.
-        "created_at": min(stage["started_at"] for stage in completed.values()),
+        "created_at": min(
+            datetime.fromisoformat(stage["started_at"]) for stage in completed.values()
+        ).isoformat(),
         "direct_bucket": direct_bucket,
         "files": [],
         "tables": {kind: completed[kind]["tables"] for kind in COLUMNS},

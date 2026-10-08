@@ -61,8 +61,14 @@ distinguish the unchanged 640 MiB reserve from the 2.4 load limit.
 
 `hold-export.py --operation backup` creates only the consistent journal copy and
 immediately releases its lease. `--operation sql` opens a fresh guarded two-minute
-window without repeating that backup. On the Mac, `isolated_catalog --kind ledger`
-needs no server connection; `--kind gateway` and `--kind direct` each require a
+window without repeating that backup. Transfer both the journal and its
+`backup-proof.json` privately, then set their Mac permissions to 600. On the Mac,
+`isolated_catalog --kind ledger --ledger-proof BACKUP_PROOF` needs no server
+connection. It verifies the source checksum and retains the original source
+backup window; local processing does not refresh the inventory cutoff.
+Earlier journal checkpoints without source provenance are rejected. The combined
+export also requires `--ledger-proof`; it cannot relabel an old backup as fresh.
+`--kind gateway` and `--kind direct` each require a
 fresh root-owned session and the narrow SQL credentials. `catalog_stages`
 assembles the three completed stages and fully restores them locally before
 writing the final manifest. Its conservative cutoff is the oldest source start;

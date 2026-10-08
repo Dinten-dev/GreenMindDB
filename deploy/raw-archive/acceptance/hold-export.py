@@ -6,6 +6,7 @@ import pwd
 import secrets
 import time
 import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.raw_archive.coordination import lease
@@ -59,8 +60,9 @@ def main():
             folder.mkdir(mode=0o750)
             os.chown(folder, 0, operator.pw_gid)
             backup = folder / "ledger.sqlite3"
+            backup_started_at = datetime.now(UTC).isoformat()
             if args.operation != "sql":
-                backup_ledger(
+                backup_info = backup_ledger(
                     Path("/var/lib/greenmind-raw-copy/archive.sqlite3"),
                     backup,
                     checkpoint=healthy,
@@ -68,11 +70,30 @@ def main():
                 backup.chmod(0o640)
                 os.chown(backup, 0, operator.pw_gid)
             if args.operation == "backup":
+                proof = folder / "backup-proof.json"
+                with proof.open("x") as body:
+                    proof.chmod(0o640)
+                    os.chown(proof, 0, operator.pw_gid)
+                    json.dump(
+                        {
+                            "schema": 1,
+                            "environment": "production",
+                            "complete": True,
+                            "created_by_uid": 0,
+                            "started_at": backup_started_at,
+                            "finished_at": datetime.now(UTC).isoformat(),
+                            **backup_info,
+                        },
+                        body,
+                    )
+                    body.flush()
+                    os.fsync(body.fileno())
                 print(
                     json.dumps(
                         {
                             "status": "backed_up",
                             "ledger": str(backup),
+                            "ledger_proof": str(proof),
                             "deleted_files": 0,
                         }
                     )
