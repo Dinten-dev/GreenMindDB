@@ -12,4 +12,4 @@ def dashboard_target(networks, target):
     if not shared.intersection(target.get("networks", [])):
         raise ArchiveBlocked("Candidate cannot reach the preserved authorization target")
     # The generic 'application' alias belongs to multiple retained releases.
-    return f"http://{RECEIVER}:8000"
+    return f"http://{RECEIVER}:8000/api/v1"

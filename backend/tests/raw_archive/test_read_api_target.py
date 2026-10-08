@@ -11,7 +11,7 @@ def test_candidate_uses_unique_preserved_receiver_name():
         {"source": {"external": True, "name": "production-network"}},
         {"name": RECEIVER, "running": True, "networks": {"production-network": {}}},
     )
-    assert value == f"http://{RECEIVER}:8000"
+    assert value == f"http://{RECEIVER}:8000/api/v1"
 
 
 @pytest.mark.parametrize("damage", ["stopped", "wrong_receiver", "different_network"])
