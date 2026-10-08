@@ -34,7 +34,11 @@ read-only transactions; they are not an atomic cross-database snapshot.
 
 `greenmind-feature-backup.timer` starts at 00:00 Swiss time, with retries at
 01:00, 02:00 and 03:00. One verified daily backup suppresses later attempts.
-The existing shared archive lease prevents concurrent copy/export jobs.
+The existing shared archive lease prevents concurrent copy/export jobs. A busy
+archive lease is retried after twenty seconds, at most three times, to catch
+the copier's existing yield window. Memory/load pauses are never retried in
+process. Waiting opens no SQL connection. The outer unit budget is 350 seconds;
+each active SQL or publication/restore phase retains its two-minute budget.
 
 Worker limits: 128 MiB, no swap, 10% CPU, idle I/O. Source guards remain
 640 MiB available RAM, maximum load 2.4, healthy Gateway/Direct/Legacy routes,

@@ -9,10 +9,10 @@ import subprocess
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parents[2]
-OLD = Path("/opt/greenmind/feature-backup/20261008")
-NEW = Path("/opt/greenmind/feature-backup/20261008-v2")
-ENV = Path("/etc/greenmind/feature-backup/backup.env")
-NEW_ENV = ENV.with_name("backup-v2.env")
+OLD = Path("/opt/greenmind/feature-backup/20261008-v2")
+NEW = Path("/opt/greenmind/feature-backup/20261008-v3")
+ENV = Path("/etc/greenmind/feature-backup/backup-v2.env")
+NEW_ENV = ENV.with_name("backup-v3.env")
 UNIT = Path("/etc/systemd/system/greenmind-feature-backup.service")
 
 
@@ -65,6 +65,10 @@ def main():
     previous = UNIT.read_text()
     assert previous.count(str(OLD)) == 1 and previous.count(str(ENV)) == 1
     replacement = previous.replace(str(OLD), str(NEW)).replace(str(ENV), str(NEW_ENV))
+    assert previous.count("TimeoutStartSec=270") == 1
+    replacement = replacement.replace(
+        "TimeoutStartSec=270", "TimeoutStartSec=350\nMemoryAccounting=true"
+    )
     backup = NEW / "original-feature.service"
     backup.write_text(previous)
     pending = UNIT.with_name(".greenmind-feature-backup.service.v2")

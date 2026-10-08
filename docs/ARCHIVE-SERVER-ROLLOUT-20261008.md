@@ -171,3 +171,29 @@ Rollback only this added feature schedule by disabling
 `greenmind-feature-backup.timer`; preserve all local/offsite evidence.
 
 Final local validation: 248 passed, seven skipped, four integration deselected; Ruff and diff whitespace checks passed. Live feature completeness remains NOT VERIFIED.
+
+Local source commit: `e8fb0b4`, branch `feature/archive-deletion-preparation-20261003`.
+GitHub push was attempted, but origin pushurl is deliberately
+`DISABLED_PENDING_REVIEW`. It was not changed or bypassed. The source commit
+has not been published on GitHub; draft PR #4 remains at its previous head.
+
+### Feature release v3 and bounded validation
+
+Runtime `/opt/greenmind/feature-backup/20261008-v3` installed after exact v2
+service/config hash checks. Original packages/configuration remain preserved.
+The wrapper now retries only `archive_job_busy` at twenty-second intervals,
+up to three times, catching the copier's existing yield window. Waiting opens
+no database connection; memory pauses still exit immediately. Outer unit
+350 seconds; active SQL and publication budgets remain two minutes each.
+No source RAM reserve was weakened.
+
+A separate one-off constrained validation unit was started. It paused for
+`memory` on 2026-10-08 at 15:47 UTC before a complete backup. The daily timer
+remains active with its next calendar event at 22:00 UTC / 00:00 Switzerland.
+Storage Box quota query passed; complete feature publication/restoration still
+NOT VERIFIED, verified complete feature backups still zero.
+
+Post-v3 focused tests: 34 passed (including three bounded-contention scheduler
+tests and Direct channel-feature recovery). Earlier full suite: 248 passed,
+seven skipped, four integration deselected. No complete live acceptance is
+substituted by those local tests. Production receiver health all HTTP 200.
