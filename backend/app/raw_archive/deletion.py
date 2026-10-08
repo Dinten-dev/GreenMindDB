@@ -29,7 +29,8 @@ def eligible_after(recording, receipt, days=7):
     return max(recording.ended_at, recording.received_at, first) + timedelta(days=days)
 
 
-def approval(config, now):
+def proposal(config, now):
+    """Load a bounded technical proposal. It is never a human deletion approval."""
     path = config.deletion_approval_file
     if path is None or not path.is_absolute() or path.is_symlink():
         raise ArchiveBlocked("Reviewed deletion manifest is required")
@@ -65,11 +66,34 @@ def approval(config, now):
     return data
 
 
+def approval(config, now):
+    data = proposal(config, now)
+    consent = data.get("authorization", {})
+    if (
+        consent.get("approved") is not True
+        or consent.get("action") != "bounded_wav_pilot"
+        or not isinstance(consent.get("approved_by"), str)
+        or not 1 <= len(consent["approved_by"].strip()) <= 128
+    ):
+        raise ArchiveBlocked("Separate explicit human pilot authorization is required")
+    if not stamp(data["created_at"]) <= stamp(consent.get("approved_at")) <= now:
+        raise ArchiveBlocked("Human pilot authorization has an invalid timestamp")
+    return data
+
+
 def verify_deletion_evidence(config, recording, receipt, destination, now):
+    _verify_evidence(config, recording, receipt, destination, now, approval(config, now))
+
+
+def verify_preparation_evidence(config, recording, receipt, destination, now):
+    """Same immutable proofs without consent; does not call any source adapter."""
+    _verify_evidence(config, recording, receipt, destination, now, proposal(config, now))
+
+
+def _verify_evidence(config, recording, receipt, destination, now, data):
     check_quarantine(config, recording)
     if now < eligible_after(recording, receipt, config.local_grace_days):
         raise ArchiveBlocked("Seven-day local reserve has not elapsed")
-    data = approval(config, now)
     candidate = data["candidates"].get(recording.archive_id)
     expected = recording.content_identity() | {
         "remote_key": recording.remote_key(config.namespace),

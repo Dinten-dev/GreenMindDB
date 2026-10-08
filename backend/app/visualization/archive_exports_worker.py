@@ -81,6 +81,11 @@ def make_parts(path, job, db):
             os.fsync(body.fileno())
         finished = active.with_suffix(".zip")
         os.link(active, finished)  # Preserve private evidence; never overwrite a part.
+        folder = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(folder)
+        finally:
+            os.close(folder)
         created.append(finished)
         with db:
             db.execute(
@@ -130,7 +135,9 @@ def make_parts(path, job, db):
                 spool.open("rb") as source,
                 zipper.open(item["name"], "w", force_zip64=True) as target,
             ):
-                shutil.copyfileobj(source, target, 64 * 1024)
+                for block in iter(lambda: source.read(64 * 1024), b""):
+                    headroom(path)
+                    target.write(block)
             manifest.append({k: v for k, v in item.items() if k != "key" and k != "bucket"})
             in_part += count
             verified = index + 1
@@ -156,6 +163,7 @@ def saved_progress(parts, items):
     """Only complete, fully decoded matching ZIPs can carry progress forward."""
     completed = 0
     for path in parts:
+        headroom(path.parent)
         if path.is_symlink() or not path.is_file():
             raise RuntimeError("Gesicherter Exportteil fehlt")
         with zipfile.ZipFile(path) as bundle:
@@ -175,6 +183,7 @@ def saved_progress(parts, items):
                 digest = hashlib.sha256()
                 with bundle.open(item["name"]) as body:
                     for block in iter(lambda: body.read(64 * 1024), b""):
+                        headroom(path.parent)
                         digest.update(block)
                 if digest.hexdigest() != item["sha256"]:
                     raise RuntimeError("Gesicherter Exportteil beschädigt")

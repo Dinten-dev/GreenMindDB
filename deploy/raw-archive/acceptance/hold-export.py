@@ -39,6 +39,13 @@ def healthy():
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--operation", choices=("legacy", "backup", "sql"), default="legacy"
+    )
+    args = parser.parse_args()
     assert os.geteuid() == 0
     os.environ["RAW_ARCHIVE_COORDINATION_DIR"] = (
         "/var/lib/greenmind-archive-coordination"
@@ -52,20 +59,33 @@ def main():
             folder.mkdir(mode=0o750)
             os.chown(folder, 0, operator.pw_gid)
             backup = folder / "ledger.sqlite3"
-            backup_ledger(
-                Path("/var/lib/greenmind-raw-copy/archive.sqlite3"),
-                backup,
-                checkpoint=healthy,
-            )
-            backup.chmod(0o640)
-            os.chown(backup, 0, operator.pw_gid)
+            if args.operation != "sql":
+                backup_ledger(
+                    Path("/var/lib/greenmind-raw-copy/archive.sqlite3"),
+                    backup,
+                    checkpoint=healthy,
+                )
+                backup.chmod(0o640)
+                os.chown(backup, 0, operator.pw_gid)
+            if args.operation == "backup":
+                print(
+                    json.dumps(
+                        {
+                            "status": "backed_up",
+                            "ledger": str(backup),
+                            "deleted_files": 0,
+                        }
+                    )
+                )
+                return 0
             until = time.time() + 120
             result = {
                 "session": session,
                 "pid": os.getpid(),
-                "ledger": str(backup),
+                "ledger": str(backup) if args.operation != "sql" else None,
                 "deadline": until,
                 "ready": True,
+                "operation": args.operation,
             }
             state = folder / "lease.json"
 

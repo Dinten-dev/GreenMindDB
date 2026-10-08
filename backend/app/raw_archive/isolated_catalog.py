@@ -13,6 +13,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 
+from .catalog_stages import completed_stage, load_stage, validate_stage
 from .policy import ArchiveBlocked
 from .runner import metadata_source_settings
 from .wav_catalog import (
@@ -58,15 +59,40 @@ def load_credentials(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--credentials", type=Path, required=True)
-    parser.add_argument("--ledger", type=Path, required=True)
+    parser.add_argument("--credentials", type=Path)
+    parser.add_argument("--ledger", type=Path)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--session", required=True)
+    parser.add_argument("--session", default="")
+    parser.add_argument("--kind", choices=("ledger", "gateway", "direct"))
     args = parser.parse_args()
+    if args.kind == "ledger":
+        if args.ledger is None:
+            parser.error("A consistent journal copy is required")
+        private_directory(args.output)
+        if (args.output / "stage.json").exists():
+            load_stage(args.output, "ledger")
+            print(json.dumps({"status": "reused", "kind": "ledger", "deleted_files": 0}))
+            return
+        stage = completed_stage(
+            "ledger",
+            datetime.now(UTC).isoformat(),
+            export_ledger(args.ledger, args.output, lambda: None),
+        )
+        validate_stage(stage, "ledger", args.output)
+        save_json(args.output / "stage.json", stage)
+        print(json.dumps({"status": "complete", "kind": "ledger", "deleted_files": 0}))
+        return
     if not re.fullmatch(r"[a-f0-9]{24}", args.session):
         raise ArchiveBlocked("Explicit bounded export session required")
+    if args.credentials is None or (args.kind is None and args.ledger is None):
+        parser.error("Dedicated credentials and the appropriate source are required")
+    if args.kind and (args.output / "stage.json").exists():
+        load_stage(args.output, args.kind)
+        print(json.dumps({"status": "reused", "kind": args.kind, "deleted_files": 0}))
+        return
     load_credentials(args.credentials)
     started = time.monotonic()
+    started_at = datetime.now(UTC).isoformat()
     last = float("-inf")
 
     def checkpoint():
@@ -107,8 +133,9 @@ def main():
         "tables": {},
         "direct_bucket": metadata_source_settings("direct", namespace)["bucket"],
     }
-    manifest["files"].extend(export_ledger(args.ledger, args.output, checkpoint))
-    for kind in ("gateway", "direct"):
+    if args.kind is None:
+        manifest["files"].extend(export_ledger(args.ledger, args.output, checkpoint))
+    for kind in (args.kind,) if args.kind else ("gateway", "direct"):
         engine = create_engine(
             metadata_source_settings(kind, namespace)["database"],
             pool_size=1,
@@ -119,12 +146,40 @@ def main():
             },
         )
         try:
-            parts, tables = export_metadata(engine, kind, args.output, checkpoint)
+            parts, tables = export_metadata(
+                engine,
+                kind,
+                args.output,
+                checkpoint,
+                fetch_rows=1000 if args.kind else 10,
+                compresslevel=1 if args.kind else 6,
+            )
             manifest["files"].extend(parts)
             manifest["tables"][kind] = tables
         finally:
             engine.dispose()
     checkpoint()
+    if args.kind:
+        stage = completed_stage(
+            args.kind,
+            started_at,
+            manifest["files"],
+            manifest["tables"][args.kind],
+            direct_bucket=manifest["direct_bucket"],
+        )
+        validate_stage(stage, args.kind, args.output)
+        save_json(args.output / "stage.json", stage)
+        print(
+            json.dumps(
+                {
+                    "status": "complete",
+                    "kind": args.kind,
+                    "parts": len(stage["files"]),
+                    "deleted_files": 0,
+                }
+            )
+        )
+        return
     manifest_check(manifest)
     save_json(args.output / "manifest.json", manifest)
     print(

@@ -48,11 +48,25 @@ credential file is the only SQL credential allowed onto the verification Mac.
 guards, creates a consistent SQLite journal backup and permits a maximum
 two-minute SQL export. Its root-owned heartbeat must remain current. The Mac
 uses a loopback SSH database tunnel and `app.raw_archive.isolated_catalog`.
-Ten-row cursors and gzip parts bound memory. Each database has its own read-only
+Default ten-row cursors and gzip parts bound memory. The Mac's separately leased
+source stages use at most 1,000 rows and gzip level one to reduce network round
+trips and local compression time, without changing production copier defaults.
+Journal backup and local decoding no longer consume a SQL lease. Completed
+source stages are reused only after hashes, counts and the source-window checks
+pass. Each database has its own read-only
 REPEATABLE READ snapshot; cross-database consistency must be reconciled rather
 than claimed atomic. Only the complete export creates `manifest.json`.
 Resource pauses withdraw the ready marker before releasing the lease. Reports
 distinguish the unchanged 640 MiB reserve from the 2.4 load limit.
+
+`hold-export.py --operation backup` creates only the consistent journal copy and
+immediately releases its lease. `--operation sql` opens a fresh guarded two-minute
+window without repeating that backup. On the Mac, `isolated_catalog --kind ledger`
+needs no server connection; `--kind gateway` and `--kind direct` each require a
+fresh root-owned session and the narrow SQL credentials. `catalog_stages`
+assembles the three completed stages and fully restores them locally before
+writing the final manifest. Its conservative cutoff is the oldest source start;
+it explicitly reports that the different database snapshots are not atomic.
 
 The Mac performs full catalog restore and reconciliation into a new SQLite
 database. Catalog downloads use the provider's read-only subaccount. Upload
@@ -168,3 +182,22 @@ remain mandatory; no activation-only readiness is claimed.
 
 There is intentionally no unrestricted deletion toggle in the ordinary copier.
 An instruction to activate cannot substitute for missing or stale real evidence.
+
+## Technical preparation is not consent
+
+`preflight --verify-proof PRIVATE_PROPOSAL --proof-sha256 SHA256` accepts an
+unsigned bounded technical proposal. It independently checks snapshot recovery,
+release/observation/reconciliation evidence and the exact S3 version target.
+Only complete coverage can report `READY_FOR_PILOT_APPROVAL`; the report always
+has `approved=false` and `delete_enabled=false`. It never calls S3 deletion.
+
+The separate deletion manifest must additionally contain an `authorization`
+object with `approved=true`, `action=bounded_wav_pilot`, the approving operator
+and `approved_at` within its validity window. A draft or technical report cannot
+serve as that manifest. This object is prepared only after separate explicit
+human approval of the exact named ten-file/five-MiB maximum pilot. The ordinary
+copier remains unable to enable deletion through its existing schedule.
+
+ZIP retries now apply resource guards while decoding saved parts and writing
+verified spools into ZIPs. The completed ZIP's directory is synced before durable
+job progress advances. A paused partial file never advances verified progress.

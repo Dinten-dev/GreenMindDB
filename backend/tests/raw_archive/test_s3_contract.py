@@ -143,6 +143,25 @@ def test_other_versions_block_eviction(s3_case):
         source.evict(record, snapshot)
 
 
+def test_dry_target_uses_all_real_eviction_checks_without_delete(s3_case):
+    source, stub, record, _, snapshot = s3_case
+    deletion_prefix(stub, record, snapshot)
+    stub.add_response(
+        "list_object_versions",
+        {
+            "IsTruncated": False,
+            "Versions": [dict(Key=record.key, VersionId="version-1", IsLatest=True)],
+        },
+        {"Bucket": record.bucket, "Prefix": record.key},
+    )
+    assert source.deletion_target(record, snapshot) == {
+        "Bucket": record.bucket,
+        "Key": record.key,
+        "VersionId": "version-1",
+    }
+    # Any delete/extra request would raise because no such response is stubbed.
+
+
 def test_enabled_bucket_lifecycle_blocks_eviction(s3_case):
     source, stub, record, _, snapshot = s3_case
     deletion_prefix(stub, record, snapshot, lifecycle=True)

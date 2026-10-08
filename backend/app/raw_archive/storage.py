@@ -57,7 +57,8 @@ class S3Source:
         finally:
             body.close()
 
-    def evict(self, recording: Recording, snapshot: dict) -> None:
+    def deletion_target(self, recording: Recording, snapshot: dict) -> dict | None:
+        """Run the exact eviction checks without deleting or changing any object."""
         # An unversioned delete has a check/delete race. Never use it here.
         version = snapshot.get("VersionId")
         if version in (None, "", "null") and not self.allow_legacy_null:
@@ -106,6 +107,12 @@ class S3Source:
             or not exact[0]["IsLatest"]
         ):
             raise ArchiveBlocked("Other object versions need separate reconciliation")
+        return args
+
+    def evict(self, recording: Recording, snapshot: dict) -> None:
+        args = self.deletion_target(recording, snapshot)
+        if args is None:
+            return
         self.client.delete_object(**args)
         try:
             self.client.head_object(**args)

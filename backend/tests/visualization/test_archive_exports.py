@@ -3,6 +3,8 @@
 import hashlib
 import io
 import json
+import os
+import stat
 import uuid
 import zipfile
 from datetime import UTC, datetime, timedelta
@@ -61,9 +63,19 @@ def test_verified_export_is_atomic_and_contains_machine_metadata(tmp_path, monke
     monkeypatch.setattr(worker, "DirectSettings", lambda: object())
     monkeypatch.setattr(worker, "ArtifactStore", lambda _: object())
     monkeypatch.setattr(worker, "source_for", lambda item, *_: Body(values[item["key"]]))
+    fsync = os.fsync
+    durable_directories = []
+
+    def durable(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            durable_directories.append(fd)
+        fsync(fd)
+
+    monkeypatch.setattr(worker.os, "fsync", durable)
     worker.make_parts(tmp_path, job, db)
     row = db.execute("SELECT status,parts,completed FROM jobs").fetchone()
     assert row["status"] == "ready" and row["completed"] == 2
+    assert len(durable_directories) == len(json.loads(row["parts"]))
     with zipfile.ZipFile(tmp_path / json.loads(row["parts"])[0]) as bundle:
         assert bundle.read("0.wav") == b"first wav"
         assert bundle.read("1.wav") == b"second wav"
@@ -72,6 +84,15 @@ def test_verified_export_is_atomic_and_contains_machine_metadata(tmp_path, monke
         assert metadata[0]["sample_rate"] == 380
         assert "key" not in metadata[0] and "bucket" not in metadata[0]
     db.close()
+
+
+def test_resume_validation_pauses_before_decoding_saved_parts(tmp_path, monkeypatch):
+    def pause(_):
+        raise worker.CapacityPause("memory")
+
+    monkeypatch.setattr(worker, "headroom", pause)
+    with pytest.raises(worker.CapacityPause):
+        worker.saved_progress([tmp_path / "absent.zip"], [])
 
 
 def test_corrupt_source_never_publishes_part(tmp_path, monkeypatch):

@@ -233,8 +233,11 @@ def safe_receipt(row):
 
 
 class Parts:
-    def __init__(self, output, kind, checkpoint):
+    def __init__(self, output, kind, checkpoint, *, compresslevel=6):
+        if not 1 <= compresslevel <= 9:
+            raise ArchiveBlocked("Invalid metadata compression level")
         self.output, self.kind, self.checkpoint = output, kind, checkpoint
+        self.compresslevel = compresslevel
         self.files, self.raw, self.body = [], None, None
         self.rows = self.written = 0
 
@@ -244,7 +247,9 @@ class Parts:
             self.path = self.output / f"{self.kind}-{len(self.files):06d}.jsonl.gz"
             self.raw = self.path.open("xb")
             os.chmod(self.path, 0o600)
-            self.body = gzip.GzipFile(fileobj=self.raw, mode="wb", mtime=0)
+            self.body = gzip.GzipFile(
+                fileobj=self.raw, mode="wb", mtime=0, compresslevel=self.compresslevel
+            )
             self.rows = self.written = 0
         self.body.write(line + b"\n")
         self.rows += 1
@@ -271,10 +276,12 @@ class Parts:
             self.raw = self.body = None
 
 
-def export_metadata(engine, kind, output, checkpoint):
+def export_metadata(engine, kind, output, checkpoint, *, fetch_rows=10, compresslevel=6):
     from sqlalchemy import text
 
-    parts = Parts(output, kind, checkpoint)
+    if not 1 <= fetch_rows <= 1000:
+        raise ArchiveBlocked("Invalid metadata cursor batch")
+    parts = Parts(output, kind, checkpoint, compresslevel=compresslevel)
     tables = {}
     try:
         with engine.connect().execution_options(isolation_level="REPEATABLE READ") as db:
@@ -286,7 +293,7 @@ def export_metadata(engine, kind, output, checkpoint):
                     count = 0
                     statement = "SELECT " + ",".join('"' + name + '"' for name in fields)
                     result = (
-                        db.execution_options(stream_results=True, yield_per=10)
+                        db.execution_options(stream_results=True, yield_per=fetch_rows)
                         .execute(text(statement + ' FROM "' + table + '"'))
                         .mappings()
                     )

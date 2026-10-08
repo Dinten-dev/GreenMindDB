@@ -121,6 +121,12 @@ def guarded(tmp_path):
         "environment": "production",
         "created_at": NOW.isoformat(),
         "expires_at": (NOW + timedelta(hours=1)).isoformat(),
+        "authorization": {
+            "approved": True,
+            "action": "bounded_wav_pilot",
+            "approved_by": "isolated-test-operator",
+            "approved_at": NOW.isoformat(),
+        },
         "destination": destination.identity,
         "candidates": json.loads(index)["candidates"],
         "catalog_manifest": catalog_ref,
@@ -227,6 +233,18 @@ def test_reverification_does_not_restart_grace(guarded):
 def test_no_manifest_no_deletion(guarded):
     with pytest.raises(ArchiveBlocked, match="manifest"):
         execute(guarded, replace(guarded[0], delete_enabled=True, reads_accepted=True))
+    assert not guarded[2].deleted
+
+
+def test_technically_complete_draft_never_authorizes_removal(guarded):
+    from app.raw_archive.deletion import verify_preparation_evidence
+
+    config = guarded[-1](lambda data: data.pop("authorization"))
+    record, destination, ledger = guarded[1], guarded[3], guarded[4]
+    receipt = ledger.load(record)[1]
+    verify_preparation_evidence(config, record, receipt, destination, NOW)
+    with pytest.raises(ArchiveBlocked, match="explicit human"):
+        execute(guarded, config)
     assert not guarded[2].deleted
 
 

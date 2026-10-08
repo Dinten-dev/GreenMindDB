@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .deletion import approval, check_quarantine, eligible_after, verify_deletion_evidence
+from .deletion import check_quarantine, eligible_after, proposal, verify_preparation_evidence
 from .policy import ArchiveBlocked, Recording
 from .recovery import private_directory, recovery_index
 
@@ -42,7 +42,7 @@ def main():
     parser.add_argument(
         "--verify-proof",
         type=Path,
-        help="Rehearse all removal evidence without ever calling source.evict",
+        help="Rehearse an unsigned technical proposal; never authorizes or executes removal",
     )
     parser.add_argument("--proof-sha256", default="")
     args = parser.parse_args()
@@ -67,11 +67,12 @@ def main():
         "maximum_files": 10,
         "maximum_bytes": 5 * 1024**2,
     }
-    engines, catalogs = {}, {}
+    engines, catalogs, settings, clients = {}, {}, {}, []
     selected, total = [], 0
     try:
         for kind in ("gateway", "direct"):
             values = source_settings(kind, config.namespace)
+            settings[kind] = values
             engine = create_engine(
                 values["database"],
                 pool_size=1,
@@ -100,7 +101,7 @@ def main():
             # Five slots per pipeline prevent a Gateway-only pilot. Discovery
             # is deliberately bounded; this is not an all-files reconciliation.
             if args.verify_proof:
-                reviewed = approval(config, now)
+                reviewed = proposal(config, now)
                 query = db.execute(
                     "SELECT receipt FROM archive WHERE state='verified' AND id IN ("
                     + ",".join("?" for _ in reviewed["candidates"])
@@ -170,16 +171,53 @@ def main():
                     report["recovery_index"]["published_verified"] = True
                 if args.verify_proof:
                     report["proof_passed"] = []
-                    reviewed = approval(config, now)
+                    reviewed = proposal(config, now)
                     if set(reviewed["candidates"]) != {item.archive_id for item in selected}:
                         raise ArchiveBlocked("Rehearsal must cover the entire reviewed pilot")
+                    import boto3
+                    from botocore.config import Config as BotoConfig
+
+                    from .diagnostics import client_from_environment
+                    from .storage import S3Source
+
+                    diagnostic = client_from_environment()
+                    clients.append(diagnostic)
+                    sources = {}
+                    for kind, values in settings.items():
+                        client = boto3.client(
+                            "s3",
+                            endpoint_url=values["endpoint"],
+                            aws_access_key_id=values["access"],
+                            aws_secret_access_key=values["secret"],
+                            config=BotoConfig(
+                                connect_timeout=5,
+                                read_timeout=15,
+                                retries={"total_max_attempts": 2},
+                                s3={"addressing_style": "path"},
+                            ),
+                        )
+                        clients.append(client)
+                        sources[kind] = S3Source(
+                            client,
+                            diagnostic_client=diagnostic,
+                            allow_legacy_null=reviewed.get("legacy_null_accepted") is True,
+                        )
                     for recording in selected:
                         if not healthy():
                             raise SafetyPause("Proof readback paused for receiver headroom")
                         receipt = dict(ledger.load(recording)[1])
                         receipt.setdefault("first_verified_at", receipt.get("verified_at"))
                         try:
-                            verify_deletion_evidence(config, recording, receipt, destination, now)
+                            verify_preparation_evidence(
+                                config, recording, receipt, destination, now
+                            )
+                            if (
+                                sources[recording.kind].deletion_target(
+                                    recording, receipt["snapshot"]
+                                )
+                                is None
+                            ):
+                                raise ArchiveBlocked("Proposed pilot source is already absent")
                             report["proof_passed"].append(recording.archive_id)
                         except ArchiveBlocked as error:
                             report.setdefault("proof_blocked", []).append(
@@ -190,20 +228,36 @@ def main():
     finally:
         for engine in engines.values():
             engine.dispose()
+        for client in clients:
+            client.close()
+    ready = bool(
+        args.verify_proof
+        and selected
+        and not report.get("proof_blocked")
+        and set(report.get("proof_passed", [])) == {item.archive_id for item in selected}
+        and "pause_reason" not in report
+    )
     report["status"] = (
         "paused"
         if "pause_reason" in report
+        else "READY_FOR_PILOT_APPROVAL"
+        if ready
         else "draft_only"
         if selected
         else "no_eligible_candidates"
     )
-    report["remaining_gates"] = [
-        "bucket_versioning",
-        "snapshot_readback",
-        "catalog_restore",
-        "reviewed_manifest",
-        "explicit_deletion_authorization",
-    ]
+    report["delete_enabled"] = False
+    report["remaining_gates"] = (
+        ["explicit_deletion_authorization"]
+        if ready
+        else [
+            "bucket_versioning",
+            "snapshot_readback",
+            "catalog_restore",
+            "reviewed_manifest",
+            "explicit_deletion_authorization",
+        ]
+    )
     path = args.output / (now.strftime("%Y%m%dT%H%M%S") + "-preflight.json")
     with path.open("x") as body:
         os.chmod(path, 0o600)
