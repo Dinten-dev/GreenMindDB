@@ -201,3 +201,10 @@ copier remains unable to enable deletion through its existing schedule.
 ZIP retries now apply resource guards while decoding saved parts and writing
 verified spools into ZIPs. The completed ZIP's directory is synced before durable
 job progress advances. A paused partial file never advances verified progress.
+
+The prepared reader pins its dashboard authorization URL to the preserved
+production receiver's unique container name, after confirming it is running on
+a shared network. The generic `application` DNS alias is shared by older retained
+releases; absence from Nginx alone does not prove those releases unused. This
+preparation changes no live caller or receiver. Actual authorization and endpoint
+compatibility remain mandatory before candidate publication or retirement.

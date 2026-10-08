@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from app.raw_archive.compat_proxy import draft, rollback
+from app.raw_archive.read_api_target import RECEIVER, dashboard_target
 
 RUNTIME = Path(__file__).resolve().parents[3]
 LIVE = Path("/home/traver/greenmind-archive-production/33fe395")
@@ -45,11 +46,29 @@ def main():
     ):
         assert values[flag] == "false"
     assert values["S3_READ_ONLY"] == "true"
-    values.update(ARCHIVE_COMPAT_READS_ENABLED="true", RELEASE_REVISION=revision)
+    current = json.loads((LIVE / "compose.json").read_text())
+    target_info = json.loads(
+        subprocess.check_output(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                '{"name":{{json .Name}},"running":{{json .State.Running}},"networks":{{json .NetworkSettings.Networks}}}',
+                RECEIVER,
+            ],
+            text=True,
+            timeout=5,
+        )
+    )
+    target_info["name"] = target_info["name"].lstrip("/")
+    values.update(
+        ARCHIVE_COMPAT_READS_ENABLED="true",
+        RELEASE_REVISION=revision,
+        DIRECT_DASHBOARD_API_URL=dashboard_target(current["networks"], target_info),
+    )
     with (target / "read.env").open("x") as body:
         os.chmod(body.name, 0o600)
         body.write("".join(key + "=" + value + "\n" for key, value in values.items()))
-    current = json.loads((LIVE / "compose.json").read_text())
     api = current["services"]["api"]
     api["env_file"] = [str(target / "read.env")]
     api["ports"] = ["127.0.0.1:8141:8000"]
