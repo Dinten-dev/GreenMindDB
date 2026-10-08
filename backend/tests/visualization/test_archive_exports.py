@@ -169,3 +169,45 @@ def test_mid_file_pause_preserves_prior_verified_part_and_resumes(tmp_path, monk
         == 2
     )
     db.close()
+
+
+def test_worker_part_download_uses_persisted_name_and_checks_owner(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    db, job = make_job(tmp_path, [b"original wav"])
+    monkeypatch.setattr(worker, "headroom", lambda _: None)
+    monkeypatch.setattr(worker, "_get_s3_client", lambda: object())
+    monkeypatch.setattr(worker, "DirectSettings", lambda: object())
+    monkeypatch.setattr(worker, "ArtifactStore", lambda _: object())
+    monkeypatch.setattr(worker, "source_for", lambda *_: Body(b"original wav"))
+    worker.make_parts(tmp_path, job, db)
+    with db:
+        db.execute("UPDATE jobs SET created=strftime('%s','now') WHERE id=?", (job["id"],))
+    db.close()
+    monkeypatch.setattr(jobs, "root", lambda: tmp_path)
+    monkeypatch.setattr(jobs, "authorize_gateway", lambda *_: None)
+    app = FastAPI()
+    jobs.install(app)
+    current = SimpleNamespace(id="user")
+    app.dependency_overrides[jobs.get_current_user] = lambda: current
+    app.dependency_overrides[jobs.get_db] = lambda: None
+    with TestClient(app) as client:
+        route = f"/api/v1/visualization/archive-exports/{job['id']}/parts/0"
+        response = client.get(route)
+        assert response.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
+            assert bundle.read("0.wav") == b"original wav"
+            assert (
+                json.loads(bundle.read("manifest.json"))[0]["sha256"]
+                == hashlib.sha256(b"original wav").hexdigest()
+            )
+        current.id = "another-user"
+        assert client.get(route).status_code == 404
+        current.id = "user"
+        with jobs.connect(tmp_path) as reopened:
+            reopened.execute("UPDATE jobs SET parts=?", (json.dumps(["../outside.zip"]),))
+            reopened.commit()
+        assert client.get(route).status_code == 503

@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -240,7 +241,17 @@ def install(app):
             parts = json.loads(row["parts"])
             if row["status"] != "ready" or not 0 <= part < len(parts):
                 raise HTTPException(404, "Exportteil nicht verfügbar")
-            name = f"{row['id']}-{part:03d}.zip"
+            name = parts[part]
+            if (
+                not isinstance(name, str)
+                or Path(name).name != name
+                or not (
+                    name == f"{row['id']}-{part:03d}.zip"
+                    or name.startswith(f"{row['id']}-{part:03d}-")
+                )
+                or not name.endswith(".zip")
+            ):
+                raise HTTPException(503, "Ungültiger Exportteil")
         target = path / name
         if not target.is_file() or target.is_symlink():
             raise HTTPException(503, "Exportteil fehlt")

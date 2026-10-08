@@ -110,13 +110,17 @@ def health_probe(*, allow_low_source_space=False, metrics=None):
     if minimum_memory < 128 or not 0 < maximum_load <= 4:
         raise ArchiveBlocked("Unsafe host resource limits")
 
-    return HealthProbe(
-        urls,
-        mounts,
-        minimum_memory,
-        maximum_load,
-        allow_low_source_space=allow_low_source_space,
-        metrics=metrics,
+    from .remote_health import combined
+
+    return combined(
+        HealthProbe(
+            urls,
+            mounts,
+            minimum_memory,
+            maximum_load,
+            allow_low_source_space=allow_low_source_space,
+            metrics=metrics,
+        )
     )
 
 

@@ -22,6 +22,25 @@ from .telemetry import measure
 SFTP_TIMEOUT_SECONDS = 300
 
 
+def catalog_capacity(output):
+    """OpenSSH df reports 1024-byte units, including unprivileged availability."""
+    lines = output.splitlines()
+    headers = [
+        index
+        for index, line in enumerate(lines)
+        if line.split() == ["Size", "Used", "Avail", "(root)", "%Capacity"]
+    ]
+    if len(headers) != 1 or headers[0] + 1 >= len(lines):
+        raise ArchiveBlocked("Storage Box quota unavailable")
+    fields = lines[headers[0] + 1].split()
+    if len(fields) != 5 or not all(value.isdecimal() for value in fields[:4]):
+        raise ArchiveBlocked("Invalid Storage Box quota")
+    total, used, available, root = map(int, fields[:4])
+    if total <= 0 or not 0 <= used <= total or not 0 <= available <= root <= total:
+        raise ArchiveBlocked("Invalid Storage Box quota bounds")
+    return {"total_bytes": total * 1024, "available_bytes": available * 1024}
+
+
 class S3Source:
     def __init__(self, client, *, allow_legacy_null=False, diagnostic_client=None):
         self.client = client
@@ -304,7 +323,7 @@ class StorageBox:
         output: Path | None = None,
         max_bytes: int = 0,
         missing_path: str | None = None,
-    ) -> None:
+    ) -> str:
         command = self._transport_command()
         if output is not None:
             command = [sys.executable, "-m", "app.raw_archive.sftp_limit", str(max_bytes), *command]
@@ -319,7 +338,7 @@ class StorageBox:
             env={**os.environ, "LC_ALL": "C"},
         ) as process:
             try:
-                _, stderr = process.communicate(batch, timeout=SFTP_TIMEOUT_SECONDS)
+                stdout, stderr = process.communicate(batch, timeout=SFTP_TIMEOUT_SECONDS)
             except BaseException:
                 # Also stop the SSH descendant; it must not outlive a timed-out transfer.
                 try:
@@ -338,6 +357,11 @@ class StorageBox:
             ):
                 raise RemoteMissing("Remote archive file does not exist")
             raise ArchiveBlocked("SFTP operation failed; retain source and inspect worker logs")
+        return stdout
+
+    def capacity(self):
+        """Unknown statvfs capacity blocks publication; no remote shell required."""
+        return catalog_capacity(self.run(f"df {self.quote(self.root)}\n"))
 
     def publish(self, path: Path, key: str) -> None:
         from .policy import checksum

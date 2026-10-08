@@ -110,6 +110,7 @@ ALLOWLIST_SHA256 = hashlib.sha256(
             "receipt": sorted(RECEIPT_FIELDS),
             "feature": FEATURE_FIELDS,
             "signal": SIGNAL_FIELDS,
+            "historical_spectral_bands": ["noise_50_nyquist_hz"],
         }
     )
 ).hexdigest()
@@ -158,6 +159,7 @@ def validate_feature(value, fields):
                     "mid_0_5_1_hz",
                     "high_1_10_hz",
                     "very_high_10_50_hz",
+                    "noise_50_nyquist_hz",
                 },
                 "source_quality_counts": {
                     "valid",
@@ -276,11 +278,16 @@ class Parts:
             self.raw = self.body = None
 
 
-def export_metadata(engine, kind, output, checkpoint, *, fetch_rows=10, compresslevel=6):
+def export_metadata(
+    engine, kind, output, checkpoint, *, fetch_rows=10, compresslevel=6, tables=None
+):
     from sqlalchemy import text
 
     if not 1 <= fetch_rows <= 1000:
         raise ArchiveBlocked("Invalid metadata cursor batch")
+    selected = COLUMNS[kind] if tables is None else tables
+    if not selected or set(selected) - set(COLUMNS[kind]):
+        raise ArchiveBlocked("Unapproved metadata table selection")
     parts = Parts(output, kind, checkpoint, compresslevel=compresslevel)
     tables = {}
     try:
@@ -288,7 +295,8 @@ def export_metadata(engine, kind, output, checkpoint, *, fetch_rows=10, compress
             with db.begin():
                 if db.execute(text("SHOW transaction_read_only")).scalar() != "on":
                     raise ArchiveBlocked("Archive source must be read-only")
-                for table, fields in COLUMNS[kind].items():
+                for table in selected:
+                    fields = COLUMNS[kind][table]
                     checkpoint()
                     count = 0
                     statement = "SELECT " + ",".join('"' + name + '"' for name in fields)

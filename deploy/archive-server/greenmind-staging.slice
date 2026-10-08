@@ -1,0 +1,8 @@
+[Unit]
+Description=GreenMind staging capacity budget
+[Slice]
+MemoryHigh=768M
+MemoryMax=1024M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=256
