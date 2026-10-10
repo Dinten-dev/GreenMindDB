@@ -1,11 +1,14 @@
 """Durable gateway ingestion; SQL and password checks never block the event loop."""
 
+import asyncio
 import logging
 from collections import defaultdict
 from datetime import UTC, datetime
 from time import perf_counter
+from weakref import WeakKeyDictionary
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi.routing import APIRoute
 from prometheus_client import Histogram
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,7 +22,28 @@ from app.schemas.ingest import IngestRequest, IngestResponse
 from app.services.ingest_service import DuplicateIngestionError, process_ingestion
 from app.services.notification_service import notification_service
 
-router = APIRouter(prefix="/ingest", tags=["ingest"])
+_large_request_slots = WeakKeyDictionary()
+
+
+class BoundedIngestRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def bounded(request):
+            length = request.headers.get("content-length", "")
+            if length.isdigit() and int(length) <= 65536:
+                return await handler(request)
+            # Queue before reading/parsing large or streamed bodies. Uvicorn's
+            # receive backpressure bounds queued body memory, with no rejection.
+            loop = asyncio.get_running_loop()
+            slot = _large_request_slots.setdefault(loop, asyncio.Semaphore(1))
+            async with slot:
+                return await handler(request)
+
+        return bounded
+
+
+router = APIRouter(prefix="/ingest", tags=["ingest"], route_class=BoundedIngestRoute)
 logger = logging.getLogger(__name__)
 INGEST_STAGE = Histogram(
     "greenmind_ingest_stage_seconds",

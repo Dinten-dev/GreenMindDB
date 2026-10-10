@@ -384,7 +384,19 @@ export async function apiExportSensorData(sensorId: string, range: string = '24h
 }
 
 // ── WAV Files ────────────────────────────────────
+export interface RecordingCompleteness {
+  status: 'complete' | 'partial' | 'short' | 'partial_start' | 'collecting' | 'unknown';
+  received_samples?: number;
+  expected_samples?: number;
+  received_seconds?: number;
+  expected_seconds?: number;
+  coverage_ratio?: number | null;
+  missing_seconds?: number;
+  basis?: string;
+  close_reason?: string;
+}
 export interface WavFileInfo {
+  completeness?: RecordingCompleteness;
   id: string;
   sensor_mac: string;
   sensor_id: string;

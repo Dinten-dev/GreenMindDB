@@ -1,5 +1,9 @@
 'use client';
 
+import RecordingCompletenessBadge from './RecordingCompletenessBadge';
+import { nominalCompleteness } from '@/lib/recordingCompleteness';
+import type { RecordingCompleteness } from '@/lib/api';
+
 import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
 import SignalChart from './SignalChart';
@@ -19,6 +23,7 @@ type Recording = {
   run: number;
   started_at: string;
   duration_seconds: number;
+  completeness?: RecordingCompleteness;
   sample_rate: number;
 };
 const ranges = [
@@ -197,6 +202,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
                   {new Date(file.started_at).toLocaleString('de-CH')}{' '}
                   <span className="text-gray-500">
                     · {Math.round(file.duration_seconds)} s · {file.sample_rate} Hz
+                    <RecordingCompletenessBadge completeness={nominalCompleteness(file, true)} />
                   </span>
                 </span>
                 <a

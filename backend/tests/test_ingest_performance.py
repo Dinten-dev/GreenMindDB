@@ -1,7 +1,7 @@
 """Receipt correctness and credential revocation under the optimized ingest path."""
 
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -168,3 +168,69 @@ def test_committed_upload_reaches_authorized_live_subscriber(client, db, setup_t
         assert message["sensor_id"] == str(sensor.id)
         assert message["readings"][0]["value"] == 1650
         assert db.query(SensorReading).count() == 1
+
+
+def test_maximum_batch_still_acknowledges_all_samples(client, db, setup_test_data):
+    start = datetime.now(UTC) - timedelta(hours=1)
+    readings = [
+        {
+            "sensor_mac": setup_test_data["sensor"].mac_address,
+            "sensor_kind": "bio_signal",
+            "value": 1650,
+            "unit": "mV",
+            "timestamp": (start + timedelta(microseconds=i * 2632)).isoformat(),
+        }
+        for i in range(5000)
+    ]
+    response = client.post(
+        "/api/v1/ingest",
+        headers={"X-Api-Key": "ci-api-key"},
+        json={
+            "gateway_serial": setup_test_data["gateway"].hardware_id,
+            "measurement_id": str(uuid4()),
+            "readings": readings,
+        },
+    )
+    assert response.status_code == 201 and response.json()["ingested"] == 5000
+    assert db.query(SensorReading).count() == 5000
+
+
+def test_late_sql_chunk_failure_rolls_back_the_whole_upload(
+    client, db, setup_test_data, monkeypatch
+):
+    from sqlalchemy.orm import Session
+
+    from app.models.ingest_log import IngestLog
+
+    original = Session.execute
+    calls = []
+
+    def execute(session, statement, *args, **kwargs):
+        if getattr(statement, "is_insert", False) and statement.table.name == "sensor_reading":
+            calls.append(1)
+            if len(calls) == 2:
+                raise HTTPException(503, "local rollback proof")
+        return original(session, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "execute", execute)
+    start = datetime.now(UTC) - timedelta(hours=1)
+    response = client.post(
+        "/api/v1/ingest",
+        headers={"X-Api-Key": "ci-api-key"},
+        json={
+            "gateway_serial": setup_test_data["gateway"].hardware_id,
+            "measurement_id": str(uuid4()),
+            "readings": [
+                {
+                    "sensor_mac": setup_test_data["sensor"].mac_address,
+                    "sensor_kind": "bio_signal",
+                    "value": 1650,
+                    "unit": "mV",
+                    "timestamp": (start + timedelta(microseconds=i * 2632)).isoformat(),
+                }
+                for i in range(600)
+            ],
+        },
+    )
+    assert response.status_code == 503 and len(calls) == 2
+    assert db.query(SensorReading).count() == db.query(IngestLog).count() == 0
