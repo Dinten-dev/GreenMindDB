@@ -138,6 +138,15 @@ class TestIngestBoundary:
     ):
         zone_broadcast = mocker.patch("app.routers.ingest.manager.broadcast_to_zone")
         sensor_broadcast = mocker.patch("app.routers.ingest.manager.broadcast_to_sensor")
+        # Ingestion broadcasts only when the corresponding view has subscribers.
+        mocker.patch.dict(
+            "app.routers.ingest.manager.active_connections",
+            {str(setup_test_data["zone"].id): [object()]},
+        )
+        mocker.patch.dict(
+            "app.routers.ingest.manager.sensor_connections",
+            {str(setup_test_data["sensor"].id): [object()]},
+        )
         timestamp = "2026-01-02T03:04:05+00:00"
 
         response = client.post(
