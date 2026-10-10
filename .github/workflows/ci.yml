@@ -153,7 +153,7 @@ jobs:
       - name: Install existing backend test dependencies
         run: python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Test Direct transactions and Legacy migration compatibility
-        run: python -m pytest tests/direct/test_postgres.py tests/test_staging_migrations.py -v
+        run: python -m pytest tests/direct/test_postgres.py tests/test_ingest_postgres.py tests/test_staging_migrations.py -v
         env:
           DIRECT_TEST_POSTGRES_URL: postgresql+psycopg2://direct_test:local-direct-test-only@127.0.0.1:5432/direct_test
           STAGING_TEST_DATABASE_URL: postgresql+psycopg2://migration_test:local-migration-only@127.0.0.1:5433/migration_test

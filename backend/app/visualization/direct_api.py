@@ -15,6 +15,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.rate_limit import limiter
+from app.services.wav_completeness import direct_completeness
 from app.visualization import direct
 from app.zone_access import require_zone_access
 
@@ -60,7 +61,7 @@ def recordings(db, device_id, start, end):
     # Latest verified revision only. Never send storage credentials or object keys.
     rows = (
         db.execute(
-            text("""SELECT s.id AS segment_id,r.revision,r.manifest FROM direct_segment s
+            text("""SELECT s.id AS segment_id,s.sealed,r.revision,r.manifest FROM direct_segment s
         JOIN direct_revision r ON r.segment_id=s.id AND r.revision=s.published_revision
         WHERE s.device_id=:id AND (s.bucket+1)*600>:start AND s.bucket*600<:end
           AND r.raw_deleted_at IS NULL ORDER BY s.bucket DESC LIMIT 101"""),
@@ -83,6 +84,7 @@ def recordings(db, device_id, start, end):
                         "run": index,
                         "started_at": datetime.fromtimestamp(stamp, UTC).isoformat(),
                         "duration_seconds": duration,
+                        "completeness": direct_completeness(row["manifest"], row["sealed"]),
                         "sample_rate": cfg["sample_rate"],
                         "channels": cfg["channels"],
                         "sample_bits": cfg["sample_bits"],

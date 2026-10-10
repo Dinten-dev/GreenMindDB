@@ -20,6 +20,7 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.models.wav_file import WavFeature, WavFile
 from app.services import wav_service
+from app.services.wav_completeness import gateway_completeness
 from app.zone_access import zone_access_filter
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,7 @@ async def upload_wav(
                 "wav_id": str(existing.id),
                 "s3_key": existing.s3_key,
                 "duration_seconds": existing.duration_seconds,
+                "completeness": gateway_completeness(existing),
                 "coverage_ratio": existing.coverage_ratio,
                 "timing_status": existing.timing_status,
                 "feature_status": existing.feature_status,
@@ -179,6 +181,17 @@ async def upload_wav(
     db.commit()
     db.refresh(wav_record)
 
+    completeness = gateway_completeness(wav_record)
+    if completeness["status"] == "short":
+        logger.warning(
+            "WAV_INCOMPLETE sensor=%s received_samples=%d expected_samples=%d "
+            "missing_seconds=%.3f close_reason=unknown basis=nominal_bucket",
+            sensor_mac,
+            completeness["received_samples"],
+            completeness["expected_samples"],
+            completeness["missing_seconds"],
+        )
+
     logger.info(
         "WAV uploaded: sensor=%s s3=%s duration=%.1fs source=%s timing=%s coverage=%.3f",
         sensor_mac,
@@ -194,6 +207,7 @@ async def upload_wav(
         "wav_id": str(wav_record.id),
         "s3_key": s3_key,
         "duration_seconds": wav_record.duration_seconds,
+        "completeness": completeness,
         "coverage_ratio": wav_record.coverage_ratio,
         "timing_status": wav_record.timing_status,
         "feature_status": wav_record.feature_status,
@@ -249,6 +263,7 @@ def list_wav_files(
             "sensor_id": str(f.sensor_id),
             "sample_rate": f.sample_rate,
             "duration_seconds": f.duration_seconds,
+            "completeness": gateway_completeness(f),
             "coverage_ratio": f.coverage_ratio,
             "timing_status": f.timing_status,
             "file_size_bytes": f.file_size_bytes,

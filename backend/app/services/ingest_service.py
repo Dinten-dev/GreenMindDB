@@ -28,17 +28,27 @@ def _insert_readings_idempotently(db: Session, rows: list[dict]) -> int:
         return 0
     dialect = db.get_bind().dialect.name
     if dialect == "postgresql":
-        statement = postgresql_insert(SensorReading).values(rows)
+        insert = postgresql_insert
     elif dialect == "sqlite":
-        statement = sqlite_insert(SensorReading).values(rows)
+        insert = sqlite_insert
     else:
         raise RuntimeError(f"Unsupported ingestion database dialect: {dialect}")
-    statement = statement.on_conflict_do_nothing(index_elements=["timestamp", "sensor_id", "kind"])
-    result = db.execute(statement)
-    return max(0, result.rowcount or 0)
+    inserted = 0
+    # Bound SQL compiler/bind memory for the existing 5,000-reading contract.
+    # All chunks share this session's transaction and a single durable commit.
+    for offset in range(0, len(rows), 100):
+        statement = insert(SensorReading).values(rows[offset : offset + 100])
+        statement = statement.on_conflict_do_nothing(
+            index_elements=["timestamp", "sensor_id", "kind"]
+        )
+        result = db.execute(statement)
+        inserted += max(0, result.rowcount or 0)
+    return inserted
 
 
-def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tuple[int, list[dict]]:
+def process_ingestion(
+    data: IngestRequest, gateway: Gateway, db: Session, *, sensor_ids: dict | None = None
+) -> tuple[int, list[dict]]:
     """
     Store IoT data, applying idempotency checks.
     Returns a tuple of (ingested_count, list_of_alerts_to_trigger).
@@ -67,6 +77,9 @@ def process_ingestion(data: IngestRequest, gateway: Gateway, db: Session) -> tup
             status_code=403,
             detail="Every sensor must already be registered to the authenticated gateway",
         )
+
+    if sensor_ids is not None:
+        sensor_ids.update({mac: str(sensor.id) for mac, sensor in sensors_by_mac.items()})
 
     # 2. Log Start
     log = existing_log or IngestLog(

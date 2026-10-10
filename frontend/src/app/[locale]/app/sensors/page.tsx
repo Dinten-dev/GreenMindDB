@@ -19,6 +19,7 @@ import {
   WavCountInfo,
 } from '@/lib/api';
 import SignalChart from './SignalChart';
+import WavCompletenessList from './WavCompletenessList';
 import PairSensorDialog from './PairSensorDialog';
 import DirectSensorsPanel, { useDirectDevices } from './DirectSensorsPanel';
 import SensorCard from './SensorCard';
@@ -799,6 +800,11 @@ export default function SensorsPage() {
                 </div>
               )}
 
+              <WavCompletenessList
+                sensorId={selectedSensor}
+                fromDate={wavFromDate}
+                toDate={wavToDate}
+              />
               {/* WAV Files Section */}
               <div className="mt-6 pt-6 border-t border-black/[0.04]">
                 <div className="flex items-center gap-2 mb-3">
