@@ -59,8 +59,10 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
     setError('');
     const refresh = async () => {
       try {
+        const params = new URLSearchParams({ range });
+        if (range === '5m' || range === '1h') params.set('resolution', '1');
         const [data, files] = await Promise.all([
-          read<SensorDataResponse[]>(`${base}/data?range=${range}`, controller.signal),
+          read<SensorDataResponse[]>(`${base}/data?${params}`, controller.signal),
           read<Recording[]>(`${base}/recordings?range=${range}`, controller.signal),
         ]);
         if (controller.signal.aborted) return;
@@ -101,7 +103,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           <p className="mt-1 text-xs text-gray-500">Aktualisiert sich alle zehn Sekunden.</p>
         </div>
         <a
-          href={`${base}/export?range=${range}`}
+          href={`${base}/export?${new URLSearchParams({ range, ...(range === '5m' || range === '1h' ? { resolution: '1' } : {}) })}`}
           className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-800"
         >
           CSV herunterladen
@@ -159,6 +161,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
                 series={item}
                 color="#10b981"
                 unit={item.unit}
+                showPeaks={range === '5m' || range === '1h'}
                 formatTick={(stamp) =>
                   new Date(stamp).toLocaleString(
                     'de-CH',

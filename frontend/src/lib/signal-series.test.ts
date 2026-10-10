@@ -24,3 +24,23 @@ test('does not draw lines through missing intervals or substitute averages for R
   expect(prepareSignalSeries(data, 'rms').map((p) => p.plotted)).toEqual([20, null, null]);
   expect(resolutionLabel(data)).toBe('1 min');
 });
+
+test.each([300, 3600])(
+  'preserves short positive and negative impulses across a %s-second view',
+  (duration) => {
+    const start = Date.parse('2026-10-10T12:00:00Z');
+    const data = Array.from({ length: duration }, (_, second) => ({
+      timestamp: new Date(start + second * 1000).toISOString(),
+      value: second === 120 ? 100 / 380 : second === 121 ? -80 / 380 : 0,
+      minimum: second === 121 ? -80 : 0,
+      maximum: second === 120 ? 100 : 0,
+      resolution_seconds: 1,
+    }));
+    const points = prepareSignalSeries(data);
+    expect(points).toHaveLength(duration);
+    expect(points[120].maximum).toBe(100);
+    expect(points[121].minimum).toBe(-80);
+    expect(points[120].plotted).toBe(100 / 380);
+    expect(prepareSignalSeries(data, 'rms')[120].maximum).toBeNull();
+  }
+);
