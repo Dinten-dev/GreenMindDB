@@ -3,7 +3,7 @@
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -123,3 +123,37 @@ def test_concurrent_retries_ack_only_one_committed_receipt(pg_receipts):
     assert sum(response.json()["status"] == "success" for response in responses) == 1
     with Session(pg_receipts) as db:
         assert db.query(SensorReading).count() == db.query(IngestLog).count() == 1
+
+
+def test_parallel_maximum_batches_commit_every_reading(pg_receipts):
+    barrier = threading.Barrier(3)
+    with TestClient(app) as client:
+
+        def upload(index):
+            start = datetime.now(UTC) - timedelta(hours=index + 1)
+            payload = {
+                "gateway_serial": "peter-test",
+                "measurement_id": str(uuid4()),
+                "readings": [
+                    {
+                        "sensor_mac": "AA:BB:CC:DD:EE:FE",
+                        "sensor_kind": "bio_signal",
+                        "value": 1650,
+                        "unit": "mV",
+                        "timestamp": (start + timedelta(microseconds=i * 2632)).isoformat(),
+                    }
+                    for i in range(5000)
+                ],
+            }
+            barrier.wait()
+            return client.post(
+                "/api/v1/ingest", json=payload, headers={"X-Api-Key": "isolated-test-key"}
+            )
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            responses = list(pool.map(upload, range(3)))
+    assert all(response.status_code == 201 for response in responses)
+    assert all(response.json()["ingested"] == 5000 for response in responses)
+    with Session(pg_receipts) as db:
+        assert db.query(SensorReading).count() == 15000
+        assert db.query(IngestLog).count() == 3
