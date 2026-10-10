@@ -19,11 +19,13 @@ export default function SignalChart({
   color,
   unit,
   formatTick,
+  showPeaks = false,
 }: {
   series: SensorDataResponse;
   color: string;
   unit: string;
   formatTick: (timestamp: string) => string;
+  showPeaks?: boolean;
 }) {
   const [metric, setMetric] = useState<'value' | 'rms'>('value');
   const [selectedAt, setSelectedAt] = useState<string | null>(null);
@@ -160,21 +162,39 @@ export default function SignalChart({
             dataKey="plotted"
             name={metric === 'value' ? 'Mittelwert' : 'Signalstärke'}
             stroke={color}
-            strokeWidth={2}
+            strokeWidth={showPeaks && metric === 'value' ? 1 : 2}
+            strokeOpacity={showPeaks && metric === 'value' ? 0.45 : 1}
             dot={false}
             connectNulls={false}
             isAnimationActive={false}
           />
+          {showPeaks &&
+            metric === 'value' &&
+            (['minimum', 'maximum'] as const).map((key) => (
+              <Line
+                key={key}
+                type="linear"
+                dataKey={key}
+                name={key === 'minimum' ? 'Minimum' : 'Maximum'}
+                stroke={color}
+                strokeWidth={1.5}
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            ))}
         </ComposedChart>
       </ResponsiveContainer>
       <p className="mt-2 text-xs leading-relaxed text-gray-500">
-        {metric === 'rms'
-          ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
-          : verified
-            ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
-            : series.original_signal_available
-              ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
-              : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
+        {showPeaks && metric === 'value'
+          ? 'Die deutlichen Linien zeigen Minimum und Maximum jedes Zeitfensters, die dünne Linie den Mittelwert. Auch kurze Ausschläge bleiben sichtbar; ihre genaue Form zeigt das Originalsignal. '
+          : metric === 'rms'
+            ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
+            : verified
+              ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
+              : series.original_signal_available
+                ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
+                : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
         Datenlücken werden nicht überbrückt.
       </p>
       {series.original_signal_available && (

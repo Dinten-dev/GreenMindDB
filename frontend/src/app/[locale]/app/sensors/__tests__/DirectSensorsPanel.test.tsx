@@ -3,8 +3,10 @@ import DirectSensorsPanel from '../DirectSensorsPanel';
 
 jest.mock('../SignalChart', () => ({
   __esModule: true,
-  default: ({ series }: { series: { data: unknown[] } }) => (
-    <div data-testid="signal-chart">{series.data.length} Punkte</div>
+  default: ({ series, showPeaks }: { series: { data: unknown[] }; showPeaks: boolean }) => (
+    <div data-testid="signal-chart" data-show-peaks={showPeaks}>
+      {series.data.length} Punkte
+    </div>
   ),
 }));
 const device = {
@@ -60,9 +62,22 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
   fireEvent.click(screen.getByRole('button', { name: 'Live · 5 Min.' }));
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/visualization/direct/direct-a/data?range=5m',
+      '/api/v1/visualization/direct/direct-a/data?range=5m&resolution=1',
       expect.objectContaining({ cache: 'no-store' })
     )
+  );
+  expect(await screen.findByTestId('signal-chart')).toHaveAttribute('data-show-peaks', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '1 Stunde' }));
+  await waitFor(() =>
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/v1/visualization/direct/direct-a/data?range=1h&resolution=1',
+      expect.objectContaining({ cache: 'no-store' })
+    )
+  );
+  expect(await screen.findByTestId('signal-chart')).toHaveAttribute('data-show-peaks', 'true');
+  expect(screen.getByRole('link', { name: 'CSV herunterladen' })).toHaveAttribute(
+    'href',
+    '/api/v1/visualization/direct/direct-a/export?range=1h&resolution=1'
   );
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'false');

@@ -5,6 +5,8 @@ export function prepareSignalSeries(points: DataPoint[], metric: 'value' | 'rms'
     timestamp: string;
     time: number;
     plotted: number | null;
+    minimum: number | null;
+    maximum: number | null;
     envelope: [number, number] | null;
     coverage_ratio?: number | null;
     resolution_seconds?: number;
@@ -20,6 +22,8 @@ export function prepareSignalSeries(points: DataPoint[], metric: 'value' | 'rms'
         timestamp: new Date(Date.parse(previous.timestamp) + step * 1000).toISOString(),
         time: Date.parse(previous.timestamp) + step * 1000,
         plotted: null,
+        minimum: null,
+        maximum: null,
         envelope: null,
       });
     }
@@ -27,6 +31,8 @@ export function prepareSignalSeries(points: DataPoint[], metric: 'value' | 'rms'
       ...point,
       time: Date.parse(point.timestamp),
       plotted: metric === 'value' ? point.value : (point.rms ?? null),
+      minimum: metric === 'value' ? (point.minimum ?? null) : null,
+      maximum: metric === 'value' ? (point.maximum ?? null) : null,
       envelope:
         metric === 'value' && point.minimum != null && point.maximum != null
           ? [point.minimum, point.maximum]
