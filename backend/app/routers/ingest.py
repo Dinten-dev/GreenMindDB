@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from time import perf_counter
 from weakref import WeakKeyDictionary
@@ -23,6 +24,7 @@ from app.services.ingest_service import DuplicateIngestionError, process_ingesti
 from app.services.notification_service import notification_service
 
 _large_request_slots = WeakKeyDictionary()
+_large_upload_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-bulk")
 
 
 class BoundedIngestRoute(APIRoute):
@@ -142,7 +144,14 @@ async def ingest_data(
     db: Session = Depends(get_db),
 ):
     started = perf_counter()
-    result = await run_in_threadpool(_persist, data, x_api_key, db.get_bind())
+    if len(data.readings) > 500:
+        # Reuse one worker's SQL allocator arenas for large requests. Ordinary
+        # reports retain the shared worker pool and cannot queue behind a bulk.
+        result = await asyncio.get_running_loop().run_in_executor(
+            _large_upload_worker, _persist, data, x_api_key, db.get_bind()
+        )
+    else:
+        result = await run_in_threadpool(_persist, data, x_api_key, db.get_bind())
     status, ingested, gateway_id, zone_id, alerts, readings, messages = result
     for alert in alerts:
         background_tasks.add_task(
