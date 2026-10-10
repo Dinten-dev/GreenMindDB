@@ -3,7 +3,7 @@
 This guide covers the isolated `compose/` profile: FastAPI, TimescaleDB, MinIO, Caddy, and
 optional Prometheus/Grafana. It does **not** run the Next.js frontend and is not the canonical
 developer stack. For ordinary local development, use the root `docker-compose.yml` and the
-[README quick start](../README.md#quick-start).
+[README local development](../README.md#local-development).
 
 ## Prerequisites
 
@@ -97,11 +97,11 @@ must follow the verification link and the frontend must submit the token to
 
 `OWNER` is organization-scoped. Fleet-wide gateway and firmware administration requires the
 platform `ADMIN` role; signup cannot request that role. Follow the reviewed interactive bootstrap
-procedure in the [root README](../README.md#one-time-platform-admin-bootstrap) to promote one
+procedure in the [administration reference](development.md#one-time-platform-admin-bootstrap) to promote one
 already verified account. Never add a fixed bootstrap password or seed a verified owner.
 
 All maintained application routes are under `/api/v1` except `/`, `/health`, `/metrics`, and
-development OpenAPI endpoints. Use the [API boundary table](../README.md#api-boundaries) or
+development OpenAPI endpoints. Use the [API boundary table](../backend/README.md#api-boundaries) or
 OpenAPI in a development environment rather than relying on copied endpoint lists.
 
 ## Migrations

@@ -5,7 +5,7 @@ description = "GreenMind — FastAPI backend for plant bioelectrical sensing"
 requires-python = ">=3.11"
 license = {text = "Proprietary"}
 authors = [{name = "Traver Dinten"}]
-readme = "../README.md"
+readme = "README.md"
 
 # ─── ruff ────────────────────────────────────────────────────────────
 [tool.ruff]
