@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import DirectSensorsPanel from '../DirectSensorsPanel';
 
 jest.mock('../SignalChart', () => ({
@@ -16,7 +16,10 @@ const device = {
   last_seen: '2026-09-19T14:50:00Z',
 };
 const points = [{ timestamp: '2026-09-19T14:49:00Z', value: 1000 }];
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  jest.useRealTimers();
+});
 
 test('loads Direct measurements only when expanded and exposes authenticated WAV/CSV paths', async () => {
   global.fetch = jest.fn(async (url) => ({
@@ -92,8 +95,92 @@ test('shows an explicit data error instead of hiding a device with failing chart
   })) as jest.Mock;
   render(<DirectSensorsPanel />);
   fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Messdaten konnten nicht aktualisiert werden'
+  expect(await screen.findByText(/Messdaten konnten nicht aktualisiert werden/)).toHaveAttribute(
+    'role',
+    'alert'
   );
+  expect(screen.queryByText(/In diesem Zeitraum sind noch keine/)).not.toBeInTheDocument();
   expect(screen.getByText('Empfängt Daten')).toBeInTheDocument();
+});
+
+const signal = [{ sensor_id: device.id, kind: 'bio_signal_ch1', unit: 'mV', data: points }];
+
+test('shows the curve when the recordings list fails', async () => {
+  global.fetch = jest.fn(async (url) => ({
+    ok: !String(url).includes('/recordings'),
+    status: String(url).includes('/recordings') ? 503 : 200,
+    json: async () => (String(url).endsWith('/devices') ? [device] : signal),
+  })) as jest.Mock;
+  render(<DirectSensorsPanel />);
+  fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
+  expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
+  expect(screen.getByRole('alert')).toHaveTextContent('Aufnahmeliste');
+  expect(screen.queryByText(/Noch keine abgeschlossene Aufnahme/)).not.toBeInTheDocument();
+});
+
+test('does not wait for a stalled recordings list before displaying the curve', async () => {
+  jest.useFakeTimers();
+  global.fetch = jest.fn((url) =>
+    String(url).includes('/recordings')
+      ? new Promise(() => {})
+      : Promise.resolve({
+          ok: true,
+          json: async () => (String(url).endsWith('/devices') ? [device] : signal),
+        })
+  ) as jest.Mock;
+  render(<DirectSensorsPanel />);
+  fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
+  expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
+  await act(async () => jest.advanceTimersByTimeAsync(10000));
+  expect(
+    (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/data?'))
+  ).toHaveLength(2);
+  expect(
+    (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/recordings'))
+  ).toHaveLength(1);
+});
+
+test('retains the open curve when device status temporarily fails', async () => {
+  jest.useFakeTimers();
+  let statusFails = false;
+  global.fetch = jest.fn(async (url) => ({
+    ok: !(String(url).endsWith('/devices') && statusFails),
+    status: String(url).endsWith('/devices') && statusFails ? 503 : 200,
+    json: async () =>
+      String(url).endsWith('/devices')
+        ? [device]
+        : String(url).includes('/recordings')
+          ? []
+          : signal,
+  })) as jest.Mock;
+  render(<DirectSensorsPanel />);
+  fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
+  expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
+  statusFails = true;
+  await act(async () => jest.advanceTimersByTimeAsync(10000));
+  expect(screen.getByTestId('signal-chart')).toHaveTextContent('1 Punkte');
+  expect(screen.getByText('Status unklar')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Biolingo/ })).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('removes cached device data after authorization is rejected', async () => {
+  jest.useFakeTimers();
+  let revoked = false;
+  global.fetch = jest.fn(async (url) => ({
+    ok: !revoked,
+    status: revoked ? 403 : 200,
+    json: async () =>
+      String(url).endsWith('/devices')
+        ? [device]
+        : String(url).includes('/recordings')
+          ? []
+          : signal,
+  })) as jest.Mock;
+  render(<DirectSensorsPanel />);
+  fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
+  expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
+  revoked = true;
+  await act(async () => jest.advanceTimersByTimeAsync(10000));
+  expect(screen.queryByTestId('signal-chart')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Biolingo/ })).not.toBeInTheDocument();
 });
