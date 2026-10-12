@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import re
 import secrets
+import time
 import uuid
+from collections import OrderedDict
 from hashlib import sha256
 from hmac import compare_digest
+from threading import Lock
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
@@ -24,6 +27,49 @@ GATEWAY_KEY_PREFIX = "gmk"
 _NEW_KEY_RE = re.compile(r"^gmk_([0-9a-f]{32})_([A-Za-z0-9_-]{32})$")
 _MAX_API_KEY_LENGTH = 128
 _DIGEST_PREFIX = "sha256$"
+_CACHE_SECONDS = 300
+_CACHE_LIMIT = 1024
+# Successful checks only. Each hit still reads current activation/hash from SQL.
+# Scope entries to their engine; never retain the plaintext credential.
+_verified_keys: OrderedDict = OrderedDict()
+_cache_lock = Lock()
+# Bound synchronization independently of attacker-chosen keys. Requests with
+# the same cold credential share one costly legacy check, then reread SQL.
+_verification_locks = tuple(Lock() for _ in range(64))
+
+
+def clear_gateway_auth_cache() -> None:
+    with _cache_lock:
+        _verified_keys.clear()
+
+
+def _remember_verified(db, api_key, gateway):
+    key = (id(db.get_bind()), sha256(api_key.encode()).digest())
+    with _cache_lock:
+        _verified_keys[key] = (gateway.id, gateway.api_key_hash, time.monotonic() + _CACHE_SECONDS)
+        _verified_keys.move_to_end(key)
+        while len(_verified_keys) > _CACHE_LIMIT:
+            _verified_keys.popitem(last=False)
+
+
+def _cached_gateway(db, api_key):
+    key = (id(db.get_bind()), sha256(api_key.encode()).digest())
+    with _cache_lock:
+        entry = _verified_keys.get(key)
+        if entry is None:
+            return None
+        if entry[2] <= time.monotonic():
+            _verified_keys.pop(key, None)
+            return None
+        _verified_keys.move_to_end(key)
+    gateway = db.query(Gateway).populate_existing().filter(Gateway.id == entry[0]).first()
+    if gateway is None or gateway.api_key_hash != entry[1]:
+        with _cache_lock:
+            _verified_keys.pop(key, None)
+        return None
+    if not gateway.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Gateway deactivated")
+    return gateway
 
 
 def generate_gateway_api_key(gateway_id: uuid.UUID) -> str:
@@ -72,6 +118,19 @@ def authenticate_gateway_api_key(db: Session, api_key: str | None) -> Gateway:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     match = _NEW_KEY_RE.fullmatch(api_key)
+    if api_key.startswith(f"{GATEWAY_KEY_PREFIX}_") and not match:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+    cached = _cached_gateway(db, api_key)
+    if cached is not None:
+        return cached
+    with _verification_locks[sha256(api_key.encode()).digest()[0] % 64]:
+        cached = _cached_gateway(db, api_key)
+        if cached is not None:
+            return cached
+        return _authenticate_uncached(db, api_key, match)
+
+
+def _authenticate_uncached(db, api_key, match):
     if match:
         gateway_id = uuid.UUID(hex=match.group(1))
         gateway = db.query(Gateway).filter(Gateway.id == gateway_id).first()
@@ -79,19 +138,21 @@ def authenticate_gateway_api_key(db: Session, api_key: str | None) -> Gateway:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
         if not gateway.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Gateway deactivated")
+        if not gateway.api_key_hash.startswith(_DIGEST_PREFIX):
+            _remember_verified(db, api_key, gateway)
         return gateway
 
-    if api_key.startswith(f"{GATEWAY_KEY_PREFIX}_"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-
     # Compatibility only: remove after all deployed gateways have rotated to gmk_* keys.
-    for gateway in db.query(Gateway).filter(Gateway.api_key_hash.isnot(None)).all():
+    for gateway in (
+        db.query(Gateway).populate_existing().filter(Gateway.api_key_hash.isnot(None)).all()
+    ):
         if verify_gateway_api_key(gateway, api_key):
             if not gateway.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Gateway deactivated",
                 )
+            _remember_verified(db, api_key, gateway)
             return gateway
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")

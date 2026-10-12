@@ -3,7 +3,7 @@
 import time
 
 from app.direct.database import transaction
-from app.direct.models import Chunk, Piece, Revision, Segment
+from app.direct.models import Chunk, PayloadReference, Piece, Revision, Segment
 
 
 def run_retention(engine, settings, store, *, now=None):
@@ -18,6 +18,10 @@ def run_retention(engine, settings, store, *, now=None):
                 Segment.sealed.is_(True),
                 Segment.published_revision > 0,
                 (Segment.bucket + 1) * 600 < now - settings.raw_days * 86400,
+                ~db.query(PayloadReference.chunk_id)
+                .join(Piece, Piece.chunk_id == PayloadReference.chunk_id)
+                .filter(Piece.segment_id == Segment.id)
+                .exists(),
             )
             .order_by(Segment.bucket)
             .limit(100)
@@ -50,7 +54,13 @@ def run_retention(engine, settings, store, *, now=None):
                         db.delete(revision)
         chunks = (
             db.query(Chunk)
-            .filter(Chunk.payload.is_(None), Chunk.received_at < now - settings.raw_days * 86400)
+            .filter(
+                Chunk.payload.is_(None),
+                Chunk.received_at < now - settings.raw_days * 86400,
+                ~db.query(PayloadReference.chunk_id)
+                .filter(PayloadReference.chunk_id == Chunk.id)
+                .exists(),
+            )
             .order_by(Chunk.received_at)
             .limit(500)
             .with_for_update(skip_locked=True)
