@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.direct.auth import TOKEN_RE
 from app.direct.database import transaction
-from app.direct.models import Chunk, Device, Enrollment, Pairing
+from app.direct.models import Chunk, Device, Enrollment, Pairing, Segment
 from app.direct.protocol import DirectError
 
 PREFIX = "/api/v1/direct-ingest"
@@ -226,8 +226,10 @@ def install_pairing_routes(app):
         def list_devices():
             with transaction(app.state.engine) as db:
                 latest = (
-                    db.query(Chunk.device_id, func.max(Chunk.received_at).label("seen"))
-                    .group_by(Chunk.device_id)
+                    # Acceptance commits this timestamp with its original chunk.
+                    # Assembly and duplicate ACKs do not advance it.
+                    db.query(Segment.device_id, func.max(Segment.updated_at).label("seen"))
+                    .group_by(Segment.device_id)
                     .subquery()
                 )
                 rows = (
@@ -242,6 +244,24 @@ def install_pairing_routes(app):
                     .limit(200)
                     .all()
                 )
+                # Keep historical offline devices visible after segment metadata
+                # was removed. Never aggregate the entire chunk history for
+                # devices with their durable segment acceptance timestamp.
+                missing = [device.id for device, _, seen in rows if seen is None]
+                fallback = (
+                    dict(
+                        db.query(Chunk.device_id, func.max(Chunk.received_at))
+                        .filter(Chunk.device_id.in_(missing))
+                        .group_by(Chunk.device_id)
+                        .all()
+                    )
+                    if missing
+                    else {}
+                )
+                rows = [
+                    (device, mac, seen if seen is not None else fallback.get(device.id))
+                    for device, mac, seen in rows
+                ]
                 return [
                     {
                         "id": d.id,
