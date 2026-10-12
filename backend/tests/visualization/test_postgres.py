@@ -437,6 +437,153 @@ def test_quality_metadata_blocks_removal_for_existing_feature_workers(fixture):
     assert not worker.prune_chunk(engine, chunk)
 
 
+def add_orphan_reading(engine, stamp, sensor_id, value=99):
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO sensor_reading(timestamp,sensor_id,kind,value,unit) VALUES (:stamp,:sid,'bio_signal',:value,'mV')"
+            ),
+            {"stamp": stamp, "sid": sensor_id, "value": value},
+        )
+
+
+def test_orphan_readings_archive_all_originals_and_protect_source(fixture):
+    engine, ids, start, add = fixture
+    missing = uuid.uuid4()
+    add(start, 10)
+    add(start + timedelta(seconds=1), 30)
+    add_orphan_reading(engine, start + timedelta(seconds=2), missing)
+    chunk = chunk_for(engine, start)
+    manifest = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    archived = list(read_archive(manifest))
+    assert manifest["rows"] == len(archived) == 3
+    assert [row["value"] for row in archived] == [10, 30, 99]
+    assert manifest["orphan_rows"] == 1
+    assert manifest["protected_rows"] == 1
+    assert manifest["orphan_sensor_ids"] == [str(missing)]
+    assert manifest["projection_status"] == "incomplete_missing_sensor"
+    assert not worker.prune_chunk(engine, chunk)
+    with engine.connect() as db:
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 3
+        assert db.execute(text("SELECT n,total,minimum,maximum FROM visual_reading")).one() == (
+            2,
+            40,
+            10,
+            30,
+        )
+        assert db.execute(text("SELECT source_rows FROM visual_chunk")).scalar_one() == 3
+
+
+def test_parent_return_reprojects_without_double_counting_or_repeated_snapshots(fixture):
+    from pathlib import Path
+
+    engine, ids, start, add = fixture
+    missing = uuid.uuid4()
+    add(start, 10)
+    add_orphan_reading(engine, start + timedelta(seconds=1), missing)
+    chunk = chunk_for(engine, start)
+    first = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert worker.snapshot_candidate(engine) is None
+    # Another ordinary chunk can progress instead of repeatedly retrying this one.
+    add(start - timedelta(days=2), 20)
+    another = chunk_for(engine, start - timedelta(days=2))
+    assert worker.snapshot_candidate(engine)["chunk_name"] == another["chunk_name"]
+    worker.snapshot_chunk(engine, another, datetime.now(UTC))
+    with engine.begin() as db:
+        db.execute(
+            text("INSERT INTO sensor VALUES (:sid,:gateway)"),
+            {"sid": missing, "gateway": ids["gateway"]},
+        )
+    # Parent return must expose retained source before the asynchronous snapshot.
+    with engine.connect() as db:
+        series = query_series(db, missing, start, start + timedelta(minutes=10), 60)
+        assert series[0]["data"][0]["value"] == 99
+        valid = query_series(db, ids["sensor"], start, start + timedelta(minutes=10), 60)
+        assert len(valid[0]["data"]) == 1 and valid[0]["data"][0]["value"] == 10
+    assert worker.snapshot_candidate(engine)["chunk_name"] == chunk["chunk_name"]
+    second = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert second["orphan_rows"] == 0 and second["projection_status"] == "complete"
+    assert second["sha256"] == first["sha256"] and Path(first["path"]).is_file()
+    assert worker.snapshot_candidate(engine) is None
+    with engine.connect() as db:
+        series = query_series(db, missing, start, start + timedelta(minutes=10), 60)
+        assert len(series[0]["data"]) == 1 and series[0]["data"][0]["value"] == 99
+        values = db.execute(
+            text("SELECT sensor_id,sum(n),sum(total) FROM visual_reading GROUP BY sensor_id")
+        ).all()
+        assert {str(sid): (n, total) for sid, n, total in values} == {
+            str(ids["sensor"]): (2, 30),
+            str(missing): (1, 99),
+        }
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 3
+
+
+@pytest.mark.parametrize("protection", ["orphan_rows", "protected_rows"])
+def test_prune_rechecks_current_manifest_under_lock(fixture, monkeypatch, protection):
+    import json
+
+    engine, ids, start, add = fixture
+    add(start, 10)
+    chunk = chunk_for(engine, start)
+    manifest = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    original_read = worker.read_archive
+
+    def replace_manifest_after_read(saved):
+        yield from original_read(saved)
+        changed = dict(manifest)
+        changed[protection] = 1
+        with engine.begin() as db:
+            db.execute(
+                text("UPDATE visual_chunk SET archive_manifest=:manifest WHERE chunk_name=:name"),
+                {"manifest": json.dumps(changed), "name": chunk["chunk_name"]},
+            )
+
+    monkeypatch.setattr(worker, "read_archive", replace_manifest_after_read)
+    assert not worker.prune_chunk(engine, chunk)
+    with engine.connect() as db:
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 1
+
+
+def test_orphan_quality_protection_is_not_double_counted(fixture):
+    engine, ids, start, add = fixture
+    add_orphan_reading(engine, start, uuid.uuid4())
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "ALTER TABLE sensor_reading ADD COLUMN IF NOT EXISTS source_dropped_samples_total bigint"
+            )
+        )
+        db.execute(text("UPDATE sensor_reading SET source_dropped_samples_total=2"))
+    chunk = chunk_for(engine, start)
+    manifest = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert manifest["rows"] == manifest["protected_rows"] == manifest["orphan_rows"] == 1
+    assert list(read_archive(manifest))[0]["source_dropped_samples_total"] == 2
+    assert not worker.prune_chunk(engine, chunk)
+
+
+def test_concurrent_reading_parent_removal_keeps_snapshot_atomic(fixture, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    engine, ids, start, add = fixture
+    add(start, 10)
+    chunk = chunk_for(engine, start)
+    original_write = worker.write_archive
+
+    def remove_parent_before_projection(*args, **kwargs):
+        with engine.begin() as db:
+            db.execute(text("DELETE FROM sensor WHERE id=:sid"), {"sid": ids["sensor"]})
+        return original_write(*args, **kwargs)
+
+    monkeypatch.setattr(worker, "write_archive", remove_parent_before_projection)
+    with pytest.raises(OperationalError) as error:
+        worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert error.value.orig.pgcode == "40001"
+    with engine.connect() as db:
+        assert db.execute(text("SELECT status FROM visual_chunk")).scalar_one() == "pending"
+        assert db.execute(text("SELECT count(*) FROM visual_reading")).scalar_one() == 0
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 1
+
+
 def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monkeypatch):
     from sqlalchemy.orm import Session
 
