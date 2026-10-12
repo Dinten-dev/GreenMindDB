@@ -1,13 +1,16 @@
 import hashlib
 import time
 import uuid
+from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import event
 
 from app.direct import pairing
+from app.direct.assembler import assemble_one
 from app.direct.auth import issue_token
 from app.direct.database import transaction
-from app.direct.models import Device, Enrollment, Pairing
+from app.direct.models import Chunk, Device, Enrollment, Pairing, Piece, Segment
 
 PREFIX = "/api/v1/direct-ingest"
 ORIGIN = "https://test.green-mind.ch"
@@ -148,3 +151,66 @@ def test_zone_revocation_hides_device_without_interrupting_reception(setup):
         payload, p.metadata(payload, device_id=body["device_id"]), token_override=body["token"]
     )
     assert result.status_code == 201
+
+
+def test_device_list_preserves_received_time_without_chunk_history_scan(setup):
+    p = setup
+    with transaction(p.engine) as db:
+        device = db.get(Device, p.device_id)
+        device.organization_id, device.zone_id = p.org, p.zone
+    payload = bytes(12)
+    assert p.upload(payload).status_code == 201
+    with transaction(p.engine) as db:
+        stamp = db.query(Chunk).one().received_at
+    assert assemble_one(p.engine, p.cfg, p.store, now=time.time() + 2)
+    statements = []
+
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        statements.append(statement.lower())
+
+    event.listen(p.engine, "before_cursor_execute", capture)
+    try:
+        response = p.client.get(PREFIX + "/devices", headers=p.headers)
+    finally:
+        event.remove(p.engine, "before_cursor_execute", capture)
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["last_seen"] == datetime.fromtimestamp(stamp, UTC).isoformat()
+    assert row["status"] == "online" and row["spool_bytes"] == len(payload)
+    assert all("direct_chunk" not in statement for statement in statements)
+
+
+def test_duplicate_conflict_and_further_acceptance_keep_exact_status(setup, monkeypatch):
+    p = setup
+    with transaction(p.engine) as db:
+        device = db.get(Device, p.device_id)
+        device.organization_id, device.zone_id = p.org, p.zone
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now)
+    payload = bytes(12)
+    assert p.upload(payload).status_code == 201
+    first = p.client.get(PREFIX + "/devices", headers=p.headers).json()[0]["last_seen"]
+    monkeypatch.setattr(time, "time", lambda: now + 10)
+    assert p.upload(payload).json()["status"] == "duplicate"
+    assert p.upload(bytes([1]) * 12).status_code == 409
+    assert p.client.get(PREFIX + "/devices", headers=p.headers).json()[0]["last_seen"] == first
+    assert p.upload(payload, p.metadata(payload, sequence=1, first_frame=1)).status_code == 201
+    row = p.client.get(PREFIX + "/devices", headers=p.headers).json()[0]
+    assert row["last_seen"] == datetime.fromtimestamp(now + 10, UTC).isoformat()
+    assert row["spool_bytes"] == 24
+
+
+def test_offline_device_retains_original_time_when_segment_metadata_is_absent(setup):
+    p = setup
+    with transaction(p.engine) as db:
+        device = db.get(Device, p.device_id)
+        device.organization_id, device.zone_id = p.org, p.zone
+    assert p.upload(bytes(12)).status_code == 201
+    with transaction(p.engine) as db:
+        stamp = time.time() - 100
+        db.query(Chunk).one().received_at = stamp
+        db.query(Piece).delete()
+        db.query(Segment).delete()
+    row = p.client.get(PREFIX + "/devices", headers=p.headers).json()[0]
+    assert row["status"] == "offline"
+    assert row["last_seen"] == datetime.fromtimestamp(stamp, UTC).isoformat()
