@@ -494,12 +494,20 @@ def test_parent_return_reprojects_without_double_counting_or_repeated_snapshots(
             text("INSERT INTO sensor VALUES (:sid,:gateway)"),
             {"sid": missing, "gateway": ids["gateway"]},
         )
+    # Parent return must expose retained source before the asynchronous snapshot.
+    with engine.connect() as db:
+        series = query_series(db, missing, start, start + timedelta(minutes=10), 60)
+        assert series[0]["data"][0]["value"] == 99
+        valid = query_series(db, ids["sensor"], start, start + timedelta(minutes=10), 60)
+        assert len(valid[0]["data"]) == 1 and valid[0]["data"][0]["value"] == 10
     assert worker.snapshot_candidate(engine)["chunk_name"] == chunk["chunk_name"]
     second = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
     assert second["orphan_rows"] == 0 and second["projection_status"] == "complete"
     assert second["sha256"] == first["sha256"] and Path(first["path"]).is_file()
     assert worker.snapshot_candidate(engine) is None
     with engine.connect() as db:
+        series = query_series(db, missing, start, start + timedelta(minutes=10), 60)
+        assert len(series[0]["data"]) == 1 and series[0]["data"][0]["value"] == 99
         values = db.execute(
             text("SELECT sensor_id,sum(n),sum(total) FROM visual_reading GROUP BY sensor_id")
         ).all()
