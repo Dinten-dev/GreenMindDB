@@ -25,18 +25,13 @@ from app.schemas.administration import (
     AdminUserDelete,
     AdminUserUpdate,
 )
-from app.zone_access import zone_access_filter
+from app.zone_access import is_platform_admin, zone_access_filter
 
 router = APIRouter(prefix="/administration", tags=["administration"])
 
 
 def is_management_admin(user: User) -> bool:
-    allowed = {
-        email.strip().casefold()
-        for email in settings.management_admin_emails.split(",")
-        if email.strip()
-    }
-    return bool(user.is_active and user.is_verified and user.email.casefold() in allowed)
+    return is_platform_admin(user)
 
 
 def require_management_admin(user: User = Depends(get_current_user)) -> User:
@@ -92,6 +87,8 @@ def view(user, grants, db):
             if not user.is_active
             else "E-Mail unbestätigt: kein Zugang."
             if not user.is_verified
+            else "Plattformadministration: alle Zonen aller Firmen."
+            if is_platform_admin(user)
             else "Keine Firma zugeordnet: kein Zonenzugang."
             if not user.organization_id
             else "Alle aktuellen und künftigen Zonen dieser Firma."

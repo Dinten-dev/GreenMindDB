@@ -17,7 +17,7 @@ from app.models.user import User
 from app.rate_limit import limiter
 from app.services.wav_completeness import direct_completeness
 from app.visualization import direct
-from app.zone_access import require_zone_access
+from app.zone_access import is_platform_admin, require_zone_access
 
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
 
@@ -31,11 +31,13 @@ def connection():
 
 
 def authorize(db, legacy, user, device_id):
-    if not user.organization_id:
+    platform_admin = is_platform_admin(user)
+    if not user.organization_id and not platform_admin:
         raise HTTPException(403, "No organization")
+    tenant = "" if platform_admin else " AND organization_id=:org"
     row = (
         db.execute(
-            text("SELECT id,zone_id,mode FROM direct_device WHERE id=:id AND organization_id=:org"),
+            text("SELECT id,zone_id,mode FROM direct_device WHERE id=:id" + tenant),
             {"id": str(device_id), "org": str(user.organization_id)},
         )
         .mappings()
