@@ -31,8 +31,11 @@ inline chunks and older WAV references. Old WAV versions remain required.
    snapshots. Restore a snapshot into an empty isolated database and reconstruct
    complete original chunks from independently read archived WAVs.
 4. Update every assembler and visualization reader before enabling offload.
-   Stop duplicate obsolete workers only as part of the verified worker handoff;
-   keep the active ingestion API serving requests.
+   Identify processes by their command, not their container name: the current
+   source has one `app.direct.worker` assembler and a separate
+   `app.visualization.direct run` projection worker. Both need compatible code;
+   the projection worker must remain available. Keep the active ingestion APIs
+   serving requests during the bounded, verified assembler handoff.
 5. Verify that the copy-only archive catalog includes immutable unsealed
    revisions, including older revisions superseded by late arrivals. This must
    not relax any local WAV deletion gate.
