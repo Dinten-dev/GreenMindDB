@@ -1,10 +1,10 @@
 """Independent settings: no new requirement is imposed on existing deployments."""
 
-from pathlib import Path
 import os
 import pwd
-from urllib.parse import urlsplit
+from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -63,7 +63,10 @@ class DirectSettings(BaseSettings):
                 or not self.s3_secret_key.get_secret_value()
             ):
                 raise ValueError("Direct bucket-scoped credentials are required")
-            if not self.s3_endpoint_url.startswith("https://") and not self.private_tunnel_permitted():
+            if (
+                not self.s3_endpoint_url.startswith("https://")
+                and not self.private_tunnel_permitted()
+            ):
                 raise ValueError("Direct object storage requires HTTPS")
             if not self.database_url.get_secret_value().startswith("postgresql"):
                 raise ValueError("Direct requires a dedicated PostgreSQL database")
@@ -76,16 +79,24 @@ class DirectSettings(BaseSettings):
         if not self.private_s3_tunnel:
             return False
         endpoint = urlsplit(self.s3_endpoint_url)
-        if (endpoint.scheme != 'http' or endpoint.hostname != '127.0.0.1'
-                or endpoint.port != 9000 or endpoint.path not in ('', '/')
-                or endpoint.query or endpoint.fragment or endpoint.username or endpoint.password
-                or self.ingest_enabled or self.retention_enabled
-                or os.uname().nodename != 'ubuntu-4gb-fsn1-1'
-                or os.getenv('RAW_ARCHIVE_WORKER_ROLE') != 'archive'
-                or os.getenv('ARCHIVE_REMOTE_AUTH_ENABLED') != 'true'
-                or os.getenv('RAW_ARCHIVE_DELETE_ENABLED') != 'false'):
+        if (
+            endpoint.scheme != "http"
+            or endpoint.hostname != "127.0.0.1"
+            or endpoint.port != 9000
+            or endpoint.path not in ("", "/")
+            or endpoint.query
+            or endpoint.fragment
+            or endpoint.username
+            or endpoint.password
+            or self.ingest_enabled
+            or self.retention_enabled
+            or os.uname().nodename != "ubuntu-4gb-fsn1-1"
+            or os.getenv("RAW_ARCHIVE_WORKER_ROLE") != "archive"
+            or os.getenv("ARCHIVE_REMOTE_AUTH_ENABLED") != "true"
+            or os.getenv("RAW_ARCHIVE_DELETE_ENABLED") != "false"
+        ):
             return False
         try:
-            return os.getuid() == pwd.getpwnam('greenmind-archive-read').pw_uid
+            return os.getuid() == pwd.getpwnam("greenmind-archive-read").pw_uid
         except KeyError:
             return False

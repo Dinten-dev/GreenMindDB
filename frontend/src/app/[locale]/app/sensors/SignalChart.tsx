@@ -193,14 +193,14 @@ export default function SignalChart({
         {summarized
           ? 'Die Werte fassen vollständig geprüfte WAV-Aufnahmen zusammen. Mittelwerte sind nach Sampleanzahl gewichtet. Zeitstempel-Überlappungen werden ausgewiesen; deren Datenabdeckung bleibt unbekannt. '
           : showPeaks && metric === 'value'
-          ? 'Die deutlichen Linien zeigen Minimum und Maximum jedes Zeitfensters, die dünne Linie den Mittelwert. Auch kurze Ausschläge bleiben sichtbar; ihre genaue Form zeigt das Originalsignal. '
-          : metric === 'rms'
-            ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
-            : verified
-              ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
-              : series.original_signal_available
-                ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
-                : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
+            ? 'Die deutlichen Linien zeigen Minimum und Maximum jedes Zeitfensters, die dünne Linie den Mittelwert. Auch kurze Ausschläge bleiben sichtbar; ihre genaue Form zeigt das Originalsignal. '
+            : metric === 'rms'
+              ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
+              : verified
+                ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
+                : series.original_signal_available
+                  ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
+                  : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
         Datenlücken werden nicht überbrückt.
       </p>
       {series.original_signal_available && (

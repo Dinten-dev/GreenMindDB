@@ -6,7 +6,6 @@ from fastapi import HTTPException
 from sqlalchemy import and_, false, select, true
 
 from app.config import settings
-
 from app.models.master import Zone
 from app.models.user import Role
 from app.models.zone_access import ZoneAccess
@@ -18,9 +17,7 @@ def is_platform_admin(user):
         for email in settings.management_admin_emails.split(",")
         if email.strip()
     }
-    return bool(
-        user.is_active and user.is_verified and user.email.casefold() in allowed
-    )
+    return bool(user.is_active and user.is_verified and user.email.casefold() in allowed)
 
 
 def zone_access_filter(user):

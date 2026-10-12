@@ -11,9 +11,9 @@ from app.raw_archive.policy import ArchiveBlocked
 
 
 @pytest.fixture
-def broker(world, monkeypatch, tmp_path):
+def broker(world, monkeypatch, tmp_path, request):
     config, _, source, destination, add, execute = world
-    record = add("gateway", 1)
+    record = add(getattr(request, "param", "gateway"), 1)
     execute()
     scratch = tmp_path / "scratch"
     scratch.mkdir(mode=0o700)
@@ -22,6 +22,8 @@ def broker(world, monkeypatch, tmp_path):
     monkeypatch.setenv("RAW_ARCHIVE_READS_ENABLED", "true")
     monkeypatch.setenv("RAW_ARCHIVE_READ_BROKER_SOCKET", str(path))
     monkeypatch.setenv("RAW_ARCHIVE_READ_SCRATCH_DIR", str(scratch))
+    if record.kind == "direct":
+        monkeypatch.setenv("RAW_ARCHIVE_DIRECT_S3_BUCKET", record.bucket)
     monkeypatch.setattr(read_broker, "healthy", lambda: None)
     server = read_broker.Server(str(path), config, destination, scratch)
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
@@ -89,3 +91,43 @@ def test_no_write_method(broker):
         assert connection.getresponse().status == 501
     finally:
         connection.close()
+
+
+@pytest.mark.parametrize("broker", ["direct"], indirect=True)
+def test_direct_client_reads_verified_archive_over_real_private_socket(broker):
+    import os
+
+    from app.direct.archive_reader import available_archive, read_archive
+    from app.direct.config import DirectSettings
+
+    record, payload, destination, _ = broker
+    settings = DirectSettings(
+        archive_broker_socket=Path(os.environ["RAW_ARCHIVE_READ_BROKER_SOCKET"]),
+        s3_bucket=record.bucket,
+    )
+    assert available_archive(settings, {record.key, "missing.wav"}) == {record.key}
+    assert read_archive(settings, record.key) == payload
+    destination.data[next(iter(destination.data))] = bytes(len(payload))
+    # Availability is only discovery; every read still verifies archived bytes.
+    with pytest.raises(OSError):
+        read_archive(settings, record.key)
+
+
+@pytest.mark.parametrize("broker", ["direct"], indirect=True)
+def test_direct_client_preserves_broker_concurrency_bound(broker):
+    import os
+
+    from app.direct.archive_reader import read_archive
+    from app.direct.config import DirectSettings
+
+    record, _, _, server = broker
+    settings = DirectSettings(
+        archive_broker_socket=Path(os.environ["RAW_ARCHIVE_READ_BROKER_SOCKET"]),
+        s3_bucket=record.bucket,
+    )
+    server.read_slot.acquire()
+    try:
+        with pytest.raises(OSError):
+            read_archive(settings, record.key)
+    finally:
+        server.read_slot.release()
