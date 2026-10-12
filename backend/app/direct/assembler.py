@@ -180,9 +180,9 @@ def release_verified_chunks(engine, *, limit=200):
         ]
     for device_id in devices:
         with transaction(engine) as db:
-            # Match ingest lock order: device, then quota. Never hold a WAV lock.
+            # Device first serializes all writes for this sensor. Select only its
+            # chunks before the shared quota lock; scans must not block others.
             device = db.query(Device).filter_by(id=device_id).with_for_update().one()
-            budget = db.query(Budget).filter_by(id=1).with_for_update().one()
             chunks = (
                 db.query(Chunk)
                 .filter(Chunk.device_id == device_id, Chunk.payload.isnot(None), ~pending_piece)
@@ -192,6 +192,9 @@ def release_verified_chunks(engine, *, limit=200):
                 .all()
             )
             amount = sum(chunk.payload_bytes for chunk in chunks)
+            if not amount:
+                continue
+            budget = db.query(Budget).filter_by(id=1).with_for_update().one()
             for chunk in chunks:
                 chunk.payload = None
             device.spool_bytes -= amount
