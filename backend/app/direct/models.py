@@ -96,6 +96,16 @@ class Segment(Base):
     __table_args__ = (UniqueConstraint("device_id", "session_id", "bucket"),)
 
 
+class PayloadReference(Base):
+    """Original chunk reconstruction; immutable WAVs remain pinned by these rows."""
+
+    __tablename__ = "direct_chunk_payload_ref"
+    chunk_id = Column(String(36), ForeignKey("direct_chunk.id"), primary_key=True)
+    version = Column(Integer, nullable=False, default=1)
+    parts = Column(JSON, nullable=False)
+    archived_at = Column(Float, nullable=False)
+
+
 class Piece(Base):
     __tablename__ = "direct_piece"
     segment_id = Column(String(36), ForeignKey("direct_segment.id"), primary_key=True)
