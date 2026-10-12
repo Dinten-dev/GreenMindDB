@@ -81,6 +81,32 @@ def test_low_quota_does_not_upload(tmp_path):
     assert not box.bodies
 
 
+def test_verification_uses_separate_read_identity(tmp_path):
+    output, manifest, _ = bundle(tmp_path)
+    box = Box()
+
+    class Reader:
+        download_catalog = box.download_catalog
+
+    def reject(*args):
+        pytest.fail("Upload access must not verify the feature bundle")
+
+    box.download_catalog = reject
+    proof = features.publish_and_restore(output, manifest, box, verification_box=Reader())
+    assert proof["independent_read_identity"] is True
+
+
+def test_interrupted_readback_can_resume_without_overwriting_evidence(tmp_path):
+    output, manifest, _ = bundle(tmp_path)
+    box = Box(corrupt=True)
+    with pytest.raises(ArchiveBlocked):
+        features.publish_and_restore(output, manifest, box)
+    first = (output / "readback/manifest.json").read_bytes()
+    box.corrupt = False
+    assert features.publish_and_restore(output, manifest, box)["status"] == "verified"
+    assert (output / "readback/manifest.json").read_bytes() == first
+
+
 def test_corrupt_remote_manifest_never_creates_success(tmp_path):
     output, manifest, _ = bundle(tmp_path)
     with pytest.raises(ArchiveBlocked, match="manifest readback"):

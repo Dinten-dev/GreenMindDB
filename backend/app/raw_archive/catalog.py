@@ -25,7 +25,27 @@ class GatewayCatalog:
         from app.models.wav_file import WavFile
 
         with self.sessions() as db:
-            wav = db.get(WavFile, wav_id)
+            if self.copy_only:
+                # The copy role has only the WAV-only metadata column allowlist.
+                # Loading the whole ORM entity would require unrelated columns.
+                wav = (
+                    db.query(
+                        WavFile.id,
+                        WavFile.raw_deleted_at,
+                        WavFile.s3_key,
+                        WavFile.content_sha256,
+                        WavFile.file_size_bytes,
+                        WavFile.ended_at,
+                        WavFile.created_at,
+                        WavFile.started_at,
+                        WavFile.sensor_mac,
+                        WavFile.sensor_id,
+                    )
+                    .filter(WavFile.id == wav_id)
+                    .one_or_none()
+                )
+            else:
+                wav = db.get(WavFile, wav_id)
             if wav is None or wav.raw_deleted_at is not None:
                 raise ArchiveBlocked("Missing or previously deleted WAV")
             if self.copy_only:
@@ -185,16 +205,38 @@ class DirectCatalog:
         from app.direct.models import Enrollment, Revision, Segment
 
         with self.sessions() as db:
-            segment = db.get(Segment, segment_id)
+            if self.copy_only:
+                segment = (
+                    db.query(
+                        Segment.id,
+                        Segment.device_id,
+                        Segment.session_id,
+                        Segment.bucket,
+                        Segment.revision,
+                        Segment.published_revision,
+                        Segment.sealed,
+                        Segment.updated_at,
+                    )
+                    .filter(Segment.id == segment_id)
+                    .one_or_none()
+                )
+            else:
+                segment = db.get(Segment, segment_id)
             revision = db.get(Revision, (segment_id, revision_number))
             if (
                 segment is None
-                or not segment.sealed
+                or (not self.copy_only and not segment.sealed)
                 or revision is None
                 or revision.raw_deleted_at is not None
                 or not revision.verified_at
-                or segment.published_revision != segment.revision
-                or revision_number != segment.published_revision
+                or revision_number > segment.published_revision
+                or (
+                    not self.copy_only
+                    and (
+                        segment.published_revision != segment.revision
+                        or revision_number != segment.published_revision
+                    )
+                )
             ):
                 raise ArchiveBlocked("Direct segment is not sealed and verified")
             manifest = revision.manifest
@@ -251,8 +293,15 @@ class DirectCatalog:
                         run["key"],
                         run["sha256"],
                         size,
-                        datetime.fromtimestamp(max(ended, (segment.bucket + 1) * 600), UTC),
-                        datetime.fromtimestamp(max(segment.updated_at, revision.verified_at), UTC),
+                        datetime.fromtimestamp(
+                            ended if self.copy_only else max(ended, (segment.bucket + 1) * 600), UTC
+                        ),
+                        datetime.fromtimestamp(
+                            revision.verified_at
+                            if self.copy_only
+                            else max(segment.updated_at, revision.verified_at),
+                            UTC,
+                        ),
                         revision.manifest_sha256,
                         datetime.fromtimestamp(run["started_at_us"] / 1_000_000, UTC),
                         sensor,
@@ -278,11 +327,14 @@ class DirectCatalog:
                     Segment.id == Revision.segment_id,
                 )
                 .filter(
-                    Segment.sealed.is_(True),
                     Revision.raw_deleted_at.is_(None),
-                    Segment.updated_at < before.timestamp(),
                     Revision.verified_at < before.timestamp(),
                 )
+            )
+            query = (
+                query.filter(Revision.revision <= Segment.published_revision)
+                if self.copy_only
+                else query.filter(Segment.sealed.is_(True), Segment.updated_at < before.timestamp())
             )
             if cursor:
                 query = query.filter(
@@ -311,18 +363,25 @@ class DirectCatalog:
         if len(references) > 100:
             raise ArchiveBlocked("Fingerprint page exceeds bound")
         with self.sessions() as db:
-            rows = (
-                db.query(
-                    R.segment_id,
-                    R.revision,
-                    R.manifest_sha256,
-                    R.verified_at,
-                    R.raw_deleted_at,
+            columns = [
+                R.segment_id,
+                R.revision,
+                R.manifest_sha256,
+                R.verified_at,
+                R.raw_deleted_at,
+            ]
+            columns += (
+                [S.device_id, S.session_id, S.bucket]
+                if self.copy_only
+                else [
                     S.updated_at,
                     S.sealed,
                     S.revision,
                     S.published_revision,
-                )
+                ]
+            )
+            rows = (
+                db.query(*columns)
                 .join(S, S.id == R.segment_id)
                 .filter(tuple_(R.segment_id, R.revision).in_([tuple(ref) for ref in references]))
                 .all()
@@ -345,9 +404,12 @@ class DirectCatalog:
                     Revision.verified_at >= after.timestamp(),
                     Revision.verified_at < before.timestamp(),
                     Revision.raw_deleted_at.is_(None),
-                    Segment.sealed.is_(True),
-                    Segment.updated_at < before.timestamp(),
                 )
+            )
+            query = (
+                query.filter(Revision.revision <= Segment.published_revision)
+                if self.copy_only
+                else query.filter(Segment.sealed.is_(True), Segment.updated_at < before.timestamp())
             )
             if cursor:
                 query = query.filter(

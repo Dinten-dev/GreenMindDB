@@ -22,7 +22,12 @@ PROXIES = ("greenmind-prod", "greenmind-staging")
 
 def protected():
     result = {}
-    for name in RECEIVERS:
+    from .source_probe import gateway_ports
+
+    names = RECEIVERS
+    if 8152 in gateway_ports():
+        names = (RECEIVERS[0], "gm-peter-receiver-20261010", *RECEIVERS[1:])
+    for name in names:
         state = json.loads(
             subprocess.check_output(  # noqa: S603 - fixed inspection-only command
                 [
@@ -30,7 +35,9 @@ def protected():
                     "inspect",
                     "--format",
                     '{"running":{{.State.Running}},"started":{{json .State.StartedAt}},'
-                    '"restarts":{{.RestartCount}}}',
+                    '"restarts":{{.RestartCount}},"image":{{json .Image}},'
+                    '"memory":{{.HostConfig.Memory}},"swap":{{.HostConfig.MemorySwap}},'
+                    '"cpu":{{.HostConfig.NanoCpus}},"restart_policy":{{json .HostConfig.RestartPolicy.Name}}}',
                     name,
                 ],
                 text=True,
@@ -44,6 +51,17 @@ def protected():
         result[name] = hashlib.sha256(
             (Path("/etc/nginx/sites-available") / name).read_bytes()
         ).hexdigest()
+    release = os.getenv("RAW_ARCHIVE_OBSERVATION_READER_RELEASE")
+    if release:
+        from urllib.request import urlopen
+
+        with urlopen("http://127.0.0.1:28141/health", timeout=3) as response:
+            if response.status != 200:
+                raise ArchiveBlocked("Accepted archive reader is unavailable")
+            body = response.read(8193)
+        if len(body) > 8192 or json.loads(body).get("release_id") != release:
+            raise ArchiveBlocked("Accepted reader release changed")
+        result["accepted_archive_reader_release"] = release
     return result
 
 

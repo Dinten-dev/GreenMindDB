@@ -20,9 +20,11 @@ def test_http_cache_preserves_immediate_memory_and_load_guards(tmp_path, monkeyp
     monkeypatch.setattr(
         Path,
         "read_text",
-        lambda path: f"MemAvailable: {state['memory']} kB"
-        if str(path) == "/proc/meminfo"
-        else original(path),
+        lambda path: (
+            f"MemAvailable: {state['memory']} kB"
+            if str(path) == "/proc/meminfo"
+            else original(path)
+        ),
     )
     monkeypatch.setattr("app.raw_archive.health.os.getloadavg", lambda: (state["load"], 0, 0))
 

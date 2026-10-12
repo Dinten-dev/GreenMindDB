@@ -2,6 +2,7 @@
 
 import math
 import os
+import secrets
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -10,7 +11,18 @@ from .policy import ArchiveBlocked
 
 
 class CombinedProbe:
-    def __init__(self, local, *, url, token, source, minimum_memory, maximum_load, clock=time.time):
+    def __init__(
+        self,
+        local,
+        *,
+        url,
+        token,
+        source,
+        minimum_memory,
+        maximum_load,
+        clock=time.time,
+        monotonic=time.monotonic,
+    ):
         parts = urlsplit(url)
         if (
             parts.scheme != "http"
@@ -28,11 +40,13 @@ class CombinedProbe:
             or not math.isfinite(minimum_memory)
             or minimum_memory < 512
             or not math.isfinite(maximum_load)
-            or not 0 < maximum_load <= 2
+            # Never exceed the independent production lease's original ceiling.
+            or not 0 < maximum_load <= 2.4
         ):
             raise ArchiveBlocked("Authenticated source identity and original reserve required")
         self.local, self.url, self.token, self.source = local, url, token, source
         self.minimum_memory, self.maximum_load, self.clock = minimum_memory, maximum_load, clock
+        self.monotonic = monotonic
         self.last = {"ok": False, "reason": "not_checked"}
 
     def close(self):
@@ -47,8 +61,12 @@ class CombinedProbe:
             self.last = self.local.last
             return False
         try:
+            nonce = secrets.token_hex(16)
+            began = self.monotonic()
             with self.local.client.stream(
-                "GET", self.url, headers={"Authorization": "Bearer " + self.token}
+                "GET",
+                self.url,
+                headers={"Authorization": "Bearer " + self.token, "X-GreenMind-Probe-Nonce": nonce},
             ) as response:
                 if response.status_code != 200:
                     return self.fail("source_probe_unavailable")
@@ -64,7 +82,16 @@ class CombinedProbe:
                 return self.fail("source_probe_invalid")
             if value.get("schema") != 1 or value.get("source") != self.source:
                 return self.fail("source_identity")
-            age = self.clock() - float(value["checked_at"])
+            if "probe_nonce" in value or "sample_age_seconds" in value:
+                if value.get("probe_nonce") != nonce:
+                    return self.fail("source_probe_invalid")
+                sample_age = float(value["sample_age_seconds"])
+                elapsed = self.monotonic() - began
+                if not math.isfinite(sample_age) or sample_age < 0 or elapsed < 0:
+                    return self.fail("source_probe_invalid")
+                age = sample_age + elapsed
+            else:
+                age = self.clock() - float(value["checked_at"])
             if not math.isfinite(age) or not 0 <= age <= 10:
                 return self.fail("source_probe_stale")
             memory, load = float(value["available_mib"]), float(value["load"])

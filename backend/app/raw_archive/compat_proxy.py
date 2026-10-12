@@ -31,7 +31,7 @@ NESTED = (
 
 
 def blocks(reader_port):
-    if reader_port not in {8140, 8141}:
+    if reader_port not in {8140, 8141, 28141}:
         raise ArchiveBlocked("Unreviewed archive reader port")
     return tuple(block.replace(":8140", f":{reader_port}") for block in (BEFORE, NESTED))
 
@@ -53,3 +53,23 @@ def rollback(candidate, *, reader_port=8140):
     if candidate.count(before) != 1 or candidate.count(nested) != 1:
         raise ArchiveBlocked("Compatibility proxy blocks changed")
     return candidate.replace(before, "", 1).replace(nested, "", 1)
+
+
+def archive_host_draft(original, expected_sha256):
+    """Only the reviewed three existing readers plus old WAV compatibility."""
+    if hashlib.sha256(original.encode()).hexdigest() != expected_sha256:
+        raise ArchiveBlocked("Production proxy changed; inspect it first")
+    if original.count("http://127.0.0.1:8140") != 3 or ":28141" in original:
+        raise ArchiveBlocked("Reviewed three-reader baseline required")
+    updated = original.replace("http://127.0.0.1:8140", "http://127.0.0.1:28141")
+    candidate = draft(updated, hashlib.sha256(updated.encode()).hexdigest(), reader_port=28141)
+    if archive_host_rollback(candidate) != original:
+        raise ArchiveBlocked("Archive overlay cannot restore all original bytes")
+    return candidate
+
+
+def archive_host_rollback(candidate):
+    updated = rollback(candidate, reader_port=28141)
+    if updated.count("http://127.0.0.1:28141") != 3:
+        raise ArchiveBlocked("Reviewed archive reader locations changed")
+    return updated.replace("http://127.0.0.1:28141", "http://127.0.0.1:8140")

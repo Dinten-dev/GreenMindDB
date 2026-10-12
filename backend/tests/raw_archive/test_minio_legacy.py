@@ -17,7 +17,10 @@ from app.raw_archive.policy import ArchiveBlocked, Recording
 from app.raw_archive.storage import S3Source
 
 pytestmark = pytest.mark.integration
+# The production RepoDigest is no longer publicly pullable. Require the actual
+# independently measured production server binary, not just a mutable tag.
 IMAGE = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+BINARY_SHA256 = "7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f"
 
 
 @pytest.fixture
@@ -61,6 +64,10 @@ def minio():
         timeout=240,
     )
     try:
+        actual = subprocess.check_output(
+            [docker, "exec", name, "sha256sum", "/usr/bin/minio"], text=True, timeout=10
+        ).split()[0]
+        assert actual == BINARY_SHA256, "Fixture must match the actual production server binary"
         port = subprocess.check_output(
             [docker, "port", name, "9000"], text=True, timeout=10
         ).strip()

@@ -80,6 +80,7 @@ def test_sql_lease_never_repeats_journal_backup(tmp_path, monkeypatch):
     settings["healthy"] = healthy
     assert main() == 75
     state = json.loads(next(tmp_path.glob("session-*/lease.json")).read_text())
+    assert next(tmp_path.glob("session-*")).stat().st_mode & 0o777 == 0o750
     assert state["ready"] is False and state["ledger"] is None
     assert not list(tmp_path.glob("session-*/ledger.sqlite3"))
 

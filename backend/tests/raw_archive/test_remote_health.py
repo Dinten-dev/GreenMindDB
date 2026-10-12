@@ -99,6 +99,7 @@ def test_public_probe_and_weakened_source_reserve_rejected():
             minimum_memory=512,
             maximum_load=2,
         )
+
     with pytest.raises(ArchiveBlocked):
         CombinedProbe(
             Local(GOOD),
@@ -108,3 +109,77 @@ def test_public_probe_and_weakened_source_reserve_rejected():
             minimum_memory=128,
             maximum_load=2,
         )
+
+
+@pytest.mark.parametrize("limit", [2.4, 2.401])
+def test_original_production_lease_ceiling_remains_hard(limit):
+    local = Local({**GOOD, "load": 2.3})
+    try:
+        if limit > 2.4:
+            with pytest.raises(ArchiveBlocked):
+                CombinedProbe(
+                    local,
+                    url="http://127.0.0.1:18150/source-health",
+                    token="a" * 64,
+                    source="production-main",
+                    minimum_memory=640,
+                    maximum_load=limit,
+                    clock=lambda: 1001,
+                )
+        else:
+            healthy = CombinedProbe(
+                local,
+                url="http://127.0.0.1:18150/source-health",
+                token="a" * 64,
+                source="production-main",
+                minimum_memory=640,
+                maximum_load=limit,
+                clock=lambda: 1001,
+            )
+            assert healthy()
+    finally:
+        local.close()
+
+
+@pytest.mark.parametrize(
+    "age,elapsed,nonce_ok,expected",
+    [
+        (2, 1, True, True),
+        (0, 11, True, False),
+        (9.5, 1, True, False),
+        (-1, 0, True, False),
+        (0, 0, False, False),
+        (float("nan"), 0, True, False),
+    ],
+)
+def test_nonce_bound_monotonic_freshness_ignores_clock_skew(age, elapsed, nonce_ok, expected):
+    local = Local(GOOD)
+    local.client.close()
+
+    def reply(request):
+        return httpx.Response(
+            200,
+            json={
+                **GOOD,
+                "checked_at": 9999999,
+                "probe_nonce": request.headers["X-GreenMind-Probe-Nonce"] if nonce_ok else "0" * 32,
+                "sample_age_seconds": age,
+            },
+        )
+
+    local.client = httpx.Client(transport=httpx.MockTransport(reply))
+    ticks = iter([10, 10 + elapsed])
+    healthy = CombinedProbe(
+        local,
+        url="http://127.0.0.1:18150/source-health",
+        token="a" * 64,
+        source="production-main",
+        minimum_memory=640,
+        maximum_load=2,
+        clock=lambda: 0,
+        monotonic=lambda: next(ticks),
+    )
+    try:
+        assert healthy() is expected
+    finally:
+        healthy.close()

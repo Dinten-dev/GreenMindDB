@@ -26,20 +26,22 @@ from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.rate_limit import limiter
+from app.transaction_pool import attach_read_guards
 from app.visualization.resolution import display_step
-from app.zone_access import zone_access_filter
+from app.zone_access import is_platform_admin, zone_access_filter
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 read_engine = create_engine(
     os.environ.get("DATABASE_URL", "postgresql+psycopg2://localhost/plantdb"),
-    pool_size=3,
+    pool_size=1 if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true" else 3,
     max_overflow=0,
     pool_timeout=5,
     pool_pre_ping=True,
     connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"},
 )
+attach_read_guards(read_engine, statement_ms=8000, lock_ms=150, work_mem_kib=8192)
 
 
 def read_db():
@@ -68,7 +70,7 @@ async def private_response(request, call_next):
 
 
 def authorize(db, user, sensor_id):
-    if not user.organization_id:
+    if not user.organization_id and not is_platform_admin(user):
         raise HTTPException(403, "No organization")
     sensor = (
         db.query(Sensor.id)
@@ -121,7 +123,8 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
         db.execute(
             text("""SELECT kind,unit,to_timestamp(floor(extract(epoch FROM bucket)/greatest(seconds,:step))*greatest(seconds,:step)) AS stamp,
       greatest(seconds,:step) AS seconds,sum(n) AS n,sum(total) AS total,sum(total2) AS total2,min(minimum) AS minimum,max(maximum) AS maximum
-      FROM visual_reading WHERE sensor_id=:sid AND bucket<:end AND bucket+seconds*interval '1 second'>:start
+      FROM visual_reading WHERE sensor_id=:sid AND bucket>:start-interval '600 seconds'
+      AND bucket<:end AND bucket+seconds*interval '1 second'>:start
       GROUP BY kind,unit,stamp,greatest(seconds,:step) ORDER BY stamp LIMIT :lim"""),
             params,
         )
@@ -159,13 +162,17 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
                 target[field] += row[field]
             target["minimum"] = min(target["minimum"], row["minimum"])
             target["maximum"] = max(target["maximum"], row["maximum"])
+    # The validated schema constrains both rollup tables to 60/600 seconds.
+    # Retain the exact overlap predicate; the index bound excludes only buckets
+    # that cannot intersect the requested window, including its left boundary.
     waves = (
         db.execute(
             text("""SELECT to_timestamp(floor(extract(epoch FROM w.bucket)/greatest(w.seconds,:step))*greatest(w.seconds,:step)) AS stamp,
       greatest(w.seconds,:step) AS seconds,sum(n) AS n,sum(total) AS total,sum(total2) AS total2,
       min(minimum) AS minimum,max(maximum) AS maximum,sum(duration) AS duration
       FROM visual_wave w JOIN visual_wav v ON v.wav_id=w.wav_id
-      WHERE w.sensor_id=:sid AND w.bucket<:end AND w.bucket+w.seconds*interval '1 second'>:start AND v.status='verified'
+      WHERE w.sensor_id=:sid AND w.bucket>:start-interval '600 seconds'
+      AND w.bucket<:end AND w.bucket+w.seconds*interval '1 second'>:start AND v.status='verified'
       GROUP BY stamp,greatest(w.seconds,:step)"""),
             params,
         )
@@ -483,3 +490,7 @@ install_archive_exports(app)
 from app.visualization.compat_downloads import install as install_compat_downloads  # noqa: E402
 
 install_compat_downloads(app)
+
+from app.visualization.remote_auth import install as install_remote_auth  # noqa: E402
+
+install_remote_auth(app)

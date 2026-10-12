@@ -1,6 +1,26 @@
 # WAV-Archiv: Betreiberanleitung und Freigabeschritte
 
-Stand: 7. Oktober 2026. Löschung bleibt deaktiviert.
+Aktueller Nachtrag: 9. Oktober 2026. Löschung bleibt deaktiviert.
+
+Beide Produktions-Buckets wurden am 8. Oktober tatsächlich über den vorhandenen
+Metadaten-Diagnosezugang erneut gelesen: Versionierung `Enabled`, jeweils
+`NoSuchLifecycleConfiguration`. Die unten beschriebenen unversionierten
+Antworten vom 7. Oktober sind historische Ergebnisse vor der separat geprüften
+Versionierungsänderung. Vor einem späteren Pilot müssen diese Diagnosen erneut
+frisch geprüft und gebunden werden. Legacy-null-Löschung bleibt ausdrücklich aus.
+
+Neues Vorbereitungspaket auf beiden Hosts: `20261008-v9`, 277 lokale Tests
+bestanden, sieben ausgelassen, vier Integrationsprüfungen nicht ausgeführt.
+Vollständiger Live-Katalog, echte Reader-Abnahme und neuer 24-Stunden-Test fehlen.
+Der alte vorbereitete Proxy passt nicht mehr zur aktuellen Production-Datei.
+Ein neuer GET-Entwurf wurde am 9. Oktober gegen die aktuelle Datei erstellt,
+mit Nginx tatsächlich auf Syntax geprüft und bytegenau zurückgerechnet.
+Er wurde **nicht veröffentlicht**; die echte Umschaltungs-/Rücknahmeprobe fehlt.
+
+Details und Betreiberzugänge:
+[Archivserver-Protokoll](ARCHIVE-SERVER-ROLLOUT-20261008.md).
+
+## Historischer Stand vom 7. Oktober
 
 Aktualisiert nach der Betreiber-Anmeldung: Diagnosekonto angelegt und beide
 Buckets tatsächlich geprüft. Zwei WAV-Downloads über den Unteraccount bestanden.

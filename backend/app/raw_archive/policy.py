@@ -182,11 +182,23 @@ class Ledger:
     """Separate durable journal; never adds tables or writes to the live database."""
 
     def __init__(self, root: Path):
+        mode = os.environ.get("RAW_ARCHIVE_LEDGER_JOURNAL_MODE", "WAL")
+        if mode != "WAL" and not (
+            mode == "DELETE"
+            and os.environ.get("RAW_ARCHIVE_WORKER_ROLE") == "archive"
+            and os.uname().nodename == "ubuntu-4gb-fsn1-1"
+        ):
+            raise ArchiveBlocked("Explicit archive-host journal mode required")
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = root / "archive.sqlite3"
         self.db = sqlite3.connect(self.path, timeout=2)
-        os.chmod(self.path, 0o600)
-        self.db.execute("PRAGMA journal_mode=WAL")
+        # Retain the operator-installed reader ACL's read mask on this one
+        # archive journal. No reader joins the upload credential's group.
+        os.chmod(self.path, 0o640 if mode == "DELETE" else 0o600)
+        # The separate reader has no directory write permission. Rollback
+        # journaling permits genuine mode=ro reads without WAL sidecar writes.
+        # Only the isolated single writer opts in; the source stays on WAL.
+        self.db.execute("PRAGMA journal_mode=" + mode)
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.execute("""CREATE TABLE IF NOT EXISTS archive (
             id TEXT PRIMARY KEY, state TEXT NOT NULL, receipt TEXT NOT NULL)""")

@@ -14,6 +14,8 @@ FIELDS = ("USER", "HOST", "KEY", "KNOWN_HOSTS")
 class ReadOnlyBox:
     """Only verified-key GETs; no publish, delete, shell or generic batch method."""
 
+    _transfer_kilobits = 2048
+
     def __init__(self, *, user, host, key, known_hosts):
         match = re.fullmatch(r"(u[0-9]+)-sub[0-9]+", user)
         if match is None or host != user + ".your-storagebox.de":
@@ -21,15 +23,20 @@ class ReadOnlyBox:
         primary = match.group(1)
         self.identity = f"sftp://{primary}@{primary}.your-storagebox.de:23/greenmind-raw"
         self.__transport = StorageBox(
-            host=host, user=user, key=key, known_hosts=known_hosts, kilobits=2048
+            host=host, user=user, key=key, known_hosts=known_hosts, kilobits=self._transfer_kilobits
         )
 
     def download(self, key, path, max_bytes):
+        self._download(key, path, max_bytes, catalog=False)
+
+    def _download(self, key, path, max_bytes, *, catalog):
         if path.exists() or path.is_symlink() or not 0 < max_bytes <= 64 * 1024**2:
             raise ArchiveBlocked("Download needs a new bounded private path")
         # The provider roots this subaccount at greenmind-raw. Keep logical
         # receipt identity; never add a second greenmind-raw prefix remotely.
-        remote = self.__transport.path(key).removeprefix("greenmind-raw/")
+        remote = (
+            self.__transport.catalog_path(key) if catalog else self.__transport.path(key)
+        ).removeprefix("greenmind-raw/")
         self.__transport.run(
             f"get {remote} {self.__transport.quote(path)}\n",
             output=path,
@@ -46,6 +53,10 @@ class ReadOnlyBox:
 class CatalogReadOnlyBox(ReadOnlyBox):
     """Verification-host catalog GETs; not used as the public WAV reader."""
 
+    # Private verification only; keep public WAV reads at their original limit.
+    # Same existing transport ceiling and single-flight SFTP requests; no caching.
+    _transfer_kilobits = 8192
+
     def download_catalog(self, key, path, max_bytes, *, snapshot=None):
         if snapshot is not None:
             raise ArchiveBlocked("Snapshot restore requires the separately verified operator path")
@@ -53,10 +64,10 @@ class CatalogReadOnlyBox(ReadOnlyBox):
             raise ArchiveBlocked("Only hash-addressed WAV catalog parts can be read")
         if not 0 < max_bytes <= 17 * 1024**2:
             raise ArchiveBlocked("Catalog part exceeds its verified bound")
-        self.download(key, path, max_bytes)
+        self._download(key, path, max_bytes, catalog=True)
 
 
-def configured_read_only_box():
+def configured_read_only_box(*, transport=ReadOnlyBox):
     """Partial configuration blocks instead of falling back to upload credentials."""
     if not any(name.startswith(PREFIX) for name in os.environ):
         return None
@@ -70,4 +81,8 @@ def configured_read_only_box():
     upload_key = os.environ.get("RAW_ARCHIVE_SFTP_KEY")
     if upload_key and Path(upload_key).is_file() and key.is_file() and key.samefile(upload_key):
         raise ArchiveBlocked("Read-only access must not reuse the upload key")
-    return ReadOnlyBox(user=values["USER"], host=values["HOST"], key=key, known_hosts=known_hosts)
+    return transport(user=values["USER"], host=values["HOST"], key=key, known_hosts=known_hosts)
+
+
+def configured_catalog_read_only_box():
+    return configured_read_only_box(transport=CatalogReadOnlyBox)

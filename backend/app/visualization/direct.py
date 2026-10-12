@@ -22,6 +22,7 @@ from app.direct.config import DirectSettings
 from app.direct.models import Chunk, Piece, Revision, Segment
 from app.direct.models import Session as CaptureSession
 from app.direct.storage import ArtifactStore
+from app.transaction_pool import attach_read_guards
 
 log = logging.getLogger(__name__)
 
@@ -44,11 +45,12 @@ def resources():
     engine = create_engine(
         cfg.database_url.get_secret_value(),
         pool_size=1,
-        max_overflow=1,
+        max_overflow=0 if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true" else 1,
         pool_pre_ping=True,
         pool_timeout=3,
         connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"},
     )
+    attach_read_guards(engine, statement_ms=8000, lock_ms=150, work_mem_kib=8192)
     return engine, ArtifactStore(cfg)
 
 

@@ -140,9 +140,9 @@ def test_approved_offload_can_relieve_a_full_source_volume(tmp_path, monkeypatch
     monkeypatch.setattr(
         Path,
         "read_text",
-        lambda path: "MemAvailable: 2097152 kB"
-        if str(path) == "/proc/meminfo"
-        else original_read(path),
+        lambda path: (
+            "MemAvailable: 2097152 kB" if str(path) == "/proc/meminfo" else original_read(path)
+        ),
     )
     monkeypatch.setattr(runner.os, "getloadavg", lambda: (0, 0, 0))
     monkeypatch.setattr(

@@ -194,6 +194,8 @@ def _run(metrics, cleanup):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.transaction_pool import attach_read_guards
+
     from .catalog import DirectCatalog, GatewayCatalog
     from .storage import S3Source
 
@@ -218,6 +220,7 @@ def _run(metrics, cleanup):
                 "-c lock_timeout=500 -c idle_in_transaction_session_timeout=5000",
             },
         )
+        attach_read_guards(engine, statement_ms=3000, lock_ms=500, idle_ms=5000)
         cleanup.callback(engine.dispose)
         require_scan_index(engine, kind)
         sessions = sessionmaker(bind=engine)

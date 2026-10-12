@@ -115,7 +115,7 @@ def test_eviction_uses_only_the_verified_version_and_confirms_removal(s3_case):
             "IsTruncated": False,
             "Versions": [dict(Key=record.key, VersionId="version-1", IsLatest=True)],
         },
-        {"Bucket": record.bucket, "Prefix": record.key},
+        {"Bucket": record.bucket, "Prefix": record.key, "MaxKeys": 2},
     )
     args = {"Bucket": record.bucket, "Key": record.key, "VersionId": "version-1"}
     stub.add_response("delete_object", {}, args)
@@ -137,7 +137,7 @@ def test_other_versions_block_eviction(s3_case):
             "IsTruncated": False,
             "Versions": [dict(Key=record.key, VersionId="version-2", IsLatest=True)],
         },
-        {"Bucket": record.bucket, "Prefix": record.key},
+        {"Bucket": record.bucket, "Prefix": record.key, "MaxKeys": 2},
     )
     with pytest.raises(ArchiveBlocked, match="Other object versions"):
         source.evict(record, snapshot)
@@ -152,7 +152,7 @@ def test_dry_target_uses_all_real_eviction_checks_without_delete(s3_case):
             "IsTruncated": False,
             "Versions": [dict(Key=record.key, VersionId="version-1", IsLatest=True)],
         },
-        {"Bucket": record.bucket, "Prefix": record.key},
+        {"Bucket": record.bucket, "Prefix": record.key, "MaxKeys": 2},
     )
     assert source.deletion_target(record, snapshot) == {
         "Bucket": record.bucket,

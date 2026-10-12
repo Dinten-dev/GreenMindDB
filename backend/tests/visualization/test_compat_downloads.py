@@ -206,6 +206,19 @@ def test_device_reads_own_verified_archived_run_and_keeps_tls_auth(device_reader
     assert reads == ["private.wav"]
 
 
+def test_local_original_listing_does_not_depend_on_archive_broker(device_reader, monkeypatch):
+    client, headers, segment, _, _, _ = device_reader
+    with Session(compat.direct.resources()[0]) as db:
+        revision = db.query(Revision).filter_by(segment_id=segment).one()
+        revision.raw_deleted_at = None
+        db.commit()
+    monkeypatch.setattr(
+        compat, "verified_objects", lambda *_: pytest.fail("No unnecessary archive query")
+    )
+    listing = client.get("/api/v1/direct-ingest/segments", headers=headers)
+    assert listing.status_code == 200 and listing.json()[0]["raw_available"] is True
+
+
 def test_device_hash_mismatch_never_releases_original(device_reader):
     client, headers, segment, _, _, store = device_reader
     store.get = lambda _: b"corrupted"

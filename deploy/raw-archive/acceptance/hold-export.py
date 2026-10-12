@@ -59,6 +59,7 @@ def main():
             folder = ROOT / ("session-" + session)
             folder.mkdir(mode=0o750)
             os.chown(folder, 0, operator.pw_gid)
+            folder.chmod(0o750)  # Permit the named operator under a private unit umask.
             backup = folder / "ledger.sqlite3"
             backup_started_at = datetime.now(UTC).isoformat()
             if args.operation != "sql":

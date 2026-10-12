@@ -132,18 +132,21 @@ def validate_feature(value, fields):
             not isinstance(value[name], list)
             or any(
                 reason
-                not in {
-                    "low_coverage",
-                    "clipping",
-                    "flatline",
-                    "sequence_gaps",
-                    "dropped_samples",
-                    "lead_off",
-                    "rail_flags",
-                    "jump_flags",
-                    "recovery_flags",
-                    "robust_outliers",
-                }
+                not in (
+                    {
+                        "low_coverage",
+                        "clipping",
+                        "flatline",
+                        "sequence_gaps",
+                        "dropped_samples",
+                        "lead_off",
+                        "rail_flags",
+                        "jump_flags",
+                        "recovery_flags",
+                        "robust_outliers",
+                    }
+                    | ({"outliers"} if name == "anomaly_reasons" else set())
+                )
                 for reason in value[name]
             )
         ):
@@ -314,10 +317,10 @@ def export_metadata(
     return parts.files, tables
 
 
-def export_ledger(path, output, checkpoint):
+def export_ledger(path, output, checkpoint, *, compresslevel=6):
     if path.is_symlink() or not path.is_absolute() or not path.is_file():
         raise ArchiveBlocked("Existing absolute journal required")
-    parts = Parts(output, "ledger", checkpoint)
+    parts = Parts(output, "ledger", checkpoint, compresslevel=compresslevel)
     db = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=2)
     try:
         db.execute("PRAGMA query_only=ON")

@@ -16,9 +16,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import wav_catalog as catalog
-from .coordination import lease
 from .health import SafetyPause
 from .policy import ArchiveBlocked, checksum
+from .remote_lease import catalog_lease
 
 FORMAT = "wav_features_v1"
 TABLES = {
@@ -122,7 +122,7 @@ def restore(manifest, files, destination, checkpoint=lambda: None):
     return counts
 
 
-def publish_and_restore(output, manifest, box, checkpoint=lambda: None):
+def publish_and_restore(output, manifest, box, checkpoint=lambda: None, *, verification_box=None):
     check_manifest(manifest)
     checkpoint()
     capacity = box.capacity()
@@ -145,7 +145,15 @@ def publish_and_restore(output, manifest, box, checkpoint=lambda: None):
         box.publish_catalog(path, key)
         remote["files"].append(dict(entry, remote_key=key))
     path = output / "offsite-features.json"
-    catalog.save_json(path, remote)
+    if path.exists():
+        if (
+            path.is_symlink()
+            or path.stat().st_size > catalog.ROW_BYTES
+            or json.loads(path.read_text()) != remote
+        ):
+            raise ArchiveBlocked("Retained feature publication manifest differs")
+    else:
+        catalog.save_json(path, remote)
     reference = {
         "key": f"production/catalog-backup/{checksum(path)}.json",
         "sha256": checksum(path),
@@ -154,9 +162,14 @@ def publish_and_restore(output, manifest, box, checkpoint=lambda: None):
     checkpoint()
     box.publish_catalog(path, reference["key"])
     readback = output / "readback"
+    if readback.exists():
+        import uuid
+
+        readback = output / ("readback-" + uuid.uuid4().hex)
     catalog.private_directory(readback)
     returned = readback / "manifest.json"
-    box.download_catalog(reference["key"], returned, reference["size"])
+    reader = verification_box or box
+    reader.download_catalog(reference["key"], returned, reference["size"])
     if returned.stat().st_size != reference["size"] or checksum(returned) != reference["sha256"]:
         raise ArchiveBlocked("Feature manifest readback mismatch")
     independent = json.loads(returned.read_text())
@@ -168,7 +181,7 @@ def publish_and_restore(output, manifest, box, checkpoint=lambda: None):
         if entry.get("remote_key") != expected:
             raise ArchiveBlocked("Unexpected remote feature part")
         local = readback / entry["file"]
-        box.download_catalog(expected, local, entry["bytes"])
+        reader.download_catalog(expected, local, entry["bytes"])
         files[entry["file"]] = local
     counts = restore(independent, files, readback / "features.sqlite3", checkpoint)
     proof = {
@@ -181,22 +194,24 @@ def publish_and_restore(output, manifest, box, checkpoint=lambda: None):
         "storage_box": capacity,
         "deleted_files": 0,
         "deletion_readiness": False,
+        "independent_read_identity": verification_box is not None,
     }
+    checkpoint()
     catalog.save_json(output / "verified.json", proof)
     return proof
 
 
 def main():
-    from sqlalchemy import create_engine
-
-    from .runner import destination_from_environment, health_probe, metadata_source_settings
+    from .runner import destination_from_environment, health_probe
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if os.environ.get("RAW_ARCHIVE_ENVIRONMENT") != "production":
         raise ArchiveBlocked("Production feature backup requires explicit environment")
-    if not os.environ.get("RAW_ARCHIVE_COORDINATION_DIR"):
+    if not (
+        os.environ.get("RAW_ARCHIVE_COORDINATION_DIR") or os.environ.get("RAW_ARCHIVE_LEASE_HOST")
+    ):
         raise ArchiveBlocked("Source archive coordination must be configured")
     # Protect intake regardless of accidentally weaker supplied settings.
     os.environ["RAW_ARCHIVE_MIN_AVAILABLE_MEMORY_MIB"] = str(
@@ -205,10 +220,18 @@ def main():
     os.environ["RAW_ARCHIVE_MAX_HOST_LOAD"] = str(
         min(2.4, float(os.environ.get("RAW_ARCHIVE_MAX_HOST_LOAD", "2.4")))
     )
+    if os.environ.get("RAW_ARCHIVE_WORKER_ROLE") == "archive":
+        os.environ["RAW_ARCHIVE_SOURCE_MIN_MEMORY_MIB"] = str(
+            max(640, int(os.environ.get("RAW_ARCHIVE_SOURCE_MIN_MEMORY_MIB", "640")))
+        )
     probe = health_probe()
     start = time.monotonic()
 
+    def check_lease():
+        pass
+
     def checkpoint():
+        check_lease()
         if time.monotonic() - start > 120:
             raise SafetyPause("feature_runtime_budget")
         if not probe():
@@ -222,60 +245,99 @@ def main():
             raise SafetyPause("feature_local_space")
 
     try:
-        with lease("catalog"):
+        with catalog_lease() as check_lease:
             checkpoint()
             catalog.private_directory(args.output)
             if shutil.disk_usage(args.output).free < MAX_BYTES * 3:
                 raise SafetyPause("feature_local_space")
-            manifest = {
-                "schema": 1,
-                "format": FORMAT,
-                "environment": "production",
-                "allowlist_sha256": catalog.ALLOWLIST_SHA256,
-                "created_at": datetime.now(UTC).isoformat(),
-                "tables": {},
-                "files": [],
-            }
-            for kind, tables in TABLES.items():
-                engine = create_engine(
-                    metadata_source_settings(kind, "production")["database"],
-                    pool_size=1,
-                    max_overflow=0,
-                    connect_args={
-                        "connect_timeout": 5,
-                        "options": "-c default_transaction_read_only=on -c statement_timeout=8000 -c lock_timeout=150 -c jit=off -c work_mem=2048",
-                    },
-                )
-                try:
-                    parts, counts = catalog.export_metadata(
-                        engine,
-                        kind,
-                        args.output,
-                        checkpoint,
-                        tables=tables,
-                        fetch_rows=100,
-                        compresslevel=1,
-                    )
-                    manifest["files"].extend(parts)
-                    manifest["tables"][kind] = counts
-                finally:
-                    engine.dispose()
-            check_manifest(manifest)
-            catalog.save_json(args.output / "features.json", manifest)
+            completed = args.output / "features.json"
+            if completed.exists():
+                if completed.is_symlink() or completed.stat().st_size > catalog.ROW_BYTES:
+                    raise ArchiveBlocked("Private bounded completed feature manifest required")
+                manifest = json.loads(completed.read_text())
+                check_manifest(manifest)
+                for entry in manifest["files"]:
+                    checkpoint()
+                    path = args.output / entry["file"]
+                    if (
+                        path.is_symlink()
+                        or path.stat().st_size != entry["bytes"]
+                        or checksum(path) != entry["sha256"]
+                    ):
+                        raise ArchiveBlocked("Completed source features changed")
+            else:
+                manifest = export_features(args.output, checkpoint)
+                check_manifest(manifest)
+                catalog.save_json(completed, manifest)
         # SQL connections and their bounded source lease are closed before transfer.
         # Publication/restore gets a separate two-minute, equally guarded phase.
         start = time.monotonic()
-        with lease("catalog"):
+        with catalog_lease() as check_lease:
             checkpoint()
             box = destination_from_environment()
+            from .read_only_box import configured_catalog_read_only_box
+
+            verification_box = configured_catalog_read_only_box()
             try:
+                if (
+                    os.environ.get("RAW_ARCHIVE_WORKER_ROLE") == "archive"
+                    and verification_box is None
+                ):
+                    raise ArchiveBlocked(
+                        "Archive feature acceptance requires separate read-only access"
+                    )
                 with box.session(args.output):
-                    proof = publish_and_restore(args.output, manifest, box, checkpoint)
+                    proof = publish_and_restore(
+                        args.output, manifest, box, checkpoint, verification_box=verification_box
+                    )
             finally:
                 box.close()
+                if verification_box is not None:
+                    verification_box.close()
             print(json.dumps(proof))
     finally:
         probe.close()
+
+
+def export_features(output, checkpoint):
+    from sqlalchemy import create_engine
+
+    from .runner import metadata_source_settings
+
+    manifest = {
+        "schema": 1,
+        "format": FORMAT,
+        "environment": "production",
+        "allowlist_sha256": catalog.ALLOWLIST_SHA256,
+        "created_at": datetime.now(UTC).isoformat(),
+        "tables": {},
+        "files": [],
+    }
+    for kind, tables in TABLES.items():
+        engine = create_engine(
+            metadata_source_settings(kind, "production")["database"],
+            pool_size=1,
+            max_overflow=0,
+            connect_args={
+                "connect_timeout": 5,
+                "options": "-c default_transaction_read_only=on -c statement_timeout=8000 -c lock_timeout=150 -c jit=off -c work_mem=2048",
+            },
+        )
+        try:
+            parts, counts = catalog.export_metadata(
+                engine,
+                kind,
+                output,
+                checkpoint,
+                tables=tables,
+                fetch_rows=100,
+                compresslevel=1,
+            )
+            manifest["files"].extend(parts)
+            manifest["tables"][kind] = counts
+        finally:
+            engine.dispose()
+    return manifest
 
 
 def entrypoint():

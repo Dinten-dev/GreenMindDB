@@ -14,8 +14,8 @@ from .policy import ArchiveBlocked
 
 
 class Connection(http.client.HTTPConnection):
-    def __init__(self):
-        super().__init__("localhost", timeout=180)
+    def __init__(self, timeout=180):
+        super().__init__("localhost", timeout=timeout)
 
     def connect(self):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -23,8 +23,8 @@ class Connection(http.client.HTTPConnection):
         self.sock.connect(os.environ["RAW_ARCHIVE_READ_BROKER_SOCKET"])
 
 
-def request(path, data):
-    connection = Connection()
+def request(path, data, *, timeout=180):
+    connection = Connection(timeout)
     try:
         connection.request("POST", path, json.dumps(data), {"Content-Type": "application/json"})
         response = connection.getresponse()
@@ -34,6 +34,33 @@ def request(path, data):
     except BaseException:
         connection.close()
         raise
+
+
+def authenticated_actor(authorization, access_token):
+    connection = Connection(timeout=5)
+    try:
+        connection.request(
+            "POST",
+            "/authenticate",
+            json.dumps({"authorization": authorization, "access_token": access_token}),
+            {"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        if response.status in (401, 403):
+            return response.status, None
+        if response.status != 200:
+            raise ArchiveBlocked("Private source authentication unavailable")
+        data = response.read(1025)
+        if len(data) > 1024:
+            raise ArchiveBlocked("Private actor response exceeds bound")
+        from uuid import UUID
+
+        body = json.loads(data)
+        if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
+            raise ArchiveBlocked("Invalid authenticated actor response")
+        return 200, str(UUID(body["id"]))
+    finally:
+        connection.close()
 
 
 def available(kind, bucket, keys):

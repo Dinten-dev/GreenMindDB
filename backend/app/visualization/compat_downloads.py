@@ -58,9 +58,16 @@ def install(app):
                 .all()
             )
             bucket = resources[1].settings.s3_bucket
-            keys = [run["key"] for _, revision in rows for run in revision.manifest["runs"]]
+            # Local originals remain available even if the separate archive broker
+            # is temporarily unavailable. Consult it only for evicted revisions.
+            keys = [
+                run["key"]
+                for _, revision in rows
+                if revision.raw_deleted_at is not None
+                for run in revision.manifest["runs"]
+            ]
             try:
-                available = verified_objects("direct", bucket, keys[:1000])
+                available = verified_objects("direct", bucket, keys[:1000]) if keys else set()
             except ArchiveBlocked as error:
                 raise HTTPException(503, "verified_archive_unavailable") from error
             return [

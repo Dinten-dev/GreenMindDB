@@ -119,10 +119,11 @@ def ledger_proof(path, ledger):
     return data
 
 
-def assemble(stages, output):
+def assemble(stages, output, *, checkpoint=lambda: None, copy_parts=False):
     """Full local decoding/restore precedes a final manifest; no source connections."""
     if set(stages) != set(KINDS):
         raise ArchiveBlocked("Both complete metadata sources and a journal are required")
+    checkpoint()
     private_directory(output)
     completed = {kind: load_stage(Path(stages[kind]), kind) for kind in KINDS}
     direct_bucket = completed["direct"].get("direct_bucket", "")
@@ -147,18 +148,33 @@ def assemble(stages, output):
         "cross_database_atomic": False,
     }
     for kind in KINDS:
+        checkpoint()
         for entry in completed[kind]["files"]:
+            checkpoint()
             source = Path(stages[kind]) / entry["file"]
             target = output / entry["file"]
-            # Same-volume immutable hardlinks; never overwrite or remove source evidence.
-            os.link(source, target)
+            if copy_parts:
+                # Private systemd mount namespaces need not permit cross-mount links.
+                # Stream a new independent file; never alter or remove the checkpoint.
+                with source.open("rb") as body, target.open("xb") as destination:
+                    os.fchmod(destination.fileno(), 0o600)
+                    while block := body.read(65536):
+                        checkpoint()
+                        destination.write(block)
+                    destination.flush()
+                    os.fsync(destination.fileno())
+            else:
+                # Same-volume immutable hardlinks; retain the established CLI behavior.
+                os.link(source, target)
             manifest["files"].append(entry)
     manifest_check(manifest)
     restored = restore_parts(
         manifest,
         {entry["file"]: output / entry["file"] for entry in manifest["files"]},
         output / "local-restore.sqlite3",
+        checkpoint,
     )
+    checkpoint()
     save_json(output / "local-restore.json", {"restored": restored, "deleted_files": 0})
     save_json(output / "manifest.json", manifest)
     raw = (output / "manifest.json").read_bytes()

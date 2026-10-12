@@ -9,13 +9,22 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-STATE = Path("/mnt/HC_Volume_106755700/greenmind-feature-backup")
+STATE = Path(
+    os.environ.get(
+        "RAW_ARCHIVE_FEATURE_STATE", "/mnt/HC_Volume_106755700/greenmind-feature-backup"
+    )
+)
+PYTHON = os.environ.get(
+    "RAW_ARCHIVE_PYTHON", "/opt/greenmind/raw-copy/20260925/venv/bin/python"
+)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manual-validation", action="store_true")
     args = parser.parse_args()
+    if not STATE.is_absolute() or STATE.is_symlink() or not Path(PYTHON).is_absolute():
+        raise RuntimeError("Explicit isolated feature runtime and state required")
     day = datetime.now(ZoneInfo("Europe/Zurich")).strftime("%Y-%m-%d")
     folder = STATE / day
     folder.mkdir(mode=0o700, exist_ok=True)
@@ -59,7 +68,7 @@ def run_attempt(output):
     for number in range(4):
         result = subprocess.run(
             [
-                "/opt/greenmind/raw-copy/20260925/venv/bin/python",
+                PYTHON,
                 "-m",
                 "app.raw_archive.feature_backup",
                 "--output",

@@ -98,3 +98,57 @@ def test_unsafe_path_rejected_before_transport(tmp_path, monkeypatch):
     monkeypatch.setattr(StorageBox, "run", lambda *_a, **_k: pytest.fail("No SFTP allowed"))
     with pytest.raises(ArchiveBlocked, match="Unsafe"):
         box.download("../private.wav", tmp_path / "new.wav", 10)
+
+
+def test_catalog_bandwidth_does_not_change_public_reader(tmp_path, monkeypatch):
+    from app.raw_archive.read_only_box import CatalogReadOnlyBox
+
+    speeds = []
+
+    class Transport:
+        def __init__(self, **kw):
+            speeds.append(kw["kilobits"])
+
+    monkeypatch.setattr("app.raw_archive.read_only_box.StorageBox", Transport)
+    args = dict(
+        user="u676312-sub1",
+        host="u676312-sub1.your-storagebox.de",
+        key=tmp_path / "key",
+        known_hosts=tmp_path / "hosts",
+    )
+    ReadOnlyBox(**args)
+    CatalogReadOnlyBox(**args)
+    assert speeds == [2048, 8192]
+
+
+def test_real_catalog_transport_validates_catalog_path(tmp_path, monkeypatch):
+    from app.raw_archive.read_only_box import CatalogReadOnlyBox
+
+    (tmp_path / "key").touch()
+    (tmp_path / "hosts").touch()
+    reader = CatalogReadOnlyBox(
+        user="u676312-sub1",
+        host="u676312-sub1.your-storagebox.de",
+        key=tmp_path / "key",
+        known_hosts=tmp_path / "hosts",
+    )
+    key = "production/catalog-backup/" + "a" * 64 + ".json"
+    batches = []
+
+    def get(_transport, batch, *, output, max_bytes, missing_path):
+        assert missing_path == key and max_bytes == 2
+        assert not missing_path.startswith("greenmind-raw/")
+        batches.append(batch)
+        output.write_bytes(b"{}")
+
+    monkeypatch.setattr(StorageBox, "run", get)
+    target = tmp_path / "manifest.json"
+    reader.download_catalog(key, target, 2)
+    assert target.read_bytes() == b"{}" and len(batches) == 1
+
+
+def test_catalog_fix_does_not_expand_public_wav_reader(tmp_path, monkeypatch):
+    reader = make_box(tmp_path)
+    monkeypatch.setattr(StorageBox, "run", lambda *_a, **_k: pytest.fail("No transport allowed"))
+    with pytest.raises(ArchiveBlocked, match="Unsafe"):
+        reader.download("production/catalog-backup/" + "a" * 64 + ".json", tmp_path / "new.json", 2)

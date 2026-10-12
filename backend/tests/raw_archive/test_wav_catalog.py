@@ -126,6 +126,18 @@ def test_nested_feature_secrets_and_session_extras_are_rejected():
         catalog.validate_row("direct", "direct_session", row)
 
 
+def test_historical_outliers_reason_is_preserved_only_for_anomaly_field():
+    payload = {"anomaly_reasons": ["outliers", "clipping"]}
+    original = catalog.raw_json(payload)
+    catalog.validate_feature(payload, catalog.FEATURE_FIELDS)
+    assert catalog.raw_json(payload) == original
+    for field in ("technical_fault_reasons", "biological_candidate_reasons"):
+        with pytest.raises(ArchiveBlocked):
+            catalog.validate_feature({field: ["outliers"]}, catalog.FEATURE_FIELDS)
+    with pytest.raises(ArchiveBlocked):
+        catalog.validate_feature({"anomaly_reasons": ["private_password"]}, catalog.FEATURE_FIELDS)
+
+
 def test_restore_refuses_existing_database_and_tampered_part(tmp_path):
     root, manifest = fixture_bundle(tmp_path)
     files = {entry["file"]: root / entry["file"] for entry in manifest["files"]}

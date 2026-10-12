@@ -20,18 +20,15 @@ from app.models.wav_file import WavFile
 from app.rate_limit import limiter
 from app.visualization.archive_jobs import EXPIRES, MAX_BYTES, MAX_FILES, connect, root
 from app.visualization.archive_jobs import PART_BYTES as PART_BYTES
-from app.zone_access import zone_access_filter
+from app.zone_access import is_platform_admin, zone_access_filter
 
 
 def authorize_gateway(db, user, sensor_id):
-    if (
-        not user.organization_id
-        or not db.query(Sensor.id)
-        .join(Gateway, Gateway.id == Sensor.gateway_id)
-        .join(Zone, Zone.id == Gateway.zone_id)
-        .filter(Sensor.id == sensor_id, zone_access_filter(user))
-        .first()
-    ):
+    if (not user.organization_id and not is_platform_admin(user)) or not db.query(Sensor.id).join(
+        Gateway, Gateway.id == Sensor.gateway_id
+    ).join(Zone, Zone.id == Gateway.zone_id).filter(
+        Sensor.id == sensor_id, zone_access_filter(user)
+    ).first():
         raise HTTPException(404, "Sensor nicht gefunden")
 
 

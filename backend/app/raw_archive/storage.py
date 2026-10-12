@@ -113,7 +113,11 @@ class S3Source:
             or head["LastModified"].isoformat() != snapshot["LastModified"]
         ):
             raise ArchiveBlocked("Immutable source snapshot changed")
-        versions = self.client.list_object_versions(Bucket=recording.bucket, Prefix=recording.key)
+        # Two entries already disprove the required single-version state. Never
+        # load an arbitrarily long history merely to reject it afterward.
+        versions = self.client.list_object_versions(
+            Bucket=recording.bucket, Prefix=recording.key, MaxKeys=2
+        )
         exact = [entry for entry in versions.get("Versions", []) if entry["Key"] == recording.key]
         markers = [
             entry for entry in versions.get("DeleteMarkers", []) if entry["Key"] == recording.key

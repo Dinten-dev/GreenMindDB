@@ -61,6 +61,16 @@ def available(config, kind, bucket, keys):
 
 
 def healthy():
+    if os.getenv("RAW_ARCHIVE_WORKER_ROLE") == "archive":
+        from .runner import health_probe
+
+        probe = health_probe()
+        try:
+            if not probe():
+                raise ArchiveBlocked("Preserve source and archive headroom")
+        finally:
+            probe.close()
+        return
     memory = next(
         int(line.split()[1])
         for line in Path("/proc/meminfo").read_text().splitlines()
@@ -92,6 +102,19 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < size <= 1024 * 1024 or self.headers.get("Transfer-Encoding"):
                 raise ArchiveBlocked("Invalid body")
             data = json.loads(self.rfile.read(size))
+            if self.path == "/authenticate":
+                from .remote_auth import authenticate
+
+                # The existing four-connection broker bound also covers auth.
+                # A source outage fails closed; no token claims are trusted here.
+                status, actor = authenticate(data)
+                payload = json.dumps(actor or {}).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "private, no-store")
+                self.end_headers()
+                self.wfile.write(payload)
+                return
             if self.path not in {"/available", "/read"}:
                 raise ArchiveBlocked("Unsupported operation")
             kind, bucket, keys = validate(data, listing=self.path == "/available")

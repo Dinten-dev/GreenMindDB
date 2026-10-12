@@ -69,7 +69,7 @@ def main():
     )
     result = {
         "accounts": accounts,
-        "budgets_mib": {"total": 2560, "archive": 1536, "staging": 1024},
+        "budgets_mib": {"total": 2560, "archive": 1024, "staging": 1536},
         "deletion_enabled": False,
         "archive_jobs_started": False,
         "at": __import__("datetime")

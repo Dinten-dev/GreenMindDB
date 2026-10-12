@@ -1,8 +1,8 @@
 [Unit]
 Description=GreenMind archive capacity budget
 [Slice]
-MemoryHigh=1280M
-MemoryMax=1536M
+MemoryHigh=768M
+MemoryMax=1024M
 MemorySwapMax=0
-CPUQuota=100%
+CPUQuota=50%
 TasksMax=256

@@ -17,7 +17,7 @@ from app.models.user import User
 from app.rate_limit import limiter
 from app.visualization import direct
 from app.visualization.resolution import display_step
-from app.zone_access import require_zone_access
+from app.zone_access import is_platform_admin, require_zone_access
 
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
 
@@ -31,12 +31,15 @@ def connection():
 
 
 def authorize(db, legacy, user, device_id):
-    if not user.organization_id:
+    platform = is_platform_admin(user)
+    if not user.organization_id and not platform:
         raise HTTPException(403, "No organization")
     row = (
         db.execute(
-            text("SELECT id,zone_id,mode FROM direct_device WHERE id=:id AND organization_id=:org"),
-            {"id": str(device_id), "org": str(user.organization_id)},
+            text(
+                "SELECT id,zone_id,mode FROM direct_device WHERE id=:id AND (:platform OR organization_id=:org)"
+            ),
+            {"id": str(device_id), "org": str(user.organization_id), "platform": platform},
         )
         .mappings()
         .first()
