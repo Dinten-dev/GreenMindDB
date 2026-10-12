@@ -32,15 +32,14 @@ def connection():
 
 
 def authorize(db, legacy, user, device_id):
-    platform = is_platform_admin(user)
-    if not user.organization_id and not platform:
+    platform_admin = is_platform_admin(user)
+    if not user.organization_id and not platform_admin:
         raise HTTPException(403, "No organization")
+    tenant = "" if platform_admin else " AND organization_id=:org"
     row = (
         db.execute(
-            text(
-                "SELECT id,zone_id,mode FROM direct_device WHERE id=:id AND (:platform OR organization_id=:org)"
-            ),
-            {"id": str(device_id), "org": str(user.organization_id), "platform": platform},
+            text("SELECT id,zone_id,mode FROM direct_device WHERE id=:id" + tenant),
+            {"id": str(device_id), "org": str(user.organization_id)},
         )
         .mappings()
         .first()

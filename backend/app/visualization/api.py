@@ -111,11 +111,12 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
                 raise HTTPException(413, "Choose a coarser resolution")
             return summaries
     params = {"sid": sensor_id, "start": start, "end": end, "step": requested, "lim": limit}
-    # A verified chunk's source rows are represented atomically by its rollups.
+    # A verified chunk's source rows are represented atomically by its rollups,
+    # except explicit missing-parent projections; their retained source remains readable.
     # Late arrivals are incorporated by the next worker pass, never double counted.
     covered = db.execute(
         text(
-            "SELECT range_start,range_end FROM visual_chunk WHERE status IN ('verified','compacted') AND range_start<:end AND range_end>:start"
+            "SELECT range_start,range_end FROM visual_chunk WHERE status IN ('verified','compacted') AND range_start<:end AND range_end>:start AND NOT (coalesce(archive_manifest::jsonb->'orphan_sensor_ids','[]'::jsonb) ? CAST(:sid AS text))"
         ),
         params,
     ).all()

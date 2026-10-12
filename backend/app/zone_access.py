@@ -12,12 +12,17 @@ from app.models.zone_access import ZoneAccess
 
 
 def is_platform_admin(user):
+    """Only configured, active, verified operator accounts span companies."""
     allowed = {
         email.strip().casefold()
         for email in settings.management_admin_emails.split(",")
         if email.strip()
     }
-    return bool(user.is_active and user.is_verified and user.email.casefold() in allowed)
+    return bool(
+        getattr(user, "is_active", False)
+        and getattr(user, "is_verified", False)
+        and getattr(user, "email", "").casefold() in allowed
+    )
 
 
 def zone_access_filter(user):
