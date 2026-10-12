@@ -24,6 +24,22 @@ ARCHIVE = Path(os.environ.get("VISUAL_ARCHIVE_DIR", "/archive"))
 LOCK_ID = 719420260915
 
 
+def has_source_metadata(row):
+    return any(
+        row.get(k) is not None
+        for k in (
+            "source_sequence",
+            "source_dropped_samples_total",
+            "quality_valid_count",
+            "quality_lead_off_count",
+            "quality_rail_high_count",
+            "quality_rail_low_count",
+            "quality_jump_count",
+            "quality_recovery_count",
+        )
+    )
+
+
 def engine_for_worker():
     return create_engine(
         # Advisory guard, snapshot transaction and committed progress update.
@@ -184,9 +200,30 @@ def snapshot_chunk(engine, chunk, now):
             groups = defaultdict(list)
             current = None
             protected_rows = 0
+            orphan_rows = 0
+            orphan_sensor_ids = set()
 
             def flush():
+                nonlocal orphan_rows, protected_rows
+                if not groups:
+                    return
+                parents = {
+                    str(sid)
+                    for sid in db.execute(
+                        text("SELECT id FROM sensor WHERE id=ANY(CAST(:ids AS uuid[]))"),
+                        {"ids": list({key[0] for key in groups})},
+                    ).scalars()
+                }
                 for (sensor, kind, stamp, seconds, unit), values in groups.items():
+                    if sensor not in parents:
+                        # All source rows still reach the archive; only this impossible
+                        # projection is deferred, and pruning remains blocked.
+                        orphan_rows += len(values)
+                        # Keep the older pruning consumer fail-closed too, without
+                        # counting a metadata-protected source row twice.
+                        protected_rows += sum(not has_source_metadata(row) for row in values)
+                        orphan_sensor_ids.add(sensor)
+                        continue
                     if seconds == 600:
                         promote_key(db, {"sensor_id": sensor, "kind": kind, "target": stamp})
                     previous = (
@@ -227,19 +264,7 @@ def snapshot_chunk(engine, chunk, now):
                     for row in rows.mappings():
                         # Existing feature workers still consult these source fields.
                         # Retain chunks containing them until their archival reader is deployed.
-                        if any(
-                            row.get(k) is not None
-                            for k in (
-                                "source_sequence",
-                                "source_dropped_samples_total",
-                                "quality_valid_count",
-                                "quality_lead_off_count",
-                                "quality_rail_high_count",
-                                "quality_rail_low_count",
-                                "quality_jump_count",
-                                "quality_recovery_count",
-                            )
-                        ):
+                        if has_source_metadata(row):
                             protected_rows += 1
                         stamp = row["timestamp"]
                         interval = bucket(stamp, 600)
@@ -268,6 +293,11 @@ def snapshot_chunk(engine, chunk, now):
 
             manifest = write_archive(ARCHIVE, records(), name.replace(".", "-"), progress=progress)
             manifest["protected_rows"] = protected_rows
+            manifest["orphan_rows"] = orphan_rows
+            manifest["orphan_sensor_ids"] = sorted(orphan_sensor_ids)
+            manifest["projection_status"] = (
+                "incomplete_missing_sensor" if orphan_rows else "complete"
+            )
             db.execute(
                 text(
                     "UPDATE visual_chunk SET archived_version=:v,status='verified',archive_manifest=:manifest,source_rows=:rows,updated_at=now() WHERE chunk_name=:name"
@@ -304,7 +334,7 @@ def prune_chunk(engine, chunk):
         if pending:
             return False
         manifest = json.loads(saved["archive_manifest"])
-        if manifest.get("protected_rows", 0):
+        if manifest.get("protected_rows", 0) or manifest.get("orphan_rows", 0):
             return False
     for _ in read_archive(manifest):
         pass
@@ -322,6 +352,13 @@ def prune_chunk(engine, chunk):
             .one()
         )
         if state["change_version"] != state["archived_version"] or state["status"] != "verified":
+            return False
+        # The independently verified file must still be the current manifest.
+        # A new snapshot can add protection without changing the source marker.
+        if state["archive_manifest"] != saved["archive_manifest"]:
+            return False
+        current_manifest = json.loads(state["archive_manifest"])
+        if current_manifest.get("protected_rows", 0) or current_manifest.get("orphan_rows", 0):
             return False
         # created_before/after are deliberately not used: exact chunk range only.
         removed = (
@@ -444,6 +481,24 @@ def wave_candidates(engine, now, limit=20):
         )
 
 
+def snapshot_candidate(engine):
+    with engine.connect() as db:
+        return (
+            db.execute(
+                text("""SELECT v.* FROM visual_chunk v JOIN timescaledb_information.chunks c
+          ON v.chunk_name=c.chunk_schema||'.'||c.chunk_name
+          WHERE v.status='pending' OR
+          (v.change_version IS DISTINCT FROM v.archived_version AND v.updated_at<now()-interval '1 minute') OR
+          (v.status='verified' AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(coalesce(v.archive_manifest::jsonb->'orphan_sensor_ids','[]'::jsonb)) missing(id)
+            JOIN sensor s ON s.id=CAST(missing.id AS uuid)))
+          ORDER BY v.range_start DESC LIMIT 1""")
+            )
+            .mappings()
+            .first()
+        )
+
+
 def cycle(engine, prune=False):
     now = datetime.now(UTC)
     maximum_load = float(os.environ.get("VISUAL_MAX_HOST_LOAD", "0"))
@@ -466,16 +521,7 @@ def cycle(engine, prune=False):
         time.sleep(float(os.environ.get("VISUAL_WAV_PAUSE", "0.2")))
         set_status(engine, "working", {"phase": "wav_projection", "pruning_enabled": prune})
     track_chunks(engine, now)
-    with engine.connect() as db:
-        candidate = (
-            db.execute(
-                text(
-                    "SELECT v.* FROM visual_chunk v JOIN timescaledb_information.chunks c ON v.chunk_name=c.chunk_schema||'.'||c.chunk_name WHERE v.status='pending' OR (v.change_version IS DISTINCT FROM v.archived_version AND v.updated_at<now()-interval '1 minute') ORDER BY range_start DESC LIMIT 1"
-                )
-            )
-            .mappings()
-            .first()
-        )
+    candidate = snapshot_candidate(engine)
     if candidate:
         snapshot_chunk(engine, candidate, now)
     if prune:
@@ -483,7 +529,7 @@ def cycle(engine, prune=False):
             candidate = (
                 db.execute(
                     text(
-                        "SELECT c.* FROM visual_chunk c WHERE c.status='verified' AND coalesce((c.archive_manifest::jsonb->>'protected_rows')::bigint,0)=0 AND NOT EXISTS (SELECT 1 FROM wav_file w LEFT JOIN visual_wav v ON v.wav_id=w.id WHERE w.started_at<c.range_end AND w.ended_at>c.range_start AND (w.feature_status IS DISTINCT FROM 'verified' OR coalesce(v.status,'pending') NOT IN ('verified','unavailable'))) ORDER BY c.range_end DESC LIMIT 1"
+                        "SELECT c.* FROM visual_chunk c WHERE c.status='verified' AND coalesce((c.archive_manifest::jsonb->>'protected_rows')::bigint,0)=0 AND coalesce((c.archive_manifest::jsonb->>'orphan_rows')::bigint,0)=0 AND NOT EXISTS (SELECT 1 FROM wav_file w LEFT JOIN visual_wav v ON v.wav_id=w.id WHERE w.started_at<c.range_end AND w.ended_at>c.range_start AND (w.feature_status IS DISTINCT FROM 'verified' OR coalesce(v.status,'pending') NOT IN ('verified','unavailable'))) ORDER BY c.range_end DESC LIMIT 1"
                     )
                 )
                 .mappings()
