@@ -18,7 +18,7 @@ from tests.direct.test_postgres import pg_pipeline as pg_pipeline
 pytestmark = pytest.mark.integration
 
 
-def test_private_snapshot_restores_exact_chunks_and_retry_identities(pg_pipeline, tmp_path):
+def test_private_snapshot_restores_exact_chunks_and_retry_identities(pg_pipeline, tmp_path):  # noqa: F811 - imported pytest fixture
     p = pg_pipeline
     original = bytes([1]) * 1200
     assert p.upload(original).status_code == 201
