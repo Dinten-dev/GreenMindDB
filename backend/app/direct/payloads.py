@@ -276,9 +276,8 @@ def offload_verified_chunks(
         ):
             raise ValueError("Archive source reconstruction mismatch")
         with transaction(engine) as db:
-            # Match ingest: device -> budget -> chunk; no network under these locks.
+            # Finish device/chunk waits before taking the shared quota lock.
             device = db.query(Device).filter_by(id=chunk.device_id).with_for_update().one()
-            budget = db.query(Budget).filter_by(id=1).with_for_update().one()
             current = db.query(Chunk).filter_by(id=chunk.id).with_for_update().one_or_none()
             if current is None or current.payload is None:
                 continue
@@ -286,11 +285,14 @@ def offload_verified_chunks(
                 current.payload_sha256 != chunk.payload_sha256
                 or current.payload != original
                 or current.payload_bytes != len(original)
-                or min(device.spool_bytes, budget.used_bytes) < len(original)
+                or device.spool_bytes < len(original)
             ):
                 raise ValueError("Source or spool accounting changed")
             if db.get(PayloadReference, chunk.id) is not None:
                 raise ValueError("Unexpected existing payload reference")
+            budget = db.query(Budget).filter_by(id=1).with_for_update().one()
+            if budget.used_bytes < len(original):
+                raise ValueError("Spool accounting changed")
             db.add(reference)
             current.payload = None
             device.spool_bytes -= len(original)

@@ -97,6 +97,58 @@ def test_postgres_offload_and_duplicate_uploads_account_once(pg_pipeline, tmp_pa
         assert db.get(Budget, 1).used_bytes == db.get(Device, p.device_id).spool_bytes == 0
 
 
+def test_postgres_offload_waiting_for_chunk_does_not_block_other_sensor(pg_pipeline, tmp_path):
+    from threading import Event
+
+    from sqlalchemy import event
+
+    from tests.direct.test_payloads import archive_copy, publish
+
+    p = pg_pipeline
+    other = build_pipeline(p.cfg)
+    assert p.upload(bytes(1200)).status_code == 201
+    publish(p)
+    archived = archive_copy(p, tmp_path / "box")
+    waiting = Event()
+    worker_pid = []
+
+    def before_execute(connection, _cursor, statement, _parameters, _context, _many):
+        if "FROM direct_chunk " in statement and "FOR UPDATE" in statement:
+            worker_pid.append(connection.connection.driver_connection.get_backend_pid())
+            waiting.set()
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with transaction(p.engine) as blocker:
+                blocker.query(Chunk).with_for_update().one()
+                event.listen(p.engine, "before_cursor_execute", before_execute)
+                future = pool.submit(offload_verified_chunks, p.engine, p.store, archived)
+                assert waiting.wait(3)
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    state = blocker.execute(
+                        text("SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid"),
+                        {"pid": worker_pid[0]},
+                    ).scalar()
+                    if state == "Lock":
+                        break
+                    time.sleep(0.01)
+                assert state == "Lock"
+                # A different sensor must commit while this chunk stays locked.
+                with other.engine.begin() as connection:
+                    connection.execute(text("SET lock_timeout='500ms'"))
+                assert other.upload(bytes(1200)).status_code == 201
+                assert not future.done()
+            assert future.result(timeout=5) == 1200
+        with transaction(p.engine) as db:
+            assert db.get(Budget, 1).used_bytes == 1200
+            assert db.query(PayloadReference).count() == 1
+    finally:
+        event.remove(p.engine, "before_cursor_execute", before_execute)
+        other.client.close()
+        other.engine.dispose()
+
+
 def test_postgres_reference_upgrade_is_additive_and_repeatable(pg_pipeline, monkeypatch):
     from app.direct import provision
 

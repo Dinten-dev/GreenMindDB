@@ -78,6 +78,15 @@ class ArtifactStore:
         return key, digest
 
     def get(self, key):
+        # Ordinary readers retain the existing archive-aware S3 path. Source
+        # verification must use get_local, which never calls this fallback.
+        if self.client and self.settings.archive_broker_socket is None:
+            self._path(key)
+            return self._read_response(
+                archive_reader.get_object(
+                    self.client, Bucket=self.settings.s3_bucket, Key=key, kind="direct"
+                )
+            )
         try:
             return self.get_local(key)
         except FileNotFoundError:
@@ -107,16 +116,21 @@ class ArtifactStore:
     def get_local(self, key):
         path = self._path(key)
         if self.client:
-            response = archive_reader.get_object(
-                self.client, Bucket=self.settings.s3_bucket, Key=key, kind="direct"
+            return self._read_response(
+                self.client.get_object(Bucket=self.settings.s3_bucket, Key=key)
             )
-            try:
-                value = response["Body"].read(self.settings.max_segment_bytes + 4097)
-            finally:
-                response["Body"].close()
         else:
             with path.open("rb") as source:
                 value = source.read(self.settings.max_segment_bytes + 4097)
+        if len(value) > self.settings.max_segment_bytes + 4096:
+            raise OSError("Direct artifact exceeds bounded read size")
+        return value
+
+    def _read_response(self, response):
+        try:
+            value = response["Body"].read(self.settings.max_segment_bytes + 4097)
+        finally:
+            response["Body"].close()
         if len(value) > self.settings.max_segment_bytes + 4096:
             raise OSError("Direct artifact exceeds bounded read size")
         return value

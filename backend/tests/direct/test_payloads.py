@@ -57,6 +57,47 @@ def test_missing_source_cannot_be_hidden_by_archive_fallback(pipeline, tmp_path,
         assert db.get(Device, p.device_id).spool_bytes == len(payload)
 
 
+def test_s3_source_verification_never_uses_generic_archive_fallback(
+    pipeline, tmp_path, monkeypatch
+):
+    from botocore.exceptions import ClientError
+
+    from app.direct.storage import archive_reader
+
+    p = pipeline
+    payload = bytes(1200)
+    assert p.upload(payload).status_code == 201
+    publish(p)
+    archived = archive_copy(p, tmp_path / "s3-independent-archive")
+    missing = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+
+    class MissingSource:
+        def get_object(self, **_kwargs):
+            raise missing
+
+    restored = []
+
+    def restore(*, kind, bucket, key):
+        restored.append(key)
+        return {"Body": io.BytesIO(archived(key))}
+
+    monkeypatch.setenv("RAW_ARCHIVE_READS_ENABLED", "true")
+    monkeypatch.setattr(archive_reader, "restore_object", restore)
+    p.store.client = MissingSource()
+    with transaction(p.engine) as db:
+        key = db.query(Revision).one().manifest["runs"][0]["key"]
+    assert p.store.get(key) == archived(key)
+    assert restored == [key]
+    restored.clear()
+    with pytest.raises(ClientError):
+        offload_verified_chunks(p.engine, p.store, archived)
+    assert restored == []
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).one().payload == payload
+        assert db.query(PayloadReference).count() == 0
+        assert db.get(Budget, 1).used_bytes == len(payload)
+
+
 def test_full_partial_spool_recovers_without_losing_late_frames(pipeline, tmp_path):
     p = pipeline
     p.cfg.max_spool_bytes = 2400

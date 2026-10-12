@@ -16,7 +16,7 @@ from app.direct.auth import authenticate
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
 from app.direct.ingest import accept_chunk
-from app.direct.models import Budget, Chunk, Heartbeat, Revision, Segment
+from app.direct.models import Budget, Heartbeat, Revision, Segment
 from app.direct.protocol import ChunkMetadata, DirectError
 from app.direct.storage import ArtifactStore
 
@@ -42,7 +42,19 @@ def create_app(settings=None, engine=None, store=None):
     @app.exception_handler(SQLAlchemyError)
     async def database_error(_, exc):
         # Do not log SQL parameters: they may contain payloads or credentials.
-        logger.error("direct_database_unavailable type=%s", type(exc).__name__)
+        original = getattr(exc, "orig", None)
+        sqlstate = getattr(original, "pgcode", None) or getattr(original, "sqlstate", None)
+        # Emit only recognized constants, never driver messages or SQL values.
+        category = {
+            "55P03": "lock_timeout",
+            "57014": "statement_cancelled",
+            "40P01": "deadlock",
+            "53300": "connection_limit",
+            "08006": "connection_failure",
+        }.get(sqlstate, "unclassified")
+        logger.error(
+            "direct_database_unavailable type=%s category=%s", type(exc).__name__, category
+        )
         return JSONResponse(
             {"error": "direct_database_unavailable"}, status_code=503, headers={"Retry-After": "30"}
         )
@@ -86,7 +98,9 @@ def create_app(settings=None, engine=None, store=None):
         if not cfg.ingest_enabled:
             return JSONResponse(result, status_code=503)
         with transaction(app.state.engine) as db:
-            result["last_persisted_at"] = db.query(func.max(Chunk.received_at)).scalar()
+            # Ingest updates this timestamp in the same durable transaction.
+            # Avoid scanning the entire retained chunk history on every probe.
+            result["last_persisted_at"] = db.query(func.max(Segment.updated_at)).scalar()
         ready = result["accepting_max_size_chunks"] and result["assembler"] == "healthy"
         return JSONResponse(result, status_code=200 if ready else 503)
 
