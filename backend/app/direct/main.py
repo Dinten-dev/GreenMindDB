@@ -82,7 +82,7 @@ def create_app(settings=None, engine=None, store=None):
             free_bytes = max(0, cfg.max_spool_bytes - budget.used_bytes)
             accepting = free_bytes >= cfg.max_chunk_bytes
             return {
-                "direct_ingest": "healthy" if accepting else "capacity_limited",
+                "direct_ingest": "healthy",
                 "spool_bytes": budget.used_bytes,
                 "spool_limit_bytes": cfg.max_spool_bytes,
                 "spool_free_bytes": free_bytes,
@@ -101,6 +101,8 @@ def create_app(settings=None, engine=None, store=None):
             # Ingest updates this timestamp in the same durable transaction.
             # Avoid scanning the entire retained chunk history on every probe.
             result["last_persisted_at"] = db.query(func.max(Segment.updated_at)).scalar()
+        if not result["accepting_max_size_chunks"]:
+            result["direct_ingest"] = "capacity_limited"
         ready = result["accepting_max_size_chunks"] and result["assembler"] == "healthy"
         return JSONResponse(result, status_code=200 if ready else 503)
 

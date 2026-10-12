@@ -108,7 +108,9 @@ def test_full_partial_spool_recovers_without_losing_late_frames(pipeline, tmp_pa
     assert p.upload(gap, p.metadata(gap, sequence=1, first_frame=100)).status_code == 503
     health = p.client.get("/health")
     assert health.status_code == 200  # Liveness must not trigger a restart loop.
-    assert health.json()["direct_ingest"] == "capacity_limited"
+    assert health.json()["direct_ingest"] == "healthy"
+    assert health.json()["accepting_max_size_chunks"] is False
+    assert p.client.get("/readiness").json()["direct_ingest"] == "capacity_limited"
     assert p.client.get("/readiness").status_code == 503
     get_archive = archive_copy(p, tmp_path / "box")
     assert offload_verified_chunks(p.engine, p.store, get_archive) == 2400
