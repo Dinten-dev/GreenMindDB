@@ -126,3 +126,37 @@ def test_worker_chunk_selection_does_not_hold_other_sensor_quota(pg_pipeline):
             event.remove(p.engine, "before_cursor_execute", delayed_selection)
         other.client.close()
         other.engine.dispose()
+
+
+def test_cleanup_candidate_scan_does_not_block_same_sensor(pg_pipeline):
+    p = pg_pipeline
+    entered, resume = Event(), Event()
+    payload = bytes(1200)
+    meta = p.metadata(payload, session_start_us=p.start_us + 599_800_000)
+    assert p.upload(payload, meta).status_code == 201
+    assert assemble_one(p.engine, p.cfg, p.store, now=time.time() + 2)
+
+    def delayed_candidates(connection, cursor, statement, parameters, context, executemany):
+        # Delay the potentially broad cleanup scan, before bounded ID recheck.
+        if (
+            "FROM direct_chunk" in statement
+            and "EXISTS" in statement
+            and "direct_chunk.id IN" not in statement
+            and "DISTINCT" not in statement
+        ):
+            entered.set()
+            assert resume.wait(5)
+
+    event.listen(p.engine, "before_cursor_execute", delayed_candidates)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            cleanup = pool.submit(release_verified_chunks, p.engine)
+            try:
+                assert entered.wait(2)
+                assert pool.submit(p.upload, payload, meta).result(timeout=1).status_code == 200
+            finally:
+                resume.set()
+            assert cleanup.result(timeout=3) == 1200
+    finally:
+        resume.set()
+        event.remove(p.engine, "before_cursor_execute", delayed_candidates)

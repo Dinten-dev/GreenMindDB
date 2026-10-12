@@ -204,25 +204,32 @@ def release_verified_chunks(engine, *, limit=200):
             or_(Segment.sealed.is_(False), Segment.published_revision == 0),
         )
     )
+    # Discover eligible identities before locking a sensor. A sparse spool may
+    # require a broad anti-join even with indexes; that scan must not delay ACKs.
     with transaction(engine) as db:
-        devices = [
-            row[0]
-            for row in db.query(Chunk.device_id)
+        candidates = (
+            db.query(Chunk.id, Chunk.device_id)
             .filter(Chunk.payload.isnot(None), ~pending_piece)
-            .distinct()
-            .limit(10)
+            .order_by(Chunk.received_at)
+            .limit(limit)
             .all()
-        ]
-    for device_id in devices:
+        )
+    by_device = {}
+    for chunk_id, device_id in candidates:
+        by_device.setdefault(device_id, []).append(chunk_id)
+    for device_id, chunk_ids in by_device.items():
         with transaction(engine) as db:
-            # Device first serializes all writes for this sensor. Select only its
-            # chunks before the shared quota lock; scans must not block others.
             device = db.query(Device).filter_by(id=device_id).with_for_update().one()
+            # Recheck only the bounded identities under the sensor lock; a
+            # competing offloader or cleanup may already have released them.
             chunks = (
                 db.query(Chunk)
-                .filter(Chunk.device_id == device_id, Chunk.payload.isnot(None), ~pending_piece)
-                .order_by(Chunk.received_at)
-                .limit(limit)
+                .filter(
+                    Chunk.id.in_(chunk_ids),
+                    Chunk.device_id == device_id,
+                    Chunk.payload.isnot(None),
+                    ~pending_piece,
+                )
                 .with_for_update(skip_locked=True)
                 .all()
             )
