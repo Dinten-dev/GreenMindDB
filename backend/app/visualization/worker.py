@@ -432,7 +432,8 @@ def wave_candidates(engine, now, limit=20):
     with engine.connect() as db:
         return (
             db.execute(
-                text("""SELECT w.*,f.source_sha256 FROM wav_file w JOIN wav_feature f ON f.wav_file_id=w.id
+                text("""SELECT w.*,f.source_sha256 FROM wav_file w JOIN sensor s ON s.id=w.sensor_id
+          JOIN wav_feature f ON f.wav_file_id=w.id
           LEFT JOIN visual_wav v ON v.wav_id=w.id WHERE w.feature_status='verified' AND w.raw_deleted_at IS NULL
           AND (v.wav_id IS NULL OR (v.seconds=60 AND v.status IN ('verified','unavailable') AND w.ended_at<:old) OR (v.status='failed' AND v.updated_at<now()-interval '1 day'))
           ORDER BY (w.started_at>=:recent) DESC,w.started_at DESC LIMIT :lim"""),
