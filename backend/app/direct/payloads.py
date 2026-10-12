@@ -156,6 +156,12 @@ def reconstruct(chunk, reference, config, reader):
 
 
 def read_payload(db, chunk, config, reader):
+    reference = db.get(PayloadReference, chunk.id) if chunk.payload is None else None
+    return read_payload_snapshot(chunk, reference, config, reader)
+
+
+def read_payload_snapshot(chunk, reference, config, reader):
+    """Read detached immutable inputs without keeping a DB transaction open."""
     if chunk.payload is not None:
         if (
             len(chunk.payload) != chunk.payload_bytes
@@ -163,7 +169,7 @@ def read_payload(db, chunk, config, reader):
         ):
             raise ValueError("Persisted source checksum mismatch")
         return chunk.payload
-    return reconstruct(chunk, db.get(PayloadReference, chunk.id), config, reader)
+    return reconstruct(chunk, reference, config, reader)
 
 
 def prepare_reference(db, chunk):

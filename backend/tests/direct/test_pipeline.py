@@ -367,3 +367,39 @@ def test_one_device_cannot_read_another_device_segments(pipeline):
     finally:
         other.client.close()
         other.engine.dispose()
+
+
+def test_expired_assembler_cannot_overwrite_new_worker(pipeline, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    p = pipeline
+    assert p.upload(bytes(1200)).status_code == 201
+    entered, resume = Event(), Event()
+    original = p.store.put
+    calls = []
+
+    def delayed_first(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            entered.set()
+            assert resume.wait(8)
+            raise OSError("old worker failed after its claim expired")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(p.store, "put", delayed_first)
+    now = time.time() + 2
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        stale = pool.submit(assemble_one, p.engine, p.cfg, p.store, now=now)
+        try:
+            assert entered.wait(3)
+            assert assemble_one(p.engine, p.cfg, p.store, now=now + 301)
+        finally:
+            resume.set()
+        with pytest.raises(OSError, match="claim expired"):
+            stale.result(timeout=5)
+    with transaction(p.engine) as db:
+        segment = db.query(Segment).one()
+        assert segment.published_revision == segment.revision == 1
+        assert segment.error is None and segment.retry_at == 0
+        assert db.query(Revision).count() == 1

@@ -305,3 +305,76 @@ def test_hotspot_pairing_code_is_consumed_atomically(pg_pipeline):
     assert p.client.post("/api/v1/direct-ingest/register", json=winner).status_code == 201
     with transaction(p.engine) as db:
         assert db.query(Enrollment).count() == 1
+
+
+def test_slow_wav_storage_never_locks_same_sensor_upload(pg_pipeline, monkeypatch):
+    from threading import Event
+
+    from app.direct.models import Segment
+
+    p = pg_pipeline
+    payload = bytes(1200)
+    assert p.upload(payload).status_code == 201
+    entered, resume = Event(), Event()
+    original = p.store.put
+
+    def slow_put(*args, **kwargs):
+        entered.set()
+        assert resume.wait(8)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(p.store, "put", slow_put)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assembly = pool.submit(assemble_one, p.engine, p.cfg, p.store, now=time.time() + 2)
+        try:
+            assert entered.wait(3)
+            upload = pool.submit(
+                p.upload, payload, p.metadata(payload, sequence=1, first_frame=100)
+            )
+            assert upload.result(timeout=2).status_code == 201
+        finally:
+            resume.set()
+        assert assembly.result(timeout=5) is False
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).count() == 2
+        assert db.query(Revision).count() == 0
+        assert db.query(Segment).one().retry_at == 0
+        assert db.get(Budget, 1).used_bytes == 2400
+    assert assemble_one(p.engine, p.cfg, p.store, now=time.time() + 2)
+    with transaction(p.engine) as db:
+        revision = db.query(Revision).one()
+        assert revision.revision == 2
+        assert revision.manifest["runs"][0]["frame_count"] == 200
+
+
+def test_spool_index_upgrade_preserves_payloads_and_is_repeatable(pg_pipeline):
+    from app.direct.spool_indexes import upgrade
+
+    p = pg_pipeline
+    payload = bytes(1200)
+    assert p.upload(payload).status_code == 201
+    with p.engine.begin() as connection:
+        connection.execute(text("DROP INDEX ix_direct_chunk_inline_received"))
+        connection.execute(text("DROP INDEX ix_direct_piece_chunk_id"))
+    upgrade(p.engine)
+    upgrade(p.engine)
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).one().payload == payload
+        assert db.get(Budget, 1).used_bytes == 1200
+    assert "ix_direct_chunk_inline_received" in {
+        item["name"] for item in inspect(p.engine).get_indexes("direct_chunk")
+    }
+    assert "ix_direct_piece_chunk_id" in {
+        item["name"] for item in inspect(p.engine).get_indexes("direct_piece")
+    }
+
+
+def test_spool_index_upgrade_refuses_wrong_existing_definition(pg_pipeline):
+    from app.direct.spool_indexes import upgrade
+
+    p = pg_pipeline
+    with p.engine.begin() as connection:
+        connection.execute(text("DROP INDEX ix_direct_chunk_inline_received"))
+        connection.execute(text("CREATE INDEX ix_direct_chunk_inline_received ON direct_chunk(id)"))
+    with pytest.raises(ValueError, match="different definition"):
+        upgrade(p.engine)

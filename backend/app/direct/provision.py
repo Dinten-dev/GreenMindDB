@@ -17,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-schema")
+    sub.add_parser("upgrade-spool-indexes")
     upgrade = sub.add_parser("upgrade-payload-references")
     upgrade.add_argument("--read-role", action="append", default=[])
     add = sub.add_parser("add-device")
@@ -30,6 +31,12 @@ def main():
     args = parser.parse_args()
     cfg = DirectSettings()
     engine = make_engine(cfg)
+    if args.command == "upgrade-spool-indexes":
+        from app.direct.spool_indexes import upgrade
+
+        upgrade(engine)
+        print("Direct spool indexes verified; existing recordings unchanged")
+        return
     if args.command == "upgrade-payload-references":
         from sqlalchemy import inspect
 

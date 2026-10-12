@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import pytest
-from sqlalchemy import event, text
+from sqlalchemy import event
 
 from app.direct.assembler import assemble_one, release_verified_chunks
 from app.direct.database import transaction
@@ -40,26 +40,13 @@ def test_slow_wav_and_late_arrival_do_not_block_other_sensor(pg_pipeline, monkey
                 late = pool.submit(
                     p.upload, bytes(1200), p.metadata(bytes(1200), sequence=1, first_frame=100)
                 )
-                # Establish the actual PostgreSQL row wait before the other upload.
-                deadline = time.monotonic() + 2
-                while time.monotonic() < deadline:
-                    with p.engine.connect() as db:
-                        waiting = db.execute(
-                            text(
-                                "SELECT count(*) FROM pg_stat_activity "
-                                "WHERE datname=current_database() AND wait_event_type='Lock' "
-                                "AND query LIKE '%direct_segment%' AND query LIKE '%FOR UPDATE%'"
-                            )
-                        ).scalar()
-                    if waiting:
-                        break
-                    time.sleep(0.01)
-                assert waiting
+                # Storage IO must not keep either sensor waiting on a row lock.
+                assert late.result(timeout=1).status_code == 201
                 response = pool.submit(other.upload, bytes(1200)).result(timeout=1)
                 assert response.status_code == 201
             finally:
                 resume.set()
-            assert assembly.result(timeout=3)
+            assert assembly.result(timeout=3) is False
             assert late.result(timeout=3).status_code == 201
         with transaction(p.engine) as db:
             assert db.query(Chunk).count() == 3

@@ -10,10 +10,12 @@ from sqlalchemy import (
     Column,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -75,7 +77,17 @@ class Chunk(Base):
     payload = Column(LargeBinary)
     payload_bytes = Column(Integer, nullable=False)
     received_at = Column(Float, default=time.time, nullable=False)
-    __table_args__ = (UniqueConstraint("device_id", "session_id", "sequence"),)
+    __table_args__ = (
+        UniqueConstraint("device_id", "session_id", "sequence"),
+        Index(
+            "ix_direct_chunk_inline_received",
+            "received_at",
+            "id",
+            "device_id",
+            postgresql_where=text("payload IS NOT NULL"),
+            sqlite_where=text("payload IS NOT NULL"),
+        ),
+    )
 
 
 class Segment(Base):
@@ -109,7 +121,7 @@ class PayloadReference(Base):
 class Piece(Base):
     __tablename__ = "direct_piece"
     segment_id = Column(String(36), ForeignKey("direct_segment.id"), primary_key=True)
-    chunk_id = Column(String(36), ForeignKey("direct_chunk.id"), primary_key=True)
+    chunk_id = Column(String(36), ForeignKey("direct_chunk.id"), primary_key=True, index=True)
     payload_offset = Column(Integer, nullable=False)
     frame_count = Column(Integer, nullable=False)
 
