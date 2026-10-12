@@ -3,14 +3,26 @@
 import uuid
 
 from fastapi import HTTPException
-from sqlalchemy import and_, false, select
+from sqlalchemy import and_, false, select, true
 
+from app.config import settings
 from app.models.master import Zone
 from app.models.user import Role
 from app.models.zone_access import ZoneAccess
 
 
+def is_platform_admin(user):
+    allowed = {
+        email.strip().casefold()
+        for email in settings.management_admin_emails.split(",")
+        if email.strip()
+    }
+    return bool(user.is_active and user.is_verified and user.email.casefold() in allowed)
+
+
 def zone_access_filter(user):
+    if is_platform_admin(user):
+        return true()
     if not user.organization_id:
         return false()
     tenant = Zone.organization_id == user.organization_id

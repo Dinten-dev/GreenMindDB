@@ -1,0 +1,24 @@
+[Unit]
+Description=GreenMind isolated archive and staging SSH transport
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+[Service]
+User=greenmind-archive-read
+Slice=greenmind-archive.slice
+LoadCredential=link-key:/etc/greenmind/source-link/key
+LoadCredential=known-hosts:/etc/greenmind/source-link/known_hosts
+ExecStart=/usr/bin/ssh -F /dev/null -N -T -i %d/link-key -o UserKnownHostsFile=%d/known-hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -L 127.0.0.1:5432:127.0.0.1:5432 -L 127.0.0.1:9000:127.0.0.1:9000 -L 127.0.0.1:18150:127.0.0.1:8150 -L 127.0.0.1:18120:127.0.0.1:8120 -L 127.0.0.1:18003:127.0.0.1:8003 -L 127.0.0.1:18000:127.0.0.1:8000 -L 172.28.21.1:9443:172.28.21.1:9443 -L 172.28.20.1:9444:172.28.20.1:9444 -R 127.0.0.1:28124:127.0.0.1:8124 -R 127.0.0.1:28125:127.0.0.1:8125 -R 127.0.0.1:28126:127.0.0.1:8126 -R 127.0.0.1:28002:127.0.0.1:8002 -R 127.0.0.1:23124:127.0.0.1:3124 -R 127.0.0.1:23009:127.0.0.1:3009 -R 127.0.0.1:29002:127.0.0.1:9002 -R 127.0.0.1:28141:127.0.0.1:8141 greenmind-archive-link@188.245.247.156
+Restart=always
+RestartSec=15
+MemoryMax=64M
+MemorySwapMax=0
+CPUQuota=10%
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+[Install]
+WantedBy=multi-user.target

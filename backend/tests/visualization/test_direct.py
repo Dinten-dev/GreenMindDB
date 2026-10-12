@@ -150,7 +150,11 @@ def live(tmp_path, monkeypatch):
 
     app.dependency_overrides[get_db] = lambda: Legacy()
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=org, role="admin"
+        organization_id=org,
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="direct-reader@example.test",
     )
     yield SimpleNamespace(
         engine=engine,
@@ -191,7 +195,11 @@ def test_live_read_model_idempotent_api_and_tenant(live):
     csv = x.client.get(f"/api/v1/visualization/direct/{x.device}/export?range=1h")
     assert csv.status_code == 200 and "resolution_seconds" in csv.text
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=uuid.uuid4()
+        organization_id=uuid.uuid4(),
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="other-tenant@example.test",
     )
     for tail in ("data", "export", "recordings", "waveform?at=2026-09-19T00:00:00Z"):
         assert x.client.get(f"/api/v1/visualization/direct/{x.device}/{tail}").status_code == 404

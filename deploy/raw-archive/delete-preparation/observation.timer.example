@@ -1,0 +1,11 @@
+[Unit]
+Description=GreenMind observation samples every five minutes; finite 24-hour window
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=15s
+Persistent=false
+Unit=greenmind-archive-observation-FILL_REVISION.service
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,7 @@
 """One sensor's WAV or cleanup wait must not lock another sensor's quota."""
 
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -9,8 +10,10 @@ from sqlalchemy import event, text
 
 from app.direct.assembler import assemble_one, release_verified_chunks
 from app.direct.database import transaction
-from app.direct.models import Budget, Chunk
+from app.direct.models import Budget, Chunk, Device, Revision
+from app.direct.payloads import offload_verified_chunks
 from tests.direct.conftest import build_pipeline
+from tests.direct.test_payloads import archive_copy, publish
 
 pytest_plugins = ("tests.direct.test_postgres",)
 pytestmark = pytest.mark.integration
@@ -65,6 +68,40 @@ def test_slow_wav_and_late_arrival_do_not_block_other_sensor(pg_pipeline, monkey
         resume.set()
         other.client.close()
         other.engine.dispose()
+
+
+def test_offload_cleanup_and_late_retries_keep_one_device_budget_exact(pg_pipeline, tmp_path):
+    p = pg_pipeline
+    original, late = bytes(1200), bytes([1]) * 1200
+    assert p.upload(original).status_code == 201
+    sealed = p.metadata(
+        original, session_id=str(uuid.uuid4()), session_start_us=p.start_us + 599_800_000
+    )
+    assert p.upload(original, sealed).status_code == 201
+    publish(p)
+    archived = archive_copy(p, tmp_path / "independent-box")
+    with transaction(p.engine) as db:
+        keys = {run["key"] for rev in db.query(Revision) for run in rev.manifest["runs"]}
+
+    def operate(index):
+        if index % 4 == 0:
+            return offload_verified_chunks(p.engine, p.store, archived)
+        if index % 4 == 1:
+            return release_verified_chunks(p.engine)
+        if index % 4 == 2:
+            assert p.upload(original).json()["status"] == "duplicate"
+        else:
+            result = p.upload(late, p.metadata(late, sequence=1, first_frame=100))
+            assert result.status_code in (200, 201)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(operate, range(16)))
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).count() == 3
+        inline = db.query(Chunk).filter(Chunk.payload.isnot(None)).all()
+        assert len(inline) == 1 and inline[0].payload == late
+        assert db.get(Budget, 1).used_bytes == db.get(Device, p.device_id).spool_bytes == 1200
+    assert all(p.store.get_local(key) == archived(key) for key in keys)
 
 
 def test_worker_chunk_selection_does_not_hold_other_sensor_quota(pg_pipeline):

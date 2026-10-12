@@ -54,10 +54,10 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
   expect(global.fetch).toHaveBeenCalledTimes(1);
   fireEvent.click(toggle);
   expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
-  expect(screen.getByRole('link', { name: 'CSV herunterladen' })).toHaveAttribute(
-    'href',
-    '/api/v1/visualization/direct/direct-a/export?range=24h'
-  );
+  const exportUrl = screen.getByRole('link', { name: 'CSV herunterladen' }).getAttribute('href');
+  expect(exportUrl).toContain('/api/v1/visualization/direct/direct-a/export?range=24h');
+  expect(new URL(exportUrl!, 'http://localhost').searchParams.get('from_dt')).toBeTruthy();
+  expect(new URL(exportUrl!, 'http://localhost').searchParams.get('to_dt')).toBeTruthy();
   expect(screen.getByRole('link', { name: 'WAV herunterladen', hidden: true })).toHaveAttribute(
     'href',
     '/api/v1/visualization/direct/direct-a/wav/segment-a/4/0'
@@ -65,7 +65,9 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
   fireEvent.click(screen.getByRole('button', { name: 'Live · 5 Min.' }));
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/visualization/direct/direct-a/data?range=5m&resolution=1',
+      expect.stringMatching(
+        /^\/api\/v1\/visualization\/direct\/direct-a\/data\?range=5m&from_dt=.*&resolution=1$/
+      ),
       expect.objectContaining({ cache: 'no-store' })
     )
   );
@@ -73,14 +75,18 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
   fireEvent.click(screen.getByRole('button', { name: '1 Stunde' }));
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/visualization/direct/direct-a/data?range=1h&resolution=1',
+      expect.stringMatching(
+        /^\/api\/v1\/visualization\/direct\/direct-a\/data\?range=1h&from_dt=.*&resolution=1$/
+      ),
       expect.objectContaining({ cache: 'no-store' })
     )
   );
   expect(await screen.findByTestId('signal-chart')).toHaveAttribute('data-show-peaks', 'true');
   expect(screen.getByRole('link', { name: 'CSV herunterladen' })).toHaveAttribute(
     'href',
-    '/api/v1/visualization/direct/direct-a/export?range=1h&resolution=1'
+    expect.stringMatching(
+      /^\/api\/v1\/visualization\/direct\/direct-a\/export\?range=1h&from_dt=.*&resolution=1$/
+    )
   );
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'false');

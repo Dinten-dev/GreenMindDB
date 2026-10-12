@@ -7,6 +7,7 @@ from app.direct.assembler import assemble_one, release_verified_chunks
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
 from app.direct.models import Heartbeat
+from app.direct.payloads import offload_verified_chunks
 from app.direct.retention import run_retention
 from app.direct.storage import ArtifactStore
 
@@ -27,6 +28,12 @@ def main():
         try:
             processed = assemble_one(engine, cfg, store)
             release_verified_chunks(engine)
+            if cfg.payload_offload_enabled:
+                released = offload_verified_chunks(
+                    engine, store, store.get_archive, archive_available=store.archive_available
+                )
+                if released:
+                    logger.info("direct_verified_payload_offload bytes=%s", released)
             if time.time() >= next_retention:
                 run_retention(engine, cfg, store)
                 next_retention = time.time() + 3600

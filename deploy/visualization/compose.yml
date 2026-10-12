@@ -39,7 +39,7 @@ services:
     cpus: 0.20
     environment:
       VISUAL_ARCHIVE_DIR: /archive
-      VISUAL_PRUNE_ENABLED: 'true'
+      VISUAL_PRUNE_ENABLED: 'false'
       VISUAL_BATCH_PAUSE: '0.1'
       VISUAL_WAV_PAUSE: '0.5'
       VISUAL_CYCLE_PAUSE: '20'
