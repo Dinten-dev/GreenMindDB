@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import create_engine, text
 from sqlalchemy.dialects import postgresql
 
 from app.config import settings
@@ -55,21 +57,31 @@ def test_direct_lookup_and_zone_policy_use_same_platform_authority(monkeypatch, 
     )
     calls = []
 
-    class Result:
-        def mappings(self):
-            return self
-
-        def first(self):
-            return {"id": "device", "zone_id": "zone", "mode": "native"}
-
-    class DB:
-        def execute(self, query, params):
-            calls.append(params)
-            return Result()
-
     monkeypatch.setattr(
         direct_api, "require_zone_access", lambda legacy, actor, zone: calls.append((actor, zone))
     )
-    assert direct_api.authorize(DB(), object(), user, "device")["id"] == "device"
-    assert calls[0]["platform"] is configured
-    assert calls[1] == (user, "zone")
+    engine = create_engine("sqlite://")
+    try:
+        with engine.begin() as db:
+            db.execute(
+                text(
+                    "CREATE TABLE direct_device(id text,zone_id text,mode text,organization_id text)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO direct_device VALUES ('device','zone','native','other'),('own','zone','native','tenant')"
+                )
+            )
+            if configured:
+                assert direct_api.authorize(db, object(), user, "device")["id"] == "device"
+                assert calls == [(user, "zone")]
+            else:
+                with pytest.raises(HTTPException) as denied:
+                    direct_api.authorize(db, object(), user, "device")
+                assert denied.value.status_code == 404
+                assert calls == []
+            assert direct_api.authorize(db, object(), user, "own")["id"] == "own"
+            assert calls[-1] == (user, "zone")
+    finally:
+        engine.dispose()
