@@ -230,7 +230,8 @@ def offload_verified_chunks(
     engine, store, archive_get, *, limit=200, max_bytes=1024**2, archive_available=None
 ):
     """Verify both copies outside locks, then atomically exchange bytes for references."""
-    local_reader, archive_reader = WavReader(store.get), WavReader(archive_get)
+    # Source verification must never silently fall back to the archive copy.
+    local_reader, archive_reader = WavReader(store.get_local), WavReader(archive_get)
     released = 0
     pending = []
     planned_bytes = 0

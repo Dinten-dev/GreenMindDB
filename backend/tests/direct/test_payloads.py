@@ -6,6 +6,7 @@ import time
 import tracemalloc
 import wave
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 from sqlalchemy import event
@@ -32,6 +33,28 @@ def archive_copy(p, folder):
 def publish(p):
     while assemble_one(p.engine, p.cfg, p.store, now=time.time() + 2):
         pass
+
+
+def test_missing_source_cannot_be_hidden_by_archive_fallback(pipeline, tmp_path, monkeypatch):
+    p = pipeline
+    payload = bytes(1200)
+    assert p.upload(payload).status_code == 201
+    publish(p)
+    archived = archive_copy(p, tmp_path / "independent-archive")
+    p.cfg.archive_broker_socket = Path("/private/synthetic.sock")
+
+    def unavailable(_key):
+        raise FileNotFoundError("synthetic source missing")
+
+    monkeypatch.setattr(p.store, "get_local", unavailable)
+    monkeypatch.setattr(p.store, "get_archive", archived)
+    with pytest.raises(FileNotFoundError):
+        offload_verified_chunks(p.engine, p.store, archived)
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).one().payload == payload
+        assert db.query(PayloadReference).count() == 0
+        assert db.get(Budget, 1).used_bytes == len(payload)
+        assert db.get(Device, p.device_id).spool_bytes == len(payload)
 
 
 def test_full_partial_spool_recovers_without_losing_late_frames(pipeline, tmp_path):

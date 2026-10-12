@@ -15,6 +15,9 @@ inline chunks and older WAV references. Old WAV versions remain required.
 - Storage Box WAV originals remain permanently stored.
 - Offload requires a complete independent Storage Box readback and original-chunk
   SHA-256 agreement; source storage verification alone is insufficient.
+- Source verification uses `ArtifactStore.get_local` exclusively. Missing source
+  WAVs must fail without falling back to the same archive being verified, leaving
+  SQL bytes, references, and both spool counters unchanged.
 - `RAW_ARCHIVE_DELETE_ENABLED=false`, `RETENTION_ENABLED=false`, and
   `DIRECT_RETENTION_ENABLED=false`; `DIRECT_RETENTION_DRY_RUN=true`.
 - SQL queue-byte exchange is independent of later local WAV eviction.
