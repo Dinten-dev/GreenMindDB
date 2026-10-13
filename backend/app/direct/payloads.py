@@ -6,8 +6,9 @@ import json
 import time
 import wave
 from collections import OrderedDict
+from dataclasses import dataclass
 
-from sqlalchemy import exists
+from sqlalchemy import exists, tuple_
 
 from app.direct.database import transaction
 from app.direct.models import Budget, Chunk, Device, PayloadReference, Piece, Revision, Segment
@@ -232,31 +233,43 @@ def prepare_reference(db, chunk):
     )
 
 
+@dataclass
+class OffloadCursor:
+    """Cycle bounded batches so missing old archive copies cannot starve later ones."""
+
+    after: tuple[float, str] | None = None
+
+
 def offload_verified_chunks(
-    engine, store, archive_get, *, limit=200, max_bytes=1024**2, archive_available=None
+    engine,
+    store,
+    archive_get,
+    *,
+    limit=200,
+    max_bytes=1024**2,
+    archive_available=None,
+    cursor=None,
 ):
     """Verify both copies outside locks, then atomically exchange bytes for references."""
-    # Source verification must never silently fall back to the archive copy.
     local_reader, archive_reader = WavReader(store.get_local), WavReader(archive_get)
     released = 0
     pending = []
     planned_bytes = 0
     with transaction(engine) as db:
-        ids = [
-            row[0]
-            for row in db.query(Chunk.id)
-            .filter(
-                Chunk.payload.isnot(None),
-                exists().where(
-                    (Piece.chunk_id == Chunk.id)
-                    & (Piece.segment_id == Segment.id)
-                    & (Segment.published_revision > 0)
-                ),
-            )
-            .order_by(Chunk.received_at)
-            .limit(limit)
-            .all()
-        ]
+        query = db.query(Chunk.id, Chunk.received_at).filter(
+            Chunk.payload.isnot(None),
+            exists().where(
+                (Piece.chunk_id == Chunk.id)
+                & (Piece.segment_id == Segment.id)
+                & (Segment.published_revision > 0)
+            ),
+        )
+        if cursor is not None and cursor.after is not None:
+            query = query.filter(tuple_(Chunk.received_at, Chunk.id) > cursor.after)
+        rows = query.order_by(Chunk.received_at, Chunk.id).limit(limit).all()
+    if cursor is not None:
+        cursor.after = (rows[-1].received_at, rows[-1].id) if rows else None
+    ids = [row.id for row in rows]
     for chunk_id in ids:
         with transaction(engine) as db:
             chunk = db.get(Chunk, chunk_id)

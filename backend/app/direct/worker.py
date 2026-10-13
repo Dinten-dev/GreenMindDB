@@ -7,17 +7,21 @@ from app.direct.assembler import assemble_one, release_verified_chunks
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
 from app.direct.models import Heartbeat
-from app.direct.payloads import offload_verified_chunks
+from app.direct.payloads import OffloadCursor, offload_verified_chunks
 from app.direct.retention import run_retention
 from app.direct.storage import ArtifactStore
 
 logger = logging.getLogger(__name__)
 
 
-def release_payloads(engine, cfg, store):
+def release_payloads(engine, cfg, store, *, cursor=None):
     if cfg.payload_offload_enabled:
         return offload_verified_chunks(
-            engine, store, store.get_archive, archive_available=store.archive_available
+            engine,
+            store,
+            store.get_archive,
+            archive_available=store.archive_available,
+            cursor=cursor,
         )
     if cfg.payload_release_requires_archive:
         # A rollback may pause offload without reverting to single-copy cleanup.
@@ -33,12 +37,13 @@ def main():
         return
     engine, store = make_engine(cfg), ArtifactStore(cfg)
     next_retention = 0
+    offload_cursor = OffloadCursor()
     while True:
         status = "healthy"
         processed = False
         try:
             processed = assemble_one(engine, cfg, store)
-            released = release_payloads(engine, cfg, store)
+            released = release_payloads(engine, cfg, store, cursor=offload_cursor)
             if cfg.payload_offload_enabled and released:
                 logger.info("direct_verified_payload_offload bytes=%s", released)
             if time.time() >= next_retention:

@@ -344,3 +344,58 @@ def test_large_wav_reconstruction_does_not_duplicate_entire_pcm(pipeline):
     finally:
         tracemalloc.stop()
     assert reader.cached_bytes == 0
+
+
+def test_cursor_passes_full_unavailable_batch_and_revisits_it(pipeline, tmp_path):
+    from app.direct.payloads import OffloadCursor
+
+    p = pipeline
+    for n in range(3):
+        payload = bytes([n + 1]) * 1200
+        p.upload(payload, p.metadata(payload, sequence=n, first_frame=n * 300000))
+    publish(p)
+    archived = archive_copy(p, tmp_path / "box")
+    with transaction(p.engine) as db:
+        chunks = db.query(Chunk).order_by(Chunk.sequence).all()
+        # Equal timestamps exercise deterministic keyset tie-breaking.
+        for chunk in chunks:
+            chunk.received_at = 100
+    # Identify the final candidate's immutable archive object without relying on buckets.
+    with transaction(p.engine) as db:
+        from app.direct.payloads import prepare_reference
+
+        last = db.query(Chunk).order_by(Chunk.received_at, Chunk.id).all()[-1]
+        available_key = prepare_reference(db, last)[1].parts[0]["key"]
+    cursor = OffloadCursor()
+
+    def availability(keys):
+        return set(keys) & {available_key}
+
+    assert (
+        offload_verified_chunks(
+            p.engine, p.store, archived, limit=2, archive_available=availability, cursor=cursor
+        )
+        == 0
+    )
+    assert (
+        offload_verified_chunks(
+            p.engine, p.store, archived, limit=2, archive_available=availability, cursor=cursor
+        )
+        == 1200
+    )
+    assert (
+        offload_verified_chunks(
+            p.engine, p.store, archived, limit=2, archive_available=availability, cursor=cursor
+        )
+        == 0
+    )
+    assert cursor.after is None
+    assert (
+        offload_verified_chunks(
+            p.engine, p.store, archived, limit=2, archive_available=lambda keys: keys, cursor=cursor
+        )
+        == 2400
+    )
+    with transaction(p.engine) as db:
+        assert db.get(Budget, 1).used_bytes == 0
+        assert db.query(PayloadReference).count() == 3
