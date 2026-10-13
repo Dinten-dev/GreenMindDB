@@ -81,7 +81,8 @@ def live(tmp_path, monkeypatch):
         pytest.skip("Disposable local PostgreSQL required")
     parsed = make_url(url)
     assert parsed.host in ("localhost", "127.0.0.1") and parsed.database == "visual_test"
-    engine = create_engine(url)
+    # Match production: one pool slot, no overflow, bounded waiting.
+    engine = create_engine(url, pool_size=1, max_overflow=0, pool_timeout=0.5)
     Base.metadata.create_all(engine)
     direct.initialize(engine)
     with engine.begin() as db:
@@ -253,3 +254,62 @@ def test_worker_cycle_backfills_without_mutating_receiver(live, monkeypatch):
         assert db.execute(text("SELECT sum(n) FROM direct_visual_point")).scalar() == 380
         assert db.query(Chunk).one().payload == live.raw.tobytes()
     assert direct.cycle(live.engine, live.store) == "healthy"
+
+
+def test_hpk_waveform_raw_defaults_and_tenant(live):
+    x = live
+    url = f"/api/v1/visualization/direct/{x.device}/waveform"
+    params = {"at": datetime.fromtimestamp(x.start, UTC).isoformat(), "seconds": 1}
+    raw = x.client.get(url, params=params)
+    explicit_raw = x.client.get(url, params=params | {"processing": "raw"})
+    assert raw.content == explicit_raw.content
+    view = x.client.get(f"/api/v1/visualization/direct/{x.device}/hpk")
+    assert view.status_code == 200 and "HPK-Signalvergleich" in view.text
+    assert x.client.get("/api/v1/visualization/hpk").status_code == 200
+    assert "frame-ancestors" in view.headers["content-security-policy"]
+    assert view.headers["cache-control"] == "private, no-store"
+    derived = x.client.get(url, params=params | {"processing": "hpk"})
+    assert derived.status_code == 200, derived.text
+    result = derived.json()
+    assert result["derived"] and result["sample_rate"] == 100
+    assert result["source_sample_rate"] == 380 and result["unit"] == "mV"
+    assert len(result["data"]) == 100
+    assert x.client.get(url, params=params | {"processing": "unknown"}).status_code == 422
+    with Session(x.engine) as db:
+        assert db.query(Chunk).one().payload == x.raw.tobytes()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        organization_id=uuid.uuid4(),
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="other-tenant@example.test",
+    )
+    assert x.client.get(url, params=params | {"processing": "hpk"}).status_code == 404
+    assert x.client.get(f"/api/v1/visualization/direct/{x.device}/hpk").status_code == 404
+    app.dependency_overrides.pop(get_current_user)
+    assert x.client.get(url, params=params | {"processing": "hpk"}).status_code == 401
+    assert x.client.get(f"/api/v1/visualization/direct/{x.device}/hpk").status_code == 401
+    assert x.client.get("/api/v1/visualization/hpk").status_code == 401
+
+
+def test_hpk_wav_is_separate_and_original_hash_unchanged(live):
+    x = live
+    assert assemble_one(x.engine, x.settings, x.store)
+    files = x.client.get(f"/api/v1/visualization/direct/{x.device}/recordings?range=1h").json()
+    f = files[0]
+    url = (
+        f"/api/v1/visualization/direct/{x.device}/wav/{f['segment_id']}/{f['revision']}/{f['run']}"
+    )
+    raw = x.client.get(url)
+    derived = x.client.get(url, params={"processing": "hpk"})
+    assert derived.status_code == 200, derived.text
+    assert derived.headers["x-signal-derived"] == "true"
+    assert "hpk-derived" in derived.headers["content-disposition"]
+    with wave.open(io.BytesIO(derived.content)) as reader:
+        assert reader.getframerate() == 100 and reader.getnframes() == 100
+    assert x.client.get(url).content == raw.content
+    with wave.open(io.BytesIO(raw.content)) as reader:
+        assert reader.getframerate() == 380
+        assert reader.readframes(380) == x.raw.tobytes()
+    app.dependency_overrides.pop(get_current_user)
+    assert x.client.get(url, params={"processing": "hpk"}).status_code == 401
