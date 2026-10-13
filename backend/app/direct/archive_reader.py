@@ -7,6 +7,10 @@ import re
 import socket
 
 
+class ArchiveTemporarilyUnavailable(OSError):
+    """The private broker deferred a bounded read; keep source bytes and retry."""
+
+
 class BrokerConnection(http.client.HTTPConnection):
     def __init__(self, path):
         super().__init__("localhost", timeout=30)
@@ -30,6 +34,8 @@ def read_archive(settings, key):
             {"Content-Type": "application/json"},
         )
         response = connection.getresponse()
+        if response.status == 503:
+            raise ArchiveTemporarilyUnavailable("Verified archive read deferred")
         if response.status != 200:
             raise OSError("Verified archive unavailable")
         size = int(response.getheader("Content-Length", "0"))
@@ -58,6 +64,8 @@ def available_archive(settings, keys):
             {"Content-Type": "application/json"},
         )
         response = connection.getresponse()
+        if response.status == 503:
+            raise ArchiveTemporarilyUnavailable("Verified archive availability deferred")
         if response.status != 200:
             raise OSError("Verified archive availability unavailable")
         data = response.read(256 * 1024 + 1)
