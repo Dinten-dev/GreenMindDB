@@ -14,6 +14,17 @@ from app.direct.storage import ArtifactStore
 logger = logging.getLogger(__name__)
 
 
+def release_payloads(engine, cfg, store):
+    if cfg.payload_offload_enabled:
+        return offload_verified_chunks(
+            engine, store, store.get_archive, archive_available=store.archive_available
+        )
+    if cfg.payload_release_requires_archive:
+        # A rollback may pause offload without reverting to single-copy cleanup.
+        return 0
+    return release_verified_chunks(engine)
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     cfg = DirectSettings()
@@ -27,13 +38,9 @@ def main():
         processed = False
         try:
             processed = assemble_one(engine, cfg, store)
-            release_verified_chunks(engine)
-            if cfg.payload_offload_enabled:
-                released = offload_verified_chunks(
-                    engine, store, store.get_archive, archive_available=store.archive_available
-                )
-                if released:
-                    logger.info("direct_verified_payload_offload bytes=%s", released)
+            released = release_payloads(engine, cfg, store)
+            if cfg.payload_offload_enabled and released:
+                logger.info("direct_verified_payload_offload bytes=%s", released)
             if time.time() >= next_retention:
                 run_retention(engine, cfg, store)
                 next_retention = time.time() + 3600

@@ -28,6 +28,7 @@ class DirectSettings(BaseSettings):
     idle_seconds: int = Field(120, ge=1, le=3600)
     poll_seconds: int = Field(5, ge=1, le=300)
     payload_offload_enabled: bool = False
+    payload_release_requires_archive: bool = False
     archive_broker_socket: Path | None = None
     storage: Literal["local", "s3"] = "local"
     artifact_root: Path = Path("./direct-artifacts")
@@ -47,7 +48,9 @@ class DirectSettings(BaseSettings):
             raise ValueError("Direct archive broker requires an absolute private socket path")
         if self.payload_offload_enabled and self.archive_broker_socket is None:
             raise ValueError("Payload offload requires a verified archive broker")
-        if self.payload_offload_enabled and self.retention_enabled:
+        if (
+            self.payload_offload_enabled or self.payload_release_requires_archive
+        ) and self.retention_enabled:
             raise ValueError(
                 "Independent destructive retention must remain disabled during offload"
             )
