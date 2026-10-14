@@ -24,6 +24,8 @@ class DirectSettings(BaseSettings):
     late_seconds: int = Field(604_800, ge=60, le=7_776_000)
     idle_seconds: int = Field(120, ge=1, le=3600)
     poll_seconds: int = Field(5, ge=1, le=300)
+    payload_offload_enabled: bool = False
+    archive_broker_socket: Path | None = None
     storage: Literal["local", "s3"] = "local"
     artifact_root: Path = Path("./direct-artifacts")
     s3_endpoint_url: str = ""
@@ -37,6 +39,14 @@ class DirectSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_isolation(self):
+        if self.archive_broker_socket is not None and not self.archive_broker_socket.is_absolute():
+            raise ValueError("Direct archive broker requires an absolute private socket path")
+        if self.payload_offload_enabled and self.archive_broker_socket is None:
+            raise ValueError("Payload offload requires a verified archive broker")
+        if self.payload_offload_enabled and self.retention_enabled:
+            raise ValueError(
+                "Independent destructive retention must remain disabled during offload"
+            )
         if self.environment != "development":
             if not self.require_tls:
                 raise ValueError("Direct TLS is mandatory outside development")

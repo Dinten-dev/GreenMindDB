@@ -11,6 +11,7 @@ from sqlalchemy import and_, exists, or_, update
 from app.direct.database import transaction
 from app.direct.features import channel_features
 from app.direct.models import Budget, Chunk, Device, Piece, Revision, Segment, Session
+from app.direct.payloads import WavReader, read_payload
 from app.direct.protocol import SEGMENT_US
 
 
@@ -30,6 +31,7 @@ def build_manifest(db, segment, store):
     run_start = None
     run_payload = bytearray()
     cursor = segment.first_frame
+    reader = WavReader(store.get)
 
     def finish_run():
         nonlocal run_payload, run_start
@@ -64,17 +66,16 @@ def build_manifest(db, segment, store):
 
     for piece, chunk in rows:
         start = chunk.first_frame + piece.payload_offset
-        if start < cursor or chunk.payload is None:
+        if start < cursor:
             raise ValueError("Overlapping frames or unavailable source chunk")
-        if hashlib.sha256(chunk.payload).hexdigest() != chunk.payload_sha256:
-            raise ValueError("Persisted source checksum mismatch")
+        payload = read_payload(db, chunk, config, reader)
         if start > cursor:
             finish_run()
             gaps.append([cursor, start])
         if run_start is None:
             run_start = start
         offset = piece.payload_offset * frame_bytes
-        data = chunk.payload[offset : offset + piece.frame_count * frame_bytes]
+        data = payload[offset : offset + piece.frame_count * frame_bytes]
         if len(data) != piece.frame_count * frame_bytes:
             raise ValueError("Truncated persisted chunk")
         run_payload.extend(data)
