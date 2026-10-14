@@ -52,7 +52,7 @@ class Destination:
 def setup(tmp_path, monkeypatch):
     # These existing unit tests isolate upload/readback/crash behavior. The
     # mandatory approval/grace/snapshot gate has separate end-to-end tests.
-    monkeypatch.setattr("app.raw_archive.deletion.verify_deletion_evidence", lambda *_: None)
+    monkeypatch.setattr("app.raw_archive.deletion.verify_deletion_evidence", lambda *_, **__: None)
     config = Config(enabled=True, root=tmp_path, min_free_bytes=0)
     recording = Recording(
         "gateway",

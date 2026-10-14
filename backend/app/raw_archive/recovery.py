@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import time
 from contextlib import closing
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -288,6 +289,7 @@ def restore_metadata(source, digest, engine):
 
 def recovery_index(recordings, ledger, namespace, destination):
     candidates = {}
+    receipts = {}
     for record in recordings:
         state = ledger.load(record)
         if not state or state[0] != "verified":
@@ -297,14 +299,24 @@ def recovery_index(recordings, ledger, namespace, destination):
             "feature_digest": record.feature_digest,
             "source_snapshot": state[1]["snapshot"],
         }
+        # Copy-only receipts intentionally omit feature checksums. The reviewed
+        # source catalog supplies current feature metadata without changing bytes
+        # or resetting the original successful-copy/grace timestamps.
+        exported = json.loads(json.dumps(state[1]))
+        exported["recording"] = json.loads(json.dumps(asdict(record), default=str))
+        exported.setdefault("first_verified_at", exported.get("verified_at"))
+        receipts[record.archive_id] = exported
     data = {
         "schema": 1,
         "environment": namespace,
         "destination": destination.identity,
         "candidates": candidates,
         "recordings": {
-            record.archive_id: ledger.load(record)[1]["recording"] for record in recordings
+            record.archive_id: receipts[record.archive_id]["recording"] for record in recordings
         },
+        # Move only this reviewed subset to the source-side deletion journal.
+        # Preserve the original grace clock after moving copying to another host.
+        "receipts": receipts,
     }
     raw = json.dumps(data, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     if not candidates or len(raw) > 1024**2:

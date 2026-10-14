@@ -81,13 +81,32 @@ def approval(config, now):
     return data
 
 
-def verify_deletion_evidence(config, recording, receipt, destination, now):
-    _verify_evidence(config, recording, receipt, destination, now, approval(config, now))
+def verify_deletion_evidence(config, recording, receipt, destination, now, *, clock=None):
+    proof_at = _verify_evidence(config, recording, receipt, destination, now, approval(config, now))
+    # Four remote readbacks may outlive the consent or snapshot validity window.
+    # Check the live deadline after their last byte, before any deletion.
+    current = clock() if clock else now
+    verify_current_authorization(config, recording, current, proof_at)
+    return proof_at
 
 
-def verify_preparation_evidence(config, recording, receipt, destination, now):
+def verify_current_authorization(config, recording, current, proof_at, *, consent=True):
+    data = (approval if consent else proposal)(config, current)
+    from .readiness import validate_release
+
+    validate_release(data, recording, current)
+    if current - stamp(data["snapshot"]["created_at"]) > timedelta(hours=24):
+        raise ArchiveBlocked("Storage Box snapshot expired during proof readback")
+    if current - proof_at > timedelta(hours=24):
+        raise ArchiveBlocked("Catalog restore expired during proof readback")
+
+
+def verify_preparation_evidence(config, recording, receipt, destination, now, *, clock=None):
     """Same immutable proofs without consent; does not call any source adapter."""
-    _verify_evidence(config, recording, receipt, destination, now, proposal(config, now))
+    proof_at = _verify_evidence(config, recording, receipt, destination, now, proposal(config, now))
+    verify_current_authorization(
+        config, recording, clock() if clock else now, proof_at, consent=False
+    )
 
 
 def _verify_evidence(config, recording, receipt, destination, now, data):
@@ -202,6 +221,7 @@ def _verify_evidence(config, recording, receipt, destination, now, data):
         destination.download_snapshot(name, receipt["remote_key"], wav, recording.size)
         if wav.stat().st_size != recording.size or checksum(wav) != recording.sha256:
             raise ArchiveBlocked("Snapshot WAV readback mismatch")
+    return proof_at
 
 
 def check_quarantine(config, recording):

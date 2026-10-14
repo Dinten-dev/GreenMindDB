@@ -263,6 +263,7 @@ def run_daily(
         raise ArchiveBlocked("Both Gateway and Direct sources must be configured")
     if set(source_identities) != set(catalogs):
         raise ArchiveBlocked("Stable source identities are required")
+    live_clock = (lambda: datetime.now(UTC)) if now is None else lambda: now
     now = now or datetime.now(UTC)
     started = monotonic()
     report = dict(
@@ -462,7 +463,7 @@ def run_daily(
                                 ledger,
                                 strict.revalidate,
                                 checkpoint=checkpoint,
-                                now=lambda: now,
+                                now=live_clock,
                             )
                             report["deleted"] += int(status == "evicted")
                     if completed and not config.delete_enabled:

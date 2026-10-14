@@ -333,9 +333,15 @@ def archive_one(
         config.guard(deleting=True)
         recording.eligible(now(), config)
         timed("catalog_revalidate", revalidate, recording)
-        from .deletion import verify_deletion_evidence
+        from .deletion import verify_current_authorization, verify_deletion_evidence
 
-        verify_deletion_evidence(config, recording, receipt, destination, now())
+        proof_at = verify_deletion_evidence(
+            config, recording, receipt, destination, now(), clock=now
+        )
+        checkpoint()
+        timed("catalog_revalidate", revalidate, recording)
+        if proof_at is not None:
+            verify_current_authorization(config, recording, now(), proof_at)
         ledger.save(recording, "deleting", receipt)
         source.evict(recording, snapshot)
         ledger.save(recording, "evicted", receipt)

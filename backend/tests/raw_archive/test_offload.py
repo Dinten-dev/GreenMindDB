@@ -60,7 +60,7 @@ def offload(world, *, features_missing=False, corrupt_second_read=False):
     destination.download = read
     # Isolate daily dispatch; test_deletion_gates exercises the full new gate.
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr("app.raw_archive.deletion.verify_deletion_evidence", lambda *_: None)
+        patch.setattr("app.raw_archive.deletion.verify_deletion_evidence", lambda *_, **__: None)
         result = run_daily(
             replace(config, delete_enabled=True, reads_accepted=True),
             catalogs,
