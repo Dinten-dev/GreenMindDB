@@ -37,3 +37,17 @@ def test_path_injection_rejected(tmp_path):
         remote.path("../other-data.wav")
     assert "-oStrictHostKeyChecking=yes" in remote.command
     assert "-oBatchMode=yes" in remote.command
+
+
+@pytest.mark.parametrize("method", ["publish_catalog", "publish_recovery"])
+def test_storage_box_rejects_metadata_before_any_transport(tmp_path, monkeypatch, method):
+    key, known = tmp_path / "key", tmp_path / "known_hosts"
+    key.touch()
+    known.touch()
+    destination = StorageBox(host="example.test", user="test", key=key, known_hosts=known)
+    monkeypatch.setattr(destination, "run", lambda *args, **kwargs: pytest.fail("transport called"))
+    metadata = tmp_path / "private.json"
+    metadata.write_text("{}")
+    with pytest.raises(ArchiveBlocked, match="WAVs only"):
+        getattr(destination, method)(metadata, "production/catalog-backup/" + "a" * 64 + ".json")
+    assert metadata.read_text() == "{}"

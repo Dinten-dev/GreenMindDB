@@ -435,32 +435,8 @@ class StorageBox:
             raise ArchiveBlocked("Remote object exceeds allowed size")
 
     def publish_recovery(self, path, key):
-        """Append one hash-addressed index; no existing RAW or index is replaced."""
-        from .policy import checksum
-
-        digest = checksum(path)
-        if key != key.split("/", 1)[0] + "/recovery/" + digest + ".json":
-            raise ArchiveBlocked("Recovery filename must equal its content checksum")
-        if not 0 < path.stat().st_size <= 1024**2:
-            raise ArchiveBlocked("Recovery index exceeds its size budget")
-        remote = self.recovery_path(key)
-        with tempfile.TemporaryDirectory(dir=path.parent, prefix="index-proof-") as folder:
-            previous = Path(folder) / "existing.json"
-            try:
-                self.download_recovery(key, previous, path.stat().st_size)
-            except RemoteMissing:
-                temporary = remote + ".partial-" + uuid.uuid4().hex
-                commands = [
-                    f"-mkdir {self.root}",
-                    f"-mkdir {self.root}/{key.split('/')[0]}",
-                    f"-mkdir {self.root}/{key.split('/')[0]}/recovery",
-                    f"put {self.quote(path)} {temporary}",
-                    f"rename {temporary} {remote}",
-                ]
-                self.run("\n".join(commands) + "\n")
-                self.download_recovery(key, previous, path.stat().st_size)
-            if previous.stat().st_size != path.stat().st_size or checksum(previous) != digest:
-                raise ArchiveBlocked("Recovery index readback mismatch")
+        """Keep private recovery metadata off the permanent WAV Storage Box."""
+        raise ArchiveBlocked("Storage Box accepts WAVs only; keep recovery metadata private")
 
     def catalog_path(self, key):
         if not re.fullmatch(
@@ -479,30 +455,8 @@ class StorageBox:
         self._download_path(remote, path, max_bytes)
 
     def publish_catalog(self, path, key):
-        """Content-addressed metadata only, bounded to the transport's 64 MiB ceiling."""
-        from .policy import checksum
-
-        digest = checksum(path)
-        remote = self.catalog_path(key)
-        if (
-            key.rsplit("/", 1)[1].split(".", 1)[0] != digest
-            or not 0 < path.stat().st_size <= 64 * 1024**2
-        ):
-            raise ArchiveBlocked("Catalog backup must be bounded and hash-addressed")
-        with tempfile.TemporaryDirectory(dir=path.parent, prefix="catalog-proof-") as folder:
-            previous = Path(folder) / "remote"
-            try:
-                self.download_catalog(key, previous, path.stat().st_size)
-            except RemoteMissing:
-                temporary = remote + ".partial-" + uuid.uuid4().hex
-                parent = remote.rsplit("/", 1)[0]
-                self.run(
-                    f"-mkdir {self.root}\n-mkdir {self.root}/{key.split('/')[0]}\n-mkdir {parent}\n"
-                    f"put {self.quote(path)} {temporary}\nrename {temporary} {remote}\n"
-                )
-                self.download_catalog(key, previous, path.stat().st_size)
-            if previous.stat().st_size != path.stat().st_size or checksum(previous) != digest:
-                raise ArchiveBlocked("Catalog backup independent readback mismatch")
+        """Legacy metadata reads remain available; new metadata writes are forbidden."""
+        raise ArchiveBlocked("Storage Box accepts WAVs only; keep catalog metadata private")
 
     def restore(self, key: str, sha256: str, size: int, destination: Path) -> None:
         """Operator restore, verified before visibility; never overwrite an existing file."""
