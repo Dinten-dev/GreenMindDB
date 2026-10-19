@@ -16,7 +16,8 @@ from app.database import get_db
 from app.models.user import User
 from app.rate_limit import limiter
 from app.services.wav_completeness import direct_completeness
-from app.visualization import direct
+from app.visualization import direct, hpk_filter, hpk_view
+from app.visualization.resolution import display_step
 from app.zone_access import is_platform_admin, require_zone_access
 
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
@@ -49,12 +50,25 @@ def authorize(db, legacy, user, device_id):
     return row
 
 
-def get_series(db, device_id, range):
+def get_series(db, device_id, range, *, resolution=None, from_dt=None, to_dt=None):
     end = datetime.now(UTC).timestamp()
-    seconds = WINDOWS[range]
-    step = 1 if seconds <= 3600 else 60 if seconds <= 604800 else 600
+    start = end - WINDOWS[range]
+    if (from_dt is None) != (to_dt is None):
+        raise HTTPException(400, "Both time bounds are required")
+    if from_dt is not None:
+        if from_dt.tzinfo is None or to_dt.tzinfo is None:
+            raise HTTPException(400, "Time bounds must include a timezone")
+        start, end = from_dt.timestamp(), to_dt.timestamp()
     try:
-        return direct.query_series(db, str(device_id), end - seconds, end, step)
+        step = display_step(
+            datetime.fromtimestamp(start, UTC),
+            datetime.fromtimestamp(end, UTC),
+            requested=resolution,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        return direct.query_series(db, str(device_id), start, end, step)
     except ValueError as exc:
         raise HTTPException(413, "Bitte kürzeren Zeitraum wählen") from exc
 
@@ -66,7 +80,7 @@ def recordings(db, device_id, start, end):
             text("""SELECT s.id AS segment_id,s.sealed,r.revision,r.manifest FROM direct_segment s
         JOIN direct_revision r ON r.segment_id=s.id AND r.revision=s.published_revision
         WHERE s.device_id=:id AND (s.bucket+1)*600>:start AND s.bucket*600<:end
-          AND r.raw_deleted_at IS NULL ORDER BY s.bucket DESC LIMIT 101"""),
+          ORDER BY s.bucket DESC LIMIT 101"""),
             {"id": str(device_id), "start": start, "end": end},
         )
         .mappings()
@@ -96,16 +110,38 @@ def recordings(db, device_id, start, end):
 
 
 def install(app):
+    @app.get("/api/v1/visualization/hpk")
+    @limiter.limit("12/minute")
+    def hpk_start(request: Request, user: User = Depends(get_current_user)):
+        return hpk_view.index_response()
+
+    @app.get("/api/v1/visualization/direct/{device_id}/hpk")
+    @limiter.limit("12/minute")
+    def hpk_comparison(
+        request: Request,
+        device_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        legacy: Session = Depends(get_db),
+        db: Session = Depends(connection),
+    ):
+        authorize(db, legacy, user, device_id)
+        return hpk_view.response(device_id)
+
     @app.get("/api/v1/visualization/direct/{device_id}/data")
     def data(
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        resolution: int | None = Query(None, ge=1, le=604800),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         device = authorize(db, legacy, user, device_id)
-        result = get_series(db, device_id, range)
+        result = get_series(
+            db, device_id, range, resolution=resolution, from_dt=from_dt, to_dt=to_dt
+        )
         updated = db.execute(
             text(
                 "SELECT max(v.updated_at) FROM direct_visual_segment v JOIN direct_segment s ON s.id=v.segment_id WHERE s.device_id=:id"
@@ -123,12 +159,17 @@ def install(app):
         request: Request,
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        resolution: int | None = Query(None, ge=1, le=604800),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        series = get_series(db, device_id, range)
+        series = get_series(
+            db, device_id, range, resolution=resolution, from_dt=from_dt, to_dt=to_dt
+        )
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(
@@ -196,6 +237,7 @@ def install(app):
         segment_id: uuid.UUID,
         revision: int,
         run_index: int,
+        processing: str = Query("raw", pattern="^(raw|hpk)$"),
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
@@ -203,13 +245,20 @@ def install(app):
         authorize(db, legacy, user, device_id)
         row = db.execute(
             text("""SELECT r.manifest FROM direct_revision r JOIN direct_segment s ON s.id=r.segment_id
-            WHERE s.id=:segment AND s.device_id=:device AND r.revision=:revision AND r.raw_deleted_at IS NULL"""),
-            {"segment": str(segment_id), "device": str(device_id), "revision": revision},
+            WHERE s.id=:segment AND s.device_id=:device AND r.revision=:revision"""),
+            {
+                "segment": str(segment_id),
+                "device": str(device_id),
+                "revision": revision,
+            },
         ).scalar()
         if not row or not 0 <= run_index < len(row["runs"]):
             raise HTTPException(404, "Aufnahme nicht gefunden")
+        # Authorization and immutable manifest are captured; release the single
+        # read-pool connection before any object-storage access.
+        db.rollback()
         try:
-            payload, _ = direct.read_wav(
+            payload, pcm = direct.read_wav(
                 direct.resources()[1],
                 row["runs"][run_index],
                 row["config"],
@@ -218,12 +267,26 @@ def install(app):
             )
         except (ValueError, OSError) as exc:
             raise HTTPException(503, "Aufnahme konnte nicht geprüft werden") from exc
+        headers = {
+            "Content-Disposition": f'attachment; filename="direct-{segment_id}-{run_index}.wav"'
+        }
+        if processing == "hpk":
+            with hpk_filter.processing_slot():
+                payload = hpk_filter.wav(pcm, row["config"])
+            headers = {
+                "Content-Disposition": f'attachment; filename="direct-{segment_id}-{run_index}-hpk-derived-100hz-mv-x10.wav"',
+                "X-Signal-Processing": hpk_filter.VERSION,
+                "X-Signal-Unit": "mV",
+                "X-PCM-Scale": "int16=round(mV*10)",
+                "X-Source-Sample-Rate": "380",
+                "X-Signal-Sample-Rate": "100",
+                "X-Signal-Derived": "true",
+                "Cache-Control": "private, no-store",
+            }
         return Response(
             payload,
             media_type="audio/wav",
-            headers={
-                "Content-Disposition": f'attachment; filename="direct-{segment_id}-{run_index}.wav"'
-            },
+            headers=headers,
         )
 
     @app.get("/api/v1/visualization/direct/{device_id}/waveform")
@@ -234,6 +297,7 @@ def install(app):
         at: datetime,
         seconds: int = Query(10, ge=1, le=30),
         channel: int = Query(0, ge=0, le=3),
+        processing: str = Query("raw", pattern="^(raw|hpk)$"),
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
@@ -247,16 +311,23 @@ def install(app):
         ).scalar()
         if not segment:
             raise HTTPException(404, "Keine Originaldaten für diesen Zeitpunkt")
+        # load_source obtains its own snapshot; the reader pool has one slot.
+        db.rollback()
         source = direct.load_source(*direct.resources(), segment)
         if not source:
             raise HTTPException(
-                409, "Originalaufnahme wird gerade fertiggestellt; bitte erneut versuchen"
+                409,
+                "Originalaufnahme wird gerade fertiggestellt; bitte erneut versuchen",
             )
         _, cfg, runs, _ = source
         if seconds * cfg["sample_rate"] > 30000:
             raise HTTPException(413, "Originalvorschau enthält zu viele Messpunkte")
         if channel >= cfg["channels"]:
             raise HTTPException(404, "Kanal nicht gefunden")
+        if processing == "hpk":
+            with hpk_filter.processing_slot():
+                result = hpk_filter.waveform(runs, cfg, stamp, seconds)
+            return result | {"sensor_id": str(device_id)}
         points = []
         origin = cfg["session_start_us"] / 1e6
         start_frame = max(0, math.ceil((stamp - origin) * cfg["sample_rate"]))

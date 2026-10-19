@@ -1,0 +1,8 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetBucketVersioning", "s3:GetLifecycleConfiguration"],
+    "Resource": ["arn:aws:s3:::greenmind-raw", "arn:aws:s3:::FILL_EXACT_DIRECT_BUCKET"]
+  }]
+}

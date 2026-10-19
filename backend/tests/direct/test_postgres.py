@@ -4,17 +4,19 @@ import os
 import shutil
 import subprocess
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from app.direct.assembler import assemble_one
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
-from app.direct.models import Base, Budget, Chunk, Revision
+from app.direct.models import Base, Budget, Chunk, Device, PayloadReference, Revision
+from app.direct.payloads import offload_verified_chunks
 from tests.direct.conftest import build_pipeline
 
 pytestmark = pytest.mark.integration
@@ -66,6 +68,148 @@ def test_postgres_two_workers_publish_one_revision(pg_pipeline):
     assert sorted(results) == [False, True]
     with transaction(p.engine) as db:
         assert db.query(Revision).count() == 1
+
+
+def test_postgres_offload_and_duplicate_uploads_account_once(pg_pipeline, tmp_path):
+    from tests.direct.test_payloads import archive_copy, publish
+
+    p = pg_pipeline
+    for sequence in range(10):
+        assert (
+            p.upload(
+                bytes(1200), p.metadata(bytes(1200), sequence=sequence, first_frame=100 * sequence)
+            ).status_code
+            == 201
+        )
+    publish(p)
+    archived = archive_copy(p, tmp_path / "box")
+
+    def operate(index):
+        if index % 2:
+            assert p.upload(bytes(1200)).json()["status"] == "duplicate"
+            return 0
+        return offload_verified_chunks(p.engine, p.store, archived)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert sum(pool.map(operate, range(16))) == 12000
+    with transaction(p.engine) as db:
+        assert db.query(PayloadReference).count() == 10
+        assert db.get(Budget, 1).used_bytes == db.get(Device, p.device_id).spool_bytes == 0
+
+
+def test_postgres_offload_waiting_for_chunk_does_not_block_other_sensor(pg_pipeline, tmp_path):
+    from threading import Event
+
+    from sqlalchemy import event
+
+    from tests.direct.test_payloads import archive_copy, publish
+
+    p = pg_pipeline
+    other = build_pipeline(p.cfg)
+    assert p.upload(bytes(1200)).status_code == 201
+    publish(p)
+    archived = archive_copy(p, tmp_path / "box")
+    waiting = Event()
+    worker_pid = []
+
+    def before_execute(connection, _cursor, statement, _parameters, _context, _many):
+        if "FROM direct_chunk " in statement and "FOR UPDATE" in statement:
+            worker_pid.append(connection.connection.driver_connection.get_backend_pid())
+            waiting.set()
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with transaction(p.engine) as blocker:
+                blocker.query(Chunk).with_for_update().one()
+                event.listen(p.engine, "before_cursor_execute", before_execute)
+                future = pool.submit(offload_verified_chunks, p.engine, p.store, archived)
+                assert waiting.wait(3)
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    state = blocker.execute(
+                        text("SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid"),
+                        {"pid": worker_pid[0]},
+                    ).scalar()
+                    if state == "Lock":
+                        break
+                    time.sleep(0.01)
+                assert state == "Lock"
+                # A different sensor must commit while this chunk stays locked.
+                with other.engine.begin() as connection:
+                    connection.execute(text("SET lock_timeout='500ms'"))
+                assert other.upload(bytes(1200)).status_code == 201
+                assert not future.done()
+            assert future.result(timeout=5) == 1200
+        with transaction(p.engine) as db:
+            assert db.get(Budget, 1).used_bytes == 1200
+            assert db.query(PayloadReference).count() == 1
+    finally:
+        event.remove(p.engine, "before_cursor_execute", before_execute)
+        other.client.close()
+        other.engine.dispose()
+
+
+def test_postgres_reference_upgrade_is_additive_and_repeatable(pg_pipeline, monkeypatch):
+    from app.direct import provision
+
+    p = pg_pipeline
+    assert p.upload(bytes(1200)).status_code == 201
+    PayloadReference.__table__.drop(p.engine)
+    monkeypatch.setattr(provision, "DirectSettings", lambda: p.cfg)
+    monkeypatch.setattr("sys.argv", ["provision", "upgrade-payload-references"])
+    provision.main()
+    provision.main()
+    with transaction(p.engine) as db:
+        assert db.query(PayloadReference).count() == 0
+        assert db.query(Chunk).one().payload == bytes(1200)
+        assert db.get(Budget, 1).used_bytes == 1200
+
+
+@pytest.mark.parametrize("permitted", [False, True])
+def test_postgres_upgrade_grants_only_existing_chunk_reader(pg_pipeline, monkeypatch, permitted):
+    from app.direct import provision
+
+    p = pg_pipeline
+    role = "gm_reference_test_" + uuid.uuid4().hex
+    PayloadReference.__table__.drop(p.engine)
+    with p.engine.begin() as connection:
+        connection.execute(text("CREATE ROLE " + role))
+        if permitted:
+            connection.execute(text("GRANT SELECT ON direct_chunk TO " + role))
+    monkeypatch.setattr(provision, "DirectSettings", lambda: p.cfg)
+    monkeypatch.setattr(
+        "sys.argv", ["provision", "upgrade-payload-references", "--read-role", role]
+    )
+    try:
+        if permitted:
+            provision.main()
+            with p.engine.connect() as connection:
+                assert (
+                    connection.execute(
+                        text(
+                            "SELECT has_table_privilege(:role, 'direct_chunk_payload_ref', 'SELECT')"
+                        ),
+                        {"role": role},
+                    ).scalar()
+                    is True
+                )
+                assert (
+                    connection.execute(
+                        text(
+                            "SELECT has_table_privilege(:role, 'direct_chunk_payload_ref', 'INSERT')"
+                        ),
+                        {"role": role},
+                    ).scalar()
+                    is False
+                )
+        else:
+            with pytest.raises(SystemExit, match="already have Direct chunk access"):
+                provision.main()
+            assert "direct_chunk_payload_ref" not in inspect(p.engine).get_table_names()
+    finally:
+        with p.engine.begin() as connection:
+            connection.execute(text("DROP OWNED BY " + role))
+            connection.execute(text("DROP ROLE " + role))
 
 
 def test_postgres_devices_and_sessions_remain_independent(pg_pipeline):
@@ -161,3 +305,76 @@ def test_hotspot_pairing_code_is_consumed_atomically(pg_pipeline):
     assert p.client.post("/api/v1/direct-ingest/register", json=winner).status_code == 201
     with transaction(p.engine) as db:
         assert db.query(Enrollment).count() == 1
+
+
+def test_slow_wav_storage_never_locks_same_sensor_upload(pg_pipeline, monkeypatch):
+    from threading import Event
+
+    from app.direct.models import Segment
+
+    p = pg_pipeline
+    payload = bytes(1200)
+    assert p.upload(payload).status_code == 201
+    entered, resume = Event(), Event()
+    original = p.store.put
+
+    def slow_put(*args, **kwargs):
+        entered.set()
+        assert resume.wait(8)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(p.store, "put", slow_put)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assembly = pool.submit(assemble_one, p.engine, p.cfg, p.store, now=time.time() + 2)
+        try:
+            assert entered.wait(3)
+            upload = pool.submit(
+                p.upload, payload, p.metadata(payload, sequence=1, first_frame=100)
+            )
+            assert upload.result(timeout=2).status_code == 201
+        finally:
+            resume.set()
+        assert assembly.result(timeout=5) is False
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).count() == 2
+        assert db.query(Revision).count() == 0
+        assert db.query(Segment).one().retry_at == 0
+        assert db.get(Budget, 1).used_bytes == 2400
+    assert assemble_one(p.engine, p.cfg, p.store, now=time.time() + 2)
+    with transaction(p.engine) as db:
+        revision = db.query(Revision).one()
+        assert revision.revision == 2
+        assert revision.manifest["runs"][0]["frame_count"] == 200
+
+
+def test_spool_index_upgrade_preserves_payloads_and_is_repeatable(pg_pipeline):
+    from app.direct.spool_indexes import upgrade
+
+    p = pg_pipeline
+    payload = bytes(1200)
+    assert p.upload(payload).status_code == 201
+    with p.engine.begin() as connection:
+        connection.execute(text("DROP INDEX ix_direct_chunk_inline_received"))
+        connection.execute(text("DROP INDEX ix_direct_piece_chunk_id"))
+    upgrade(p.engine)
+    upgrade(p.engine)
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).one().payload == payload
+        assert db.get(Budget, 1).used_bytes == 1200
+    assert "ix_direct_chunk_inline_received" in {
+        item["name"] for item in inspect(p.engine).get_indexes("direct_chunk")
+    }
+    assert "ix_direct_piece_chunk_id" in {
+        item["name"] for item in inspect(p.engine).get_indexes("direct_piece")
+    }
+
+
+def test_spool_index_upgrade_refuses_wrong_existing_definition(pg_pipeline):
+    from app.direct.spool_indexes import upgrade
+
+    p = pg_pipeline
+    with p.engine.begin() as connection:
+        connection.execute(text("DROP INDEX ix_direct_chunk_inline_received"))
+        connection.execute(text("CREATE INDEX ix_direct_chunk_inline_received ON direct_chunk(id)"))
+    with pytest.raises(ValueError, match="different definition"):
+        upgrade(p.engine)

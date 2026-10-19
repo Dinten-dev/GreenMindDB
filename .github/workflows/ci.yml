@@ -52,6 +52,7 @@ jobs:
 
       - name: Run tests with coverage
         timeout-minutes: 10
+        shell: bash
         run: python -u -m pytest tests/ -v --tb=short -m "not integration" -o faulthandler_timeout=60 --durations=10 --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60 2>&1 | tee pytest.log
         env:
           SKIP_DOCKER_TESTS: "1"
@@ -152,10 +153,20 @@ jobs:
           python-version: "3.12"
       - name: Install existing backend test dependencies
         run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Prepare isolated archive test database
+        run: |
+          python - <<'PYCODE'
+          from sqlalchemy import create_engine
+          engine = create_engine("postgresql+psycopg2://direct_test:local-direct-test-only@127.0.0.1:5432/postgres", isolation_level="AUTOCOMMIT")
+          with engine.connect() as connection:
+              connection.exec_driver_sql("CREATE DATABASE archive_test")
+          engine.dispose()
+          PYCODE
       - name: Test Direct transactions and Legacy migration compatibility
-        run: python -m pytest tests/direct/test_postgres.py tests/direct/test_ingest_locks.py tests/test_ingest_postgres.py tests/test_staging_migrations.py -v
+        run: python -m pytest tests/direct/test_postgres.py tests/direct/test_ingest_locks.py tests/direct/test_payload_recovery.py tests/test_ingest_postgres.py tests/test_staging_migrations.py tests/raw_archive/test_postgres.py -v
         env:
           DIRECT_TEST_POSTGRES_URL: postgresql+psycopg2://direct_test:local-direct-test-only@127.0.0.1:5432/direct_test
+          RAW_ARCHIVE_TEST_POSTGRES_URL: postgresql+psycopg2://direct_test:local-direct-test-only@127.0.0.1:5432/archive_test
           STAGING_TEST_DATABASE_URL: postgresql+psycopg2://migration_test:local-migration-only@127.0.0.1:5433/migration_test
 
   visualization-postgres:

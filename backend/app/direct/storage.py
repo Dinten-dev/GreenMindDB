@@ -7,6 +7,9 @@ import tempfile
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
+
+from app.raw_archive import reader as archive_reader
 
 KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
 
@@ -70,21 +73,64 @@ class ArtifactStore:
             finally:
                 if os.path.exists(temporary):
                     os.unlink(temporary)
-        if hashlib.sha256(self.get(key)).hexdigest() != digest:
+        if hashlib.sha256(self.get_local(key)).hexdigest() != digest:
             raise OSError("Direct artifact verification failed")
         return key, digest
 
     def get(self, key):
+        # Ordinary readers retain the existing archive-aware S3 path. Source
+        # verification must use get_local, which never calls this fallback.
+        if self.client and self.settings.archive_broker_socket is None:
+            self._path(key)
+            return self._read_response(
+                archive_reader.get_object(
+                    self.client, Bucket=self.settings.s3_bucket, Key=key, kind="direct"
+                )
+            )
+        try:
+            return self.get_local(key)
+        except FileNotFoundError:
+            if self.settings.archive_broker_socket is None:
+                raise
+            return self.get_archive(key)
+        except ClientError as error:
+            if self.settings.archive_broker_socket is None or error.response["Error"][
+                "Code"
+            ] not in {"NoSuchKey", "NoSuchVersion", "404"}:
+                raise
+            return self.get_archive(key)
+
+    def get_archive(self, key):
+        from app.direct.archive_reader import read_archive
+
+        self._path(key)
+        return read_archive(self.settings, key)
+
+    def archive_available(self, keys):
+        from app.direct.archive_reader import available_archive
+
+        for key in keys:
+            self._path(key)
+        return available_archive(self.settings, keys)
+
+    def get_local(self, key):
         path = self._path(key)
         if self.client:
-            response = self.client.get_object(Bucket=self.settings.s3_bucket, Key=key)
-            try:
-                value = response["Body"].read(self.settings.max_segment_bytes + 4097)
-            finally:
-                response["Body"].close()
+            return self._read_response(
+                self.client.get_object(Bucket=self.settings.s3_bucket, Key=key)
+            )
         else:
             with path.open("rb") as source:
                 value = source.read(self.settings.max_segment_bytes + 4097)
+        if len(value) > self.settings.max_segment_bytes + 4096:
+            raise OSError("Direct artifact exceeds bounded read size")
+        return value
+
+    def _read_response(self, response):
+        try:
+            value = response["Body"].read(self.settings.max_segment_bytes + 4097)
+        finally:
+            response["Body"].close()
         if len(value) > self.settings.max_segment_bytes + 4096:
             raise OSError("Direct artifact exceeds bounded read size")
         return value

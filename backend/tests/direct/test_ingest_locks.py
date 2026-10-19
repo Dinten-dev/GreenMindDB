@@ -1,16 +1,19 @@
 """One sensor's WAV or cleanup wait must not lock another sensor's quota."""
 
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import pytest
-from sqlalchemy import event, text
+from sqlalchemy import event
 
 from app.direct.assembler import assemble_one, release_verified_chunks
 from app.direct.database import transaction
-from app.direct.models import Budget, Chunk
+from app.direct.models import Budget, Chunk, Device, Revision
+from app.direct.payloads import offload_verified_chunks
 from tests.direct.conftest import build_pipeline
+from tests.direct.test_payloads import archive_copy, publish
 
 pytest_plugins = ("tests.direct.test_postgres",)
 pytestmark = pytest.mark.integration
@@ -37,26 +40,13 @@ def test_slow_wav_and_late_arrival_do_not_block_other_sensor(pg_pipeline, monkey
                 late = pool.submit(
                     p.upload, bytes(1200), p.metadata(bytes(1200), sequence=1, first_frame=100)
                 )
-                # Establish the actual PostgreSQL row wait before the other upload.
-                deadline = time.monotonic() + 2
-                while time.monotonic() < deadline:
-                    with p.engine.connect() as db:
-                        waiting = db.execute(
-                            text(
-                                "SELECT count(*) FROM pg_stat_activity "
-                                "WHERE datname=current_database() AND wait_event_type='Lock' "
-                                "AND query LIKE '%direct_segment%' AND query LIKE '%FOR UPDATE%'"
-                            )
-                        ).scalar()
-                    if waiting:
-                        break
-                    time.sleep(0.01)
-                assert waiting
+                # Storage IO must not keep either sensor waiting on a row lock.
+                assert late.result(timeout=1).status_code == 201
                 response = pool.submit(other.upload, bytes(1200)).result(timeout=1)
                 assert response.status_code == 201
             finally:
                 resume.set()
-            assert assembly.result(timeout=3)
+            assert assembly.result(timeout=3) is False
             assert late.result(timeout=3).status_code == 201
         with transaction(p.engine) as db:
             assert db.query(Chunk).count() == 3
@@ -65,6 +55,40 @@ def test_slow_wav_and_late_arrival_do_not_block_other_sensor(pg_pipeline, monkey
         resume.set()
         other.client.close()
         other.engine.dispose()
+
+
+def test_offload_cleanup_and_late_retries_keep_one_device_budget_exact(pg_pipeline, tmp_path):
+    p = pg_pipeline
+    original, late = bytes(1200), bytes([1]) * 1200
+    assert p.upload(original).status_code == 201
+    sealed = p.metadata(
+        original, session_id=str(uuid.uuid4()), session_start_us=p.start_us + 599_800_000
+    )
+    assert p.upload(original, sealed).status_code == 201
+    publish(p)
+    archived = archive_copy(p, tmp_path / "independent-box")
+    with transaction(p.engine) as db:
+        keys = {run["key"] for rev in db.query(Revision) for run in rev.manifest["runs"]}
+
+    def operate(index):
+        if index % 4 == 0:
+            return offload_verified_chunks(p.engine, p.store, archived)
+        if index % 4 == 1:
+            return release_verified_chunks(p.engine)
+        if index % 4 == 2:
+            assert p.upload(original).json()["status"] == "duplicate"
+        else:
+            result = p.upload(late, p.metadata(late, sequence=1, first_frame=100))
+            assert result.status_code in (200, 201)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(operate, range(16)))
+    with transaction(p.engine) as db:
+        assert db.query(Chunk).count() == 3
+        inline = db.query(Chunk).filter(Chunk.payload.isnot(None)).all()
+        assert len(inline) == 1 and inline[0].payload == late
+        assert db.get(Budget, 1).used_bytes == db.get(Device, p.device_id).spool_bytes == 1200
+    assert all(p.store.get_local(key) == archived(key) for key in keys)
 
 
 def test_worker_chunk_selection_does_not_hold_other_sensor_quota(pg_pipeline):
@@ -102,3 +126,37 @@ def test_worker_chunk_selection_does_not_hold_other_sensor_quota(pg_pipeline):
             event.remove(p.engine, "before_cursor_execute", delayed_selection)
         other.client.close()
         other.engine.dispose()
+
+
+def test_cleanup_candidate_scan_does_not_block_same_sensor(pg_pipeline):
+    p = pg_pipeline
+    entered, resume = Event(), Event()
+    payload = bytes(1200)
+    meta = p.metadata(payload, session_start_us=p.start_us + 599_800_000)
+    assert p.upload(payload, meta).status_code == 201
+    assert assemble_one(p.engine, p.cfg, p.store, now=time.time() + 2)
+
+    def delayed_candidates(connection, cursor, statement, parameters, context, executemany):
+        # Delay the potentially broad cleanup scan, before bounded ID recheck.
+        if (
+            "FROM direct_chunk" in statement
+            and "EXISTS" in statement
+            and "direct_chunk.id IN" not in statement
+            and "DISTINCT" not in statement
+        ):
+            entered.set()
+            assert resume.wait(5)
+
+    event.listen(p.engine, "before_cursor_execute", delayed_candidates)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            cleanup = pool.submit(release_verified_chunks, p.engine)
+            try:
+                assert entered.wait(2)
+                assert pool.submit(p.upload, payload, meta).result(timeout=1).status_code == 200
+            finally:
+                resume.set()
+            assert cleanup.result(timeout=3) == 1200
+    finally:
+        resume.set()
+        event.remove(p.engine, "before_cursor_execute", delayed_candidates)

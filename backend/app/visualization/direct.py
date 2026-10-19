@@ -19,9 +19,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.direct.config import DirectSettings
-from app.direct.models import Chunk, Piece, Revision, Segment
+from app.direct.models import Chunk, PayloadReference, Piece, Revision, Segment
 from app.direct.models import Session as CaptureSession
+from app.direct.payloads import WavReader, reconstruct
 from app.direct.storage import ArtifactStore
+from app.transaction_pool import attach_read_guards
 
 log = logging.getLogger(__name__)
 
@@ -44,11 +46,12 @@ def resources():
     engine = create_engine(
         cfg.database_url.get_secret_value(),
         pool_size=1,
-        max_overflow=1,
+        max_overflow=0 if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true" else 1,
         pool_pre_ping=True,
         pool_timeout=3,
         connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"},
     )
+    attach_read_guards(engine, statement_ms=8000, lock_ms=150, work_mem_kib=8192)
     return engine, ArtifactStore(cfg)
 
 
@@ -161,7 +164,7 @@ def load_source(engine, store, segment_id):
             for key in ("id", "device_id", "session_id", "revision", "bucket")
         }
         published = db.get(Revision, (seg.id, seg.revision))
-        if published and not published.raw_deleted_at:
+        if published:
             manifest = published.manifest
             canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
             if hashlib.sha256(canonical).hexdigest() != published.manifest_sha256:
@@ -186,20 +189,13 @@ def load_source(engine, store, segment_id):
             )
             if len(rows) > 1200:
                 raise ValueError("Segment too large")
-            runs = []
-            frame_bytes = cfg["channels"] * cfg["sample_bits"] // 8
-            for piece, chunk in rows:
+            references = {}
+            for _, chunk in rows:
                 if chunk.payload is None:
-                    # Old raw blocks may already be archived. Wait for the assembler's
-                    # matching verified revision rather than replacing data incompletely.
-                    return None
-                if hashlib.sha256(chunk.payload).hexdigest() != chunk.payload_sha256:
-                    raise ValueError("Chunk checksum mismatch")
-                a = piece.payload_offset * frame_bytes
-                b = a + piece.frame_count * frame_bytes
-                if len(chunk.payload[a:b]) != b - a:
-                    raise ValueError("Truncated chunk")
-                runs.append((chunk.first_frame + piece.payload_offset, chunk.payload[a:b]))
+                    reference = db.get(PayloadReference, chunk.id)
+                    if reference is None:
+                        return None
+                    references[chunk.id] = reference
     if manifest:
         runs = [
             (
@@ -208,6 +204,23 @@ def load_source(engine, store, segment_id):
             )
             for run in manifest["runs"]
         ]
+    else:
+        # Immutable references and config were captured in the same DB snapshot.
+        # Storage reads must not hold a projection transaction open.
+        runs = []
+        reader = WavReader(store.get)
+        frame_bytes = cfg["channels"] * cfg["sample_bits"] // 8
+        for piece, chunk in rows:
+            payload = chunk.payload
+            if payload is None:
+                payload = reconstruct(chunk, references[chunk.id], cfg, reader)
+            if hashlib.sha256(payload).hexdigest() != chunk.payload_sha256:
+                raise ValueError("Chunk checksum mismatch")
+            a = piece.payload_offset * frame_bytes
+            b = a + piece.frame_count * frame_bytes
+            if len(payload[a:b]) != b - a:
+                raise ValueError("Truncated chunk")
+            runs.append((chunk.first_frame + piece.payload_offset, payload[a:b]))
     if sum(len(payload) for _, payload in runs) > 8_000_000:
         raise ValueError("Visualization segment exceeds memory budget")
     return metadata, cfg, runs, "wav" if manifest else "readings"

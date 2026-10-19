@@ -10,13 +10,16 @@ from sqlalchemy import create_engine, text
 from app.direct.auth import issue_token
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
-from app.direct.models import Base, Budget, Device
+from app.direct.models import Base, Budget, Device, PayloadReference
 
 
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-schema")
+    sub.add_parser("upgrade-spool-indexes")
+    upgrade = sub.add_parser("upgrade-payload-references")
+    upgrade.add_argument("--read-role", action="append", default=[])
     add = sub.add_parser("add-device")
     add.add_argument("--organization-id", type=uuid.UUID, required=True)
     add.add_argument("--zone-id", type=uuid.UUID, required=True)
@@ -28,6 +31,37 @@ def main():
     args = parser.parse_args()
     cfg = DirectSettings()
     engine = make_engine(cfg)
+    if args.command == "upgrade-spool-indexes":
+        from app.direct.spool_indexes import upgrade
+
+        upgrade(engine)
+        print("Direct spool indexes verified; existing recordings unchanged")
+        return
+    if args.command == "upgrade-payload-references":
+        from sqlalchemy import inspect
+
+        names = set(inspect(engine).get_table_names())
+        if "direct_chunk" not in names or any(not name.startswith("direct_") for name in names):
+            raise SystemExit("Refusing upgrade outside the existing Direct database")
+        with engine.begin() as connection:
+            if engine.dialect.name == "postgresql":
+                connection.execute(text("SET LOCAL lock_timeout='100ms'"))
+                connection.execute(text("SET LOCAL statement_timeout='2000ms'"))
+                for role in args.read_role:
+                    permitted = connection.execute(
+                        text("SELECT has_table_privilege(:role, 'direct_chunk', 'SELECT')"),
+                        {"role": role},
+                    ).scalar()
+                    if not permitted:
+                        raise SystemExit("Reference reader must already have Direct chunk access")
+            elif args.read_role:
+                raise SystemExit("Read grants require PostgreSQL")
+            PayloadReference.__table__.create(connection, checkfirst=True)
+            for role in args.read_role:
+                quoted = connection.dialect.identifier_preparer.quote(role)
+                connection.execute(text("GRANT SELECT ON direct_chunk_payload_ref TO " + quoted))
+        print("Direct payload references initialized; no existing rows changed")
+        return
     if args.command == "init-schema":
         # The separate database must be empty or contain only Direct tables.
         from sqlalchemy import inspect

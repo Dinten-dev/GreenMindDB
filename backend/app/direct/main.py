@@ -8,7 +8,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 
@@ -42,7 +42,19 @@ def create_app(settings=None, engine=None, store=None):
     @app.exception_handler(SQLAlchemyError)
     async def database_error(_, exc):
         # Do not log SQL parameters: they may contain payloads or credentials.
-        logger.error("direct_database_unavailable type=%s", type(exc).__name__)
+        original = getattr(exc, "orig", None)
+        sqlstate = getattr(original, "pgcode", None) or getattr(original, "sqlstate", None)
+        # Emit only recognized constants, never driver messages or SQL values.
+        category = {
+            "55P03": "lock_timeout",
+            "57014": "statement_cancelled",
+            "40P01": "deadlock",
+            "53300": "connection_limit",
+            "08006": "connection_failure",
+        }.get(sqlstate, "unclassified")
+        logger.error(
+            "direct_database_unavailable type=%s category=%s", type(exc).__name__, category
+        )
         return JSONResponse(
             {"error": "direct_database_unavailable"}, status_code=503, headers={"Retry-After": "30"}
         )
@@ -67,13 +79,32 @@ def create_app(settings=None, engine=None, store=None):
             if budget is None:
                 raise DirectError(503, "direct_schema_not_initialized")
             beat = db.get(Heartbeat, "assembler")
+            free_bytes = max(0, cfg.max_spool_bytes - budget.used_bytes)
+            accepting = free_bytes >= cfg.max_chunk_bytes
             return {
                 "direct_ingest": "healthy",
                 "spool_bytes": budget.used_bytes,
+                "spool_limit_bytes": cfg.max_spool_bytes,
+                "spool_free_bytes": free_bytes,
+                "accepting_max_size_chunks": accepting,
                 "assembler": beat.status
                 if beat and beat.updated_at > time.time() - max(90, cfg.poll_seconds * 3)
                 else "unavailable",
             }
+
+    @app.get("/readiness")
+    def readiness():
+        result = health()
+        if not cfg.ingest_enabled:
+            return JSONResponse(result, status_code=503)
+        with transaction(app.state.engine) as db:
+            # Ingest updates this timestamp in the same durable transaction.
+            # Avoid scanning the entire retained chunk history on every probe.
+            result["last_persisted_at"] = db.query(func.max(Segment.updated_at)).scalar()
+        if not result["accepting_max_size_chunks"]:
+            result["direct_ingest"] = "capacity_limited"
+        ready = result["accepting_max_size_chunks"] and result["assembler"] == "healthy"
+        return JSONResponse(result, status_code=200 if ready else 503)
 
     @app.post(PREFIX + "/chunks")
     async def upload(request: Request):
