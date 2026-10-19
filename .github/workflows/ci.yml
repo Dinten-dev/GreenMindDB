@@ -52,6 +52,7 @@ jobs:
 
       - name: Run tests with coverage
         timeout-minutes: 10
+        shell: bash
         run: python -u -m pytest tests/ -v --tb=short -m "not integration" -o faulthandler_timeout=60 --durations=10 --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60 2>&1 | tee pytest.log
         env:
           SKIP_DOCKER_TESTS: "1"
