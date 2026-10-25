@@ -54,17 +54,35 @@ def capabilities(response: Response, user: User = Depends(get_current_user)):
 @router.get("/storage")
 def storage(response: Response, user: User = Depends(require_management_admin)):
     response.headers["Cache-Control"] = "private, no-store"
-    path = settings.storage_monitor_path
-    if not path:
+    system_path = settings.storage_monitor_path
+    if not system_path:
         raise HTTPException(503, "Speicherüberwachung ist noch nicht eingerichtet.")
     try:
-        stats = os.statvfs(path)
-        total = stats.f_blocks * stats.f_frsize
-        available = stats.f_bavail * stats.f_frsize
-        if total <= 0 or not 0 <= available <= total:
-            raise OSError("Invalid filesystem statistics")
+        system = _storage_stats(system_path)
     except OSError:
         raise HTTPException(503, "Speicherstatus momentan nicht verfügbar.") from None
+    wav_path = settings.storage_monitor_wav_path
+    wav_storage = None
+    if wav_path:
+        try:
+            if _storage_device(system_path) != _storage_device(wav_path):
+                wav_storage = _storage_stats(wav_path)
+        except OSError:
+            pass
+    return {
+        **system,
+        "wav_storage": wav_storage,
+        "wav_storage_configured": bool(wav_path),
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _storage_stats(path: str) -> dict:
+    stats = os.statvfs(path)
+    total = stats.f_blocks * stats.f_frsize
+    available = stats.f_bavail * stats.f_frsize
+    if total <= 0 or not 0 <= available <= total:
+        raise OSError("Invalid filesystem statistics")
     free_percent = available * 100 / total
     return {
         "total_bytes": total,
@@ -74,8 +92,11 @@ def storage(response: Response, user: User = Depends(require_management_admin)):
         "used_percent": 100 - free_percent,
         "warning_threshold_percent": settings.storage_warning_free_percent,
         "warning": free_percent < settings.storage_warning_free_percent,
-        "checked_at": datetime.now(UTC).isoformat(),
     }
+
+
+def _storage_device(path: str) -> int:
+    return os.stat(path).st_dev
 
 
 def view(user, grants, db):

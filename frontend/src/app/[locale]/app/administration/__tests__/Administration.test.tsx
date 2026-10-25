@@ -30,6 +30,56 @@ test.each([4.99, 5, 5.01])('warns only below five percent (%s)', async (free) =>
   expect(await screen.findByRole('meter')).toHaveAttribute('aria-valuenow', String(100 - free));
   expect(screen.queryByRole('alert') !== null).toBe(free < 5);
 });
+test('labels system and WAV filesystems separately with decimal GB', async () => {
+  storage.mockResolvedValue({
+    total_bytes: 80_000_000_000,
+    available_bytes: 8_000_000_000,
+    used_bytes: 72_000_000_000,
+    free_percent: 10,
+    used_percent: 90,
+    warning: false,
+    warning_threshold_percent: 5,
+    checked_at: '2026-10-25T12:00:00Z',
+    wav_storage_configured: true,
+    wav_storage: {
+      total_bytes: 210_000_000_000,
+      available_bytes: 53_000_000_000,
+      used_bytes: 157_000_000_000,
+      free_percent: (53 / 210) * 100,
+      used_percent: (157 / 210) * 100,
+      warning: false,
+      warning_threshold_percent: 5,
+    },
+  });
+  render(<StorageMonitor />);
+  expect(
+    await screen.findByRole('meter', { name: 'Belegter Speicher: Systemlaufwerk' })
+  ).toHaveAttribute('aria-valuenow', '90');
+  expect(
+    screen.getByRole('meter', { name: 'Belegter Speicher: WAV-Datenlaufwerk' })
+  ).toBeInTheDocument();
+  expect(screen.getByText('8 GB von 80 GB frei')).toBeInTheDocument();
+  expect(screen.getByText('53 GB von 210 GB frei')).toBeInTheDocument();
+});
+test('does not present a missing WAV mount as free space', async () => {
+  storage.mockResolvedValue({
+    total_bytes: 1000,
+    available_bytes: 100,
+    used_bytes: 900,
+    free_percent: 10,
+    used_percent: 90,
+    warning: false,
+    warning_threshold_percent: 5,
+    checked_at: '2026-10-25T12:00:00Z',
+    wav_storage_configured: true,
+    wav_storage: null,
+  });
+  render(<StorageMonitor />);
+  expect(await screen.findByText(/WAV-Datenlaufwerk/)).toHaveTextContent(
+    'WAV-Datenlaufwerk momentan nicht verfügbar.'
+  );
+  expect(screen.getAllByRole('meter')).toHaveLength(1);
+});
 test('unavailable storage is not presented as a full disk', async () => {
   storage.mockRejectedValue(new Error('Offline'));
   render(<StorageMonitor />);

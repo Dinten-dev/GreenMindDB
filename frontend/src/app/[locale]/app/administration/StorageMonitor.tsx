@@ -1,8 +1,52 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { adminStorage, type StorageStatus } from '@/lib/administration-api';
+import { adminStorage, type StorageStatus, type StorageVolume } from '@/lib/administration-api';
+
 const bytes = (value: number) =>
-  (value / 1024 ** 3).toLocaleString('de-CH', { maximumFractionDigits: 1 }) + ' GB';
+  (value / 1_000_000_000).toLocaleString('de-CH', { maximumFractionDigits: 1 }) + ' GB';
+
+function Volume({ title, value }: { title: string; value: StorageVolume }) {
+  return (
+    <div className="space-y-3">
+      <h3 className="font-semibold text-gray-800">{title}</h3>
+      {value.warning && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <strong>{title}: Speicher wird knapp.</strong> Weniger als{' '}
+          {value.warning_threshold_percent} % frei.
+        </div>
+      )}
+      <div className="flex flex-wrap justify-between gap-3">
+        <p className="text-2xl font-semibold text-gray-800">
+          {value.used_percent.toLocaleString('de-CH', { maximumFractionDigits: 1 })} % belegt
+        </p>
+        <p className="text-sm text-gray-600">
+          {bytes(value.available_bytes)} von {bytes(value.total_bytes)} frei
+        </p>
+      </div>
+      <div
+        role="meter"
+        aria-label={`Belegter Speicher: ${title}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={value.used_percent}
+        className="h-3 overflow-hidden rounded-full bg-gray-100"
+      >
+        <div
+          className={`h-full rounded-full ${value.warning ? 'bg-amber-500' : 'bg-emerald-600'}`}
+          style={{ width: `${value.used_percent}%` }}
+        />
+      </div>
+      <p className="text-xs text-gray-500">
+        Für Dienste verfügbar:{' '}
+        {value.free_percent.toLocaleString('de-CH', { maximumFractionDigits: 2 })} %.
+      </p>
+    </div>
+  );
+}
+
 export default function StorageMonitor() {
   const [data, setData] = useState<StorageStatus | null>(null);
   const [error, setError] = useState(false);
@@ -46,40 +90,20 @@ export default function StorageMonitor() {
         </p>
       ) : (
         <>
-          {data.free_percent < 5 && data.warning && (
-            <div
-              role="alert"
-              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
-            >
-              <strong>Speicher wird knapp:</strong> Weniger als {data.warning_threshold_percent} %
-              frei. Bitte Speicherbelegung prüfen.
-            </div>
+          <Volume title="Systemlaufwerk" value={data} />
+          {data.wav_storage ? (
+            <Volume title="WAV-Datenlaufwerk" value={data.wav_storage} />
+          ) : (
+            <p role="status" className="text-sm text-gray-600">
+              WAV-Datenlaufwerk{' '}
+              {data.wav_storage_configured
+                ? 'momentan nicht verfügbar.'
+                : 'noch nicht zur Überwachung eingerichtet.'}
+            </p>
           )}
-          <div className="flex flex-wrap justify-between gap-3">
-            <p className="text-2xl font-semibold text-gray-800">
-              {data.used_percent.toLocaleString('de-CH', { maximumFractionDigits: 1 })} % belegt
-            </p>
-            <p className="text-sm text-gray-600">
-              {bytes(data.available_bytes)} von {bytes(data.total_bytes)} frei
-            </p>
-          </div>
-          <div
-            role="meter"
-            aria-label="Belegter Serverspeicher"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={data.used_percent}
-            className="h-3 overflow-hidden rounded-full bg-gray-100"
-          >
-            <div
-              className={`h-full rounded-full ${data.warning ? 'bg-amber-500' : 'bg-emerald-600'}`}
-              style={{ width: `${data.used_percent}%` }}
-            />
-          </div>
           <p className="text-xs text-gray-500">
-            Für Dienste verfügbar:{' '}
-            {data.free_percent.toLocaleString('de-CH', { maximumFractionDigits: 2 })} %. Stand:{' '}
-            {new Date(data.checked_at).toLocaleString('de-CH')}. Aktualisierung jede Minute.
+            Stand: {new Date(data.checked_at).toLocaleString('de-CH')}. Aktualisierung jede Minute.
+            GB sind dezimale Gigabyte.
           </p>
         </>
       )}

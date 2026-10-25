@@ -9,11 +9,14 @@ Freigegebene Konten sehen unter **Verwaltung → Administration** den Serverspei
 und die neue Kachel **Kunden & Benutzer**. Die vorhandenen Verwaltungseinträge
 und die Oberfläche normaler Benutzer bleiben erhalten.
 
-Der Speicherstatus zeigt den belegten Anteil sowie den für Dienste verfügbaren
-freien Speicher des konfigurierten Host-Dateisystems. Die Anzeige aktualisiert
+Der Speicherstatus zeigt Systemlaufwerk und WAV-Datenlaufwerk getrennt an.
+Die WAV-Kachel misst das Dateisystem des MinIO-Datenvolumens; ihr Wert ist
+kein freier Platz auf dem Systemlaufwerk. GB bedeutet dezimale Gigabyte
+(1 GB = 1.000.000.000 Bytes). Die Anzeige aktualisiert
 sich jede Minute. Der Warnhinweis erscheint bei **weniger als 5 %**, nicht bei
 exakt 5 %. Fehler beim Lesen werden als „nicht verfügbar“ gemeldet und nicht als
 volle Festplatte. Es werden keine Dateien durchsucht oder gelöscht.
+Fehlt die zweite Einbindung, bleibt deren Wert ausdrücklich unbekannt.
 
 Die Benutzerverwaltung bietet Suche, seitenweise Listen, neue Konten,
 Namens-/Telefonänderungen, Firmenzuordnung, bestehende Rollen, Zonenzugänge und
@@ -39,7 +42,8 @@ Benutzeränderungen werden ohne Passwörter im bestehenden Audit-Protokoll erfas
 | Wert | Beispiel/Platzhalter | Bedeutung |
 |---|---|---|
 | `MANAGEMENT_ADMIN_EMAILS` | `<REQUESTER_EMAIL>,<PETER_EMAIL>` | Kommagetrennte, vollständige Login-Adressen. Leer deaktiviert die Funktionen. |
-| `STORAGE_MONITOR_PATH` | `/host-storage` | Nur lesend eingebundenes leeres Verzeichnis auf dem tatsächlich überwachten Host-Dateisystem. |
+| `STORAGE_MONITOR_PATH` | `/host-storage` | Leeres Verzeichnis auf dem Systemdateisystem, nur lesend eingebunden. |
+| `STORAGE_MONITOR_WAV_PATH` | `/host-wav-storage` | Separates leeres Verzeichnis auf dem WAV-Datenvolumen, nur lesend eingebunden. Ohne gültige Einbindung zeigt die WAV-Kachel keinen Zahlenwert. |
 | `STORAGE_WARNING_FREE_PERCENT` | `5` | Strikter Grenzwert; Werte über 5 werden abgelehnt. |
 
 Die Anwendung hat kein separates unveränderliches Benutzernamenfeld.
@@ -70,6 +74,20 @@ Gesicherte Konten, doppelte E-Mail oder letzter Firmenverantwortlicher: 409.
 Die bestehenden Tabellen und Passwort-/Anmeldemechanismen werden wiederverwendet.
 Keine neue Datenbankmigration nötig; die vorhandene Migration 0023 muss aktiv sein.
 
+Die Antwort von `/storage` behält die bisherigen Felder für das Systemlaufwerk.
+`wav_storage` enthält dieselben Zahlen für das WAV-Datenlaufwerk oder `null`.
+`wav_storage_configured` unterscheidet fehlende Konfiguration von einem
+momentan nicht lesbaren oder versehentlich auf dasselbe Gerät gebundenen Pfad.
+Die Dateisystem-Gerätekennung muss verschieden sein; ein falscher Mount darf
+nicht als zusätzlicher freier WAV-Speicher erscheinen.
+
+Production nutzt einen eigenen Admin-Release, nicht den Staging-Rollout unten.
+Für Production beide leeren Host-Verzeichnisse, Gerätekennung und die
+nur lesenden Bind-Mounts im tatsächlichen Admin-Compose prüfen, dann erst neue
+Backend-/Frontend-Images gemeinsam mit `STORAGE_MONITOR_WAV_PATH` bereitstellen.
+Den WAV-Datenordner selbst nicht in den Admin-Container einbinden.
+Empfang, MinIO und Datenbank brauchen für die Anzeige keinen Neustart.
+
 ## Entwicklung ausrollen
 
 1. Tests ausführen, exakten Commit nach `develop` pushen, vollständige CI abwarten.
@@ -77,17 +95,20 @@ Keine neue Datenbankmigration nötig; die vorhandene Migration 0023 muss aktiv s
    Entwicklungsrechner ausführen; zusätzlich `deploy/zone-access` aus demselben
    Commit ins Paket übernehmen. Archiv-/Image-Prüfsummen kontrollieren.
 3. Nur dieses Paket übertragen. Kein vollständiges Compose-Neustarten.
-4. Ein leeres Verzeichnis auf der überwachten Host-Partition anlegen. Es darf
-   keine Serverdateien enthalten und wird ausschliesslich lesbar eingebunden.
+4. Je ein leeres Verzeichnis auf System- und WAV-Datenpartition anlegen.
+   Beide müssen verschiedene Dateisystemgeräte haben; keine WAV-Verzeichnisse
+   oder Dateien direkt in den Admin-Container einbinden.
 5. Mit `deploy/zone-access/rollout.py prepare --environment staging` und dem
    exakten Commit, Backend-/Frontend-Image, neuen Release-Verzeichnis sowie
    `--management-admin-emails '<VERIFIZIERTE_EMAIL_LISTE>'`
-   `--storage-monitor-directory '<LEERES_HOSTVERZEICHNIS>'` vorbereiten.
+   `--storage-monitor-directory '<LEERES_SYSTEMVERZEICHNIS>'`
+   `--storage-monitor-wav-directory '<LEERES_WAV-VOLUME-VERZEICHNIS>'` vorbereiten.
    Die regulären Parameter stehen in `docs/ZONE_ACCESS_REVIEW.md`.
 6. `rollout.py start --directory <RELEASEVERZEICHNIS>` startet die isolierten
    Kandidaten. Bestehende Empfangsdienste und Production laufen weiter.
 7. Mit einem ausdrücklich dafür angelegten Staging-Testadmin regulär anmelden.
-   Speicherwerte gegen `statvfs` auf dem Host vergleichen. Konto anlegen,
+   Beide Speicherwerte gegen `statvfs` auf den jeweiligen Host-Dateisystemen
+   vergleichen. Konto anlegen,
    Firmenwechsel/Zonenentzug/Deaktivieren sowie Nicht-Admin-Abweisung testen.
    Testkonten anschliessend entfernen; keine realen Nutzerrechte verändern.
 8. Exakte Proxy-Differenz, Staging-Abnahme und Rücknahme prüfen. Erst dann

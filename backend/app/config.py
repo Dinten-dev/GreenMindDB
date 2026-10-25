@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     # Explicit platform-management allowlist; names/roles alone never grant access.
     management_admin_emails: str = ""
     storage_monitor_path: str = ""
+    storage_monitor_wav_path: str = ""
     storage_warning_free_percent: float = Field(5.0, gt=0, le=5)
 
     # PEM Ed25519 public key shared with the gateway agent's release verifier.

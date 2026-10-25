@@ -168,6 +168,7 @@ def prepare(args):
     )
     management_emails = getattr(args, "management_admin_emails", None)
     monitor_directory = getattr(args, "storage_monitor_directory", None)
+    wav_monitor_directory = getattr(args, "storage_monitor_wav_directory", None)
     if management_emails is not None:
         assert args.environment == "staging", (
             "Management rollout currently approved for Staging only"
@@ -180,6 +181,17 @@ def prepare(args):
         application["MANAGEMENT_ADMIN_EMAILS"] = management_emails
         application["STORAGE_MONITOR_PATH"] = "/host-storage"
         application["STORAGE_WARNING_FREE_PERCENT"] = "5"
+        if wav_monitor_directory is not None:
+            assert wav_monitor_directory.is_dir()
+            assert not any(wav_monitor_directory.iterdir()), (
+                "Bind only an empty WAV statistics directory"
+            )
+            assert wav_monitor_directory.stat().st_dev != monitor_directory.stat().st_dev, (
+                "WAV statistics must use a different filesystem"
+            )
+            application["STORAGE_MONITOR_WAV_PATH"] = "/host-wav-storage"
+    else:
+        assert wav_monitor_directory is None
     direct = env("gm-direct-" + args.environment + "-direct-api-1")
     assert direct["DIRECT_ENVIRONMENT"] == args.environment
     # Resolve authorization to the candidate API even before public activation.
@@ -291,6 +303,15 @@ def prepare(args):
                 "read_only": True,
             }
         )
+        if wav_monitor_directory is not None:
+            services["application"]["volumes"].append(
+                {
+                    "type": "bind",
+                    "source": str(wav_monitor_directory.resolve()),
+                    "target": "/host-wav-storage",
+                    "read_only": True,
+                }
+            )
     services["visual"]["volumes"] = [
         f"/home/traver/greenmind-release-{args.environment}/archive:/archive:ro"
     ]
@@ -432,6 +453,7 @@ if __name__ == "__main__":
     p.add_argument("--frontend-image")
     p.add_argument("--management-admin-emails")
     p.add_argument("--storage-monitor-directory", type=Path)
+    p.add_argument("--storage-monitor-wav-directory", type=Path)
     a = p.parse_args()
     if a.action == "prepare":
         prepare(a)

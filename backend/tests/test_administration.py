@@ -17,6 +17,7 @@ from app.models.zone_access import ZoneAccess
 def management(client, db, admin_token, monkeypatch):
     monkeypatch.setattr(settings, "management_admin_emails", " CI-ADMIN@test.com ")
     monkeypatch.setattr(settings, "storage_monitor_path", "/host-storage")
+    monkeypatch.setattr(settings, "storage_monitor_wav_path", "")
     return {"Authorization": f"Bearer {admin_token}"}
 
 
@@ -31,6 +32,43 @@ def test_storage_boundary(client, management, monkeypatch, free, warning):
     assert response.json()["warning"] is warning
     assert response.json()["free_percent"] == pytest.approx(free)
     assert response.headers["Cache-Control"] == "private, no-store"
+    assert response.json()["wav_storage"] is None
+    assert response.json()["wav_storage_configured"] is False
+
+
+def test_storage_reports_distinct_wav_filesystem(client, management, monkeypatch):
+    monkeypatch.setattr(settings, "storage_monitor_wav_path", "/host-wav-storage")
+    monkeypatch.setattr(
+        "app.routers.administration._storage_device",
+        lambda path: 1 if path == "/host-storage" else 2,
+    )
+    monkeypatch.setattr(
+        "app.routers.administration.os.statvfs",
+        lambda path: SimpleNamespace(
+            f_blocks=1000,
+            f_frsize=4096,
+            f_bavail=100 if path == "/host-storage" else 500,
+        ),
+    )
+    body = client.get("/api/v1/administration/storage", headers=management).json()
+    assert body["available_bytes"] == 100 * 4096
+    assert body["wav_storage"]["available_bytes"] == 500 * 4096
+    assert body["wav_storage_configured"] is True
+
+
+def test_storage_does_not_mislabel_system_as_wav(client, management, monkeypatch):
+    monkeypatch.setattr(settings, "storage_monitor_wav_path", "/host-wav-storage")
+    monkeypatch.setattr(
+        "app.routers.administration._storage_device",
+        lambda _: 1,
+    )
+    monkeypatch.setattr(
+        "app.routers.administration.os.statvfs",
+        lambda _: SimpleNamespace(f_blocks=1000, f_frsize=4096, f_bavail=100),
+    )
+    body = client.get("/api/v1/administration/storage", headers=management).json()
+    assert body["wav_storage"] is None
+    assert body["wav_storage_configured"] is True
 
 
 def test_storage_errors_do_not_report_zero_space(client, management, monkeypatch):

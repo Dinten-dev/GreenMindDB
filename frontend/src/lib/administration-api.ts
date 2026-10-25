@@ -1,6 +1,6 @@
 import { apiFetch } from './api';
 
-export type StorageStatus = {
+export type StorageVolume = {
   total_bytes: number;
   available_bytes: number;
   used_bytes: number;
@@ -8,7 +8,11 @@ export type StorageStatus = {
   used_percent: number;
   warning: boolean;
   warning_threshold_percent: number;
+};
+export type StorageStatus = StorageVolume & {
   checked_at: string;
+  wav_storage?: StorageVolume | null;
+  wav_storage_configured?: boolean;
 };
 export type ManagedUser = {
   id: string;
