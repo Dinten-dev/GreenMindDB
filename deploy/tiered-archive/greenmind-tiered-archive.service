@@ -13,8 +13,13 @@ EnvironmentFile=/etc/greenmind/tiered-archive.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=OMP_NUM_THREADS=1
+Environment=TIERED_ARCHIVE_CGROUP_MONITOR=true
+LoadCredential=sftp-key:/etc/greenmind/tiered-archive/staging-upload.key
+LoadCredential=sftp-hosts:/etc/greenmind/tiered-archive/staging-known-hosts
+Environment=RAW_ARCHIVE_SFTP_KEY=%d/sftp-key
+Environment=RAW_ARCHIVE_SFTP_KNOWN_HOSTS=%d/sftp-hosts
 ExecStart=/usr/bin/flock -n /var/lib/greenmind/tiered-archive/staging/operation.lock /opt/greenmind/tiered-archive/current/python/bin/python -m app.tiered_archive tick --schedule /etc/greenmind/tiered-archive-schedule.json
-ExecStartPre=/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/verify-start.py --receipt /etc/greenmind/tiered-archive/staging-key-recovery.json --fingerprint ${TIERED_ARCHIVE_BACKUP_KEY_SHA256}
+ExecStartPre=+/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/verify-start.py --receipt /etc/greenmind/tiered-archive/staging-key-recovery.json --fingerprint ${TIERED_ARCHIVE_BACKUP_KEY_SHA256}
 ExecStopPost=/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/service-outcome.py --state /var/lib/greenmind/tiered-archive/staging --kind copy --pause-dir /var/lib/greenmind/tiered-archive/staging/control
 WorkingDirectory=/opt/greenmind/tiered-archive/current/backend
 UMask=0077

@@ -99,6 +99,8 @@ class HealthProbe:
                 "reason": None,
                 "available_mib": round(available, 1),
                 "load": round(load, 3),
+                "load_window_seconds": 60,
+                "host_cpu_count": os.cpu_count() or 1,
                 "maximum_load": self.maximum_load,
             }
             return True

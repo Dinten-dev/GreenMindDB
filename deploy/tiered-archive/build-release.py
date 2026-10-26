@@ -11,7 +11,13 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import zipfile
 from pathlib import Path
+
+
+def unpacked_bytes(wheel):
+    with zipfile.ZipFile(wheel) as bundle:
+        return sum(item.file_size for item in bundle.infolist())
 
 
 def main():
@@ -146,6 +152,9 @@ def main():
         "base_revision": commit,
         "offline_target": "CPython 3.12 Linux x86_64 glibc>=2.28",
         "offline_wheels": len(supplied),
+        "offline_unpacked_bytes": sum(
+            unpacked_bytes(wheel) for wheel in supplied.values()
+        ),
         "files": files,
         "production_deletion_enabled": False,
         "native_acceptance_complete": False,

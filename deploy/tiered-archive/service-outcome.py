@@ -1,87 +1,84 @@
-"""systemd ExecStopPost: hard failures persist a pause and local metrics."""
+"""ExecStopPost reads remaining group counters and the in-flight sampler proof."""
 
 import argparse
 import json
 import os
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
+from app.tiered_archive.resources import pause, read_cgroup, reasons, write_json
 
 
 def record(root, kind, result, exit_status, pause_dir=None):
     root = Path(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     pause_dir = Path(pause_dir or root)
-    peak = None
-    oom_kills = None
+    sample = read_cgroup()
+    causes = [] if result == "success" else ["service_" + result]
+    proof = None
+    required = os.environ.get("TIERED_ARCHIVE_CGROUP_MONITOR") == "true"
     try:
-        cgroup = next(
-            line.split(":", 2)[2]
-            for line in Path("/proc/self/cgroup").read_text().splitlines()
-            if line.startswith("0::")
-        )
-        directory = Path("/sys/fs/cgroup") / cgroup.lstrip("/")
-        peak = int((directory / "memory.peak").read_text())
-        oom_kills = dict(
-            line.split()
-            for line in (directory / "memory.events").read_text().splitlines()
-        ).get("oom_kill")
-    except (OSError, ValueError, StopIteration):
+        proof = json.loads((root / (kind + "-resources.json")).read_text())
+        if proof.get("invocation_id") != os.environ.get("INVOCATION_ID"):
+            proof = None
+    except (OSError, ValueError):
         pass
-    failed = (
-        result != "success"
-        or peak is not None
-        and peak > 160 * 1024**2
-        or int(oom_kills or 0) > 0
-    )
-    if failed:
-        with (pause_dir / "PAUSE").open("a") as body:
-            body.write(
-                json.dumps(
-                    {
-                        "at": time.time(),
-                        "kind": kind,
-                        "result": result,
-                        "exit_status": exit_status,
-                    }
-                )
-                + "\n"
-            )
-            body.flush()
-            os.fsync(body.fileno())
-        os.chmod(pause_dir / "PAUSE", 0o640)
+    if sample.get("available") or required:
+        causes += reasons(sample)
+    if required:
+        if not proof or not proof.get("completed") or proof.get("samples", 0) < 2:
+            causes.append("inflight_measurement_incomplete")
+        elif proof.get("sample_failures"):
+            causes.append("inflight_measurement_failed")
+    if proof:
+        causes += proof.get("reasons", [])
+    if causes:
+        pause(pause_dir, kind, sorted(set(causes)))
     value = {
-        "schema": 1,
+        "schema": 2,
         "at": time.time(),
         "kind": kind,
         "result": result,
         "exit_status": exit_status,
+        "reasons": sorted(set(causes)),
         "paused": (pause_dir / "PAUSE").exists(),
-        "cgroup_memory_peak_bytes": peak,
-        "cgroup_oom_kills": oom_kills,
+        "cgroup_metrics_available": sample.get("available", False),
+        "cgroup_memory_peak_bytes": sample.get("peak_bytes"),
+        "cgroup_events": sample.get("events"),
+        "cgroup_anon_bytes": sample.get("anon_bytes"),
+        "sampled_anon_peak_bytes": proof.get("sampled_anon_peak_bytes")
+        if proof
+        else None,
+        "inflight_measurement_complete": bool(proof and proof.get("completed")),
     }
-    for suffix, content in [
-        ("json", json.dumps(value, sort_keys=True) + "\n"),
-        (
-            "prom",
-            (
-                f'greenmind_tiered_staging_last_stop_seconds{{job="{kind}"}} {value["at"]}\n'
-                f'greenmind_tiered_staging_job_failed{{job="{kind}"}} {int(failed)}\n'
-                f'greenmind_tiered_staging_paused{{job="{kind}"}} {int(value["paused"])}\n'
-            ),
-        ),
-    ]:
-        target = root / (kind + "-service-result." + suffix)
-        temporary = target.with_suffix(".pending")
-        with temporary.open("w") as out:
-            os.chmod(temporary, 0o600)
-            out.write(content)
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(temporary, target)
+    write_json(root / (kind + "-service-result.json"), value)
+    metrics = [
+        f'greenmind_tiered_staging_last_stop_seconds{{job="{kind}"}} {value["at"]}',
+        f'greenmind_tiered_staging_job_failed{{job="{kind}"}} {int(bool(causes))}',
+        f'greenmind_tiered_staging_paused{{job="{kind}"}} {int(value["paused"])}',
+    ]
+    for event in ("high", "max", "oom", "oom_kill"):
+        count = sample.get("events", {}).get(event, "NaN")
+        metrics.append(
+            f'greenmind_tiered_staging_memory_events{{job="{kind}",event="{event}"}} {count}'
+        )
+    metrics.append(
+        f'greenmind_tiered_staging_anon_sampled_peak_bytes{{job="{kind}"}} {value["sampled_anon_peak_bytes"] if proof else "NaN"}'
+    )
+    target = root / (kind + "-service-result.prom")
+    temporary = target.with_suffix(".pending")
+    with temporary.open("w") as out:
+        os.chmod(temporary, 0o600)
+        out.write("\n".join(metrics) + "\n")
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(temporary, target)
     return value
 
 
-def main():
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument(
@@ -103,7 +100,3 @@ def main():
             sort_keys=True,
         )
     )
-
-
-if __name__ == "__main__":
-    main()

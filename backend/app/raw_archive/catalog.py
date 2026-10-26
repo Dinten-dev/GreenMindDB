@@ -16,10 +16,18 @@ def canonical(value: dict) -> str:
 
 
 class GatewayCatalog:
-    def __init__(self, session_factory, max_file_bytes=64 * 1024**2, *, copy_only=False):
+    def __init__(
+        self,
+        session_factory,
+        max_file_bytes=64 * 1024**2,
+        *,
+        copy_only=False,
+        bucket="greenmind-raw",
+    ):
         self.sessions = session_factory
         self.max_file_bytes = max_file_bytes
         self.copy_only = copy_only
+        self.bucket = bucket
 
     def inspect(self, wav_id) -> Recording:
         from app.models.wav_file import WavFile
@@ -52,7 +60,7 @@ class GatewayCatalog:
                 return Recording(
                     "gateway",
                     str(wav.id),
-                    "greenmind-raw",
+                    self.bucket,
                     wav.s3_key,
                     wav.content_sha256,
                     wav.file_size_bytes,
@@ -84,7 +92,7 @@ class GatewayCatalog:
             return Recording(
                 "gateway",
                 str(wav.id),
-                "greenmind-raw",
+                self.bucket,
                 wav.s3_key,
                 wav.content_sha256,
                 wav.file_size_bytes,

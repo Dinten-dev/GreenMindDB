@@ -208,7 +208,7 @@ def wav_source(source, checkpoint, *, writing=False):
     settings = source_settings(source, environment())
     sessions = sessionmaker(engine(source, writing=writing), expire_on_commit=False)
     catalog = (
-        GatewayCatalog(sessions)
+        GatewayCatalog(sessions, bucket=settings["bucket"])
         if source == "gateway"
         else DirectCatalog(sessions, settings["bucket"])
     )

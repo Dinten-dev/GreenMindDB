@@ -513,7 +513,18 @@ def test_catalogue_can_be_restored_without_source_or_local_ledger(bundle, tmp_pa
     reference = backup(ledger, box, checkpoint=lambda: None)
     recovered = Ledger(tmp_path / "recovered-state")
     try:
-        result = restore_registry(reference, recovered, box, checkpoint=lambda: None)
+        with pytest.raises(ArchiveBlocked, match="environment"):
+            restore_registry(
+                reference,
+                recovered,
+                box,
+                checkpoint=lambda: None,
+                expected_environment="production",
+            )
+        assert recovered.status() == {}
+        result = restore_registry(
+            reference, recovered, box, checkpoint=lambda: None, expected_environment="staging"
+        )
         assert result == {"restored_bundles": 1, "source_accesses": 0}
         assert recovered.get(candidate.identity) == ledger.get(candidate.identity)
         readonly = Ledger(tmp_path / "recovered-state", read_only=True)
@@ -667,7 +678,9 @@ def test_staging_installer_rejects_production_or_shared_journal():
         RAW_ARCHIVE_DIRECT_S3_ENDPOINT="http://127.0.0.1:26900",
         RAW_ARCHIVE_SFTP_USER="u123-sub1",
         RAW_ARCHIVE_SFTP_HOST="u123-sub1.your-storagebox.de",
-        RAW_ARCHIVE_SFTP_ROOT="greenmind-raw",
+        RAW_ARCHIVE_SFTP_ROOT="greenmind-staging",
+        RAW_ARCHIVE_GATEWAY_S3_BUCKET="greenmind-gateway-staging-20261026",
+        RAW_ARCHIVE_MAX_LOAD_PER_CPU="0.5",
         RAW_ARCHIVE_HEALTH_URLS="http://127.0.0.1:26812/health,http://127.0.0.1:26803/health",
         TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES=str(5 * 1024**2),
         TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES=str(1024**2),
@@ -897,6 +910,7 @@ def test_staging_reader_rejects_upload_credentials():
         "TIERED_ARCHIVE_ENVIRONMENT": "staging",
         "RAW_ARCHIVE_ENVIRONMENT": "staging",
         "TIERED_ARCHIVE_READS_ENABLED": "true",
+        "RAW_ARCHIVE_READ_ONLY_SFTP_ROOT": "greenmind-staging",
         "TIERED_ARCHIVE_STATE_DIR": "/var/lib/greenmind/tiered-archive/staging",
         "TIERED_ARCHIVE_READ_BROKER_SOCKET": "/run/greenmind-tiered-archive-staging/history.sock",
         **{

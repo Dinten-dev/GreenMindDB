@@ -19,7 +19,7 @@ def verify(path, fingerprint, *, now=None):
         if (
             not stat.S_ISREG(info.st_mode)
             or info.st_uid not in {0, os.getuid()}
-            or info.st_mode & 0o027
+            or info.st_mode & 0o077
         ):
             raise ValueError("Recovery receipt must be protected against modification")
         raw = body.read(8193)

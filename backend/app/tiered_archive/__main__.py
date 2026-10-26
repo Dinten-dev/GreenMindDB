@@ -102,7 +102,11 @@ def main():
                 if checksum(args.reference) != args.reference_sha256:
                     raise ArchiveBlocked("Recovery reference changed")
                 result = restore(
-                    json.loads(args.reference.read_text()), ledger, store, checkpoint=checkpoint
+                    json.loads(args.reference.read_text()),
+                    ledger,
+                    store,
+                    checkpoint=checkpoint,
+                    expected_environment=runtime.environment(),
                 )
     elif args.operation == "backup":
         from .execution import bounded_job

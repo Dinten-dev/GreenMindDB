@@ -16,14 +16,22 @@ class ReadOnlyBox:
 
     _transfer_kilobits = 2048
 
-    def __init__(self, *, user, host, key, known_hosts):
+    def __init__(self, *, user, host, key, known_hosts, root="greenmind-raw"):
         match = re.fullmatch(r"(u[0-9]+)-sub[0-9]+", user)
         if match is None or host != user + ".your-storagebox.de":
             raise ArchiveBlocked("Dedicated matching Storage Box subaccount required")
         primary = match.group(1)
-        self.identity = f"sftp://{primary}@{primary}.your-storagebox.de:23/greenmind-raw"
+        if root not in {"greenmind-raw", "greenmind-staging"}:
+            raise ArchiveBlocked("Explicit archive root required")
+        self.root = root
+        self.identity = f"sftp://{primary}@{primary}.your-storagebox.de:23/{root}"
         self.__transport = StorageBox(
-            host=host, user=user, key=key, known_hosts=known_hosts, kilobits=self._transfer_kilobits
+            host=host,
+            user=user,
+            key=key,
+            known_hosts=known_hosts,
+            root=root,
+            kilobits=self._transfer_kilobits,
         )
 
     def download(self, key, path, max_bytes):
@@ -36,7 +44,7 @@ class ReadOnlyBox:
         # receipt identity; never add a second greenmind-raw prefix remotely.
         remote = (
             self.__transport.catalog_path(key) if catalog else self.__transport.path(key)
-        ).removeprefix("greenmind-raw/")
+        ).removeprefix(self.root + "/")
         self.__transport.run(
             f"get {remote} {self.__transport.quote(path)}\n",
             output=path,
@@ -89,7 +97,14 @@ def configured_read_only_box(*, transport=ReadOnlyBox):
     upload_key = os.environ.get("RAW_ARCHIVE_SFTP_KEY")
     if upload_key and Path(upload_key).is_file() and key.is_file() and key.samefile(upload_key):
         raise ArchiveBlocked("Read-only access must not reuse the upload key")
-    return transport(user=values["USER"], host=values["HOST"], key=key, known_hosts=known_hosts)
+    extra = {}
+    if root := os.environ.get(PREFIX + "ROOT"):
+        if root != "greenmind-staging" or os.environ.get("RAW_ARCHIVE_ENVIRONMENT") != "staging":
+            raise ArchiveBlocked("Separate staging archive root required")
+        extra["root"] = root
+    return transport(
+        user=values["USER"], host=values["HOST"], key=key, known_hosts=known_hosts, **extra
+    )
 
 
 def configured_catalog_read_only_box():

@@ -11,6 +11,8 @@ from pathlib import Path
 
 from app.raw_archive.health import SafetyPause
 
+from .resources import monitored
+
 
 def atomic_json(path, value):
     path = Path(path)
@@ -45,7 +47,8 @@ def bounded_job(root, *, seconds=300, kind="copy"):
         signal.signal(sig, stop)
     signal.setitimer(signal.ITIMER_REAL, seconds)
     try:
-        yield
+        with monitored(root, kind=kind):
+            yield
         state["state"] = "success"
     except BaseException as error:
         state["state"] = "paused" if isinstance(error, SafetyPause) else "failed"

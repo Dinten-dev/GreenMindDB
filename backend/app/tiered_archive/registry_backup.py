@@ -51,6 +51,8 @@ def backup(ledger, store, *, checkpoint):
         for (raw,) in ledger.db.execute("SELECT receipt FROM bundle ORDER BY id"):
             receipt = json.loads(raw)
             candidate = candidate_from_json(receipt["source"])
+            if template is not None and candidate.environment != template.environment:
+                raise ArchiveBlocked("Mixed archive environments cannot share a catalogue")
             if template is None:
                 from dataclasses import replace
 
@@ -86,7 +88,15 @@ def backup(ledger, store, *, checkpoint):
         flush()
         index = folder / "index.json"
         index.write_text(
-            json.dumps({"schema": 1, "policy": POLICY_SHA256, "parts": references}, sort_keys=True)
+            json.dumps(
+                {
+                    "schema": 1,
+                    "policy": POLICY_SHA256,
+                    "environment": template.environment,
+                    "parts": references,
+                },
+                sort_keys=True,
+            )
         )
         os.chmod(index, 0o600)
         if index.stat().st_size > 1024 * 1024:
@@ -101,7 +111,11 @@ def backup(ledger, store, *, checkpoint):
         return reference
 
 
-def restore(reference, ledger, store, *, checkpoint):
+def restore(reference, ledger, store, *, checkpoint, expected_environment):
+    if expected_environment not in {"staging", "production"} or not reference["key"].startswith(
+        expected_environment + "/"
+    ):
+        raise ArchiveBlocked("Catalogue environment differs from restore target")
     if ledger.status():
         raise ArchiveBlocked("Catalogue restore requires empty isolated state")
     with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
@@ -113,12 +127,15 @@ def restore(reference, ledger, store, *, checkpoint):
         if (
             index.get("schema") != 1
             or index.get("policy") != POLICY_SHA256
+            or index.get("environment", expected_environment) != expected_environment
             or len(index["parts"]) > 65536
         ):
             raise ArchiveBlocked("Unknown catalogue format")
         count = 0
         with ledger.db:
             for number, part in enumerate(index["parts"]):
+                if not part["key"].startswith(expected_environment + "/"):
+                    raise ArchiveBlocked("Catalogue part environment differs")
                 checkpoint()
                 target = Path(folder) / str(number)
                 if not 0 < part["bytes"] <= 1024 * 1024 + 1:
@@ -142,6 +159,7 @@ def restore(reference, ledger, store, *, checkpoint):
                             if (
                                 receipt["candidate"] != candidate.identity
                                 or receipt["policy"] != POLICY_SHA256
+                                or candidate.environment != expected_environment
                             ):
                                 raise ArchiveBlocked("Catalogue source identity mismatch")
                             ledger.db.execute(

@@ -44,7 +44,23 @@ def metadata_source_settings(kind, namespace):
     url = make_url(database)
     if url.get_backend_name() != "postgresql":
         raise ArchiveBlocked("Dedicated read-only PostgreSQL access is required")
-    bucket = "greenmind-raw" if kind == "gateway" else required("DIRECT_S3_BUCKET")
+    bucket = (
+        os.environ.get("RAW_ARCHIVE_GATEWAY_S3_BUCKET", "greenmind-raw")
+        if kind == "gateway"
+        else required("DIRECT_S3_BUCKET")
+    )
+    if (
+        kind == "gateway"
+        and bucket != "greenmind-raw"
+        and not (namespace == "staging" and bucket.startswith("greenmind-gateway-staging-"))
+    ):
+        raise ArchiveBlocked("Gateway bucket must match the selected environment")
+    if (
+        kind == "gateway"
+        and os.environ.get("RAW_ARCHIVE_WORKER_ROLE") == "isolated-staging"
+        and bucket == "greenmind-raw"
+    ):
+        raise ArchiveBlocked("Isolated staging requires its own Gateway bucket")
     if kind == "direct" and not bucket.startswith(f"greenmind-direct-{namespace}"):
         raise ArchiveBlocked("Direct source bucket must match the selected environment")
     return {"database": database, "bucket": bucket}
@@ -109,6 +125,11 @@ def health_probe(*, allow_low_source_space=False, metrics=None):
     maximum_load = float(os.environ.get("RAW_ARCHIVE_MAX_HOST_LOAD", "2"))
     if minimum_memory < 128 or not 0 < maximum_load <= 4:
         raise ArchiveBlocked("Unsafe host resource limits")
+    per_cpu = os.environ.get("RAW_ARCHIVE_MAX_LOAD_PER_CPU")
+    if per_cpu is not None:
+        if not 0 < float(per_cpu) <= 0.5:
+            raise ArchiveBlocked("Unsafe normalized load threshold")
+        maximum_load = min(maximum_load, float(per_cpu) * (os.cpu_count() or 1))
 
     from .remote_health import combined
 
@@ -225,12 +246,12 @@ def _run(metrics, cleanup):
         require_scan_index(engine, kind)
         sessions = sessionmaker(bind=engine)
         catalogs[kind] = (
-            GatewayCatalog(sessions, config.max_file_bytes, copy_only=True)
+            GatewayCatalog(sessions, config.max_file_bytes, copy_only=True, bucket=values["bucket"])
             if kind == "gateway"
             else DirectCatalog(sessions, values["bucket"], copy_only=True)
         )
         eviction_catalogs[kind] = (
-            GatewayCatalog(sessions, config.max_file_bytes)
+            GatewayCatalog(sessions, config.max_file_bytes, bucket=values["bucket"])
             if kind == "gateway"
             else DirectCatalog(sessions, values["bucket"])
         )

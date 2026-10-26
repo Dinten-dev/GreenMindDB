@@ -2,7 +2,7 @@
 
 ## Aktueller Staging-Review
 
-Für die erste Installation gilt ausschliesslich [STAGING-REVIEW-V2.md](STAGING-REVIEW-V2.md).
+Für die erste Installation gilt ausschliesslich [STAGING-REVIEW-V3.md](STAGING-REVIEW-V3.md).
 Sie ersetzt die frühere Installationsbeschreibung. `staging-copy.env.example` und
 `schedule.example.json` beschreiben einen echten Kopierlauf mit aktuellen Rücklesungen
 gegen isolierte Kopien. Snapshot-Abnahme, Backups und Produktion sind spätere Phasen.

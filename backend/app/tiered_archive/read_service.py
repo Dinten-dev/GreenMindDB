@@ -9,6 +9,8 @@ from app.raw_archive.read_broker import Handler, Server
 from app.raw_archive.read_only_box import configured_read_only_box
 from app.raw_archive.worker import configuration
 
+from .resources import monitored
+
 
 class ReadHandler(Handler):
     def do_POST(self):
@@ -45,9 +47,19 @@ def main():
         path.unlink()
     os.umask(0o077)
     try:
-        with Server(
-            str(path), config, destination, Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "cache"
-        ) as server:
+        with (
+            monitored(
+                Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "cache",
+                kind="reader",
+                pause_dir=Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "control",
+            ),
+            Server(
+                str(path),
+                config,
+                destination,
+                Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "cache",
+            ) as server,
+        ):
             path.chmod(0o600)
             server.RequestHandlerClass = ReadHandler
             server.serve_forever(poll_interval=1)

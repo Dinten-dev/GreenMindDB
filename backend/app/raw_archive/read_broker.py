@@ -25,7 +25,9 @@ def validate(data, *, listing=False):
         raise ArchiveBlocked("Invalid request")
     kind, bucket = data["kind"], data["bucket"]
     if kind not in {"gateway", "direct"} or bucket != (
-        "greenmind-raw" if kind == "gateway" else os.environ.get("RAW_ARCHIVE_DIRECT_S3_BUCKET")
+        os.environ.get("RAW_ARCHIVE_GATEWAY_S3_BUCKET", "greenmind-raw")
+        if kind == "gateway"
+        else os.environ.get("RAW_ARCHIVE_DIRECT_S3_BUCKET")
     ):
         raise ArchiveBlocked("Invalid source")
     keys = data["keys"] if listing else [data["key"]]

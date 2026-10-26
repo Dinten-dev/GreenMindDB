@@ -81,6 +81,7 @@ def validate(profile, schedule):
     if (
         float(profile.get("RAW_ARCHIVE_MAX_HOST_LOAD", 2)) > 2
         or int(profile.get("RAW_ARCHIVE_MIN_AVAILABLE_MEMORY_MIB", 1024)) < 1024
+        or not 0 < float(profile.get("RAW_ARCHIVE_MAX_LOAD_PER_CPU", 0)) <= 0.5
     ):
         raise ValueError("Existing host resource floors may not be weakened")
     import re
@@ -92,9 +93,9 @@ def validate(profile, schedule):
         != profile["RAW_ARCHIVE_SFTP_USER"] + ".your-storagebox.de"
     ):
         raise ValueError("Matching dedicated Storage Box subaccount host required")
-    if profile.get("RAW_ARCHIVE_SFTP_ROOT") != "greenmind-raw":
+    if profile.get("RAW_ARCHIVE_SFTP_ROOT") != "greenmind-staging":
         raise ValueError(
-            "Staging subaccount must contain the relative greenmind-raw directory"
+            "Staging subaccount must contain the relative greenmind-staging directory"
         )
     for key, ceiling in (
         ("TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES", 5 * 1024**2),
@@ -106,6 +107,10 @@ def validate(profile, schedule):
         "greenmind-direct-staging"
     ):
         raise ValueError("Staging Direct bucket required")
+    if not profile.get("RAW_ARCHIVE_GATEWAY_S3_BUCKET", "").startswith(
+        "greenmind-gateway-staging-"
+    ):
+        raise ValueError("Separate staging Gateway bucket required")
     for key in profile:
         if "WRITER_" in key:
             raise ValueError(
@@ -177,6 +182,29 @@ def seal_release(root):
         path.chmod(0o555 if path.is_dir() or path.stat().st_mode & 0o111 else 0o444)
 
 
+def disk_budget(release, manifest, target):
+    existing = target
+    while not existing.exists():
+        existing = existing.parent
+    usage = shutil.disk_usage(existing)
+    reserve = max(2 * 1024**3, int(usage.total * 0.05))
+    release_bytes = sum(
+        path.stat().st_size for path in release.rglob("*") if path.is_file()
+    )
+    required = (
+        reserve + release_bytes + manifest["offline_unpacked_bytes"] + 64 * 1024**2
+    )
+    if usage.free < required:
+        raise OSError(
+            "Insufficient installation space while preserving the existing disk reserve"
+        )
+    return {
+        "required_free_bytes": required,
+        "reserve_bytes": reserve,
+        "free_bytes": usage.free,
+    }
+
+
 def validate_reader(profile, writer):
     if (
         profile.get("TIERED_ARCHIVE_ENVIRONMENT") != "staging"
@@ -203,6 +231,8 @@ def validate_reader(profile, writer):
         )
     if profile.get("TIERED_ARCHIVE_STATE_DIR") != writer["TIERED_ARCHIVE_STATE_DIR"]:
         raise ValueError("Historical read catalogue must match isolated staging writer")
+    if profile.get("RAW_ARCHIVE_READ_ONLY_SFTP_ROOT") != "greenmind-staging":
+        raise ValueError("Separate staging reader root required")
     if profile.get("RAW_ARCHIVE_READ_ONLY_SFTP_USER") == writer.get(
         "RAW_ARCHIVE_SFTP_USER"
     ):
@@ -279,6 +309,7 @@ def main():
     )
     if destination.exists():
         raise FileExistsError("Immutable release already exists; inspect before retry")
+    disk_budget(release, manifest, destination)
     for parent in destination.parents:
         if parent.exists() and (
             parent.is_symlink()
@@ -326,6 +357,7 @@ def main():
     seal_release(destination)
     config.mkdir(mode=0o750, parents=True, exist_ok=True)
     profile.pop("PYTHONHOME", None)
+    profile.pop("TIERED_ARCHIVE_CGROUP_MONITOR", None)
     profile.update(
         TIERED_ARCHIVE_ENABLED="true",
         TIERED_ARCHIVE_DELETE_ENABLED="false",
@@ -334,8 +366,10 @@ def main():
     if reader:
         profile["TIERED_ARCHIVE_READ_GID"] = str(reader.pw_gid)
     shared_gid = reader.pw_gid if reader else account.pw_gid
-    config.chmod(0o710)
-    os.chown(config, 0, shared_gid)
+    config.chmod(0o700)
+    os.chown(config, 0, 0)
+    for key in ("RAW_ARCHIVE_SFTP_KEY", "RAW_ARCHIVE_SFTP_KNOWN_HOSTS"):
+        profile.pop(key, None)
     for name, body in [
         (
             "staging.env",
@@ -363,6 +397,12 @@ def main():
         cache.mkdir(mode=0o700)
         os.chown(cache, reader.pw_uid, reader.pw_gid)
         read_profile.pop("PYTHONHOME", None)
+        read_profile.pop("TIERED_ARCHIVE_CGROUP_MONITOR", None)
+        for key in (
+            "RAW_ARCHIVE_READ_ONLY_SFTP_KEY",
+            "RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS",
+        ):
+            read_profile.pop(key, None)
         read_profile["PYTHONPATH"] = str(destination / "backend")
         read_path = config / "staging-read.env"
         with read_path.open("x") as out:

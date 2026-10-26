@@ -1,5 +1,7 @@
 # Staging-Review V2 — 26. Oktober 2026
 
+Historischer Stand, ersetzt durch [STAGING-REVIEW-V3.md](STAGING-REVIEW-V3.md).
+
 Status: lokal vorbereitet, keine Installation, keine Freigabe angenommen.
 Der bisherige Staging-Review wird durch diese Fassung ersetzt.
 
