@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,19 +17,34 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--wheelhouse", type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(root / "backend"))
     from app.tiered_archive.policy import POLICY_SHA256
     from app.tiered_archive.runtime import runtime_sha256
 
+    if subprocess.check_output(
+        ["git", "-C", str(root), "status", "--porcelain"], text=True
+    ).strip():
+        raise ValueError("A committed, clean source tree is required")
+    commit = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+    ).strip()
     revision = runtime_sha256()
-    name = "GreenMind_Tiered_Archive_" + revision[:12]
+    name = "GreenMind_Tiered_Archive_" + commit[:12]
     args.output.mkdir(parents=True, exist_ok=True)
     destination = args.output / name
     if destination.exists():
         raise FileExistsError("Existing immutable bundle retained")
     destination.mkdir()
+    tracked = {
+        os.fsdecode(name)
+        for name in subprocess.check_output(
+            ["git", "-C", str(root), "ls-files", "-z"]
+        ).split(b"\0")
+        if name
+    }
     selected = []
     for directory in (
         "backend/app",
@@ -40,6 +56,7 @@ def main():
             if (
                 path.is_file()
                 and not path.is_symlink()
+                and path.relative_to(root).as_posix() in tracked
                 and "__pycache__" not in path.parts
                 and path.suffix not in {".pyc", ".db", ".sqlite3"}
             ):
@@ -88,13 +105,47 @@ def main():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
         files[relative.as_posix()] = hashlib.sha256(target.read_bytes()).hexdigest()
+    locked = {}
+    for lock in (
+        root / "backend/requirements.lock",
+        root / "backend/requirements-archive.lock",
+    ):
+        lines = lock.read_text().replace("\\\n", " ").splitlines()
+        for line in lines:
+            match = re.match(r"([A-Za-z0-9_.-]+)==([^ \t]+)", line)
+            if match:
+                locked[match[1].lower().replace("_", "-")] = (
+                    match[2],
+                    set(re.findall(r"--hash=sha256:([a-f0-9]{64})", line)),
+                )
+    supplied = {}
+    for wheel in sorted(args.wheelhouse.glob("*.whl")):
+        name, version, *_ = wheel.name.split("-")
+        name = name.lower().replace("_", "-")
+        sha = hashlib.sha256(wheel.read_bytes()).hexdigest()
+        if (
+            name not in locked
+            or locked[name][0] != version
+            or sha not in locked[name][1]
+            or name in supplied
+        ):
+            raise ValueError("Wheel differs from target lock: " + wheel.name)
+        supplied[name] = wheel
+    if set(supplied) != set(locked):
+        raise ValueError("Complete offline wheel closure required")
+    for wheel in supplied.values():
+        relative = Path("wheelhouse") / wheel.name
+        target = destination / relative
+        target.parent.mkdir(exist_ok=True)
+        shutil.copyfile(wheel, target)
+        files[relative.as_posix()] = hashlib.sha256(target.read_bytes()).hexdigest()
     manifest = {
         "schema": 1,
         "runtime_sha256": revision,
         "policy_sha256": POLICY_SHA256,
-        "base_revision": subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
-        ).strip(),
+        "base_revision": commit,
+        "offline_target": "CPython 3.12 Linux x86_64 glibc>=2.28",
+        "offline_wheels": len(supplied),
         "files": files,
         "production_deletion_enabled": False,
         "native_acceptance_complete": False,
@@ -104,7 +155,7 @@ def main():
     archive = args.output / (destination.name + ".tar.gz")
     with (
         archive.open("xb") as output,
-        gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressed,
+        gzip.GzipFile(filename="", fileobj=output, mode="wb", mtime=0) as compressed,
         tarfile.open(fileobj=compressed, mode="w|") as bundle,
     ):
         for path in sorted(destination.rglob("*")):
@@ -129,6 +180,9 @@ def main():
     }
     (args.output / (destination.name + ".checksums.json")).write_text(
         json.dumps(result, sort_keys=True, indent=2) + "\n"
+    )
+    (args.output / (destination.name + ".sha256")).write_text(
+        result["archive_sha256"] + "  " + archive.name + "\n"
     )
     print(json.dumps(result, sort_keys=True))
 

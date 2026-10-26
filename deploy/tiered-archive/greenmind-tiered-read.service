@@ -1,23 +1,30 @@
 [Unit]
 Description=GreenMind private bounded historical queries
-After=network-online.target greenmind-source-link.service
+After=network-online.target
+ConditionPathExists=!/var/lib/greenmind/tiered-archive/staging/control/PAUSE
 
 [Service]
 Type=simple
 User=greenmind-archive-read
 Group=greenmind-archive-read
-Slice=greenmind-archive.slice
+Slice=greenmind-tiered-staging.slice
 EnvironmentFile=/etc/greenmind/tiered-archive-read.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=OMP_NUM_THREADS=1
 ExecStart=/opt/greenmind/tiered-archive/current/python/bin/python -m app.tiered_archive.read_service
+ExecStartPre=/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/verify-start.py --receipt /etc/greenmind/tiered-archive/staging-key-recovery.json --fingerprint ${TIERED_ARCHIVE_BACKUP_KEY_SHA256}
+ExecStopPost=/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/service-outcome.py --state /var/lib/greenmind/tiered-archive/staging/cache --kind reader --pause-dir /var/lib/greenmind/tiered-archive/staging/control
 WorkingDirectory=/opt/greenmind/tiered-archive/current/backend
 UMask=0077
 RuntimeDirectory=greenmind-tiered-archive
 RuntimeDirectoryMode=0700
-ReadWritePaths=/var/lib/greenmind/tiered-archive/cache /run/greenmind-tiered-archive
+ReadWritePaths=/var/lib/greenmind/tiered-archive/staging/cache /var/lib/greenmind/tiered-archive/staging/control /run/greenmind-tiered-archive
+MemoryHigh=160M
 MemoryMax=192M
+OOMPolicy=stop
+TimeoutStopSec=30
+Restart=no
 MemorySwapMax=0
 CPUQuota=25%
 TasksMax=16

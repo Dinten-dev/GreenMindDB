@@ -73,6 +73,8 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
     )
     db.commit()
     result = {"published": 0, "verified": 0, "evicted": 0, "blocked": 0}
+    copied_wavs = copied_bytes = 0
+    small_staging = environment() == "staging"
     try:
         for source in backups:
             if time.monotonic() >= copy_deadline:
@@ -109,12 +111,30 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
             for reference in references:
                 if time.monotonic() >= copy_deadline:
                     break
+                if small_staging and (copied_wavs >= 10 or copied_bytes >= 5 * 1024**2):
+                    break
                 try:
-                    publish_wav(source, reference)
+                    planned = adapter.catalog.resolve(reference)
+                    if small_staging and (
+                        copied_wavs + len(planned) > 10
+                        or copied_bytes + sum(record.size for record in planned) > 5 * 1024**2
+                    ):
+                        break
+                    receipt = publish_wav(
+                        source,
+                        reference,
+                        maximum_bytes=5 * 1024**2 - copied_bytes if small_staging else None,
+                    )
+                    copied_wavs += sum(f["format"] == "wav" for f in receipt["files"])
+                    copied_bytes += sum(
+                        f["bytes"] for f in receipt["files"] if f["format"] == "wav"
+                    )
                     result["published"] += 1
                 except SafetyPause:
                     raise
                 except ArchiveBlocked:
+                    if small_staging:
+                        raise
                     result["blocked"] += 1
                 with db:
                     db.execute(
@@ -205,6 +225,8 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                 except SafetyPause:
                     raise
                 except ArchiveBlocked:
+                    if small_staging:
+                        raise
                     result["blocked"] += 1
                     continue
             if os.getenv("TIERED_ARCHIVE_DELETE_ENABLED", "false") == "true":

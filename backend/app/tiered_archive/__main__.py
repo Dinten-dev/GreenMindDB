@@ -105,7 +105,10 @@ def main():
                     json.loads(args.reference.read_text()), ledger, store, checkpoint=checkpoint
                 )
     elif args.operation == "backup":
-        result = runtime.backup(args.source)
+        from .execution import bounded_job
+
+        with bounded_job(runtime.state_root(), kind="backup-" + args.source):
+            result = runtime.backup(args.source)
     elif args.operation == "inventory":
         from .source import Source
 
@@ -139,9 +142,11 @@ def main():
         with runtime.worker() as (ledger, store, checkpoint):
             result = restore(args.identity, args.output, ledger, store, checkpoint=checkpoint)
     else:
+        from .execution import bounded_job
         from .schedule import tick
 
-        result = tick(args.schedule)
+        with bounded_job(runtime.state_root()):
+            result = tick(args.schedule)
     # Routine output contains aggregate counts/identities, never raw row bodies,
     # credentials, object keys, personal data or activation-file contents.
     if isinstance(result, dict) and "files" in result:

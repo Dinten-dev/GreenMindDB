@@ -1,6 +1,7 @@
 """Explicit PostgreSQL datasets, keyset exports and exact fenced row eviction."""
 
 import hashlib
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import timedelta
@@ -204,6 +205,9 @@ class Source:
         spec = DATASETS[dataset]
         if spec.source != self.source or not 1 <= limit <= 500:
             raise ArchiveBlocked("Dataset does not belong to this bounded source")
+        byte_budget = int(os.environ.get("TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES", 8 * 1024**2))
+        if not 0 < byte_budget <= 8 * 1024**2:
+            raise ArchiveBlocked("SQL page budget exceeds worker ceiling")
         stamp = f"to_timestamp({spec.time})" if spec.epoch else spec.time
         order = ",".join("t." + key for key in spec.keys)
         params = {"org": organization, "start": start, "end": end, "lim": limit}
@@ -268,7 +272,9 @@ class Source:
                         "body": {"row": body, "context": context},
                     }
                     size = len(encode(envelope))
-                    if rows and decoded_bytes + size > 8 * 1024**2:
+                    if size > byte_budget:
+                        raise ArchiveBlocked("Single SQL row exceeds configured page budget")
+                    if rows and decoded_bytes + size > byte_budget:
                         self.page_full = True
                         break
                     self.next_cursor = {"time": at, "row": {key: body[key] for key in spec.keys}}

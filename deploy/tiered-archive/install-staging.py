@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import pwd
 import shutil
 import subprocess
@@ -40,21 +41,76 @@ def validate(profile, schedule):
         raise ValueError("Deletion/pruning must be disabled")
     if schedule.get("environment") != "staging" or schedule.get("schema") != 1:
         raise ValueError("Staging schedule required")
+    if profile.get("TIERED_ARCHIVE_SOURCE_ORIGIN") != "isolated_staging_copy":
+        raise ValueError("Explicit isolated staging-copy origin required")
+    if (
+        schedule.get("backups")
+        or schedule.get("scheduled_snapshots")
+        or schedule.get("snapshot_id")
+    ):
+        raise ValueError(
+            "First staging copy profile excludes inline backup and snapshot jobs"
+        )
     for source in ("GATEWAY", "DIRECT"):
         value = profile.get("RAW_ARCHIVE_" + source + "_DATABASE_URL", "")
         parsed = urlparse(value)
         if (
             not parsed.scheme.startswith("postgresql")
             or "staging" not in parsed.path.lower()
+            or parsed.hostname != "127.0.0.1"
+            or parsed.port != (26432 if source == "GATEWAY" else 26433)
         ):
             raise ValueError("Source database is not an explicit staging copy")
+        if (
+            profile.get("RAW_ARCHIVE_" + source + "_S3_ENDPOINT")
+            != "http://127.0.0.1:26900"
+        ):
+            raise ValueError("Dedicated local staging MinIO endpoint required")
+    if (
+        profile.get("RAW_ARCHIVE_SOURCE_PROBE_URL")
+        or profile.get("RAW_ARCHIVE_WORKER_ROLE") != "isolated-staging"
+    ):
+        raise ValueError(
+            "First staging profile must not read production telemetry or sources"
+        )
+    if (
+        profile.get("RAW_ARCHIVE_HEALTH_URLS")
+        != "http://127.0.0.1:26812/health,http://127.0.0.1:26803/health"
+    ):
+        raise ValueError("Only local staging health endpoints allowed")
+    if (
+        float(profile.get("RAW_ARCHIVE_MAX_HOST_LOAD", 2)) > 2
+        or int(profile.get("RAW_ARCHIVE_MIN_AVAILABLE_MEMORY_MIB", 1024)) < 1024
+    ):
+        raise ValueError("Existing host resource floors may not be weakened")
+    import re
+
+    if not re.fullmatch(r"u[0-9]+-sub[0-9]+", profile.get("RAW_ARCHIVE_SFTP_USER", "")):
+        raise ValueError("Dedicated staging upload subaccount required")
+    if (
+        profile.get("RAW_ARCHIVE_SFTP_HOST")
+        != profile["RAW_ARCHIVE_SFTP_USER"] + ".your-storagebox.de"
+    ):
+        raise ValueError("Matching dedicated Storage Box subaccount host required")
+    if profile.get("RAW_ARCHIVE_SFTP_ROOT") != "greenmind-raw":
+        raise ValueError(
+            "Staging subaccount must contain the relative greenmind-raw directory"
+        )
+    for key, ceiling in (
+        ("TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES", 5 * 1024**2),
+        ("TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES", 1024**2),
+    ):
+        if not 0 < int(profile.get(key, 0)) <= ceiling:
+            raise ValueError("Explicit small staging page/bundle limits required")
     if not profile.get("RAW_ARCHIVE_DIRECT_S3_BUCKET", "").startswith(
         "greenmind-direct-staging"
     ):
         raise ValueError("Staging Direct bucket required")
     for key in profile:
         if "WRITER_" in key:
-            raise ValueError("No writer credentials in a copy-only staging worker")
+            raise ValueError(
+                "Source write credentials are forbidden; destination SFTP writes remain required"
+            )
     state = Path(profile.get("TIERED_ARCHIVE_STATE_DIR", ""))
     if state != Path("/var/lib/greenmind/tiered-archive/staging"):
         raise ValueError("Use the isolated staging state path")
@@ -69,6 +125,12 @@ def verify(release, expected_sha256):
     ):
         raise ValueError("Release manifest differs from reviewed fingerprint")
     manifest = json.loads((release / "release.json").read_text())
+    import re
+
+    if "base_revision" in manifest and not re.fullmatch(
+        "[a-f0-9]{40}", manifest["base_revision"]
+    ):
+        raise ValueError("Immutable commit identity required")
     members = list(release.rglob("*"))
     if any(path.is_symlink() for path in members):
         raise ValueError("Release contains symbolic links")
@@ -87,6 +149,32 @@ def verify(release, expected_sha256):
         if hashlib.sha256(path.read_bytes()).hexdigest() != sha:
             raise ValueError("Release content changed")
     return manifest
+
+
+def offline_pip(python, release, lock):
+    return [
+        str(python),
+        "-m",
+        "pip",
+        "--isolated",
+        "--disable-pip-version-check",
+        "install",
+        "--no-index",
+        "--no-cache-dir",
+        "--find-links",
+        str(release / "wheelhouse"),
+        "--require-hashes",
+        "-r",
+        str(release / "backend" / lock),
+    ]
+
+
+def seal_release(root):
+    for path in [*root.rglob("*"), root]:
+        os.chown(path, 0, 0, follow_symlinks=False)
+        if path.is_symlink():
+            continue
+        path.chmod(0o555 if path.is_dir() or path.stat().st_mode & 0o111 else 0o444)
 
 
 def validate_reader(profile, writer):
@@ -115,6 +203,14 @@ def validate_reader(profile, writer):
         )
     if profile.get("TIERED_ARCHIVE_STATE_DIR") != writer["TIERED_ARCHIVE_STATE_DIR"]:
         raise ValueError("Historical read catalogue must match isolated staging writer")
+    if profile.get("RAW_ARCHIVE_READ_ONLY_SFTP_USER") == writer.get(
+        "RAW_ARCHIVE_SFTP_USER"
+    ):
+        raise ValueError("Reader must not reuse upload subaccount")
+    if profile.get("TIERED_ARCHIVE_BACKUP_KEY_SHA256") != writer.get(
+        "TIERED_ARCHIVE_BACKUP_KEY_SHA256"
+    ):
+        raise ValueError("Reader and writer must pin the same key recovery receipt")
     if (
         profile.get("TIERED_ARCHIVE_READ_BROKER_SOCKET")
         != "/run/greenmind-tiered-archive-staging/history.sock"
@@ -157,17 +253,47 @@ def main():
         return
     if os.geteuid() != 0:
         raise PermissionError("Administrator authentication required")
+    if platform.system() != "Linux" or platform.machine() != "x86_64":
+        raise ValueError("Release requires Linux x86_64 and CPython 3.12")
+    interpreter = args.python.resolve()
+    if (
+        not args.python.is_absolute()
+        or interpreter.stat().st_uid != 0
+        or interpreter.stat().st_mode & 0o022
+        or any(
+            parent.stat().st_uid != 0 or parent.stat().st_mode & 0o022
+            for parent in interpreter.parents
+        )
+    ):
+        raise ValueError("Root-owned non-writable interpreter required")
+    subprocess.run(
+        [str(interpreter), "-c", "import sys;assert sys.version_info[:2]==(3,12)"],
+        check=True,
+    )
     account = pwd.getpwnam("greenmind-archive")
     reader = (
         pwd.getpwnam("greenmind-archive-read") if read_profile is not None else None
     )
-    destination = Path("/opt/greenmind/tiered-archive") / manifest["runtime_sha256"]
+    destination = (
+        Path("/opt/greenmind/tiered-archive/releases") / manifest["base_revision"]
+    )
     if destination.exists():
         raise FileExistsError("Immutable release already exists; inspect before retry")
+    for parent in destination.parents:
+        if parent.exists() and (
+            parent.is_symlink()
+            or parent.stat().st_uid != 0
+            or parent.stat().st_mode & 0o022
+        ):
+            raise PermissionError("Root-owned non-writable release ancestors required")
     config = Path("/etc/greenmind/tiered-archive")
-    if (config / "staging.env").exists():
-        raise FileExistsError("Existing staging profile retained")
+    if config.exists():
+        raise FileExistsError(
+            "Existing archive configuration retained; isolate before retry"
+        )
     state = Path(profile["TIERED_ARCHIVE_STATE_DIR"])
+    if state.exists():
+        raise FileExistsError("Existing staging state retained; inspect before retry")
     if reader and state.parent.exists():
         parent = state.parent.stat()
         if not (
@@ -183,39 +309,21 @@ def main():
         config / "staging-read.env",
         Path("/etc/systemd/system/greenmind-tiered-archive-staging.service"),
         Path("/etc/systemd/system/greenmind-tiered-read-staging.service"),
+        Path("/etc/systemd/system/greenmind-tiered-archive-staging.timer"),
+        Path("/etc/systemd/system/greenmind-tiered-backup@.service"),
+        Path("/etc/systemd/system/greenmind-tiered-staging.slice"),
     ):
         if path.exists():
             raise FileExistsError("Existing staging resource retained: " + str(path))
     shutil.copytree(release, destination)
     verify(destination, args.manifest_sha256)
     subprocess.run(
-        [str(args.python), "-m", "venv", str(destination / "python")], check=True
+        [str(interpreter), "-m", "venv", str(destination / "python")], check=True
     )
     python = destination / "python/bin/python"
-    subprocess.run(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "install",
-            "--require-hashes",
-            "-r",
-            str(destination / "backend/requirements.lock"),
-        ],
-        check=True,
-    )
-    subprocess.run(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "install",
-            "--require-hashes",
-            "-r",
-            str(destination / "backend/requirements-archive.lock"),
-        ],
-        check=True,
-    )
+    for lock in ("requirements.lock", "requirements-archive.lock"):
+        subprocess.run(offline_pip(python, destination, lock), check=True)
+    seal_release(destination)
     config.mkdir(mode=0o750, parents=True, exist_ok=True)
     profile.pop("PYTHONHOME", None)
     profile.update(
@@ -225,6 +333,9 @@ def main():
     )
     if reader:
         profile["TIERED_ARCHIVE_READ_GID"] = str(reader.pw_gid)
+    shared_gid = reader.pw_gid if reader else account.pw_gid
+    config.chmod(0o710)
+    os.chown(config, 0, shared_gid)
     for name, body in [
         (
             "staging.env",
@@ -241,6 +352,10 @@ def main():
     raw_state = Path(profile["RAW_ARCHIVE_STATE_DIR"])
     raw_state.mkdir(mode=0o700, exist_ok=True)
     os.chown(raw_state, account.pw_uid, account.pw_gid)
+    control = state / "control"
+    control.mkdir(mode=0o2770)
+    os.chown(control, 0, shared_gid)
+    control.chmod(0o2770)
     if reader:
         os.chown(state, account.pw_uid, reader.pw_gid)
         state.chmod(0o750)
@@ -276,8 +391,8 @@ def main():
         str(config / "staging-schedule.json"),
     )
     service = service.replace(
-        "ReadWritePaths=/var/lib/greenmind/tiered-archive /var/lib/greenmind/archive-copy-20261010 /run/greenmind-archive",
-        "ReadWritePaths=" + str(state) + " " + profile["RAW_ARCHIVE_STATE_DIR"],
+        "ReadWritePaths=/var/lib/greenmind/tiered-archive/staging",
+        "ReadWritePaths=" + str(state),
     )
     unit = Path("/etc/systemd/system/greenmind-tiered-archive-staging.service")
     with unit.open("x") as out:
@@ -296,13 +411,48 @@ def main():
             "greenmind-tiered-archive", "greenmind-tiered-archive-staging"
         )
         read_unit = read_unit.replace(
-            "/var/lib/greenmind/tiered-archive/cache", str(state / "cache")
+            "/var/lib/greenmind/tiered-archive/staging/cache", str(state / "cache")
         )
         with Path("/etc/systemd/system/greenmind-tiered-read-staging.service").open(
             "x"
         ) as out:
             out.write(read_unit)
+    for name in ("greenmind-tiered-backup@.service", "greenmind-tiered-staging.slice"):
+        content = (
+            (destination / "deploy/tiered-archive" / name)
+            .read_text()
+            .replace("/opt/greenmind/tiered-archive/current", str(destination))
+        )
+        if reader and name.endswith(".service"):
+            content = content.replace(
+                "Group=greenmind-archive\n",
+                "Group=greenmind-archive\nSupplementaryGroups=greenmind-archive-read\n",
+            )
+        with (Path("/etc/systemd/system") / name).open("x") as out:
+            out.write(content)
+    timer = (
+        (destination / "deploy/tiered-archive/greenmind-tiered-archive.timer")
+        .read_text()
+        .replace(
+            "greenmind-tiered-archive.service",
+            "greenmind-tiered-archive-staging.service",
+        )
+    )
+    with Path("/etc/systemd/system/greenmind-tiered-archive-staging.timer").open(
+        "x"
+    ) as out:
+        out.write(timer)
     subprocess.run(["/usr/bin/systemctl", "daemon-reload"], check=True)
+    disabled = [
+        "greenmind-tiered-archive-staging.timer",
+        "greenmind-tiered-archive-staging.service",
+        "greenmind-tiered-backup@gateway.service",
+        "greenmind-tiered-backup@direct.service",
+    ]
+    if reader:
+        disabled.append("greenmind-tiered-read-staging.service")
+    for name in disabled:
+        subprocess.run(["/usr/bin/systemctl", "disable", name], check=True)
     print(
         json.dumps(
             {

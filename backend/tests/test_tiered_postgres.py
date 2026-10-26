@@ -319,19 +319,39 @@ def test_archived_rows_restore_to_empty_postgres_with_exact_values(source, tmp_p
         ledger.close()
 
 
-def test_export_byte_budget_preserves_cursor_without_losing_rows(source):
+@pytest.mark.parametrize("budget", [8 * 1024**2, 1024**2])
+def test_export_byte_budget_preserves_cursor_without_losing_rows(source, monkeypatch, budget):
+    monkeypatch.setenv("TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES", str(budget))
     with source.engine.begin() as db:
         db.execute(
             text("""INSERT INTO visual_reading SELECT sensor_id,'bulk-'||i,bucket,seconds,unit,n,total,total2,minimum,maximum,
             decode(repeat('ab',20000),'hex'),precise FROM visual_reading CROSS JOIN generate_series(1,499) i""")
         )
-    first, _ = source.export("visual_reading", ORG, AT, AT + timedelta(days=1))
-    assert source.page_full and 1 < len(first) < 500
-    second, _ = source.export(
-        "visual_reading", ORG, AT, AT + timedelta(days=1), after=source.next_cursor
-    )
-    assert len(first) + len(second) == 500
-    assert not ({row["identity"] for row in first} & {row["identity"] for row in second})
+    from app.tiered_archive.codec import encode
+
+    seen = set()
+    after = None
+    pages = 0
+    while True:
+        rows, _ = source.export("visual_reading", ORG, AT, AT + timedelta(days=1), after=after)
+        assert sum(len(encode(row)) for row in rows) <= budget
+        identities = {row["identity"] for row in rows}
+        assert not seen & identities
+        seen.update(identities)
+        pages += 1
+        if not source.page_full:
+            break
+        after = source.next_cursor
+        assert pages < 50
+    assert len(seen) == 500 and pages > 1
+
+
+def test_oversized_sql_row_blocks_instead_of_truncating(source, monkeypatch):
+    monkeypatch.setenv("TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES", str(512 * 1024))
+    with source.engine.begin() as db:
+        db.execute(text("UPDATE visual_reading SET identities=decode(repeat('ab',400000),'hex')"))
+    with pytest.raises(ArchiveBlocked, match="Single SQL row"):
+        source.export("visual_reading", ORG, AT, AT + timedelta(days=1))
 
 
 def test_missing_scan_index_blocks_before_export(source):

@@ -653,22 +653,42 @@ def test_staging_installer_rejects_production_or_shared_journal():
     profile = {
         "RAW_ARCHIVE_ENVIRONMENT": "staging",
         "TIERED_ARCHIVE_ENVIRONMENT": "staging",
-        "RAW_ARCHIVE_GATEWAY_DATABASE_URL": "postgresql://localhost/gateway_staging",
-        "RAW_ARCHIVE_DIRECT_DATABASE_URL": "postgresql://localhost/direct_staging",
+        "RAW_ARCHIVE_GATEWAY_DATABASE_URL": "postgresql://127.0.0.1:26432/gateway_staging",
+        "RAW_ARCHIVE_DIRECT_DATABASE_URL": "postgresql://127.0.0.1:26433/direct_staging",
         "RAW_ARCHIVE_DIRECT_S3_BUCKET": "greenmind-direct-staging-test",
         "TIERED_ARCHIVE_STATE_DIR": "/var/lib/greenmind/tiered-archive/staging",
         "RAW_ARCHIVE_STATE_DIR": "/var/lib/greenmind/tiered-archive/staging/raw",
     }
     schedule = {"schema": 1, "environment": "staging"}
+    profile.update(
+        TIERED_ARCHIVE_SOURCE_ORIGIN="isolated_staging_copy",
+        RAW_ARCHIVE_WORKER_ROLE="isolated-staging",
+        RAW_ARCHIVE_GATEWAY_S3_ENDPOINT="http://127.0.0.1:26900",
+        RAW_ARCHIVE_DIRECT_S3_ENDPOINT="http://127.0.0.1:26900",
+        RAW_ARCHIVE_SFTP_USER="u123-sub1",
+        RAW_ARCHIVE_SFTP_HOST="u123-sub1.your-storagebox.de",
+        RAW_ARCHIVE_SFTP_ROOT="greenmind-raw",
+        RAW_ARCHIVE_HEALTH_URLS="http://127.0.0.1:26812/health,http://127.0.0.1:26803/health",
+        TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES=str(5 * 1024**2),
+        TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES=str(1024**2),
+    )
     installer["validate"](profile, schedule)
     for key, value in [
         ("TIERED_ARCHIVE_DELETE_ENABLED", "true"),
         ("RAW_ARCHIVE_ENVIRONMENT", "production"),
         ("RAW_ARCHIVE_GATEWAY_DATABASE_URL", "postgresql://localhost/plantdb"),
         ("RAW_ARCHIVE_STATE_DIR", "/var/lib/greenmind/archive-copy-20261010"),
+        ("TIERED_ARCHIVE_SOURCE_ORIGIN", "production_read_only"),
+        ("RAW_ARCHIVE_GATEWAY_S3_ENDPOINT", "http://188.245.247.156:9000"),
+        ("TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES", str(64 * 1024**2)),
+        ("TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES", str(8 * 1024**2)),
+        ("RAW_ARCHIVE_WORKER_ROLE", "copy"),
     ]:
         with pytest.raises(ValueError):
             installer["validate"](profile | {key: value}, schedule)
+    for addition in ({"backups": ["gateway"]}, {"scheduled_snapshots": True}):
+        with pytest.raises(ValueError, match="excludes inline"):
+            installer["validate"](profile, schedule | addition)
 
 
 def test_cold_query_preserves_overlapping_left_bucket(bundle, tmp_path):

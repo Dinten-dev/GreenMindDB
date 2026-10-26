@@ -1,5 +1,12 @@
 # GreenMind: versionierte Archivierung
 
+## Aktueller Staging-Review
+
+Für die erste Installation gilt ausschliesslich [STAGING-REVIEW-V2.md](STAGING-REVIEW-V2.md).
+Sie ersetzt die frühere Installationsbeschreibung. `staging-copy.env.example` und
+`schedule.example.json` beschreiben einen echten Kopierlauf mit aktuellen Rücklesungen
+gegen isolierte Kopien. Snapshot-Abnahme, Backups und Produktion sind spätere Phasen.
+
 ## Verhalten
 
 - WAVs und vollständige wissenschaftliche Metadaten bilden gemeinsame Archivpakete.
@@ -65,11 +72,11 @@ Native Staging-Abnahme, tatsächlich konfigurierte Snapshotpläne, aktuelle MinI
 
 ## Getrennter historischer Leser
 
-`greenmind-tiered-read.service` ist ein eigener Dienst mit 192 MiB RAM und 25 Prozent CPU. Er verwendet ausschliesslich den separaten, schreibgeschützten Storage-Box-Unteraccount. Er erhält weder Datenbank-Schreibrechte noch den Uploadschlüssel. Der bestehende WAV-Lesebroker und dessen Limits bleiben erhalten. Der neue private Socket akzeptiert nur denselben Betriebssystembenutzer; Quell-APIs werden über die bereits vorhandene private Weiterleitung angeschlossen.
+`greenmind-tiered-read.service` ist ein eigener Dienst mit 192 MiB RAM und 25 Prozent CPU. Er verwendet ausschliesslich den separaten, schreibgeschützten Storage-Box-Unteraccount. Er erhält weder Datenbank-Schreibrechte noch den Uploadschlüssel. Der bestehende WAV-Lesebroker und dessen Limits bleiben erhalten. Der neue private Socket akzeptiert nur denselben Betriebssystembenutzer. Im ersten Staging erfolgt ausschliesslich lokaler Zugriff; eine Produktionsweiterleitung benötigt einen eigenen Review.
 
 `install-staging.py --read-profile ...` installiert zusätzlich einen noch nicht gestarteten Staging-Leser. Der gemeinsame Staging-Ordner erhält ausschliesslich Lesedurchgang für dessen Gruppe. Nur die atomar veröffentlichte Katalogansicht ist gruppenlesbar; der Cache gehört dem Leser, das Schreibjournal bleibt privat. Der übergeordnete Ordner muss diesen Durchgang bereits erlauben. Die Installation überschreibt keine vorhandenen Staging-Dateien oder Dienste.
 
-Jahresansichten lesen nur die benötigten Parquet-Statistikspalten. Diese werden bei der vollständigen Archivprüfung gegen die Originalwerte geprüft. Ein Archivleser verarbeitet höchstens 2’048 passende Partitionen je Anfrage, verwendet eine begrenzte DuckDB-Instanz und bündelt gleichzeitige Dateiabrufe. Der Cache ist auf 512 MiB begrenzt; zusätzlich bleiben mindestens 2 GiB Dateisystemreserve frei. SQL-Seiten enden spätestens nach 500 Zeilen beziehungsweise 8 MiB kanonischen Daten. WAV-Pakete bleiben unter 64 MiB.
+Jahresansichten lesen nur die benötigten Parquet-Statistikspalten. Diese werden bei der vollständigen Archivprüfung gegen die Originalwerte geprüft. Ein Archivleser verarbeitet höchstens 2’048 passende Partitionen je Anfrage, verwendet eine begrenzte DuckDB-Instanz und bündelt gleichzeitige Dateiabrufe. Der Dateicache ist auf 512 MiB auf Disk begrenzt; zusätzlich bleiben mindestens 2 GiB Dateisystemreserve frei. Allgemeine Obergrenzen sind 500 Zeilen beziehungsweise 8 MiB kanonische SQL-Daten und 64 MiB WAV-Pakete. Im ersten Staging gelten stattdessen 1 MiB SQL-Seiten und insgesamt höchstens zehn WAVs beziehungsweise 5 MiB je Kopierlauf, je nachdem, welche Grenze zuerst erreicht wird. Die native Einhaltung der 192-MiB-cgroup-Grenze bleibt eine Abnahmevoraussetzung.
 
 `bindings` gibt einen nicht geheimen Fingerabdruck der Quellprofile und des Archivziels aus. Aktivierungsdokument und Abnahme müssen diesen zusätzlich zum Code- und Richtlinienfingerabdruck enthalten. Ein geändertes Quellprofil oder eine andere Storage Box sperrt die Löschung.
 

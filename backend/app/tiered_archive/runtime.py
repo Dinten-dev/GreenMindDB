@@ -134,7 +134,7 @@ def worker(*, deleting=False):
             last_check = [0.0]
 
             def checkpoint():
-                if (root / "PAUSE").exists():
+                if (root / "PAUSE").exists() or (root / "control/PAUSE").exists():
                     raise SafetyPause("manual_pause")
                 if time.monotonic() - last_check[0] < 1:
                     return
@@ -316,7 +316,7 @@ def publish_sql(source, dataset, organization, start, end, *, limit=500, after=N
             }
 
 
-def publish_wav(source, reference):
+def publish_wav(source, reference, *, maximum_bytes=None):
     from . import parquet
     from .pipeline import publish
 
@@ -324,7 +324,9 @@ def publish_wav(source, reference):
         adapter = wav_source(source, checkpoint)
         with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
             folder = Path(folder)
-            envelope, artifacts, flags = adapter.export(reference, folder)
+            envelope, artifacts, flags = adapter.export(
+                reference, folder, maximum_bytes=maximum_bytes
+            )
             path = folder / "metadata.parquet"
             metadata = dict(
                 parquet.write(path, [envelope], checkpoint=checkpoint), format="parquet"

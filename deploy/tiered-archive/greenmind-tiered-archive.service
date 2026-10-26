@@ -1,34 +1,42 @@
 [Unit]
 Description=GreenMind bounded verified archival cycle
-After=network-online.target greenmind-source-link.service
+After=network-online.target
 Wants=network-online.target
+ConditionPathExists=!/var/lib/greenmind/tiered-archive/staging/control/PAUSE
 
 [Service]
 Type=oneshot
 User=greenmind-archive
 Group=greenmind-archive
-Slice=greenmind-archive.slice
+Slice=greenmind-tiered-staging.slice
 EnvironmentFile=/etc/greenmind/tiered-archive.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=OMP_NUM_THREADS=1
-ExecStart=/opt/greenmind/tiered-archive/current/python/bin/python -m app.tiered_archive tick --schedule /etc/greenmind/tiered-archive-schedule.json
+ExecStart=/usr/bin/flock -n /var/lib/greenmind/tiered-archive/staging/operation.lock /opt/greenmind/tiered-archive/current/python/bin/python -m app.tiered_archive tick --schedule /etc/greenmind/tiered-archive-schedule.json
+ExecStartPre=/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/verify-start.py --receipt /etc/greenmind/tiered-archive/staging-key-recovery.json --fingerprint ${TIERED_ARCHIVE_BACKUP_KEY_SHA256}
+ExecStopPost=/usr/bin/python3 /opt/greenmind/tiered-archive/current/deploy/tiered-archive/service-outcome.py --state /var/lib/greenmind/tiered-archive/staging --kind copy --pause-dir /var/lib/greenmind/tiered-archive/staging/control
 WorkingDirectory=/opt/greenmind/tiered-archive/current/backend
 UMask=0077
 CPUQuota=25%
+MemoryHigh=160M
 MemoryMax=192M
 MemorySwapMax=0
 TasksMax=16
 IOWeight=10
 Nice=15
-TimeoutStartSec=360
+TimeoutStartSec=330
+TimeoutStopSec=30
+OOMPolicy=stop
+Restart=no
 KillMode=control-group
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/greenmind/tiered-archive /var/lib/greenmind/archive-copy-20261010 /run/greenmind-archive
+ReadWritePaths=/var/lib/greenmind/tiered-archive/staging
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=188.245.247.156/32
 
 [Install]
 WantedBy=multi-user.target

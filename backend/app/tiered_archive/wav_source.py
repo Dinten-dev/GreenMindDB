@@ -1,5 +1,6 @@
 """Gateway and Direct WAV bundles retain scientific metadata and old URLs."""
 
+import os
 import uuid
 from contextlib import contextmanager
 from dataclasses import asdict
@@ -37,12 +38,19 @@ class WavSource:
         )
         self.expected, self.db = None, None
 
-    def export(self, reference, folder):
+    def export(self, reference, folder, *, maximum_bytes=None):
         records = self.catalog.resolve(reference)
         if not records:
             raise ArchiveBlocked("No verified WAVs in revision")
         total = sum(record.size for record in records)
-        if total > MAX_BYTES or any(not 0 < record.size <= MAX_BYTES for record in records):
+        budget = int(os.environ.get("TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES", MAX_BYTES))
+        if maximum_bytes is not None:
+            budget = min(budget, maximum_bytes)
+        if (
+            not 0 < budget <= MAX_BYTES
+            or total > budget
+            or any(not 0 < record.size <= budget for record in records)
+        ):
             raise ArchiveBlocked("WAV revision exceeds bounded bundle budget")
         disk_reserve(folder, total * 2)
         with self.sessions() as db:

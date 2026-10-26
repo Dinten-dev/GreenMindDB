@@ -1,0 +1,7 @@
+[Unit]
+Description=GreenMind staging-only resource budget
+[Slice]
+MemoryMax=416M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=48

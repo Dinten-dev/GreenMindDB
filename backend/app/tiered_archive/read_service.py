@@ -12,6 +12,10 @@ from app.raw_archive.worker import configuration
 
 class ReadHandler(Handler):
     def do_POST(self):
+        state = Path(os.environ["TIERED_ARCHIVE_STATE_DIR"])
+        if (state / "PAUSE").exists() or (state / "control/PAUSE").exists():
+            self.send_error(503, "Staging archive paused")
+            return
         if self.path not in {"/tiered-series", "/tiered-features", "/tiered-revision"}:
             self.send_error(404)
             return
@@ -44,6 +48,7 @@ def main():
         with Server(
             str(path), config, destination, Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "cache"
         ) as server:
+            path.chmod(0o600)
             server.RequestHandlerClass = ReadHandler
             server.serve_forever(poll_interval=1)
     finally:
