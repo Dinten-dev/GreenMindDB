@@ -222,6 +222,10 @@ def retention_dry_run(db: Session, now: datetime | None = None) -> dict[str, int
 
 def run_retention(db: Session) -> dict[str, int]:
     """Apply one retention cycle after an explicit operator enable."""
+    import os
+
+    if os.getenv("TIERED_ARCHIVE_ENABLED", "false") == "true":
+        return {"disabled": 1, "tiered_archive_owns_retention": 1}
     if not settings.retention_enabled:
         raise RuntimeError("Retention is disabled")
 

@@ -1,0 +1,23 @@
+[Unit]
+Description=GreenMind isolated verified WAV export worker
+After=network-online.target
+ConditionPathExists=/etc/greenmind/archive-export/EXPORT_APPROVED
+
+[Service]
+Type=oneshot
+User=greenmind-archive-export
+Group=greenmind-archive-export
+EnvironmentFile=/etc/greenmind/archive-export/export.env
+WorkingDirectory=/opt/greenmind/archive-export/current/backend
+ExecStart=/opt/greenmind/archive-export/current/venv/bin/python -m app.visualization.archive_exports_worker
+CPUQuota=10%
+MemoryHigh=192M
+MemoryMax=256M
+MemorySwapMax=0
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/greenmind-archive-export
+TimeoutStartSec=75min

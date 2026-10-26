@@ -1,0 +1,30 @@
+[Unit]
+Description=GreenMind read-only catalog recovery backup (no RAW uploads or deletion)
+After=network-online.target
+ConditionPathExists=/etc/greenmind/delete-preparation/CATALOG_BACKUP_APPROVED
+
+[Service]
+Type=oneshot
+User=996
+Group=986
+EnvironmentFile=/etc/greenmind/delete-preparation/recovery.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=FILL_IMMUTABLE_PACKAGE/backend
+ExecStart=/opt/greenmind/raw-copy/20260925/venv/bin/python -m app.raw_archive.recovery --ledger /var/lib/greenmind-raw-copy/archive.sqlite3 --output FILL_PRIVATE_BACKUP_DIRECTORY --publish-catalog
+MemoryMax=128M
+MemorySwapMax=0
+CPUQuota=10%
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=600
+TasksMax=32
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+UMask=0077
+ReadWritePaths=FILL_PRIVATE_BACKUP_DIRECTORY
+# SQLite may create its WAL shared-memory index even for mode=ro readers.
+# Keep the actual source database bind-mounted read-only.
+ReadWritePaths=/var/lib/greenmind-raw-copy
+BindReadOnlyPaths=/var/lib/greenmind-raw-copy/archive.sqlite3

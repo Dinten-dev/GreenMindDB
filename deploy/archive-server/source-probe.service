@@ -1,0 +1,27 @@
+[Unit]
+Description=GreenMind bounded read-only production telemetry
+After=network-online.target
+[Service]
+DynamicUser=yes
+LoadCredential=probe-token:/etc/greenmind/source-probe/token
+Environment=GREENMIND_SOURCE_PROBE_TOKEN_FILE=%d/probe-token
+Environment=GREENMIND_SOURCE_ID=production-188.245.247.156
+Environment=RAW_ARCHIVE_SOURCE_MOUNTS=/,/mnt/HC_Volume_106755700
+ExecStart=/usr/bin/python3 /opt/greenmind/source-probe/source_probe.py
+Restart=on-failure
+RestartSec=15
+MemoryMax=32M
+MemorySwapMax=0
+CPUQuota=5%
+TasksMax=8
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+[Install]
+WantedBy=multi-user.target

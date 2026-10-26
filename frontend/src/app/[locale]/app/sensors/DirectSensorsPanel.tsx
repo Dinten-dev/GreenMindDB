@@ -1,9 +1,14 @@
 'use client';
 
+import RecordingCompletenessBadge from './RecordingCompletenessBadge';
+import { nominalCompleteness } from '@/lib/recordingCompleteness';
+import type { RecordingCompleteness } from '@/lib/api';
+
 import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
 import SignalChart from './SignalChart';
 import SensorCard from './SensorCard';
+import ArchiveExportPanel from './ArchiveExportPanel';
 
 export type DirectDevice = {
   id: string;
@@ -19,6 +24,7 @@ type Recording = {
   run: number;
   started_at: string;
   duration_seconds: number;
+  completeness?: RecordingCompleteness;
   sample_rate: number;
 };
 const ranges = [
@@ -29,10 +35,25 @@ const ranges = [
   ['30d', '30 Tage'],
 ] as const;
 
+class ReadError extends Error {
+  constructor(readonly status: number) {
+    super('Messdaten konnten nicht geladen werden. Bitte erneut versuchen.');
+  }
+}
+
+function shouldClearCachedData(error: unknown) {
+  return (
+    error instanceof ReadError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429
+  );
+}
+
 async function read<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { cache: 'no-store', signal });
-  if (!response.ok)
-    throw new Error('Messdaten konnten nicht geladen werden. Bitte erneut versuchen.');
+  if (!response.ok) throw new ReadError(response.status);
   return response.json();
 }
 
@@ -41,44 +62,84 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
   const [series, setSeries] = useState<SensorDataResponse[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState('');
+  const [recordingsError, setRecordingsError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [recordingsLoading, setRecordingsLoading] = useState(true);
   const [retry, setRetry] = useState(0);
+  const [viewBounds, setViewBounds] = useState<{ from_dt: string; to_dt: string } | null>(null);
   const base = `/api/v1/visualization/direct/${device.id}`;
   useEffect(() => {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    let first = true;
+    let dataTimer: ReturnType<typeof setTimeout>;
+    let recordingsTimer: ReturnType<typeof setTimeout>;
     setLoading(true);
+    setRecordingsLoading(true);
     setSeries([]);
     setRecordings([]);
     setError('');
-    const refresh = async () => {
+    setRecordingsError('');
+    setViewBounds(null);
+    const refreshData = async () => {
       try {
-        const [data, files] = await Promise.all([
-          read<SensorDataResponse[]>(`${base}/data?range=${range}`, controller.signal),
-          read<Recording[]>(`${base}/recordings?range=${range}`, controller.signal),
-        ]);
+        const end = new Date();
+        const duration =
+          { '5m': 300, '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range] ?? 86400;
+        const bounds = {
+          from_dt: new Date(end.getTime() - duration * 1000).toISOString(),
+          to_dt: end.toISOString(),
+        };
+        const params = new URLSearchParams({ range, ...bounds });
+        if (range === '5m' || range === '1h') params.set('resolution', '1');
+        const data = await read<SensorDataResponse[]>(`${base}/data?${params}`, controller.signal);
         if (controller.signal.aborted) return;
         setSeries(data);
-        setRecordings(files);
+        setViewBounds(bounds);
         setError('');
-      } catch {
-        if (!controller.signal.aborted)
+      } catch (failure) {
+        if (!controller.signal.aborted) {
+          if (shouldClearCachedData(failure)) {
+            setSeries([]);
+          }
           setError(
             'Messdaten konnten nicht aktualisiert werden. Angezeigte Werte können veraltet sein.'
           );
+        }
       } finally {
         if (!controller.signal.aborted) {
-          if (first) setLoading(false);
-          first = false;
-          timer = setTimeout(refresh, 10000);
+          setLoading(false);
+          dataTimer = setTimeout(refreshData, 10000);
         }
       }
     };
-    void refresh();
+    const refreshRecordings = async () => {
+      try {
+        const files = await read<Recording[]>(
+          `${base}/recordings?range=${range}`,
+          controller.signal
+        );
+        if (controller.signal.aborted) return;
+        setRecordings(files);
+        setRecordingsError('');
+      } catch (failure) {
+        if (!controller.signal.aborted) {
+          if (shouldClearCachedData(failure)) setRecordings([]);
+          setRecordingsError(
+            'Aufnahmeliste konnte nicht aktualisiert werden. Angezeigte Einträge können veraltet sein.'
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setRecordingsLoading(false);
+          recordingsTimer = setTimeout(refreshRecordings, 10000);
+        }
+      }
+    };
+    void refreshData();
+    void refreshRecordings();
     return () => {
       controller.abort();
-      clearTimeout(timer);
+      clearTimeout(dataTimer);
+      clearTimeout(recordingsTimer);
     };
   }, [base, range, retry]);
   const points = series.reduce((sum, item) => sum + item.data.length, 0);
@@ -96,7 +157,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           <p className="mt-1 text-xs text-gray-500">Aktualisiert sich alle zehn Sekunden.</p>
         </div>
         <a
-          href={`${base}/export?range=${range}`}
+          href={`${base}/export?${new URLSearchParams({ range, ...(viewBounds ?? {}), ...(range === '5m' || range === '1h' ? { resolution: '1' } : {}) })}`}
           className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-800"
         >
           CSV herunterladen
@@ -128,11 +189,13 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           Messwerte werden geladen …
         </p>
       ) : points === 0 ? (
-        <p role="status" className="py-8 text-sm text-gray-500">
-          {device.last_seen
-            ? 'In diesem Zeitraum sind noch keine aufbereiteten Messwerte vorhanden. Neue Daten erscheinen nach wenigen Sekunden; ältere Messungen findest du über einen längeren Zeitraum.'
-            : 'Der Sensor ist verbunden. Sobald erste Messwerte eintreffen, erscheint hier der Verlauf.'}
-        </p>
+        error ? null : (
+          <p role="status" className="py-8 text-sm text-gray-500">
+            {device.last_seen
+              ? 'In diesem Zeitraum sind noch keine aufbereiteten Messwerte vorhanden. Neue Daten erscheinen nach wenigen Sekunden; ältere Messungen findest du über einen längeren Zeitraum.'
+              : 'Der Sensor ist verbunden. Sobald erste Messwerte eintreffen, erscheint hier der Verlauf.'}
+          </p>
+        )
       ) : (
         <>
           {latest && (
@@ -154,6 +217,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
                 series={item}
                 color="#10b981"
                 unit={item.unit}
+                showPeaks={range === '5m' || range === '1h'}
                 formatTick={(stamp) =>
                   new Date(stamp).toLocaleString(
                     'de-CH',
@@ -172,6 +236,11 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           </p>
         </>
       )}
+      {recordingsError && (
+        <p role="alert" className="mt-4 text-sm text-amber-800">
+          {recordingsError}
+        </p>
+      )}
       <details className="mt-5 border-t border-emerald-100 pt-4">
         <summary className="cursor-pointer text-sm font-medium text-emerald-800">
           Originalaufnahmen · WAV ({recordings.length}
@@ -182,10 +251,16 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           Übertragung dauert dies bis zu zehn Minuten. Angezeigt werden die neuesten 100 Dateien im
           gewählten Zeitraum.
         </p>
-        {recordings.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Noch keine abgeschlossene Aufnahme in diesem Zeitraum.
+        {recordingsLoading ? (
+          <p role="status" className="text-sm text-gray-500">
+            Aufnahmeliste wird geladen …
           </p>
+        ) : recordings.length === 0 ? (
+          recordingsError ? null : (
+            <p className="text-sm text-gray-500">
+              Noch keine abgeschlossene Aufnahme in diesem Zeitraum.
+            </p>
+          )
         ) : (
           <ul className="max-h-64 divide-y divide-gray-100 overflow-auto">
             {recordings.map((file) => (
@@ -197,6 +272,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
                   {new Date(file.started_at).toLocaleString('de-CH')}{' '}
                   <span className="text-gray-500">
                     · {Math.round(file.duration_seconds)} s · {file.sample_rate} Hz
+                    <RecordingCompletenessBadge completeness={nominalCompleteness(file, true)} />
                   </span>
                 </span>
                 <a
@@ -210,6 +286,16 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           </ul>
         )}
       </details>
+      <div className="mt-4">
+        {viewBounds && (
+          <ArchiveExportPanel
+            kind="direct"
+            sensorId={device.id}
+            from={viewBounds.from_dt}
+            to={viewBounds.to_dt}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -233,9 +319,9 @@ export function useDirectDevices(enabled = true) {
           setAvailable(true);
           setError(false);
         }
-      } catch {
+      } catch (failure) {
         if (active) {
-          setDevices([]);
+          if (shouldClearCachedData(failure)) setDevices([]);
           setError(true);
         }
       } finally {

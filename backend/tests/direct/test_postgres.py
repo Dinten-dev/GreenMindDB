@@ -4,17 +4,19 @@ import os
 import shutil
 import subprocess
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from app.direct.assembler import assemble_one
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
-from app.direct.models import Base, Budget, Chunk, Revision
+from app.direct.models import Base, Budget, Chunk, Device, PayloadReference, Revision
+from app.direct.payloads import offload_verified_chunks
 from tests.direct.conftest import build_pipeline
 
 pytestmark = pytest.mark.integration
@@ -66,6 +68,96 @@ def test_postgres_two_workers_publish_one_revision(pg_pipeline):
     assert sorted(results) == [False, True]
     with transaction(p.engine) as db:
         assert db.query(Revision).count() == 1
+
+
+def test_postgres_offload_and_duplicate_uploads_account_once(pg_pipeline, tmp_path):
+    from tests.direct.test_payloads import archive_copy, publish
+
+    p = pg_pipeline
+    for sequence in range(10):
+        assert (
+            p.upload(
+                bytes(1200), p.metadata(bytes(1200), sequence=sequence, first_frame=100 * sequence)
+            ).status_code
+            == 201
+        )
+    publish(p)
+    archived = archive_copy(p, tmp_path / "box")
+
+    def operate(index):
+        if index % 2:
+            assert p.upload(bytes(1200)).json()["status"] == "duplicate"
+            return 0
+        return offload_verified_chunks(p.engine, p.store, archived)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert sum(pool.map(operate, range(16))) == 12000
+    with transaction(p.engine) as db:
+        assert db.query(PayloadReference).count() == 10
+        assert db.get(Budget, 1).used_bytes == db.get(Device, p.device_id).spool_bytes == 0
+
+
+def test_postgres_reference_upgrade_is_additive_and_repeatable(pg_pipeline, monkeypatch):
+    from app.direct import provision
+
+    p = pg_pipeline
+    assert p.upload(bytes(1200)).status_code == 201
+    PayloadReference.__table__.drop(p.engine)
+    monkeypatch.setattr(provision, "DirectSettings", lambda: p.cfg)
+    monkeypatch.setattr("sys.argv", ["provision", "upgrade-payload-references"])
+    provision.main()
+    provision.main()
+    with transaction(p.engine) as db:
+        assert db.query(PayloadReference).count() == 0
+        assert db.query(Chunk).one().payload == bytes(1200)
+        assert db.get(Budget, 1).used_bytes == 1200
+
+
+@pytest.mark.parametrize("permitted", [False, True])
+def test_postgres_upgrade_grants_only_existing_chunk_reader(pg_pipeline, monkeypatch, permitted):
+    from app.direct import provision
+
+    p = pg_pipeline
+    role = "gm_reference_test_" + uuid.uuid4().hex
+    PayloadReference.__table__.drop(p.engine)
+    with p.engine.begin() as connection:
+        connection.execute(text("CREATE ROLE " + role))
+        if permitted:
+            connection.execute(text("GRANT SELECT ON direct_chunk TO " + role))
+    monkeypatch.setattr(provision, "DirectSettings", lambda: p.cfg)
+    monkeypatch.setattr(
+        "sys.argv", ["provision", "upgrade-payload-references", "--read-role", role]
+    )
+    try:
+        if permitted:
+            provision.main()
+            with p.engine.connect() as connection:
+                assert (
+                    connection.execute(
+                        text(
+                            "SELECT has_table_privilege(:role, 'direct_chunk_payload_ref', 'SELECT')"
+                        ),
+                        {"role": role},
+                    ).scalar()
+                    is True
+                )
+                assert (
+                    connection.execute(
+                        text(
+                            "SELECT has_table_privilege(:role, 'direct_chunk_payload_ref', 'INSERT')"
+                        ),
+                        {"role": role},
+                    ).scalar()
+                    is False
+                )
+        else:
+            with pytest.raises(SystemExit, match="already have Direct chunk access"):
+                provision.main()
+            assert "direct_chunk_payload_ref" not in inspect(p.engine).get_table_names()
+    finally:
+        with p.engine.begin() as connection:
+            connection.execute(text("DROP OWNED BY " + role))
+            connection.execute(text("DROP ROLE " + role))
 
 
 def test_postgres_devices_and_sessions_remain_independent(pg_pipeline):

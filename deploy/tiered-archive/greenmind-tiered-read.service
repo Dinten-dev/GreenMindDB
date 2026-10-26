@@ -1,0 +1,32 @@
+[Unit]
+Description=GreenMind private bounded historical queries
+After=network-online.target greenmind-source-link.service
+
+[Service]
+Type=simple
+User=greenmind-archive-read
+Group=greenmind-archive-read
+Slice=greenmind-archive.slice
+EnvironmentFile=/etc/greenmind/tiered-archive-read.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=OMP_NUM_THREADS=1
+ExecStart=/opt/greenmind/tiered-archive/current/python/bin/python -m app.tiered_archive.read_service
+WorkingDirectory=/opt/greenmind/tiered-archive/current/backend
+UMask=0077
+RuntimeDirectory=greenmind-tiered-archive
+RuntimeDirectoryMode=0700
+ReadWritePaths=/var/lib/greenmind/tiered-archive/cache /run/greenmind-tiered-archive
+MemoryMax=192M
+MemorySwapMax=0
+CPUQuota=25%
+TasksMax=16
+Nice=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

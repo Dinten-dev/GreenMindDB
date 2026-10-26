@@ -1,0 +1,14 @@
+[Unit]
+Description=Prepared daily WAV backup at Swiss midnight
+ConditionPathExists=/etc/greenmind/raw-archive/APPROVED
+
+[Timer]
+OnCalendar=*-*-* 00:00:00 Europe/Zurich
+AccuracySec=1min
+RandomizedDelaySec=0
+# No surprise catch-up transfer after reboot. The next run resumes durable work.
+Persistent=false
+Unit=greenmind-raw-backup.service
+
+[Install]
+WantedBy=timers.target

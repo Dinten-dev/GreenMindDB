@@ -1,0 +1,12 @@
+[Unit]
+Description=GreenMind serialized archive cycles
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=10min
+AccuracySec=30s
+Persistent=true
+Unit=greenmind-tiered-archive.service
+
+[Install]
+WantedBy=timers.target

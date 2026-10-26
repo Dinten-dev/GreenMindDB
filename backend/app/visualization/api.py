@@ -26,19 +26,22 @@ from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.rate_limit import limiter
-from app.zone_access import zone_access_filter
+from app.transaction_pool import attach_read_guards
+from app.visualization.resolution import display_step
+from app.zone_access import is_platform_admin, zone_access_filter
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 read_engine = create_engine(
     os.environ.get("DATABASE_URL", "postgresql+psycopg2://localhost/plantdb"),
-    pool_size=3,
+    pool_size=1 if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true" else 3,
     max_overflow=0,
     pool_timeout=5,
     pool_pre_ping=True,
     connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"},
 )
+attach_read_guards(read_engine, statement_ms=8000, lock_ms=150, work_mem_kib=8192)
 
 
 def read_db():
@@ -67,7 +70,7 @@ async def private_response(request, call_next):
 
 
 def authorize(db, user, sensor_id):
-    if not user.organization_id:
+    if not user.organization_id and not is_platform_admin(user):
         raise HTTPException(403, "No organization")
     sensor = (
         db.query(Sensor.id)
@@ -96,23 +99,36 @@ def uncovered(start, end, ranges):
     return [(a, b) for a, b in segments if a < b]
 
 
-def query_series(db, sensor_id, start, end, requested, limit=20000):
+def _query_local_series(db, sensor_id, start, end, requested, limit=20000):
     db.execute(text("SET LOCAL statement_timeout='8s'"))
     db.execute(text("SET LOCAL lock_timeout='150ms'"))
+    if requested >= 600 and os.getenv("VISUAL_WAV_FEATURE_SERIES_ENABLED", "false") == "true":
+        from app.visualization.feature_series import series as feature_series
+
+        summaries = feature_series(db, sensor_id, start, end, requested, limit)
+        if summaries:
+            if len(summaries[0]["data"]) >= limit:
+                raise HTTPException(413, "Choose a coarser resolution")
+            return summaries
     params = {"sid": sensor_id, "start": start, "end": end, "step": requested, "lim": limit}
-    # A verified chunk's source rows are represented atomically by its rollups.
+    from app.tiered_archive.gateway_references import relation
+
+    reading_relation, wave_relation = relation(), relation(waves=True)
+    # A verified chunk's source rows are represented atomically by its rollups,
+    # except explicit missing-parent projections; their retained source remains readable.
     # Late arrivals are incorporated by the next worker pass, never double counted.
     covered = db.execute(
         text(
-            "SELECT range_start,range_end FROM visual_chunk WHERE status IN ('verified','compacted') AND range_start<:end AND range_end>:start"
+            "SELECT range_start,range_end FROM visual_chunk WHERE status IN ('verified','compacted') AND range_start<:end AND range_end>:start AND NOT (coalesce(archive_manifest::jsonb->'orphan_sensor_ids','[]'::jsonb) ? CAST(:sid AS text))"
         ),
         params,
     ).all()
     grouped = (
         db.execute(
-            text("""SELECT kind,unit,to_timestamp(floor(extract(epoch FROM bucket)/greatest(seconds,:step))*greatest(seconds,:step)) AS stamp,
+            text(f"""SELECT kind,unit,to_timestamp(floor(extract(epoch FROM bucket)/greatest(seconds,:step))*greatest(seconds,:step)) AS stamp,
       greatest(seconds,:step) AS seconds,sum(n) AS n,sum(total) AS total,sum(total2) AS total2,min(minimum) AS minimum,max(maximum) AS maximum
-      FROM visual_reading WHERE sensor_id=:sid AND bucket<:end AND bucket+seconds*interval '1 second'>:start
+      FROM {reading_relation} AS r WHERE sensor_id=:sid AND bucket>:start-interval '600 seconds'
+      AND bucket<:end AND bucket+seconds*interval '1 second'>:start
       GROUP BY kind,unit,stamp,greatest(seconds,:step) ORDER BY stamp LIMIT :lim"""),
             params,
         )
@@ -150,13 +166,17 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
                 target[field] += row[field]
             target["minimum"] = min(target["minimum"], row["minimum"])
             target["maximum"] = max(target["maximum"], row["maximum"])
+    # The validated schema constrains both rollup tables to 60/600 seconds.
+    # Retain the exact overlap predicate; the index bound excludes only buckets
+    # that cannot intersect the requested window, including its left boundary.
     waves = (
         db.execute(
-            text("""SELECT to_timestamp(floor(extract(epoch FROM w.bucket)/greatest(w.seconds,:step))*greatest(w.seconds,:step)) AS stamp,
+            text(f"""SELECT to_timestamp(floor(extract(epoch FROM w.bucket)/greatest(w.seconds,:step))*greatest(w.seconds,:step)) AS stamp,
       greatest(w.seconds,:step) AS seconds,sum(n) AS n,sum(total) AS total,sum(total2) AS total2,
       min(minimum) AS minimum,max(maximum) AS maximum,sum(duration) AS duration
-      FROM visual_wave w JOIN visual_wav v ON v.wav_id=w.wav_id
-      WHERE w.sensor_id=:sid AND w.bucket<:end AND w.bucket+w.seconds*interval '1 second'>:start AND v.status='verified'
+      FROM {wave_relation} w JOIN visual_wav v ON v.wav_id=w.wav_id
+      WHERE w.sensor_id=:sid AND w.bucket>:start-interval '600 seconds'
+      AND w.bucket<:end AND w.bucket+w.seconds*interval '1 second'>:start AND v.status='verified'
       GROUP BY stamp,greatest(w.seconds,:step)"""),
             params,
         )
@@ -169,6 +189,8 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
         mean = row["total"] / row["n"]
         point = {
             "timestamp": row["stamp"].isoformat(),
+            "_total": row["total"],
+            "_total2": row["total2"],
             "value": round(mean, 4),
             "resolution_seconds": row["seconds"],
             "reading_count": row["n"],
@@ -185,6 +207,10 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
             else None
         )
         if observed:
+            point["_wave"] = {
+                key: observed[key]
+                for key in ("n", "total", "total2", "minimum", "maximum", "duration")
+            }
             coverage = observed["duration"] / row["seconds"]
             if coverage <= 1.02:
                 rms = math.sqrt(max(0, observed["total2"] / int(observed["n"])))
@@ -223,6 +249,28 @@ def query_series(db, sensor_id, start, end, requested, limit=20000):
     ]
 
 
+def query_series(db, sensor_id, start, end, requested, limit=20000):
+    from app.tiered_archive.reader import history
+
+    try:
+        return history(
+            _query_local_series(db, sensor_id, start, end, requested, limit),
+            db,
+            sensor_id,
+            start,
+            end,
+            requested,
+            source="gateway",
+            limit=limit,
+        )
+    except Exception as error:
+        from app.raw_archive.policy import ArchiveBlocked
+
+        if isinstance(error, (ArchiveBlocked, OSError, TimeoutError)):
+            raise HTTPException(503, "Historical archive temporarily unavailable") from error
+        raise
+
+
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1 FROM visual_reading LIMIT 1"))
@@ -246,6 +294,8 @@ def data(
     range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
     resolution: str | None = Query(None, pattern="^(raw|1m|5m|10m|1h|1d)$"),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -258,17 +308,18 @@ def data(
             end = start + timedelta(days=1)
         except ValueError as exc:
             raise HTTPException(400, "Invalid date") from exc
-    step = (
-        RESOLUTIONS[resolution]
-        if resolution
-        else (
-            1
-            if end - start <= timedelta(hours=1)
-            else 60
-            if end - start <= timedelta(days=7)
-            else 600
+    if (from_dt is None) != (to_dt is None):
+        raise HTTPException(400, "Both time bounds are required")
+    if from_dt is not None:
+        start, end = from_dt, to_dt
+    if start.tzinfo is None or end.tzinfo is None:
+        raise HTTPException(400, "Time bounds must include a timezone")
+    try:
+        step = display_step(
+            start, end, requested=RESOLUTIONS.get(resolution) if resolution else None
         )
-    )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return query_series(db, sensor_id, start, end, step)
 
 
@@ -283,13 +334,27 @@ def export(
     request: Request,
     sensor_id: uuid.UUID,
     range: str = Query("24h", pattern="^(1h|24h|7d|30d|all)$"),
+    resolution: str | None = Query(None, pattern="^(raw|1m|5m|10m|1h|1d)$"),
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     authorize(db, user, sensor_id)
     end = datetime.now(UTC)
     start = end - (timedelta(days=3650) if range == "all" else RANGES[range])
-    step = 1 if range == "1h" else 60 if range in ("24h", "7d") else 600
+    if (from_dt is None) != (to_dt is None):
+        raise HTTPException(400, "Both time bounds are required")
+    if from_dt is not None:
+        start, end = from_dt, to_dt
+    if start.tzinfo is None or end.tzinfo is None:
+        raise HTTPException(400, "Time bounds must include a timezone")
+    try:
+        step = display_step(
+            start, end, requested=RESOLUTIONS.get(resolution) if resolution else None
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     records = query_series(db, sensor_id, start, end, step, settings.sensor_export_max_rows)
     if not records:
         raise HTTPException(404, "No data available for export")
@@ -337,6 +402,9 @@ def export(
                     "standard_deviation",
                     "coverage_ratio",
                     "signal_source",
+                    "source_interval_start",
+                    "source_interval_end",
+                    "timing_overlap_seconds",
                 ]
             )
             for row in item["data"]:
@@ -352,6 +420,9 @@ def export(
                         row["standard_deviation"],
                         row["coverage_ratio"],
                         row["signal_source"],
+                        row.get("source_interval_start", ""),
+                        row.get("source_interval_end", ""),
+                        row.get("timing_overlap_seconds", ""),
                     ]
                 )
                 if out.tell() + size > settings.sensor_export_max_bytes:
@@ -379,6 +450,7 @@ def waveform(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from app.raw_archive.reader import get_object
     from app.services.wav_service import _get_s3_client
 
     authorize(db, user, sensor_id)
@@ -386,9 +458,9 @@ def waveform(
         at = at.replace(tzinfo=UTC)
     item = (
         db.execute(
-            text("""SELECT w.*,f.source_sha256 FROM wav_file w JOIN wav_feature f ON f.wav_file_id=w.id
+            text("""SELECT w.*,coalesce(f.source_sha256,w.content_sha256) AS source_sha256 FROM wav_file w LEFT JOIN wav_feature f ON f.wav_file_id=w.id
       WHERE w.sensor_id=:sid AND w.started_at<=:at AND w.ended_at>:at AND w.feature_status='verified'
-      AND w.raw_deleted_at IS NULL AND w.timing_status IN ('complete','inferred') AND w.coverage_ratio>=0.999
+      AND w.timing_status IN ('complete','inferred') AND w.coverage_ratio>=0.999
       ORDER BY w.started_at DESC LIMIT 1"""),
             {"sid": sensor_id, "at": at},
         )
@@ -399,7 +471,9 @@ def waveform(
         raise HTTPException(
             404, "Für diesen Zeitpunkt ist kein zeitlich zuordenbares WAV verfügbar."
         )
-    response = _get_s3_client().get_object(Bucket="greenmind-raw", Key=item["s3_key"])
+    response = get_object(
+        _get_s3_client(), Bucket="greenmind-raw", Key=item["s3_key"], kind="gateway"
+    )
     try:
         if response["ContentLength"] > 16 * 1024**2:
             raise HTTPException(413, "WAV too large for bounded preview")
@@ -441,3 +515,14 @@ def waveform(
 from app.visualization.direct_api import install as install_direct_views  # noqa: E402
 
 install_direct_views(app)
+from app.visualization.archive_exports import install as install_archive_exports  # noqa: E402
+
+install_archive_exports(app)
+
+from app.visualization.compat_downloads import install as install_compat_downloads  # noqa: E402
+
+install_compat_downloads(app)
+
+from app.visualization.remote_auth import install as install_remote_auth  # noqa: E402
+
+install_remote_auth(app)

@@ -1,0 +1,260 @@
+"""Bounded resumable SQL sweeps and proof refresh; activation stays separate."""
+
+import hashlib
+import json
+import os
+import stat
+import time
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from app.raw_archive.health import SafetyPause
+from app.raw_archive.policy import ArchiveBlocked
+
+from .codec import decode, encode
+from .ledger import Ledger
+from .policy import utc
+from .runtime import environment, state_root
+from .source import DATASETS
+
+
+def private_json(path, maximum=1024 * 1024):
+    with Path(path).open("rb") as body:
+        info = os.fstat(body.fileno())
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_mode & 0o077
+            or info.st_uid not in {0, os.getuid()}
+        ):
+            raise ArchiveBlocked("Private operator-owned schedule required")
+        raw = body.read(maximum + 1)
+    if len(raw) > maximum:
+        raise ArchiveBlocked("Schedule exceeds budget")
+    return json.loads(raw)
+
+
+def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
+    from .deletion import activation, limits
+    from .policy import eligibility
+    from .runtime import (
+        backup as database_backup,
+    )
+    from .runtime import (
+        candidate_from_json,
+        evict,
+        latest_snapshot,
+        publish_sql,
+        publish_wav,
+        verify,
+        wav_source,
+    )
+
+    plan = private_json(path)
+    if plan.get("environment") != environment() or plan.get("schema") != 1:
+        raise ArchiveBlocked("Schedule environment differs")
+    tasks = plan.get("scopes", [])
+    wav_sources = plan.get("wav_sources", [])
+    backups = plan.get("backups", [])
+    if (
+        not 0 <= len(tasks) <= 256
+        or any(source not in {"gateway", "direct"} for source in wav_sources)
+        or len(backups) > 2
+        or any(source not in {"gateway", "direct"} for source in backups)
+        or not (tasks or wav_sources or backups)
+    ):
+        raise ArchiveBlocked("Explicit bounded dataset scopes required")
+    started = time.monotonic()
+    deadline = started + min(300, seconds)
+    copy_deadline = started + min(150, seconds / 2)
+    ledger = Ledger(state_root())
+    db = ledger.db
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS sweep(id TEXT PRIMARY KEY, cursor BLOB, day TEXT, due TEXT)"
+    )
+    db.commit()
+    result = {"published": 0, "verified": 0, "evicted": 0, "blocked": 0}
+    try:
+        for source in backups:
+            if time.monotonic() >= copy_deadline:
+                break
+            identity = "database-backup-" + source
+            state = db.execute("SELECT due FROM sweep WHERE id=?", (identity,)).fetchone()
+            if state and utc(state[0]) > clock():
+                continue
+            database_backup(source)
+            result["published"] += 1
+            with db:
+                db.execute(
+                    "INSERT INTO sweep VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET due=excluded.due",
+                    (
+                        identity,
+                        None,
+                        clock().isoformat(),
+                        (clock() + timedelta(hours=12)).isoformat(),
+                    ),
+                )
+        for source in wav_sources:
+            if time.monotonic() >= copy_deadline:
+                break
+            identity = "wav-sweep-" + source
+            state = db.execute(
+                "SELECT cursor,day,due FROM sweep WHERE id=?", (identity,)
+            ).fetchone()
+            if state and utc(state[2]) > clock():
+                continue
+            cursor = decode(state[0]) if state and state[0] else None
+            adapter = wav_source(source, lambda: None)
+            before = clock().replace(hour=0, minute=0, second=0, microsecond=0)
+            references = adapter.catalog.page(cursor, before, 10)
+            for reference in references:
+                if time.monotonic() >= copy_deadline:
+                    break
+                try:
+                    publish_wav(source, reference)
+                    result["published"] += 1
+                except SafetyPause:
+                    raise
+                except ArchiveBlocked:
+                    result["blocked"] += 1
+                with db:
+                    db.execute(
+                        "INSERT INTO sweep VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,due=excluded.due",
+                        (identity, encode(reference), before.isoformat(), clock().isoformat()),
+                    )
+            if not references:
+                with db:
+                    db.execute(
+                        "INSERT INTO sweep VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET cursor=NULL,due=excluded.due",
+                        (
+                            identity,
+                            None,
+                            before.isoformat(),
+                            (clock() + timedelta(days=1)).isoformat(),
+                        ),
+                    )
+        from collections import deque
+
+        queue = deque(tasks)
+        while queue:
+            task = queue.popleft()
+            if time.monotonic() >= copy_deadline:
+                break
+            dataset = task["dataset"]
+            if dataset not in DATASETS:
+                raise ArchiveBlocked("Unknown dataset remains blocked")
+            identity = hashlib.sha256(json.dumps(task, sort_keys=True).encode()).hexdigest()
+            state = db.execute(
+                "SELECT cursor,day,due FROM sweep WHERE id=?", (identity,)
+            ).fetchone()
+            if state and utc(state[2]) > clock():
+                continue
+            # Closed UTC day partitions; a completed sweep is revisited daily so
+            # inserts/changes after the cursor are not silently lost forever.
+            day = utc(state[1]) if state else utc(task["start"])
+            cursor = decode(state[0]) if state and state[0] else None
+            end = min(
+                day + timedelta(days=1), clock().replace(hour=0, minute=0, second=0, microsecond=0)
+            )
+            if end <= day:
+                continue
+            out = publish_sql(
+                DATASETS[dataset].source, dataset, task["organization"], day, end, after=cursor
+            )
+            result["published"] += int(out.get("status") != "empty")
+            full = out.get("full_page", False)
+            next_cursor = encode(out["next_cursor"]) if full else None
+            next_day = day if full else end
+            due = clock()
+            if next_day >= clock().replace(hour=0, minute=0, second=0, microsecond=0):
+                next_day = utc(task["start"])
+                due += timedelta(days=1)
+            with db:
+                db.execute(
+                    "INSERT INTO sweep VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,day=excluded.day,due=excluded.due",
+                    (identity, next_cursor, next_day.isoformat(), due.isoformat()),
+                )
+            if due <= clock():
+                queue.append(task)
+        snapshot_id = plan.get("snapshot_id") or (
+            latest_snapshot() if plan.get("scheduled_snapshots") else None
+        )
+        deleted_wavs = deleted_bytes = deleted_sql = 0
+        for (raw,) in db.execute("SELECT receipt FROM bundle ORDER BY start"):
+            if time.monotonic() >= deadline:
+                break
+            receipt = json.loads(raw)
+            if receipt["state"] == "evicted":
+                continue
+            if receipt["state"] == "verified" and not all(
+                receipt["source"].get(name)
+                for name in (
+                    "complete",
+                    "features_verified",
+                    "projections_verified",
+                    "dependencies_complete",
+                )
+            ):
+                continue
+            if snapshot_id and (
+                receipt["state"] == "published"
+                or clock() - utc(receipt["verified_at"]) >= timedelta(hours=12)
+            ):
+                try:
+                    verify(receipt["candidate"], snapshot_id)
+                    result["verified"] += 1
+                except SafetyPause:
+                    raise
+                except ArchiveBlocked:
+                    result["blocked"] += 1
+                    continue
+            if os.getenv("TIERED_ARCHIVE_DELETE_ENABLED", "false") == "true":
+                if receipt["source"].get("active"):
+                    continue
+                try:
+                    current = ledger.get(receipt["candidate"])
+                    candidate = candidate_from_json(current["source"])
+                    eligibility(candidate, current, clock())
+                    permit = activation(
+                        os.environ["TIERED_ARCHIVE_ACTIVATION_FILE"],
+                        os.environ["TIERED_ARCHIVE_ACTIVATION_SHA256"],
+                        candidate,
+                        clock(),
+                    )
+                    budget = limits(permit)
+                    wavs = [
+                        reference for reference in current["files"] if reference["format"] == "wav"
+                    ]
+                    size = sum(reference["bytes"] for reference in wavs)
+                    if wavs and (
+                        deleted_wavs + len(wavs) > budget["wavs"]
+                        or deleted_bytes + size > budget["wav_bytes"]
+                    ):
+                        continue
+                    if not wavs and deleted_sql >= budget["sql_partitions"]:
+                        continue
+                    evict(receipt["candidate"])
+                    deleted_wavs += len(wavs)
+                    deleted_bytes += size
+                    deleted_sql += int(not wavs)
+                    result["evicted"] += 1
+                except SafetyPause:
+                    raise
+                except ArchiveBlocked:
+                    result["blocked"] += 1
+                    continue
+        if any(result[name] for name in ("published", "verified", "evicted")):
+            from .registry_backup import backup
+            from .runtime import worker
+
+            with worker() as (current, store, checkpoint):
+                reference = backup(current, store, checkpoint=checkpoint)
+                temporary = state_root() / "catalog-reference.pending"
+                with temporary.open("w") as body:
+                    os.chmod(temporary, 0o600)
+                    json.dump(reference, body, sort_keys=True)
+                    body.flush()
+                    os.fsync(body.fileno())
+                os.replace(temporary, state_root() / "catalog-reference.json")
+        return result
+    finally:
+        ledger.close()

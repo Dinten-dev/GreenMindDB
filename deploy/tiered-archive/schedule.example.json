@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "environment": "staging",
+  "wav_sources": ["gateway", "direct"],
+  "backups": ["gateway", "direct"],
+  "scheduled_snapshots": true,
+  "scopes": []
+}

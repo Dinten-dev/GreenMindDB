@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": [
+        "arn:aws:s3:::greenmind-raw/*",
+        "arn:aws:s3:::greenmind-direct-production-hotspot/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucketVersions", "s3:GetBucketVersioning", "s3:GetLifecycleConfiguration"],
+      "Resource": [
+        "arn:aws:s3:::greenmind-raw",
+        "arn:aws:s3:::greenmind-direct-production-hotspot"
+      ]
+    },
+    {
+      "Effect": "Deny",
+      "Action": ["s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:DeleteBucket", "s3:PutBucketVersioning", "s3:PutLifecycleConfiguration"],
+      "Resource": ["arn:aws:s3:::*"]
+    }
+  ]
+}

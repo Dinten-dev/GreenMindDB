@@ -282,11 +282,19 @@ def test_sidecar_auth_and_cross_tenant_isolation(fixture):
     route = f"/api/v1/sensors/{ids['sensor']}/data?date={start.date()}"
     assert client.get(route).status_code == 401
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=uuid.uuid4(), role="admin"
+        organization_id=uuid.uuid4(),
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="other-tenant@example.test",
     )
     assert client.get(route).status_code == 404
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=ids["org"], role="admin"
+        organization_id=ids["org"],
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="reader@example.test",
     )
     result = client.get(route)
     assert result.status_code == 200, result.text
@@ -437,6 +445,153 @@ def test_quality_metadata_blocks_removal_for_existing_feature_workers(fixture):
     assert not worker.prune_chunk(engine, chunk)
 
 
+def add_orphan_reading(engine, stamp, sensor_id, value=99):
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO sensor_reading(timestamp,sensor_id,kind,value,unit) VALUES (:stamp,:sid,'bio_signal',:value,'mV')"
+            ),
+            {"stamp": stamp, "sid": sensor_id, "value": value},
+        )
+
+
+def test_orphan_readings_archive_all_originals_and_protect_source(fixture):
+    engine, ids, start, add = fixture
+    missing = uuid.uuid4()
+    add(start, 10)
+    add(start + timedelta(seconds=1), 30)
+    add_orphan_reading(engine, start + timedelta(seconds=2), missing)
+    chunk = chunk_for(engine, start)
+    manifest = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    archived = list(read_archive(manifest))
+    assert manifest["rows"] == len(archived) == 3
+    assert [row["value"] for row in archived] == [10, 30, 99]
+    assert manifest["orphan_rows"] == 1
+    assert manifest["protected_rows"] == 1
+    assert manifest["orphan_sensor_ids"] == [str(missing)]
+    assert manifest["projection_status"] == "incomplete_missing_sensor"
+    assert not worker.prune_chunk(engine, chunk)
+    with engine.connect() as db:
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 3
+        assert db.execute(text("SELECT n,total,minimum,maximum FROM visual_reading")).one() == (
+            2,
+            40,
+            10,
+            30,
+        )
+        assert db.execute(text("SELECT source_rows FROM visual_chunk")).scalar_one() == 3
+
+
+def test_parent_return_reprojects_without_double_counting_or_repeated_snapshots(fixture):
+    from pathlib import Path
+
+    engine, ids, start, add = fixture
+    missing = uuid.uuid4()
+    add(start, 10)
+    add_orphan_reading(engine, start + timedelta(seconds=1), missing)
+    chunk = chunk_for(engine, start)
+    first = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert worker.snapshot_candidate(engine) is None
+    # Another ordinary chunk can progress instead of repeatedly retrying this one.
+    add(start - timedelta(days=2), 20)
+    another = chunk_for(engine, start - timedelta(days=2))
+    assert worker.snapshot_candidate(engine)["chunk_name"] == another["chunk_name"]
+    worker.snapshot_chunk(engine, another, datetime.now(UTC))
+    with engine.begin() as db:
+        db.execute(
+            text("INSERT INTO sensor VALUES (:sid,:gateway)"),
+            {"sid": missing, "gateway": ids["gateway"]},
+        )
+    # Parent return must expose retained source before the asynchronous snapshot.
+    with engine.connect() as db:
+        series = query_series(db, missing, start, start + timedelta(minutes=10), 60)
+        assert series[0]["data"][0]["value"] == 99
+        valid = query_series(db, ids["sensor"], start, start + timedelta(minutes=10), 60)
+        assert len(valid[0]["data"]) == 1 and valid[0]["data"][0]["value"] == 10
+    assert worker.snapshot_candidate(engine)["chunk_name"] == chunk["chunk_name"]
+    second = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert second["orphan_rows"] == 0 and second["projection_status"] == "complete"
+    assert second["sha256"] == first["sha256"] and Path(first["path"]).is_file()
+    assert worker.snapshot_candidate(engine) is None
+    with engine.connect() as db:
+        series = query_series(db, missing, start, start + timedelta(minutes=10), 60)
+        assert len(series[0]["data"]) == 1 and series[0]["data"][0]["value"] == 99
+        values = db.execute(
+            text("SELECT sensor_id,sum(n),sum(total) FROM visual_reading GROUP BY sensor_id")
+        ).all()
+        assert {str(sid): (n, total) for sid, n, total in values} == {
+            str(ids["sensor"]): (2, 30),
+            str(missing): (1, 99),
+        }
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 3
+
+
+@pytest.mark.parametrize("protection", ["orphan_rows", "protected_rows"])
+def test_prune_rechecks_current_manifest_under_lock(fixture, monkeypatch, protection):
+    import json
+
+    engine, ids, start, add = fixture
+    add(start, 10)
+    chunk = chunk_for(engine, start)
+    manifest = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    original_read = worker.read_archive
+
+    def replace_manifest_after_read(saved):
+        yield from original_read(saved)
+        changed = dict(manifest)
+        changed[protection] = 1
+        with engine.begin() as db:
+            db.execute(
+                text("UPDATE visual_chunk SET archive_manifest=:manifest WHERE chunk_name=:name"),
+                {"manifest": json.dumps(changed), "name": chunk["chunk_name"]},
+            )
+
+    monkeypatch.setattr(worker, "read_archive", replace_manifest_after_read)
+    assert not worker.prune_chunk(engine, chunk)
+    with engine.connect() as db:
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 1
+
+
+def test_orphan_quality_protection_is_not_double_counted(fixture):
+    engine, ids, start, add = fixture
+    add_orphan_reading(engine, start, uuid.uuid4())
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "ALTER TABLE sensor_reading ADD COLUMN IF NOT EXISTS source_dropped_samples_total bigint"
+            )
+        )
+        db.execute(text("UPDATE sensor_reading SET source_dropped_samples_total=2"))
+    chunk = chunk_for(engine, start)
+    manifest = worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert manifest["rows"] == manifest["protected_rows"] == manifest["orphan_rows"] == 1
+    assert list(read_archive(manifest))[0]["source_dropped_samples_total"] == 2
+    assert not worker.prune_chunk(engine, chunk)
+
+
+def test_concurrent_reading_parent_removal_keeps_snapshot_atomic(fixture, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    engine, ids, start, add = fixture
+    add(start, 10)
+    chunk = chunk_for(engine, start)
+    original_write = worker.write_archive
+
+    def remove_parent_before_projection(*args, **kwargs):
+        with engine.begin() as db:
+            db.execute(text("DELETE FROM sensor WHERE id=:sid"), {"sid": ids["sensor"]})
+        return original_write(*args, **kwargs)
+
+    monkeypatch.setattr(worker, "write_archive", remove_parent_before_projection)
+    with pytest.raises(OperationalError) as error:
+        worker.snapshot_chunk(engine, chunk, datetime.now(UTC))
+    assert error.value.orig.pgcode == "40001"
+    with engine.connect() as db:
+        assert db.execute(text("SELECT status FROM visual_chunk")).scalar_one() == "pending"
+        assert db.execute(text("SELECT count(*) FROM visual_reading")).scalar_one() == 0
+        assert db.execute(text("SELECT count(*) FROM sensor_reading")).scalar_one() == 1
+
+
 def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monkeypatch):
     from sqlalchemy.orm import Session
 
@@ -479,7 +634,11 @@ def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monk
 
     app.dependency_overrides[get_db] = database
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=ids["org"], role="admin"
+        organization_id=ids["org"],
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="reader@example.test",
     )
     client = TestClient(app)
     route = f"/api/v1/visualization/sensors/{ids['sensor']}/waveform"
@@ -496,7 +655,11 @@ def test_authenticated_original_waveform_reads_real_scaled_samples(fixture, monk
         db.execute(text("UPDATE wav_feature SET source_sha256=:sha"), {"sha": "0" * 64})
     assert client.get(route, params={"at": start.isoformat()}).status_code == 503
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        organization_id=uuid.uuid4(), role="admin"
+        organization_id=uuid.uuid4(),
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        email="other-tenant@example.test",
     )
     assert client.get(route, params={"at": start.isoformat()}).status_code == 404
 
@@ -653,3 +816,67 @@ def test_release_readiness_uses_authenticated_real_api_and_database(fixture, mon
         db.execute(text("UPDATE direct_visual_worker SET updated_at=now()-interval '10 minutes'"))
     with pytest.raises(RuntimeError, match="Direct projection worker unavailable"):
         release_check.check()
+
+
+def test_sample_weighted_features_hash_gate_and_overlap(fixture):
+    import math
+
+    from app.visualization.feature_series import series
+
+    engine, ids, start, add = fixture
+    add(start, 1)
+    with engine.begin() as db:
+        db.execute(
+            text("""ALTER TABLE wav_file ADD COLUMN IF NOT EXISTS content_sha256 text;
+        ALTER TABLE wav_file ADD COLUMN IF NOT EXISTS calibration_version text;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS sample_count bigint;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS sample_rate integer;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS duration_seconds double precision;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS mean double precision;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS rms double precision;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS minimum double precision;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS maximum double precision;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS value_unit text;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS verified_at timestamptz;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS calibration_version text;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS coverage_ratio double precision;
+        ALTER TABLE wav_feature ADD COLUMN IF NOT EXISTS timing_status text""")
+        )
+        for _number, offset, duration, mean, valid in [
+            (1, 0, 600, 10, True),
+            (2, 599, 300, 20, True),
+            (3, 1200, 300, 999, False),
+        ]:
+            wav = uuid.uuid4()
+            first = start + timedelta(seconds=offset)
+            values = dict(
+                id=wav,
+                sensor=ids["sensor"],
+                first=first,
+                last=first + timedelta(seconds=duration),
+                n=duration * 380,
+                duration=duration,
+                mean=mean,
+                rms=math.sqrt(mean * mean + 4),
+                hash="a" * 64,
+                feature_hash=("a" if valid else "b") * 64,
+            )
+            db.execute(
+                text("""INSERT INTO wav_file(id,sensor_id,started_at,ended_at,feature_status,timing_status,coverage_ratio,sample_rate,content_sha256,calibration_version)
+              VALUES(:id,:sensor,:first,:last,'verified','complete',1,380,:hash,'nominal')"""),
+                values,
+            )
+            db.execute(
+                text("""INSERT INTO wav_feature(wav_file_id,source_sha256,sample_count,sample_rate,duration_seconds,mean,rms,minimum,maximum,value_unit,verified_at,calibration_version,coverage_ratio,timing_status)
+              VALUES(:id,:feature_hash,:n,380,:duration,:mean,:rms,1,22,'mV',now(),'nominal',1,'complete')"""),
+                values,
+            )
+        result = series(db, ids["sensor"], start, start + timedelta(hours=1), 3600, 1205)[0][
+            "data"
+        ][0]
+        assert result["reading_count"] == 342000
+        assert result["recording_count"] == 2
+        assert result["value"] == round(40 / 3, 4)
+        assert result["timing_overlap_seconds"] == 1
+        assert result["coverage_ratio"] is None
+        assert result["source_interval_end"] == (start + timedelta(seconds=899)).isoformat()

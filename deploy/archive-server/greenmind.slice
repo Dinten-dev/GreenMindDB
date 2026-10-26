@@ -1,0 +1,8 @@
+[Unit]
+Description=Bounded GreenMind archive and staging workloads
+[Slice]
+MemoryHigh=2G
+MemoryMax=2560M
+MemorySwapMax=0
+CPUQuota=150%
+TasksMax=512

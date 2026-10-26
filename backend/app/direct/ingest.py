@@ -80,6 +80,18 @@ def accept_chunk(engine, settings, token, meta, payload, *, now=None):
                 raise DirectError(409, "sequence_or_frame_overlap")
             if device.spool_bytes + len(payload) > settings.max_device_spool_bytes:
                 raise DirectError(429, "device_spool_full")
+            # A WAV assembler may hold this device's segment during storage IO.
+            # Wait before reserving the shared quota, so other devices can upload.
+            pieces = list(meta.pieces())
+            segments = {
+                bucket: (
+                    db.query(Segment)
+                    .filter_by(device_id=device.id, session_id=identity[1], bucket=bucket)
+                    .with_for_update()
+                    .first()
+                )
+                for bucket, _, _, _, _ in pieces
+            }
             reserved = db.execute(
                 update(Budget)
                 .where(Budget.id == 1, Budget.used_bytes <= settings.max_spool_bytes - len(payload))
@@ -102,13 +114,8 @@ def accept_chunk(engine, settings, token, meta, payload, *, now=None):
             )
             db.add(chunk)
             db.flush()
-            for bucket, lower, upper, offset, count in meta.pieces():
-                segment = (
-                    db.query(Segment)
-                    .filter_by(device_id=device.id, session_id=identity[1], bucket=bucket)
-                    .with_for_update()
-                    .first()
-                )
+            for bucket, lower, upper, offset, count in pieces:
+                segment = segments[bucket]
                 if segment is None:
                     segment = Segment(
                         device_id=device.id,

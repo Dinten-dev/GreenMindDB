@@ -20,6 +20,7 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.models.wav_file import WavFeature, WavFile
 from app.services import wav_service
+from app.services.wav_completeness import gateway_completeness
 from app.zone_access import zone_access_filter
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,7 @@ async def upload_wav(
                 "wav_id": str(existing.id),
                 "s3_key": existing.s3_key,
                 "duration_seconds": existing.duration_seconds,
+                "completeness": gateway_completeness(existing),
                 "coverage_ratio": existing.coverage_ratio,
                 "timing_status": existing.timing_status,
                 "feature_status": existing.feature_status,
@@ -179,6 +181,17 @@ async def upload_wav(
     db.commit()
     db.refresh(wav_record)
 
+    completeness = gateway_completeness(wav_record)
+    if completeness["status"] == "short":
+        logger.warning(
+            "WAV_INCOMPLETE sensor=%s received_samples=%d expected_samples=%d "
+            "missing_seconds=%.3f close_reason=unknown basis=nominal_bucket",
+            sensor_mac,
+            completeness["received_samples"],
+            completeness["expected_samples"],
+            completeness["missing_seconds"],
+        )
+
     logger.info(
         "WAV uploaded: sensor=%s s3=%s duration=%.1fs source=%s timing=%s coverage=%.3f",
         sensor_mac,
@@ -194,6 +207,7 @@ async def upload_wav(
         "wav_id": str(wav_record.id),
         "s3_key": s3_key,
         "duration_seconds": wav_record.duration_seconds,
+        "completeness": completeness,
         "coverage_ratio": wav_record.coverage_ratio,
         "timing_status": wav_record.timing_status,
         "feature_status": wav_record.feature_status,
@@ -241,6 +255,11 @@ def list_wav_files(
             raise HTTPException(status_code=400, detail="Invalid to_dt format") from e
 
     files = query.order_by(desc(WavFile.started_at)).limit(limit).all()
+    from app.raw_archive.reader import verified_objects
+
+    archived = verified_objects(
+        "gateway", "greenmind-raw", [f.s3_key for f in files if f.raw_deleted_at is not None]
+    )
 
     return [
         {
@@ -249,6 +268,7 @@ def list_wav_files(
             "sensor_id": str(f.sensor_id),
             "sample_rate": f.sample_rate,
             "duration_seconds": f.duration_seconds,
+            "completeness": gateway_completeness(f),
             "coverage_ratio": f.coverage_ratio,
             "timing_status": f.timing_status,
             "file_size_bytes": f.file_size_bytes,
@@ -256,7 +276,8 @@ def list_wav_files(
             "ended_at": f.ended_at.isoformat(),
             "created_at": f.created_at.isoformat(),
             "timestamp_source": f.timestamp_source,
-            "raw_available": f.raw_deleted_at is None,
+            "raw_available": f.raw_deleted_at is None or f.s3_key in archived,
+            "archive_lookup_required": f.raw_deleted_at is not None,
             "raw_deleted_at": f.raw_deleted_at.isoformat() if f.raw_deleted_at else None,
             "feature_status": f.feature_status,
             "feature_verified_at": (
@@ -296,7 +317,6 @@ def count_wav_files(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             WavFile.sensor_id == sensor_id,
-            WavFile.raw_deleted_at.is_(None),
             zone_access_filter(current_user),
         )
     )
@@ -355,6 +375,18 @@ def list_wav_features(
         query = query.filter(WavFeature.is_anomaly.is_(True))
 
     features = query.order_by(desc(WavFeature.started_at)).limit(limit).all()
+    from app.tiered_archive.feature_reader import history as feature_history
+
+    features = feature_history(
+        features,
+        db,
+        current_user,
+        sensor_id=sensor_id,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        anomalies_only=anomalies_only,
+        limit=limit,
+    )
     return [
         {
             "id": str(feature.id),
@@ -443,9 +475,6 @@ def download_wav(
     )
     if not wav_file:
         raise HTTPException(status_code=404, detail="WAV file not found")
-    if wav_file.raw_deleted_at is not None:
-        raise HTTPException(status_code=410, detail="Raw WAV expired; verified features remain")
-
     sensor_name = _resolve_sensor_name(wav_file.sensor_id, db)
     filename = wav_service.generate_download_filename(
         sensor_name=sensor_name,
@@ -492,7 +521,6 @@ def download_wav_bundle(
         .join(Zone, Zone.id == Gateway.zone_id)
         .filter(
             WavFile.sensor_id == sensor_id,
-            WavFile.raw_deleted_at.is_(None),
             WavFile.started_at >= start_dt,
             WavFile.ended_at <= end_dt,
             zone_access_filter(current_user),

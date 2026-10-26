@@ -1,0 +1,4 @@
+# Additional dependencies for the isolated archive worker/read broker.
+# The public application image does not require these packages.
+pyarrow==26.0.0
+duckdb==2.0.0

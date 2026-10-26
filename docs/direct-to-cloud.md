@@ -1,20 +1,11 @@
-# Optional Direct ingest — local implementation for Staging review
+# Direct protocol and implementation reference
 
-Relative to the reviewed main baseline `3c82579`, this feature is additive.
-The existing `app.main`, Gateway endpoints, models,
-WAV reader, feature worker, retention worker and authentication are unchanged.
-The normal deployment does not include the Direct Compose overlay.
-The older `develop` differs from this baseline in 52 pre-existing files; see the
-release review before deciding which baseline will be delivered to Staging.
-The owner has now selected main plus Direct for develop/Staging. The accompanying
-review also strengthens byte verification of legacy derived archives and fixes
-frontend security dependencies. Staging retention is explicitly disabled during
-the sensor pilot, including if older server environment values requested it.
-
-Release order required by the owner: review **every change**, then authorize
-`develop`/Staging; connect the first real test sensors; verify both paths; only
-then discuss a separately authorized production release. No push is authorized
-merely by completing these tests.
+The current source has separate Direct ingestion, assembly and visualization services.
+This reference describes their contracts; the early Staging review and acceptance history remain in
+[the initial release review](direct-release-review.md).
+For sensor installation use [the current firmware guide](https://github.com/Dinten-dev/GreenMindArdu/blob/main/docs/direct-to-cloud.md).
+For service entry points see [the backend README](../backend/README.md).
+Service activation and physical acceptance are separate from source publication.
 
 ## Architecture and operating modes
 
@@ -42,7 +33,7 @@ existing mono/380-Hz/PCM16 comparison profile. DUAL cannot be enabled by request
 metadata. Direct comparison results never enter `sensor_reading`, `wav_file`
 or the existing dashboard aggregates, so retries or DUAL cannot double-count
 legacy measurements. Direct results are available through its authenticated
-segment API; a combined dashboard is not implemented by this change.
+segment API; authenticated visualization routes expose Direct results separately from legacy aggregates.
 
 Four-channel/500-Hz/24-bit data is supported by the Direct protocol and assembler.
 The existing Pi only accepts 380 Hz and its WAV format is mono PCM16. Consequently

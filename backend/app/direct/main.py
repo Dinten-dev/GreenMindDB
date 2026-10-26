@@ -8,7 +8,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 
@@ -16,7 +16,7 @@ from app.direct.auth import authenticate
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
 from app.direct.ingest import accept_chunk
-from app.direct.models import Budget, Heartbeat, Revision, Segment
+from app.direct.models import Budget, Chunk, Heartbeat, Revision, Segment
 from app.direct.protocol import ChunkMetadata, DirectError
 from app.direct.storage import ArtifactStore
 
@@ -67,13 +67,28 @@ def create_app(settings=None, engine=None, store=None):
             if budget is None:
                 raise DirectError(503, "direct_schema_not_initialized")
             beat = db.get(Heartbeat, "assembler")
+            free_bytes = max(0, cfg.max_spool_bytes - budget.used_bytes)
+            accepting = free_bytes >= cfg.max_chunk_bytes
             return {
-                "direct_ingest": "healthy",
+                "direct_ingest": "healthy" if accepting else "capacity_limited",
                 "spool_bytes": budget.used_bytes,
+                "spool_limit_bytes": cfg.max_spool_bytes,
+                "spool_free_bytes": free_bytes,
+                "accepting_max_size_chunks": accepting,
                 "assembler": beat.status
                 if beat and beat.updated_at > time.time() - max(90, cfg.poll_seconds * 3)
                 else "unavailable",
             }
+
+    @app.get("/readiness")
+    def readiness():
+        result = health()
+        if not cfg.ingest_enabled:
+            return JSONResponse(result, status_code=503)
+        with transaction(app.state.engine) as db:
+            result["last_persisted_at"] = db.query(func.max(Chunk.received_at)).scalar()
+        ready = result["accepting_max_size_chunks"] and result["assembler"] == "healthy"
+        return JSONResponse(result, status_code=200 if ready else 503)
 
     @app.post(PREFIX + "/chunks")
     async def upload(request: Request):

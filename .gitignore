@@ -76,3 +76,6 @@ deploy/direct-staging/private/
 
 deploy/direct-production/private/
 deploy/direct-production/enabled
+
+# Private reference capture used only for this local integration.
+/deploy/live-reference/

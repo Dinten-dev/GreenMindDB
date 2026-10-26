@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll verified WAV export queue
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.direct.auth import TOKEN_RE
 from app.direct.database import transaction
-from app.direct.models import Chunk, Device, Enrollment, Pairing
+from app.direct.models import Chunk, Device, Enrollment, Pairing, Segment
 from app.direct.protocol import DirectError
 
 PREFIX = "/api/v1/direct-ingest"
@@ -54,14 +54,32 @@ async def dashboard_identity(request, cfg, zone_id=None):
             user = result.json()
             if not user.get("organization_id") or not user.get("is_active"):
                 raise DirectError(403, "organization_required")
+            capabilities = await client.get(
+                cfg.dashboard_api_url + "/administration/capabilities", headers=headers
+            )
+            user["platform_admin"] = (
+                capabilities.status_code == 200 and capabilities.json().get("can_manage") is True
+            )
             if zone_id is not None:
-                if user.get("role") not in ("owner", "admin"):
+                if not user["platform_admin"] and user.get("role") not in ("owner", "admin"):
                     raise DirectError(403, "manager_required")
                 zone = await client.get(
                     cfg.dashboard_api_url + "/zones/" + str(zone_id), headers=headers
                 )
                 if zone.status_code != 200:
                     raise DirectError(404, "zone_not_found")
+                if user["platform_admin"]:
+                    catalog = await client.get(
+                        cfg.dashboard_api_url + "/administration/catalog", headers=headers
+                    )
+                    if catalog.status_code != 200:
+                        raise DirectError(503, "dashboard_unavailable")
+                    matches = [
+                        item for item in catalog.json()["zones"] if item["id"] == str(zone_id)
+                    ]
+                    if len(matches) != 1:
+                        raise DirectError(404, "zone_not_found")
+                    user["pairing_organization_id"] = matches[0]["organization_id"]
             if zone_id is None:
                 zones = await client.get(cfg.dashboard_api_url + "/zones", headers=headers)
                 if zones.status_code != 200:
@@ -137,7 +155,9 @@ def install_pairing_routes(app):
                 db.add(
                     Pairing(
                         code_hash=hashlib.sha256(code.encode()).hexdigest(),
-                        organization_id=user["organization_id"],
+                        organization_id=user.get(
+                            "pairing_organization_id", user["organization_id"]
+                        ),
                         zone_id=str(data.zone_id),
                         expires_at=expires,
                     )
@@ -226,22 +246,39 @@ def install_pairing_routes(app):
         def list_devices():
             with transaction(app.state.engine) as db:
                 latest = (
-                    db.query(Chunk.device_id, func.max(Chunk.received_at).label("seen"))
-                    .group_by(Chunk.device_id)
+                    # Acceptance commits this timestamp with its original chunk.
+                    # Assembly and duplicate ACKs do not advance it.
+                    db.query(Segment.device_id, func.max(Segment.updated_at).label("seen"))
+                    .group_by(Segment.device_id)
                     .subquery()
                 )
-                rows = (
+                query = (
                     db.query(Device, Enrollment.hardware_id, latest.c.seen)
                     .outerjoin(Enrollment, Enrollment.device_id == Device.id)
                     .outerjoin(latest, latest.c.device_id == Device.id)
-                    .filter(
-                        Device.organization_id == user["organization_id"],
-                        Device.zone_id.in_(user.get("allowed_zone_ids", [])),
-                    )
-                    .order_by(Device.id)
-                    .limit(200)
-                    .all()
+                    .filter(Device.zone_id.in_(user.get("allowed_zone_ids", [])))
                 )
+                if not user.get("platform_admin"):
+                    query = query.filter(Device.organization_id == user["organization_id"])
+                rows = query.order_by(Device.id).limit(200).all()
+                # Keep historical offline devices visible after segment metadata
+                # was removed. Never aggregate the entire chunk history for
+                # devices with their durable segment acceptance timestamp.
+                missing = [device.id for device, _, seen in rows if seen is None]
+                fallback = (
+                    dict(
+                        db.query(Chunk.device_id, func.max(Chunk.received_at))
+                        .filter(Chunk.device_id.in_(missing))
+                        .group_by(Chunk.device_id)
+                        .all()
+                    )
+                    if missing
+                    else {}
+                )
+                rows = [
+                    (device, mac, seen if seen is not None else fallback.get(device.id))
+                    for device, mac, seen in rows
+                ]
                 return [
                     {
                         "id": d.id,

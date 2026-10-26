@@ -1,0 +1,23 @@
+[Unit]
+Description=GreenMind finite 24-hour read-only receiver observation
+ConditionPathExists=!FILL_OBSERVATION_DIRECTORY/finished.json
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/greenmind/delete-preparation/recovery.env
+Environment=PYTHONPATH=FILL_IMMUTABLE_PACKAGE/backend
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/greenmind/raw-copy/20260925/venv/bin/python -m app.raw_archive.observation --output FILL_OBSERVATION_DIRECTORY
+MemoryMax=96M
+MemorySwapMax=0
+CPUQuota=10%
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=FILL_OBSERVATION_DIRECTORY
+UMask=0077
