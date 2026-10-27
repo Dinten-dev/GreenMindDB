@@ -557,6 +557,25 @@ hochgeladen. Das erste Zwei-WAV-Profil bleibt im bisherigen Umfang gesperrt.
 
 Nachweise: `outputs/greenmind-staging-mastercoverage-20261027/` im Projekt.
 Vorhandener Box-/Snapshot-Nachweis wird nicht wiederholt. Archivdienste, Timer,
-Löschschalter und Originaldaten bleiben unverändert. Die neue Quellfassung ist
-noch nicht als installierter Stand abgenommen; native Prüfung und gebundene
-Installation werden getrennt dokumentiert.
+Löschschalter und Originaldaten bleiben unverändert. Der abschliessende native Test bestand 13 Fälle mit künstlichen Daten:
+31,533 Sekunden, 72679424 Byte Speichermaximum, keine Speicherereignisse.
+Ein vorheriger Versuch wurde bereits vor der Datenbankanlage vom Ressourcenschutz
+blockiert; erst nach erneut bestandener Ressourcenprüfung wurde wiederholt.
+174 lokale Tests bestanden; 15 Docker-Tests wurden übersprungen und ein Broker-
+Test abgewählt. Zusätzlich bestanden 22 Tests der aktualisierten Profilbindung.
+
+Commit `1c3c1f669e10b4db2265d9c20882d4a95214c972` wurde anschliessend installiert:
+`/opt/greenmind/tiered-archive/overlays/staging-mastercoverage-158bf0fc6bfb`.
+Runtime-SHA-256: `158bf0fc6bfbf391f7a063a0ddd3f702bb0b8f3cdf62277934578c1a12caa4aa`.
+Manifest-SHA-256: `940175e92ea0fcb37c7670ccf2298a6bcccd6b83cce2a1843fc9cedb2a28edae`.
+384 root-eigene schreibgeschützte Dateien, davon 380 unveränderte Hardlinks.
+Die unabhängige Installationsprüfung meldete keine Fehler. Containeridentitäten
+und Startzeiten, Ledger mit zwei `published`-Paketen, PAUSE und alle deaktivierten
+Schalter sind bestätigt. Es wurde kein Archivdienst gestartet.
+
+Rücknahme über die fünf exakten Konfigurationssicherungen unter
+`/etc/greenmind/tiered-archive/before-mastercoverage-158bf0fc6bfb/manifest.json`:
+erst Hashes prüfen, gespeicherte Dateien und Modi wiederherstellen, dann
+`daemon-reload`; keine Dienste starten. Das vorherige History-Overlay bleibt
+unverändert erhalten. Echte Datenbank-Backup-Bindungen, Leseumfang und ein
+vollständiger Restore aus der Box bleiben offen.
