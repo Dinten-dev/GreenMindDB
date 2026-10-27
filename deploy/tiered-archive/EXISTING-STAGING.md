@@ -345,3 +345,33 @@ Getesteter recovery.py-SHA-256:
 Der vorbereitete Profilprüfer bindet den neuen Restore-Stand an
 `/opt/greenmind/tiered-archive/overlays/staging-restore-a8ae83e46a5c/backend`.
 Installation und unabhängige Abschlussprüfung werden separat nachgewiesen.
+
+Installationsabschluss des Restore-Standes
+
+Am 27.10.2026 um 18:11 UTC wurde der nativ geprüfte Stand installiert:
+Commit `59b92f1bc8e5b1fde4c6197875e478e824efb36f`,
+Overlay `/opt/greenmind/tiered-archive/overlays/staging-restore-a8ae83e46a5c`.
+Runtime-SHA-256: `a8ae83e46a5ca6ed7365a54a79435d42472313c603490ad5f4864a20c585b856`.
+Manifest-SHA-256: `145e5a72bb5ec05157ba3d55a205d56e0e7c2fa928c68620e2b6b5157898ac2b`.
+383 schreibgeschützte Dateien, davon 381 unveränderte Hardlinks. Zwei Backend-
+Dateien wurden ersetzt; das vorherige Overlay bleibt vollständig erhalten.
+
+Die unabhängige Abschlussprüfung bestätigte den Runtime-Fingerprint, alle
+Dateien und die Übereinstimmung von recovery.py mit dem nativen Test. Die vier
+bestehenden Container haben unveränderte IDs, Startzeiten und Speicherlimits.
+Beide Pilotbelege bleiben published. Keine Archivdienste oder Timer wurden
+gestartet; inactive/disabled, PAUSE, fehlendes INSTALLATION_READY und alle acht
+false-Lösch-/Abnahmeflags wurden erneut bestätigt. Latenz-Baseline und ihre
+systemd-Credential-Bindung blieben erhalten.
+
+Gezielte Rücknahme: Nur die fünf exakt verzeichneten Dateien aus
+`/etc/greenmind/tiered-archive/before-restore-a8ae83e46a5c/manifest.json`
+nach Prüfung ihrer Backup-Hashes zurücksetzen und daemon-reload ausführen.
+Keine Dienststarts, keine Datenrücknahme und keine Entfernung alter Overlays.
+
+Der Snapshot bleibt ausstehend. Safari zeigte erneut die Hetzner-Anmeldeseite;
+die gespeicherte bestehende Anmeldung war verfügbar. Die automatische
+Freigabeprüfung blockierte jedoch das Absenden des Agenten-Logins, weil zuvor
+eine persönliche Anmeldung verlangt wurde. Es gab keinen Umgehungsversuch;
+die persönliche Anmeldung wurde erneut angefordert. Keine Zugangsdaten wurden
+ausgegeben, keine Konten angelegt und keine Zugriffsrechte erweitert.
