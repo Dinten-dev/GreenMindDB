@@ -12,7 +12,7 @@ FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
          'TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED',
          'TIERED_ARCHIVE_DIRECT_LOCATORS_ACCEPTED', 'TIERED_ARCHIVE_FEATURE_READS_ACCEPTED')
 STATE = '/var/lib/greenmind/tiered-archive/staging'
-BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-latency-69e3320d8a80/backend'
+BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-restore-a8ae83e46a5c/backend'
 CREDENTIAL_FIELDS = ('RAW_ARCHIVE_SFTP_KEY', 'RAW_ARCHIVE_SFTP_KNOWN_HOSTS',
                      'RAW_ARCHIVE_READ_ONLY_SFTP_KEY', 'RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS',
                      'CREDENTIALS_DIRECTORY', 'TIERED_ARCHIVE_LATENCY_BASELINE')

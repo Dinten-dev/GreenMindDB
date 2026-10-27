@@ -316,3 +316,32 @@ noch nicht im installierten Overlay enthalten. Vor dem nächsten echten Restore
 ist sie nativ zu prüfen und versionsgebunden zu installieren. Vollständiger
 Schema-/Stammdaten-Restore, Direct-Objektrekonstruktion und die übrigen
 Abnahmepunkte bleiben eigenständige offene Schritte.
+
+Native SQL-Restore-Prüfung – 27.10.2026, 18:08 UTC
+
+Die noch ausstehende PostgreSQL-Prüfung wurde mit der vorhandenen Staging-Instanz
+PostgreSQL 15.10 ausgeführt. Eine eindeutig markierte, neue Testdatenbank enthielt
+ausschliesslich künstliche Tabellen und Werte. Es wurden weder Quelltabellen noch
+Archivobjekte gelesen. Keine zusätzliche PostgreSQL-Instanz wurde eingerichtet.
+
+Sieben Fälle bestanden: mehrere Parquet-Teile mit exakten UUID-/Bytea-/Decimal-/
+Zeitwerten; beschädigter späterer Teil; Datenbanktrigger mit Werteänderung;
+veränderte Direct-Kindzeile mit vollständigem Rollback und Wiederaufnahme;
+echter PostgreSQL-Lockkonflikt (55P03), leere Tabelle und erfolgreicher Folgelauf;
+doppelte Identität (23505); Unterbrechung nach begonnener Einfügung mit Rollback.
+
+Limit 192 MiB RAM / 25 Prozent CPU, 160 MiB MemoryHigh, kein Swap. Gemessene
+Spitze 64090112 Byte, keine high/max/OOM-Ereignisse, Testdauer 5,717 Sekunden.
+Der bestehende Staging-Healthcheck sowie die Latenz- und Laufzeitgrenzen waren
+aktiv. Der separate PostgreSQL-Container behielt sein vorhandenes 320-MiB-Limit;
+die 192 MiB begrenzten den Testclient, nicht den gesamten Datenbankserver.
+
+Nach bestätigtem Testende wurde nur die eigene Datenbank entfernt: Name, OID,
+zufälliger Eigentumsmarker und null aktive Sitzungen wurden vorher geprüft.
+Danach wurden nur die neuen Testdateien entfernt. Container-ID und Startzeit
+blieben gleich; Archivdienste und Timer blieben inactive/disabled.
+Getesteter recovery.py-SHA-256:
+`0ce6119b681008c40abeaeda9d296023f92d52995c4ea5242a6762fd4e50ee36`.
+Der vorbereitete Profilprüfer bindet den neuen Restore-Stand an
+`/opt/greenmind/tiered-archive/overlays/staging-restore-a8ae83e46a5c/backend`.
+Installation und unabhängige Abschlussprüfung werden separat nachgewiesen.
