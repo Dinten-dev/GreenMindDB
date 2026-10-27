@@ -168,4 +168,31 @@ vor/nach Commit, Wiederaufnahme, unveränderten Erstfund und Kapazitätsgrenze.
 Limit 64 MiB RAM / 5 Prozent CPU; gemessene Spitze 13627392 Byte, keine
 memory.high/max/OOM-Ereignisse. Netzwerk und Schlüsselverzeichnis waren gesperrt;
 keine Quellen-/Archivzugriffe. Nur sein neu erstelltes Testverzeichnis wurde entfernt.
-Die geänderte Software ist noch nicht in die gebundenen Archivdienste übernommen.
+Die geänderte Software wurde anschliessend als schreibgeschütztes Staging-Overlay
+installiert, ohne einen Archivdienst zu starten:
+`/opt/greenmind/tiered-archive/overlays/staging-queue-54a00f1bc886`.
+Software-/Bindungscommit: `53ae2d0f07dcaa3b838d3175bd7b163b32aa1701`.
+Runtime-SHA-256: `54a00f1bc886511c35f3b3634f187dca427fda9833ffc8aa501e53e8903cd2e2`.
+Manifest-SHA-256: `415de505ec463231203691f0dce85c2164e404a5723dffe3b4eb77fe5582d42b`.
+382 Dateien, davon 377 unveränderte Hardlinks; vorherige Version bleibt erhalten.
+Nur die beiden PYTHONPATH-Bindungen, zwei bestehende Overlay-Drop-ins und der
+exakte Profilprüfer wurden aktualisiert. Quellen, Schlüssel, Konten und Dienste
+wurden nicht neu eingerichtet. Alle bisherigen Startsperren bleiben wirksam.
+
+Rücknahme dieser Aktualisierung: Die fünf gesicherten Dateien aus
+`/etc/greenmind/tiered-archive/before-queue-54a00f1bc886/manifest.json` nach
+SHA-256-Prüfung auf ihre dort exakt verzeichneten Ziele zurücksetzen; danach
+`systemctl daemon-reload`. Keine Dienststarts. Nicht den älteren allgemeinen
+Installationsrollback mit dieser gezielten Rücknahme vermischen.
+
+Der nächste echte Kopierlauf auf dieser Softwareversion bleibt ausstehend.
+Der lokale Suchlauf wird dann die Warteschlangentabellen anlegen; der native
+Test hat ausschliesslich sein eigenes künstliches SQLite-Verzeichnis verwendet.
+
+Snapshot-Zwischenstand: Der vorhandene API-Zugang erlaubte GET, verweigerte
+jedoch am 27.10.2026 den einzigen journalisierten POST mit HTTP 403. Kein neuer
+Snapshot wurde dadurch erstellt. Safari zeigte eine abgemeldete Hetzner-Sitzung;
+die persönliche Anmeldung wurde angefordert. Es wurden keine neuen Konten,
+API-Tokens oder SSH-Schlüssel angelegt und keine Rechte erweitert. Der vorhandene
+Zugang reicht weiterhin zum späteren Lesen eines über die Console erstellten
+Snapshots. Eine API-Erstellung wird nicht ungeprüft wiederholt.
