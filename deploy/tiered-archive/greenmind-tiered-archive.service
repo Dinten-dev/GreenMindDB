@@ -14,6 +14,8 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=OMP_NUM_THREADS=1
 Environment=TIERED_ARCHIVE_CGROUP_MONITOR=true
+LoadCredential=latency-baseline:/etc/greenmind/tiered-archive/staging-latency-baseline.json
+Environment=TIERED_ARCHIVE_LATENCY_BASELINE=%d/latency-baseline
 LoadCredential=sftp-key:/etc/greenmind/tiered-archive/staging-upload.key
 LoadCredential=sftp-hosts:/etc/greenmind/tiered-archive/staging-known-hosts
 Environment=RAW_ARCHIVE_SFTP_KEY=%d/sftp-key

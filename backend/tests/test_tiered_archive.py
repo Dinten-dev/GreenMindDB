@@ -942,7 +942,8 @@ def test_private_history_broker_reads_only_evicted_tenant_scope(bundle, tmp_path
     monkeypatch.setenv("RAW_ARCHIVE_ENVIRONMENT", "staging")
     monkeypatch.setenv("TIERED_ARCHIVE_READS_ENABLED", "true")
     monkeypatch.setenv("TIERED_ARCHIVE_READ_BROKER_SOCKET", str(path))
-    monkeypatch.setattr(read_broker, "healthy", lambda: None)
+    health_calls = []
+    monkeypatch.setattr(read_broker, "healthy", lambda: pytest.fail("Legacy health must not run"))
     payload = dict(
         source="gateway",
         organization=ORG,
@@ -951,7 +952,13 @@ def test_private_history_broker_reads_only_evicted_tenant_scope(bundle, tmp_path
         end=(AT + timedelta(days=1)).isoformat(),
         step=600,
     )
-    with read_broker.Server(str(path), configuration(), box, tmp_path / "scratch") as server:
+    with read_broker.Server(
+        str(path),
+        configuration(),
+        box,
+        tmp_path / "scratch",
+        health_check=lambda: health_calls.append("bound-staging-health"),
+    ) as server:
         server.RequestHandlerClass = ReadHandler
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -969,6 +976,7 @@ def test_private_history_broker_reads_only_evicted_tenant_scope(bundle, tmp_path
                 assert json.loads(response.read()) == {"series": [], "waves": []}
             finally:
                 connection.close()
+            assert health_calls == ["bound-staging-health", "bound-staging-health"]
         finally:
             server.shutdown()
             thread.join(timeout=5)
@@ -1074,6 +1082,15 @@ def test_backup_schedule_survives_restart_and_waits_twelve_hours(tmp_path, monke
     calls = []
     monkeypatch.setattr(schedule, "environment", lambda: "staging")
     monkeypatch.setattr(schedule, "state_root", lambda: root)
+
+    class Healthy:
+        def __call__(self):
+            return True
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(schedule, "health_probe", lambda kind: Healthy())
     monkeypatch.setattr(runtime, "state_root", lambda: root)
     monkeypatch.setattr(runtime, "backup", lambda source: calls.append(source))
 

@@ -196,3 +196,56 @@ die persönliche Anmeldung wurde angefordert. Es wurden keine neuen Konten,
 API-Tokens oder SSH-Schlüssel angelegt und keine Rechte erweitert. Der vorhandene
 Zugang reicht weiterhin zum späteren Lesen eines über die Console erstellten
 Snapshots. Eine API-Erstellung wird nicht ungeprüft wiederholt.
+
+
+Fortsetzung: automatische Latenzpause und Leser-Gesundheit
+
+Der Ausgangswert wurde bei ausgeschalteten Archivdiensten mit 30 vollständigen
+HTTP-200-Antworten pro vorhandener Staging-API erfasst (Intervall zwei Sekunden).
+Festgelegt ist das 95. Perzentil nach Nearest-Rank: Gateway 26,860 ms,
+Direct 9,362 ms und MinIO 2,479 ms. Daraus folgen unveränderte Plan-Grenzen
+von 126,860 / 109,362 / 102,479 ms (`max(1.2 * Basis; Basis + 100 ms)`).
+Die gesamte Antwort wird bis höchstens 64 KiB gelesen. Ein einzelner Ausreisser
+pausiert nicht; drei aufeinanderfolgende Überschreitungen derselben API pausieren.
+
+Die Referenzdatei wird anhand ihres SHA-256 gebunden und als systemd-Credential
+gelesen. Sie wird nicht automatisch auf schlechtere Werte angepasst. Fehlende,
+unpassende oder veränderte Referenzen blockieren den Staging-Start. Die beiden
+Profile müssen dieselben lokalen APIs und denselben Baseline-Hash verwenden.
+Ausgangsmessung: 64 MiB / 5 Prozent CPU, gemessene Spitze 13049856 Byte,
+keine high/max/OOM-Ereignisse. Keine Quellenänderungen.
+
+Die Zähler stehen getrennt für Kopierer und Leser in `latency-copy.json` bzw.
+`cache/latency-reader.json`. Ein Dateilock serialisiert Updates. Die Pause wird
+vor dem dritten gespeicherten Überschreitungszustand dauerhaft geschrieben;
+Datei und Verzeichnis werden synchronisiert. Probe-Neuanlage und Prozessneustart
+setzen die Zählung nicht zurück. Defekte Zustandsdateien pausieren ebenfalls.
+Erfolgreich zwischengespeicherte Healthchecks zählen nicht als neue Messung.
+Ein gesunder Messwert setzt nur den Zähler der betreffenden API zurück.
+
+Der Suchlauf prüft Gesundheit vor Quellenauflösung und Seitenabfragen. Der
+Kopierer prüft während der Arbeit weiter an seinen Kontrollpunkten. Der Leser
+verwendet nun explizit die Staging-Gesundheitsprüfung statt der alten Ports
+8120/8003/8000. Ein Nachweis bestätigte, dass seinem bisherigen Profil die
+Staging-Health-Bindungen fehlten. Dieselbe gebundene Prüfung läuft vor Anfragen
+und im Server-Hauptloop, auch während laufender Anfragen oder ohne neue Nutzer.
+Erfolgreiche HTTP-Messungen werden höchstens fünf Sekunden zwischengespeichert;
+Speicher-, Last- und Plattengrenzen werden an jedem Aufruf erneut geprüft.
+Eine dauerhafte Pause sperrt Folgeläufe und weitere Leseranfragen.
+
+Vor manueller Wiederaufnahme sind Ursache und Messzustand zu prüfen. Nach
+bewusster Entfernung von `control/PAUSE` muss die Quelle wieder gesund sein;
+anhaltende Überschreitung pausiert erneut. Keine automatische Wiederaufnahme,
+kein Timerstart und keine Löschfreigabe entstehen aus dieser Änderung.
+
+Der native Fehlerfall benutzte einen künstlichen HTTP-Server im privaten
+Netzwerk einer kurzlebigen Testeinheit. Drei tatsächlich verzögerte Antworten
+mit jeweils neu aufgebautem Probeobjekt ergaben 1/2/3 und eine persistente Pause.
+64 MiB RAM / 5 Prozent CPU; Spitze 22368256 Byte, keine Speicherereignisse.
+Keine Archiv-, Quellen- oder Schlüsselzugriffe; neue Testdateien entfernt.
+Der erste Versuch scheiterte vor Testbeginn an einer fehlenden TCP-Socketfamilie;
+für den zweiten blieb das Netzwerk isoliert, TCP wurde nur darin zugelassen.
+
+Ein externer Alarmweg, ein echter Kopier-/Leselauf auf dem veränderten Stand und
+24 Stunden Gesamtbeobachtung stehen weiterhin aus. Der ausstehende Snapshot
+bleibt von der persönlichen Hetzner-Anmeldung abhängig.

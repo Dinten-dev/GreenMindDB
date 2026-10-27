@@ -29,11 +29,13 @@ class HealthProbe:
         allow_low_source_space=False,
         metrics=None,
         clock=time.monotonic,
+        on_sample=None,
     ):
         self.urls, self.mounts = urls, mounts
         self.minimum_memory, self.maximum_load = minimum_memory, maximum_load
         self.allow_low_source_space = allow_low_source_space
         self.metrics, self.clock = metrics, clock
+        self.on_sample = on_sample
         self.last_http = float("-inf")
         self.last = {"ok": False, "reason": "not_checked"}
         self._client_context = None
@@ -82,7 +84,9 @@ class HealthProbe:
                     )
                     self.client = self._client_context.__enter__()
                 with measure(self.metrics, "receiver_health"):
+                    latencies = []
                     for index, url in enumerate(self.urls):
+                        began = self.clock()
                         with self.client.stream("GET", url) as response:
                             if response.status_code != 200:
                                 return self.fail(
@@ -90,6 +94,17 @@ class HealthProbe:
                                     endpoint_index=index,
                                     status=response.status_code,
                                 )
+                            if self.on_sample is not None:
+                                size = 0
+                                for block in response.iter_bytes(chunk_size=8192):
+                                    size += len(block)
+                                    if size > 65536:
+                                        return self.fail(
+                                            "receiver_health_body", endpoint_index=index
+                                        )
+                        latencies.append((self.clock() - began) * 1000)
+                    if self.on_sample is not None:
+                        self.on_sample(latencies)
                 # Cache only successful checks, for at most five seconds.
                 self.last_http = self.clock()
             if load > self.maximum_load:

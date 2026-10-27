@@ -93,7 +93,9 @@ def worker(*, deleting=False):
 
     from app.raw_archive.coordination import lease
     from app.raw_archive.health import SafetyPause
-    from app.raw_archive.runner import destination_from_environment, health_probe
+    from app.raw_archive.runner import destination_from_environment
+
+    from .latency import health_probe
 
     if os.getenv("TIERED_ARCHIVE_ENABLED", "false") != "true":
         raise ArchiveBlocked("Tiered worker disabled")
@@ -122,7 +124,7 @@ def worker(*, deleting=False):
                 saved[key] = os.environ.get(key)
                 os.environ[key] = value
         try:
-            health = health_probe()
+            health = health_probe("copy")
         finally:
             for key, value in saved.items():
                 if value is None:

@@ -4,6 +4,7 @@ This deliberately separate path does not weaken install-staging.py's isolated
 copy contract. It accepts the already reviewed Box account and RO subaccount,
 keeps source credentials read-only, and never authorizes service activation.
 """
+import re
 from urllib.parse import urlsplit
 
 FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
@@ -11,10 +12,10 @@ FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
          'TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED',
          'TIERED_ARCHIVE_DIRECT_LOCATORS_ACCEPTED', 'TIERED_ARCHIVE_FEATURE_READS_ACCEPTED')
 STATE = '/var/lib/greenmind/tiered-archive/staging'
-BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-queue-54a00f1bc886/backend'
+BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-latency-69e3320d8a80/backend'
 CREDENTIAL_FIELDS = ('RAW_ARCHIVE_SFTP_KEY', 'RAW_ARCHIVE_SFTP_KNOWN_HOSTS',
                      'RAW_ARCHIVE_READ_ONLY_SFTP_KEY', 'RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS',
-                     'CREDENTIALS_DIRECTORY')
+                     'CREDENTIALS_DIRECTORY', 'TIERED_ARCHIVE_LATENCY_BASELINE')
 
 
 def validate(writer, reader, schedule):
@@ -35,6 +36,23 @@ def validate(writer, reader, schedule):
             raise ValueError('Reuse existing isolated local state')
         if profile.get('RAW_ARCHIVE_STATE_DIR') != STATE + '/raw':
             raise ValueError('Separate staging raw receipt state required')
+    for profile in (writer, reader):
+        if profile.get('RAW_ARCHIVE_HEALTH_URLS') != 'http://127.0.0.1:8001/health,http://127.0.0.1:8002/health,http://127.0.0.1:9002/minio/health/ready':
+            raise ValueError('Writer and reader must check the existing Staging APIs')
+        if profile.get('RAW_ARCHIVE_WORKER_ROLE') != 'existing-staging' or profile.get('RAW_ARCHIVE_SOURCE_PROBE_URL'):
+            raise ValueError('Only local Staging health checks are allowed')
+        if profile.get('RAW_ARCHIVE_SOURCE_MOUNTS') != STATE:
+            raise ValueError('Existing Staging partition must be checked')
+        if int(profile.get('RAW_ARCHIVE_MIN_AVAILABLE_MEMORY_MIB', '0')) < 1024:
+            raise ValueError('Keep host memory reserve in both services')
+        if not 0 < float(profile.get('RAW_ARCHIVE_MAX_HOST_LOAD', '0')) <= 2:
+            raise ValueError('Keep host load ceiling in both services')
+        if not 0 < float(profile.get('RAW_ARCHIVE_MAX_LOAD_PER_CPU', '0')) <= .5:
+            raise ValueError('Keep normalized load ceiling in both services')
+        if not re.fullmatch('[0-9a-f]{64}', profile.get('TIERED_ARCHIVE_LATENCY_BASELINE_SHA256', '')):
+            raise ValueError('Measured pinned latency baseline required')
+    if writer['TIERED_ARCHIVE_LATENCY_BASELINE_SHA256'] != reader['TIERED_ARCHIVE_LATENCY_BASELINE_SHA256']:
+        raise ValueError('Writer and reader baseline binding differs')
     if writer.get('TIERED_ARCHIVE_SOURCE_ORIGIN') != 'existing_archive_host_staging_copy':
         raise ValueError('Inventoried source origin required')
     if writer.get('RAW_ARCHIVE_WORKER_ROLE') != 'existing-staging':

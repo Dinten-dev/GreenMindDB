@@ -114,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                 acquired = self.server.read_slot.acquire(blocking=False)
                 if not acquired:
                     raise ArchiveBlocked("Historical read busy")
-                healthy()
+                self.server.health_check()
                 payload = encode(private_revision(data, self.server.destination))
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(payload)))
@@ -132,7 +132,7 @@ class Handler(BaseHTTPRequestHandler):
                 acquired = self.server.read_slot.acquire(blocking=False)
                 if not acquired:
                     raise ArchiveBlocked("Historical read busy")
-                healthy()
+                self.server.health_check()
                 payload = json.dumps(
                     pack(private_features(data, self.server.destination)),
                     sort_keys=True,
@@ -155,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
                 acquired = self.server.read_slot.acquire(blocking=False)
                 if not acquired:
                     raise ArchiveBlocked("Historical read concurrency exhausted")
-                healthy()
+                self.server.health_check()
                 result = private_series(data, self.server.destination)
                 payload = json.dumps(result, allow_nan=False).encode()
                 if len(payload) > 4 * 1024**2:
@@ -192,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
             acquired = self.server.read_slot.acquire(blocking=False)
             if not acquired:
                 raise ArchiveBlocked("Read concurrency exhausted")
-            healthy()
+            self.server.health_check()
             with archived_file(
                 self.server.config,
                 self.server.destination,
@@ -201,7 +201,7 @@ class Handler(BaseHTTPRequestHandler):
                 key=keys[0],
                 scratch=self.server.scratch,
             ) as path:
-                healthy()
+                self.server.health_check()
                 self.send_response(200)
                 self.send_header("Content-Length", str(path.stat().st_size))
                 self.send_header("X-Content-SHA256", checksum(path))
@@ -227,8 +227,9 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     def handle_error(self, request, address):
         pass  # Do not log request identities or private storage exceptions.
 
-    def __init__(self, path, config, destination, scratch):
+    def __init__(self, path, config, destination, scratch, *, health_check=None):
         self.config, self.destination, self.scratch = config, destination, scratch
+        self.health_check = health_check or healthy
         self.read_slot = BoundedSemaphore(1)
         self.connections = BoundedSemaphore(4)
         super().__init__(path, Handler)

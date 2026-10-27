@@ -35,6 +35,9 @@ def profiles():
                   RAW_ARCHIVE_READ_ONLY_SFTP_USER='u676312-sub1',
                   RAW_ARCHIVE_READ_ONLY_SFTP_HOST='u676312-sub1.your-storagebox.de',
                   TIERED_ARCHIVE_BACKUP_KEY_SHA256='a' * 64)
+    for profile in (writer, reader):
+        profile.update({key: writer[key] for key in ('RAW_ARCHIVE_HEALTH_URLS', 'RAW_ARCHIVE_WORKER_ROLE', 'RAW_ARCHIVE_SOURCE_MOUNTS', 'RAW_ARCHIVE_MIN_AVAILABLE_MEMORY_MIB', 'RAW_ARCHIVE_MAX_HOST_LOAD', 'RAW_ARCHIVE_MAX_LOAD_PER_CPU')})
+        profile['TIERED_ARCHIVE_LATENCY_BASELINE_SHA256'] = 'b' * 64
     return writer, reader, dict(schema=1, environment='staging', wav_sources=['gateway', 'direct'], scopes=[], backups=[], scheduled_snapshots=False)
 
 
@@ -82,5 +85,20 @@ def test_reader_cannot_inherit_upload_or_change_root(field, value):
 def test_environment_file_cannot_override_runtime_or_credentials(profile_index, field):
     writer, reader, schedule = profiles()
     (writer, reader)[profile_index][field] = '/old-release-or-private-key'
+    with pytest.raises(ValueError):
+        reuse.validate(writer, reader, schedule)
+
+
+@pytest.mark.parametrize('field,value', [
+    ('RAW_ARCHIVE_HEALTH_URLS', 'http://127.0.0.1:8120/health'),
+    ('RAW_ARCHIVE_WORKER_ROLE', 'archive'),
+    ('RAW_ARCHIVE_MIN_AVAILABLE_MEMORY_MIB', '512'),
+    ('RAW_ARCHIVE_MAX_LOAD_PER_CPU', '1'),
+    ('TIERED_ARCHIVE_LATENCY_BASELINE_SHA256', ''),
+    ('TIERED_ARCHIVE_LATENCY_BASELINE_SHA256', 'c' * 64),
+])
+def test_reader_cannot_bypass_staging_latency_guard(field, value):
+    writer, reader, schedule = profiles()
+    reader[field] = value
     with pytest.raises(ValueError):
         reuse.validate(writer, reader, schedule)

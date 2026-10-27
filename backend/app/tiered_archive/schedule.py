@@ -12,6 +12,7 @@ from app.raw_archive.health import SafetyPause
 from app.raw_archive.policy import ArchiveBlocked
 
 from .codec import decode, encode
+from .latency import health_probe
 from .ledger import Ledger
 from .policy import utc
 from .runtime import environment, state_root
@@ -77,7 +78,17 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
     pending = WavQueue(db)
     copied_wavs = copied_bytes = 0
     small_staging = environment() == "staging"
+    planning_health = None
     try:
+        planning_health = health_probe("copy")
+
+        def planning_checkpoint():
+            if (ledger.root / "PAUSE").exists() or (ledger.root / "control/PAUSE").exists():
+                raise SafetyPause("manual_pause")
+            if not planning_health():
+                raise SafetyPause(planning_health.last.get("reason", "receiver_headroom"))
+
+        planning_checkpoint()
         for source in backups:
             if time.monotonic() >= copy_deadline:
                 break
@@ -101,7 +112,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
             if time.monotonic() >= copy_deadline:
                 break
             identity = "wav-sweep-" + source
-            adapter = wav_source(source, lambda: None)
+            adapter = wav_source(source, planning_checkpoint)
             before = clock().replace(hour=0, minute=0, second=0, microsecond=0)
 
             handled = set()
@@ -139,6 +150,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                 if small_staging and (copied_wavs >= 10 or copied_bytes >= 5 * 1024**2):
                     return False
                 try:
+                    planning_checkpoint()
                     planned = adapter.catalog.resolve(reference)
                     total = sum(record.size for record in planned)
                     if small_staging and (len(planned) > 10 or total > 5 * 1024**2):
@@ -201,6 +213,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
             if state and utc(state[2]) > clock():
                 continue
             cursor = decode(state[0]) if state and state[0] else None
+            planning_checkpoint()
             references = adapter.catalog.page(cursor, before, 10)
             for reference in references:
                 if not process(reference, discovered=True):
@@ -344,4 +357,6 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         result["pending_wavs"] = pending.count()
         return result
     finally:
+        if planning_health is not None:
+            planning_health.close()
         ledger.close()

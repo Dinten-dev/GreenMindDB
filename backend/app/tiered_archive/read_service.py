@@ -2,14 +2,18 @@
 
 import os
 import stat
+import threading
+from contextlib import closing
 from pathlib import Path
 
+from app.raw_archive.health import SafetyPause
 from app.raw_archive.policy import ArchiveBlocked
 from app.raw_archive.read_broker import Handler, Server
 from app.raw_archive.read_only_box import configured_read_only_box
 from app.raw_archive.worker import configuration
 
-from .resources import monitored
+from .latency import health_probe
+from .resources import monitored, pause
 
 
 class ReadHandler(Handler):
@@ -47,7 +51,24 @@ def main():
         path.unlink()
     os.umask(0o077)
     try:
+        probe = health_probe("reader")
+        health_lock = threading.Lock()
+        control = Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "control"
+
+        def checked_health():
+            with health_lock:
+                if (control / "PAUSE").exists():
+                    raise SafetyPause("manual_pause")
+                try:
+                    if not probe():
+                        raise SafetyPause(probe.last.get("reason", "receiver_headroom"))
+                except Exception as error:
+                    reason = error.code if isinstance(error, SafetyPause) else "health_probe_error"
+                    pause(control, "reader", [reason])
+                    raise SafetyPause(reason) from None
+
         with (
+            closing(probe),
             monitored(
                 Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "cache",
                 kind="reader",
@@ -58,10 +79,14 @@ def main():
                 config,
                 destination,
                 Path(os.environ["TIERED_ARCHIVE_STATE_DIR"]) / "cache",
+                health_check=checked_health,
             ) as server,
         ):
+            checked_health()
             path.chmod(0o600)
             server.RequestHandlerClass = ReadHandler
+            # BaseServer runs this on every loop, even with idle or busy clients.
+            server.service_actions = checked_health
             server.serve_forever(poll_interval=1)
     finally:
         destination.close()

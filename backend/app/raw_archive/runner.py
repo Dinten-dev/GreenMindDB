@@ -103,7 +103,7 @@ def source_settings(kind, namespace):
     )
 
 
-def health_probe(*, allow_low_source_space=False, metrics=None):
+def health_probe(*, allow_low_source_space=False, metrics=None, on_sample=None):
     """Read-only local health requests plus real host memory/load/free-space checks."""
 
     urls = required("HEALTH_URLS").split(",")
@@ -141,6 +141,7 @@ def health_probe(*, allow_low_source_space=False, metrics=None):
             maximum_load,
             allow_low_source_space=allow_low_source_space,
             metrics=metrics,
+            on_sample=on_sample,
         )
     )
 

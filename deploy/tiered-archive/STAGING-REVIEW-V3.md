@@ -142,8 +142,10 @@ Quelle für Ereignisse und Speicherarten:
 
 Latenzgrenze: drei aufeinanderfolgende API-Messungen über
 `max(1.2 × Ausgangswert; Ausgangswert + 100 ms)` bedeuten Pause.
-Der Vergleich ist noch nicht automatisiert. Unbeaufsichtigter Betrieb
-wartet auf einen nachweislich angeschlossenen und getesteten Alarmweg.
+Der Vergleich ist in der Fortsetzung vom 27.10.2026 automatisiert; Messbasis,
+Neustartverhalten und Einbau sind in EXISTING-STAGING.md dokumentiert.
+Unbeaufsichtigter Betrieb wartet weiterhin auf einen nachweislich angeschlossenen
+und getesteten Alarmweg.
 
 Eine dauerhafte `control/PAUSE` verhindert Folgeläufe. Bereits aktive
 Worker stoppen am Kontrollpunkt; Leser verweigern weitere Abfragen.
