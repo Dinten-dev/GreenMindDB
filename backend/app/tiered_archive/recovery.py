@@ -60,15 +60,11 @@ def restore(identity, output, ledger, store, *, checkpoint):
 
 def restore_database(folder, database_url, manifest_sha256, *, checkpoint):
     """Restore exact typed rows into an empty table in an isolated local DB."""
-    from sqlalchemy import MetaData, Table, create_engine, func, select, text
-    from sqlalchemy.engine import make_url
+    from sqlalchemy import MetaData, Table, and_, create_engine, func, select, text
 
-    from .codec import encode
     from .source import DATASETS
 
-    url = make_url(database_url)
-    if url.host not in {"localhost", "127.0.0.1", "::1"} or "_restore_" not in (url.database or ""):
-        raise ArchiveBlocked("Only a dedicated local _restore_ database may be populated")
+    url = restore_url(database_url)
     manifest_path = folder / "manifest.json"
     if checksum(manifest_path) != manifest_sha256:
         raise ArchiveBlocked("Restore manifest changed")
@@ -77,55 +73,128 @@ def restore_database(folder, database_url, manifest_sha256, *, checkpoint):
     if candidate.dataset not in DATASETS:
         raise ArchiveBlocked("Use metadata/WAV restore for this bundle")
     spec = DATASETS[candidate.dataset]
-    engine = create_engine(database_url, pool_size=1, max_overflow=0)
+    if candidate.source != spec.source or manifest.get("identity") != candidate.identity:
+        raise ArchiveBlocked("Restore source identity mismatch")
+    parts = manifest["files"]
+    if (
+        not 1 <= len(parts) <= 128
+        or any(part["format"] != "parquet" for part in parts)
+        or sum(part["rows"] for part in parts) != candidate.rows
+        or sum(part["decoded_bytes"] for part in parts) > parquet.MAX_DECODED_BYTES
+    ):
+        raise ArchiveBlocked("Complete bounded SQL restore parts required")
+
+    def rows():
+        for number, reference in enumerate(parts):
+            for envelope in parquet.read(
+                folder / f"{number:04d}.parquet", reference, checkpoint=checkpoint
+            ):
+                if envelope["organization"] != candidate.organization:
+                    raise ArchiveBlocked("SQL restore organization mismatch")
+                if set(envelope["body"]) != {"row", "context"}:
+                    raise ArchiveBlocked("Unexpected SQL restore envelope")
+                checkpoint()
+                yield envelope["body"]
+
+    checkpoint()
+    engine = create_engine(url, pool_size=1, max_overflow=0)
     count = 0
     try:
         with engine.begin() as db:
             db.execute(text("SET LOCAL lock_timeout='150ms'"))
-            table = Table(spec.table, MetaData(), autoload_with=db)
-            if db.execute(select(func.count()).select_from(table)).scalar_one() != 0:
-                raise ArchiveBlocked("Restore never merges into a populated target table")
-            for number, reference in enumerate(manifest["files"]):
-                if reference["format"] != "parquet":
-                    continue
-                for envelope in parquet.read(
-                    folder / f"{number:04d}.parquet", reference, checkpoint=checkpoint
-                ):
-                    body = envelope["body"]
-                    if set(body) != {"row", "context"}:
-                        raise ArchiveBlocked("Unexpected SQL restore envelope")
-                    db.execute(table.insert().values(**body["row"]))
-                    count += 1
-                    if spec.table == "direct_chunk":
-                        context = body["context"]
-                        for name, rows in [
-                            (
-                                "direct_chunk_payload_ref",
-                                [context["payload_reference"]]
-                                if context["payload_reference"]
-                                else [],
-                            ),
-                            ("direct_piece", context["pieces"]),
-                        ]:
-                            child = Table(name, MetaData(), autoload_with=db)
-                            for row in rows:
-                                db.execute(child.insert().values(**row))
+            db.execute(text("SET LOCAL statement_timeout='8000ms'"))
+            metadata = MetaData()
+            table = Table(spec.table, metadata, autoload_with=db)
+            children = {}
+            if spec.table == "direct_chunk":
+                children = {
+                    name: Table(name, metadata, autoload_with=db)
+                    for name in ("direct_chunk_payload_ref", "direct_piece")
+                }
+            # Fixed allowlisted names only. Keep concurrent writers out until
+            # the final typed readback and transaction commit have completed.
+            for target in (table, *children.values()):
+                db.execute(text(f'LOCK TABLE "{target.name}" IN ACCESS EXCLUSIVE MODE'))
+                if db.execute(select(func.count()).select_from(target)).scalar_one() != 0:
+                    raise ArchiveBlocked("Restore never merges into a populated target table")
+            child_counts = dict.fromkeys(children, 0)
+            for body in rows():
+                db.execute(table.insert().values(**body["row"]))
+                count += 1
+                if children:
+                    for name, values in direct_children(body).items():
+                        for row in values:
+                            db.execute(children[name].insert().values(**row))
+                            child_counts[name] += 1
             if count != candidate.rows:
                 raise ArchiveBlocked("Database restoration row count mismatch")
-            # Verify typed values after PostgreSQL has stored them, not merely
-            # that INSERT accepted the input objects.
-            keys = {}
-            reference = manifest["files"][0]
-            for envelope in parquet.read(folder / "0000.parquet", reference, checkpoint=checkpoint):
-                keys[encode({key: envelope["body"]["row"][key] for key in spec.keys})] = encode(
-                    envelope["body"]["row"]
+            if db.execute(select(func.count()).select_from(table)).scalar_one() != count:
+                raise ArchiveBlocked("Stored PostgreSQL row count differs from archive")
+            for name, child in children.items():
+                if (
+                    db.execute(select(func.count()).select_from(child)).scalar_one()
+                    != child_counts[name]
+                ):
+                    raise ArchiveBlocked("Stored Direct dependency count differs from archive")
+            # Re-read every part without retaining all payloads in RAM. Check
+            # the database values, including changes made by database triggers.
+            for body in rows():
+                expected = body["row"]
+                actual = (
+                    db.execute(
+                        select(table).where(
+                            and_(*(table.c[key] == expected[key] for key in spec.keys))
+                        )
+                    )
+                    .mappings()
+                    .one_or_none()
                 )
-            for row in db.execute(select(table)).mappings():
-                identity = encode({key: row[key] for key in spec.keys})
-                if keys.pop(identity, None) != encode(dict(row)):
+                if actual is None or encode(dict(actual)) != encode(expected):
                     raise ArchiveBlocked("Stored PostgreSQL values differ from archive")
-            if keys:
-                raise ArchiveBlocked("Restored source identities missing")
+                if children:
+                    for name, expected_rows in direct_children(body).items():
+                        actual_rows = db.execute(
+                            select(children[name]).where(
+                                children[name].c.chunk_id == expected["id"]
+                            )
+                        ).mappings()
+                        if sorted(encode(dict(row)) for row in actual_rows) != sorted(
+                            encode(row) for row in expected_rows
+                        ):
+                            raise ArchiveBlocked("Stored Direct dependencies differ from archive")
         return {"restored_rows": count, "typed_values_verified": True, "source_accesses": 0}
     finally:
         engine.dispose()
+
+
+def restore_url(database_url):
+    """Reject libpq host/service overrides before creating any connection."""
+    import re
+
+    from sqlalchemy.engine import make_url
+
+    url = make_url(database_url)
+    if (
+        url.drivername not in {"postgresql", "postgresql+psycopg2"}
+        or url.host not in {"localhost", "127.0.0.1", "::1"}
+        or not re.fullmatch(r"[a-z][a-z0-9_]*_restore_[a-z0-9_]+", url.database or "")
+        or not url.username
+        or url.query
+    ):
+        raise ArchiveBlocked(
+            "Only a dedicated local _restore_ database without overrides may be populated"
+        )
+    return url
+
+
+def direct_children(body):
+    context = body["context"]
+    result = {
+        "direct_chunk_payload_ref": [context["payload_reference"]]
+        if context["payload_reference"] is not None
+        else [],
+        "direct_piece": context["pieces"],
+    }
+    if any(row["chunk_id"] != body["row"]["id"] for values in result.values() for row in values):
+        raise ArchiveBlocked("Direct dependency belongs to another chunk")
+    return result

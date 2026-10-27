@@ -249,3 +249,70 @@ für den zweiten blieb das Netzwerk isoliert, TCP wurde nur darin zugelassen.
 Ein externer Alarmweg, ein echter Kopier-/Leselauf auf dem veränderten Stand und
 24 Stunden Gesamtbeobachtung stehen weiterhin aus. Der ausstehende Snapshot
 bleibt von der persönlichen Hetzner-Anmeldung abhängig.
+
+Installationsnachweis der Latenzpause – 27.10.2026, 17:52 UTC
+
+Installierter Software-/Bindungscommit: `d2161971fd7a9233a9893796209827b2bfed0713`.
+Overlay: `/opt/greenmind/tiered-archive/overlays/staging-latency-69e3320d8a80`.
+Runtime-SHA-256: `69e3320d8a805eec29524f2bd5020a4883ed3cc2b74c120d738b3c4819e87beb`.
+Manifest-SHA-256: `a05b2e1aae43650c1d74acfb50b213650ab7e9d2cdf9b317a6e4fe82992ce31c`.
+Baseline-SHA-256: `34894d9df7cac7e077f850a47277d2021110c13997d4e08da9b0e1bc7f893b90`.
+
+Die unabhängige Abschlussprüfung bestätigte 383 root-eigene schreibgeschützte
+Dateien, alle Profilbindungen und die geladenen systemd-Credentials über D-Bus.
+Beide Dienste und der Timer sind inactive/disabled ohne Dienststart;
+PAUSE besteht, INSTALLATION_READY fehlt, alle acht Lösch-/Abnahmeflags sind false.
+Die beiden bisherigen Pilotbelege bleiben published, nicht snapshot-verified.
+Bestehende Containeridentitäten und Startzeiten sind unverändert.
+
+189 unterschiedliche gezielte Tests bestanden. Zusätzlich konnten beide
+Dienstidentitäten ihre tatsächlichen Profile und das Baseline-Credential in
+isolierten nativen Testeinheiten laden: 64 MiB RAM / 5 Prozent CPU, Spitzen
+17874944 bzw. 18022400 Byte, keine Speicherereignisse. Diese Vorprüfung führte
+keine HTTP-, SQL- oder Archivabfragen aus und verwendete keine Archivschlüssel.
+Die gesonderte native Latenzprüfung bleibt der oben dokumentierte künstliche Test.
+
+Vorprüfungen ohne die systemd-Zusatzgruppe beziehungsweise ohne die erlaubten
+Schreibpfade lieferten zunächst negative Rechteprüfungen. Die korrekte Prüfung
+mit den tatsächlichen Dienstgruppen und Schreibpfaden bestand; keine ACL oder
+Gruppenzuordnung wurde geändert. Zwei Abschlussprüfungen mussten die Darstellung
+von LoadCredential beziehungsweise das Laden deaktivierter Unit-Metadaten
+berücksichtigen. Die dritte Prüfung bestand vollständig; LoadUnit startete nichts.
+
+Gezielte Rücknahme: Die acht Ziele aus
+`/etc/greenmind/tiered-archive/before-latency-69e3320d8a80/manifest.json` verwenden.
+Nach Hashprüfung die fünf vorher bestehenden Dateien zurücksetzen und nur die
+drei dort als neu verzeichneten Dateien entfernen; danach daemon-reload, keine
+Dienststarts. Vorherige Overlays und Basisrelease bleiben erhalten.
+
+Weitere lokale Korrektur: SQL-Wiederherstellung
+
+Der SQL-Restore vergleicht jetzt jeden Archivteil vollständig mit den tatsächlich
+gespeicherten Werten, ohne sämtliche Nutzdaten in einer zweiten RAM-Kopie zu
+sammeln. Direct-Teile und Payload-Verweise werden nach Anzahl, Chunk-Zuordnung
+und Werten geprüft. Bereits gefüllte Ziel- oder Direct-Zusatztabellen bleiben
+gesperrt. Die Zieltabellen werden während der Transaktion exklusiv gesperrt;
+Lock-Wartezeit 150 ms, einzelne SQL-Anweisungen höchstens acht Sekunden.
+Ein Prüf- oder Schreibfehler rollt alle eigenen Einfügungen zurück.
+
+Zulässig sind nur explizite lokale PostgreSQL-Ziele mit eigenem `_restore_`-Namen
+und ohne URL-Zusatzparameter. Versteckte host-, hostaddr-, service- oder
+dbname-Überschreibungen werden vor dem Verbindungsaufbau abgewiesen. Eine
+Restore-Ergebnisanzeige mit Dateianzahl wird nicht mehr versehentlich wie ein
+Veröffentlichungsbeleg behandelt; bisher konnte die CLI nach erfolgreichem
+Datei-Restore an dieser Anzeige scheitern.
+
+23 neue Tests mit echten Parquet-Dateien und isoliertem SQLite prüfen unter
+anderem spätere beschädigte Teile, Trigger-Veränderungen, fremde Direct-Kinder,
+Rollback und unveränderte bestehende Daten. Zusammen mit der betroffenen
+Regression: 183 bestanden, ein bereits separat geprüfter Sockettest ausgenommen.
+SQLite ersetzt dabei ausschliesslich PostgreSQL-SET-/LOCK-Anweisungen für diese
+lokalen Tests. Es ist kein Nachweis der PostgreSQL-Sperrwirkung.
+
+Der zusätzliche echte PostgreSQL-Test prüft Lock-Konflikt, Rollback und erneuten
+Restore. Er ist noch auszuführen: Am lokalen Rechner lief kein Docker-Daemon;
+kein bestehender Dienst wurde dafür gestartet. Diese Restore-Korrektur ist
+noch nicht im installierten Overlay enthalten. Vor dem nächsten echten Restore
+ist sie nativ zu prüfen und versionsgebunden zu installieren. Vollständiger
+Schema-/Stammdaten-Restore, Direct-Objektrekonstruktion und die übrigen
+Abnahmepunkte bleiben eigenständige offene Schritte.

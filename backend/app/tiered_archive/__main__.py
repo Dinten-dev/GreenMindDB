@@ -155,7 +155,7 @@ def main():
             result = tick(args.schedule)
     # Routine output contains aggregate counts/identities, never raw row bodies,
     # credentials, object keys, personal data or activation-file contents.
-    if isinstance(result, dict) and "files" in result:
+    if isinstance(result, dict) and {"files", "state", "candidate"} <= result.keys():
         result = {"status": result["state"], "identity": result["candidate"]}
     elif isinstance(result, dict) and "receipt" in result:
         result = {"status": result["receipt"]["state"], "identity": result["receipt"]["candidate"]}

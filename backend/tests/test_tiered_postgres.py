@@ -319,6 +319,32 @@ def test_archived_rows_restore_to_empty_postgres_with_exact_values(source, tmp_p
         ledger.close()
 
 
+def test_restore_lock_contention_rolls_back_then_allows_retry(source, tmp_path):
+    from sqlalchemy.exc import OperationalError
+
+    from app.tiered_archive.recovery import restore, restore_database
+
+    candidate, ledger, _ = archive(source, tmp_path)
+    try:
+        box = Box(tmp_path / "unused-box")
+        box.root = tmp_path / "box"
+        folder = tmp_path / "restore-lock-test"
+        report = restore(candidate.identity, folder, ledger, box, checkpoint=lambda: None)
+        with source.engine.begin() as db:
+            db.execute(text("DELETE FROM visual_reading"))
+        url = source.engine.url.render_as_string(hide_password=False)
+        with source.engine.begin() as blocker:
+            blocker.execute(text("LOCK TABLE visual_reading IN ACCESS SHARE MODE"))
+            with pytest.raises(OperationalError) as failure:
+                restore_database(folder, url, report["manifest_sha256"], checkpoint=lambda: None)
+            assert failure.value.orig.pgcode == "55P03"
+            assert blocker.execute(text("SELECT count(*) FROM visual_reading")).scalar_one() == 0
+        result = restore_database(folder, url, report["manifest_sha256"], checkpoint=lambda: None)
+        assert result["restored_rows"] == 1 and result["typed_values_verified"]
+    finally:
+        ledger.close()
+
+
 @pytest.mark.parametrize("budget", [8 * 1024**2, 1024**2])
 def test_export_byte_budget_preserves_cursor_without_losing_rows(source, monkeypatch, budget):
     monkeypatch.setenv("TIERED_ARCHIVE_MAX_SQL_PAGE_BYTES", str(budget))
