@@ -468,3 +468,31 @@ Die Retention-Altersgrenzen werden durch gewählte Abfragezeiträume nicht gepr�
 Der bisher installierte Stand bleibt unverändert; diese Korrektur ist noch nicht
 auf dem Archivserver installiert. Keine Dienste, Timer oder Löschungen gestartet.
 Nachweis: `outputs/greenmind-staging-history-20261027/` im Projektverzeichnis.
+
+### Nativer historischer Vergleich – 27.10.2026
+
+- Bestehende Staging-Quellen ausschliesslich mit vorhandener SELECT-Rolle gelesen.
+- Acht vorhandene Aggregatzeilen als lokale Test-Parquets vollständig zurückgelesen.
+- Direct: sechs Zeilen, insgesamt 292600 Samples.
+- Gateway: eine Messwertzeile und eine WAV-Statistikzeile.
+- Gateway-Ausweichzeitraum: 07.09.2026, 12:00–12:10 UTC.
+- Der zunächst vorgesehene Gateway-Zeitraum enthielt keine Aggregate.
+- Je Datensatz sieben Zeitfenster plus fremde Organisation/Sensor geprüft.
+- Insgesamt 24 bestandene Vergleiche gegen native PostgreSQL-Aggregation.
+- Je Testdatei nur ein Download in den lokalen Cache.
+- Grenzen: 192 MiB RAM, 25 Prozent CPU, kein Swap.
+- Speicherhöchststände: 112721920 beziehungsweise 73977856 Byte; keine Speicherereignisse.
+- Nur eigene Testdateien nach bestätigtem Testende entfernt.
+- Container, Archivledger, Profile, Startsperren und Timer blieben unverändert.
+
+Der Testkatalog ist ausschliesslich ein temporärer Adapter; keine echte
+Archivquittung wurde auf `evicted` gesetzt. PostgreSQL blieb in REPEATABLE READ
+und READ ONLY. Keine Box-Verbindung und keine Änderung von Originaltabellen.
+Der Vergleich belegt korrekte Projektion dieser kleinen vorhandenen Datensätze,
+nicht eine vollständige Jahreslast, API-Anmeldung oder Mandantenkonfiguration.
+
+Neue vorgesehene Bindung: `/opt/greenmind/tiered-archive/overlays/staging-history-8ace20b9064a`.
+Runtime-SHA-256: `8ace20b9064ac33b2e835a1a82854c8f431ebb1af8f627f156564ba03356297b`.
+Vorheriges Overlay und Konfiguration werden zur Rücknahme erhalten. Installation
+und unabhängige Nachprüfung werden separat in der Ausführungsakte nachgewiesen:
+`outputs/greenmind-staging-history-native-20261027/` im Projektverzeichnis.
