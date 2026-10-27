@@ -12,13 +12,18 @@ FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
          'TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED',
          'TIERED_ARCHIVE_DIRECT_LOCATORS_ACCEPTED', 'TIERED_ARCHIVE_FEATURE_READS_ACCEPTED')
 STATE = '/var/lib/greenmind/tiered-archive/staging'
-BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-restore-a8ae83e46a5c/backend'
+BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-fullrestore-13a7d225d975/backend'
+CLIENT_DIR = '/opt/greenmind/tiered-archive/clients/postgresql-15.10-55bb10b9c0ca'
+CLIENT_MANIFEST = '55bb10b9c0cac4be01ef2d14ca03e51e3ccd837fb7ec83c2a46d4359d4b0e6f0'
 CREDENTIAL_FIELDS = ('RAW_ARCHIVE_SFTP_KEY', 'RAW_ARCHIVE_SFTP_KNOWN_HOSTS',
                      'RAW_ARCHIVE_READ_ONLY_SFTP_KEY', 'RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS',
                      'CREDENTIALS_DIRECTORY', 'TIERED_ARCHIVE_LATENCY_BASELINE')
 
 
 def validate(writer, reader, schedule):
+    if (writer.get('TIERED_ARCHIVE_PG_CLIENT_DIR') != CLIENT_DIR or
+            writer.get('TIERED_ARCHIVE_PG_CLIENT_MANIFEST_SHA256') != CLIENT_MANIFEST):
+        raise ValueError('Reviewed native PostgreSQL client runtime required')
     for profile in (writer, reader):
         # EnvironmentFile overrides Environment=, including systemd %d credentials.
         if profile.get('PYTHONPATH') != BACKEND:

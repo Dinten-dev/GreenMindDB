@@ -1,11 +1,14 @@
 """Consistent schema/master-data backups encrypted before leaving the worker."""
 
+import hashlib
+import json
 import os
 import secrets
 import stat
 import struct
 import subprocess
 import time
+from pathlib import Path
 
 from app.raw_archive.policy import ArchiveBlocked, checksum
 
@@ -14,6 +17,52 @@ BLOCK_BYTES = 1024 * 1024
 MAX_BYTES = 64 * 1024**2
 MASTER_TABLES = ("organization", "users", "zone", "gateway", "sensor", "plant")
 DIRECT_MASTER_TABLES = ("direct_device", "direct_enrollment", "direct_session")
+
+
+def client_command(name):
+    """Use a pinned native client bundle; every child remains in the job cgroup."""
+    import re
+
+    if name not in {"pg_dump", "pg_restore", "psql"}:
+        raise ArchiveBlocked("Unknown PostgreSQL client")
+    root = os.environ.get("TIERED_ARCHIVE_PG_CLIENT_DIR")
+    if not root:
+        return ["/usr/bin/" + name]
+    root = Path(root)
+    pinned = os.environ.get("TIERED_ARCHIVE_PG_CLIENT_MANIFEST_SHA256", "")
+    if not root.is_absolute() or root.resolve() != root or not re.fullmatch("[a-f0-9]{64}", pinned):
+        raise ArchiveBlocked("Pinned absolute PostgreSQL client runtime required")
+    manifest_path = root / "manifest.json"
+    if manifest_path.stat().st_size > 65536 or checksum(manifest_path) != pinned:
+        raise ArchiveBlocked("PostgreSQL client runtime manifest differs")
+    manifest = json.loads(manifest_path.read_text())
+    files = manifest.get("files", {})
+    if manifest.get("version") != 1 or not 4 <= len(files) <= 64:
+        raise ArchiveBlocked("Incomplete PostgreSQL client runtime")
+    for relative, expected in files.items():
+        part = Path(relative)
+        if part.is_absolute() or ".." in part.parts:
+            raise ArchiveBlocked("Unsafe PostgreSQL client runtime path")
+        path = root / part
+        info = path.lstat()
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != 0
+            or info.st_mode & 0o222
+            or checksum(path) != expected
+        ):
+            raise ArchiveBlocked("PostgreSQL client runtime file differs")
+    for path in [root, manifest_path]:
+        info = path.lstat()
+        if info.st_uid != 0 or info.st_mode & 0o222 or path.is_symlink():
+            raise ArchiveBlocked("PostgreSQL client runtime must be root-owned and read-only")
+    loader = manifest.get("loader")
+    if loader not in {"lib/ld-linux-x86-64.so.2", "lib/ld-musl-x86_64.so.1"}:
+        raise ArchiveBlocked("Unknown PostgreSQL client loader")
+    binary = "bin/" + name
+    if loader not in files or binary not in files:
+        raise ArchiveBlocked("Missing pinned PostgreSQL executable")
+    return [str(root / loader), "--library-path", str(root / "lib"), str(root / binary)]
 
 
 def require_current(receipts, *, source, environment, destination, now):
@@ -141,7 +190,54 @@ def decrypt(source, target, key, expected_sha256, *, checkpoint):
         raise ArchiveBlocked("Restored database backup checksum mismatch")
 
 
-def dump(database_url, source, output, *, checkpoint, executable="/usr/bin/pg_dump"):
+def master_proof(db, source, *, checkpoint):
+    """Bounded typed readback in the caller's consistent database transaction."""
+    from sqlalchemy import MetaData, Table, select, text
+
+    from .codec import encode
+
+    if source not in {"gateway", "direct"}:
+        raise ArchiveBlocked("Unknown backup source")
+    if db.dialect.name == "postgresql":
+        db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+    tables = MASTER_TABLES if source == "gateway" else DIRECT_MASTER_TABLES
+    result = {}
+    total = 0
+    for name in tables:
+        checkpoint()
+        table = Table(name, MetaData(), autoload_with=db)
+        keys = list(table.primary_key.columns)
+        if not keys:
+            raise ArchiveBlocked("Master-data proof requires stable primary keys")
+        schema = {
+            "columns": [
+                {
+                    "name": col.name,
+                    "type": col.type.compile(dialect=db.dialect),
+                    "nullable": col.nullable,
+                }
+                for col in table.columns
+            ],
+            "primary_key": [col.name for col in keys],
+        }
+        digest = hashlib.sha256(encode(schema))
+        count = 0
+        query = select(table).order_by(*keys).execution_options(stream_results=True, yield_per=128)
+        with db.execute(query) as rows:
+            for row in rows.mappings():
+                checkpoint()
+                raw = encode(dict(row))
+                total += len(raw)
+                if total > MAX_BYTES:
+                    raise ArchiveBlocked("Master-data proof exceeds bounded backup budget")
+                digest.update(len(raw).to_bytes(8, "big"))
+                digest.update(raw)
+                count += 1
+        result[name] = {"rows": count, "content_sha256": digest.hexdigest()}
+    return {"version": 1, "tables": result}
+
+
+def dump(database_url, source, output, *, checkpoint, executable=None, with_proof=False):
     """One exported snapshot spans schema and allowlisted master rows."""
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
@@ -176,7 +272,7 @@ def dump(database_url, source, output, *, checkpoint, executable="/usr/bin/pg_du
             ]:
                 target = output / (label + ".dump")
                 command = [
-                    executable,
+                    *([executable] if executable else client_command("pg_dump")),
                     "--no-password",
                     "--format=custom",
                     "--no-owner",
@@ -207,6 +303,8 @@ def dump(database_url, source, output, *, checkpoint, executable="/usr/bin/pg_du
                         raise
                 os.chmod(target, 0o600)
                 outputs.append(target)
+            if with_proof:
+                return outputs, master_proof(db, source, checkpoint=checkpoint)
             return outputs
     finally:
         engine.dispose()

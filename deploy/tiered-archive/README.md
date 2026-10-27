@@ -24,13 +24,47 @@ gegen isolierte Kopien. Snapshot-Abnahme, Backups und Produktion sind spätere P
 
 ## Programme
 
-`python -m app.tiered_archive` bietet `inventory`, `status`, `archive-sql`, `archive-wav`, `verify`, `restore`, `backup`, `catalog-backup`, `catalog-restore`, `tick` und `evict`.
+`python -m app.tiered_archive` bietet `inventory`, `status`, `archive-sql`, `archive-wav`, `verify`, `restore`, `restore-database`, `restore-backup`, `backup`, `catalog-backup`, `catalog-restore`, `tick` und `evict`.
 
 `tick` arbeitet begrenzte, private Scopes aus einer JSON-Konfiguration ab. WAV-Scans verwenden dauerhafte Cursor, SQL-Scans geschlossene UTC-Tage und Primärschlüssel. Vollständige Scans werden wiederholt, damit spätere Änderungen oder verspätete Einträge erneut archiviert werden. Der gesamte Lauf endet nach spätestens fünf Minuten. Die bestehende Copy-Koordination verhindert konkurrierende Transfers.
 
 `verify` benötigt die echte Storage-Box-Snapshot-ID. Bei `scheduled_snapshots=true` wählt der Timer den neuesten vom Anbieter gemeldeten Snapshot; er erstellt und löscht selbst keine Snapshots. Ein täglicher Snapshotplan muss auf der Storage Box bereits eingerichtet sein. Ein vor der Veröffentlichung entstandener Snapshot bestätigt das Paket nicht.
 
 `backup` erzeugt Schema und erlaubte Stammdatentabellen aus demselben PostgreSQL-Snapshot. Dumps werden vor dem Upload mit einem privaten 32-Byte-Schlüssel authentifiziert verschlüsselt. Diesen Schlüssel separat vom Server und der Storage Box verwahren. Der Code erstellt keine stillschweigend ungesicherten Ersatzschlüssel.
+
+Neue Sicherungen enthalten zusätzlich typisierte Stammdaten-Prüfwerte aus genau
+diesem Snapshot: Primärschlüsselreihenfolge, Spaltenformen, Datensatzzahlen und
+Inhaltsprüfsummen. Zeitwerte werden dafür in UTC gelesen. Die Daten-Dumps bleiben
+im bestätigten PostgreSQL-Format; es wird keine zweite vollständige Tabellenkopie
+ins Archiv geschrieben. Prüfdaten stehen im bestehenden Parquet/Zstandard-Index.
+
+`restore-backup --folder /absoluter/restore-ordner --profile-file /privates/zielprofil
+--manifest-sha256 <SHA256> --key-file /privater/backupschluessel` bleibt ohne
+`--execute` rein informativ. Das private Zielprofil enthält ausschliesslich die
+PostgreSQL-URL einer eigenen lokalen `_restore_`-Datenbank. Die Zielrolle muss
+deren Eigentümer sein, ohne Superuser-, Rollen-, Datenbank-, Replikations- oder
+RLS-Umgehungsrechte. Keine vorhandenen Tabellen, Typen, Funktionen oder fremden
+Schemas werden überschrieben. Beide Dumps werden vor jeder Datenbankverbindung
+vollständig authentifiziert entschlüsselt. Temporäre Klartextdateien sind privat
+und werden nach dem Aufruf entfernt.
+
+Vorbedingungen, Schema vor Daten, Stammdaten und abschliessende Constraints/Indizes
+laufen in einer gemeinsamen psql-Transaktion mit ON_ERROR_STOP. SQL-Fehler rollen
+die gesamte Rückspielung zurück. Anschliessend werden die tatsächlich gespeicherten
+Stammdaten und Spaltenformen mit dem Archivbeleg verglichen. Schlägt diese Prüfung
+nach Commit fehl, gibt es keine Erfolgsmeldung; die isolierte Zieldatenbank bleibt
+zur Untersuchung erhalten. Eine Wiederholung in eine gefüllte Datenbank ist gesperrt.
+Der anschliessende Messdaten-Restore bleibt ein eigener `restore-database`-Schritt.
+Alte Dumps ohne typisierten Stammdatenbeleg bleiben über den Datei-Restore erhalten;
+sie erbringen damit noch keinen neuen vollständigen Werte-Abnahmenachweis.
+
+Die PostgreSQL-Clientprozesse müssen in derselben begrenzten Dienst-cgroup laufen.
+Beim vorhandenen Staging wird dafür die isolierte, root-eigene schreibgeschützte
+PostgreSQL-15.10-Laufzeit wiederverwendet; keine Docker-Berechtigung für den Worker.
+`TIERED_ARCHIVE_PG_CLIENT_DIR` und `TIERED_ARCHIVE_PG_CLIENT_MANIFEST_SHA256` binden
+sie exakt. Vor jedem Start eines Clients werden Manifest und alle Dateien geprüft.
+Ohne diese optionale Bindung werden vorhandene Systemclients unter `/usr/bin`
+verwendet. Die konkrete bestehende Staging-Installation verlangt die geprüfte Bindung.
 
 `catalog-backup` sichert Katalog und Prüfjournal in unveränderlichen Teilen. `catalog-restore` kann daraus einen leeren Katalog rekonstruieren. Die ausgegebene Wurzelreferenz und ihre Prüfsumme müssen ausserhalb des Servers erhalten bleiben. `restore` schreibt Originale und verlustfreie SQL-Zeilen ausschliesslich in einen neuen Ordner.
 

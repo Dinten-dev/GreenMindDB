@@ -14,6 +14,8 @@ def profiles():
     writer = dict(line.split('=', 1) for line in (ROOT / 'deploy/tiered-archive/staging-copy.env.example').read_text().splitlines() if line and not line.startswith('#'))
     writer.update({k: 'false' for k in reuse.FLAGS})
     writer['PYTHONPATH'] = reuse.BACKEND
+    writer['TIERED_ARCHIVE_PG_CLIENT_DIR'] = reuse.CLIENT_DIR
+    writer['TIERED_ARCHIVE_PG_CLIENT_MANIFEST_SHA256'] = reuse.CLIENT_MANIFEST
     for key in reuse.CREDENTIAL_FIELDS:
         writer.pop(key, None)
     writer.update(TIERED_ARCHIVE_SOURCE_ORIGIN='existing_archive_host_staging_copy',
@@ -48,6 +50,8 @@ def test_existing_sources_and_box_pass():
 
 
 @pytest.mark.parametrize('field,value', [
+    ('TIERED_ARCHIVE_PG_CLIENT_DIR', '/tmp/unreviewed-clients'),
+    ('TIERED_ARCHIVE_PG_CLIENT_MANIFEST_SHA256', 'f' * 64),
     ('RAW_ARCHIVE_ENVIRONMENT', 'production'),
     ('TIERED_ARCHIVE_ENVIRONMENT', 'production'),
     ('RAW_ARCHIVE_GATEWAY_DATABASE_URL', 'postgresql+psycopg2://greenmind_archive_staging_ro:test@188.245.247.156:5433/plantdb_staging'),

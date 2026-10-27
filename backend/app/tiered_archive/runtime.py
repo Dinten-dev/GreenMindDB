@@ -487,11 +487,12 @@ def backup(source):
         key = key_from_file(Path(os.environ["TIERED_ARCHIVE_BACKUP_KEY_FILE"]))
         with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
             folder = Path(folder)
-            originals = dump(
+            originals, proof = dump(
                 database_url,
                 source,
                 folder,
                 checkpoint=checkpoint,
+                with_proof=True,
             )
             files = []
             for path in originals:
@@ -503,7 +504,12 @@ def backup(source):
                 path.unlink()
                 files.append((sealed, metadata))
             at = datetime.now(UTC)
-            body = {"source": source, "at": at, "files": [meta for _, meta in files]}
+            body = {
+                "source": source,
+                "at": at,
+                "files": [meta for _, meta in files],
+                "master_proof": proof,
+            }
             # The backup catalogue has an explicit system namespace and is never
             # returned through tenant-facing historical query routes.
             system_org = "00000000-0000-0000-0000-000000000000"

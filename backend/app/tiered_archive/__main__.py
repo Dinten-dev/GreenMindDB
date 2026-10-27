@@ -17,11 +17,14 @@ def main():
     sub.add_parser("status")
     sub.add_parser("bindings")
     sub.add_parser("catalog-backup")
-    restore_db = sub.add_parser("restore-database")
-    restore_db.add_argument("--folder", type=Path, required=True)
-    restore_db.add_argument("--profile-file", type=Path, required=True)
-    restore_db.add_argument("--manifest-sha256", required=True)
-    restore_db.add_argument("--execute", action="store_true")
+    for operation in ("restore-database", "restore-backup"):
+        restore_db = sub.add_parser(operation)
+        restore_db.add_argument("--folder", type=Path, required=True)
+        restore_db.add_argument("--profile-file", type=Path, required=True)
+        restore_db.add_argument("--manifest-sha256", required=True)
+        restore_db.add_argument("--execute", action="store_true")
+        if operation == "restore-backup":
+            restore_db.add_argument("--key-file", type=Path, required=True)
     catalogue = sub.add_parser("catalog-restore")
     catalogue.add_argument("--reference", type=Path, required=True)
     catalogue.add_argument("--reference-sha256", required=True)
@@ -68,7 +71,7 @@ def main():
         from .storage import Store
 
         result = {"bindings_sha256": runtime.bindings_sha256(Store(destination_from_environment()))}
-    elif args.operation == "restore-database":
+    elif args.operation in {"restore-database", "restore-backup"}:
         if not args.execute:
             result = {"status": "REVIEW_ONLY", "source_accesses": 0}
         else:
@@ -89,9 +92,21 @@ def main():
                 url = body.read(8193).strip()
                 if len(url) > 8192:
                     raise ArchiveBlocked("Restore profile exceeds budget")
-            result = restore_database(
-                args.folder, url, args.manifest_sha256, checkpoint=lambda: None
-            )
+            if args.operation == "restore-backup":
+                from .backup import key_from_file
+                from .database_restore import restore_backup
+
+                result = restore_backup(
+                    args.folder,
+                    url,
+                    args.manifest_sha256,
+                    key_from_file(args.key_file),
+                    checkpoint=lambda: None,
+                )
+            else:
+                result = restore_database(
+                    args.folder, url, args.manifest_sha256, checkpoint=lambda: None
+                )
     elif args.operation in {"catalog-backup", "catalog-restore"}:
         from app.raw_archive.policy import checksum
 
