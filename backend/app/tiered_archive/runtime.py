@@ -162,6 +162,7 @@ def worker(*, deleting=False):
 
 def engine(source, *, writing=False):
     from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
 
     from app.raw_archive.runner import metadata_source_settings
 
@@ -185,10 +186,9 @@ def engine(source, *, writing=False):
             raise ArchiveBlocked("Deletion writer is bound to another database")
     return create_engine(
         value,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=3,
-        pool_pre_ping=True,
+        # Bounded jobs create several short-lived adapters. Do not leave idle
+        # connections behind after each closed session/scoped export.
+        poolclass=NullPool,
         connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=4096"},
     )
 
