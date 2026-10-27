@@ -671,3 +671,21 @@ Runtime-SHA-256:
 Installations- und unabhängiger Nachweis folgen in den gleichnamigen JSON-Dateien
 unter `outputs/greenmind-staging-realrestore-20261027/`. Erst ein erfolgreicher
 Nachweis bestätigt die Installation. Keine Dienststarts oder Löschfreigaben.
+
+
+Installationsnachweis abgeschlossen: Code-Commit
+`f30693d6086b8a3afc6583191008ed3ebc7e8e2a`, Manifest
+`ccc33e520120fb164dea8ad7af5cefe9c3358f655998d574e546f5aaf8c13309`.
+384 root-eigene schreibgeschützte Dateien, davon 383 unverändert verknüpft.
+Der unabhängige Prüflauf enthält keine Fehler. Backup-Bindungen, Schlüssel,
+vier bestehende Container samt Startzeiten, Zeitplan, Ledger und PAUSE bestätigt.
+Beide Archivdienste und Timer inactive/disabled, Dienststartzeitstempel leer.
+Die eigene Direct-Restore-Datenbank und Testdateien sind entfernt; beendet wurde
+nur ihr eindeutig zugeordneter Timescale-Scheduler nach Prüfung von OID, Eigentümer
+und Testmarkierung. Keine fremden Sitzungen beendet.
+
+Rücknahme ausschliesslich über
+`/etc/greenmind/tiered-archive/before-credentials-83fd3279eea3/manifest.json`:
+fünf gesicherte Konfigurationen nach Hashprüfung und mit gespeicherten Modi
+zurückspielen, anschliessend daemon-reload ohne Dienststart. Voriges Overlay
+und die bereits freigegebenen SELECT-Rechte bleiben dabei erhalten.
