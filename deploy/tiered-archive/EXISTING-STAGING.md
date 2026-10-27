@@ -689,3 +689,45 @@ Rücknahme ausschliesslich über
 fünf gesicherte Konfigurationen nach Hashprüfung und mit gespeicherten Modi
 zurückspielen, anschliessend daemon-reload ohne Dienststart. Voriges Overlay
 und die bereits freigegebenen SELECT-Rechte bleiben dabei erhalten.
+
+
+### Native vollständige Staging-Restores – 27.10.2026, anschliessende Abnahme
+
+Das neue manuelle Prüfwerkzeug unter `native-restore/` stellt Gateway und Direct
+mit ihren tatsächlichen Staging-Inhalten über vollständige pg_dump-Dateien und
+separat verschlüsselte Wiederherstellungsmetadaten wieder her. Worker-SHA-256:
+`a291de324d0bba240f79a8d2c9ba1fe1ab4238e93c477230de5ab572df785b78`.
+
+Gateway: 43 öffentliche Tabellen, 110 Datensätze und zehn Sequenzstände;
+Direct: 14 öffentliche Tabellen, 32373 Datensätze und elf Sequenzstände.
+Alle öffentlichen Zeilen binär nach Primärschlüssel verglichen, zusätzlich
+Spalten, Constraints, Indizes, Views, Erweiterungsversionen, Hypertabellen,
+Dimensionen, Chunk-Zuordnung und Kompression. Ein separater künstlicher Test
+bestätigt auch tatsächliche komprimierte Messwerte. Zielgebundene administrative
+Timescale-Vor-/Nachbereitung behebt den zuvor reproduzierten Fehler, ohne dem
+Archivbenutzer globale Administratorrechte zu geben. Kopierte Hintergrundjobs
+werden vor Rückkehr in den Normalmodus ausschliesslich im eigenen Ziel deaktiviert.
+
+Der im normalen Dump fehlende interne Timescale-Zähler
+`_timescaledb_internal.bgw_job_stat_history_id_seq` wird aus authentifizierten
+Zusatzmetadaten wiederhergestellt. Keine Abschwächung des Sequenzvergleichs.
+Zusätzlich ausdrücklich freigegeben wurde nur SELECT auf
+`greenmind_direct_staging.public.direct_budget_id_seq` für die bestehende Rolle;
+OID 22784, keine USAGE-/UPDATE-Rechte. Rücknahmejournal:
+`/etc/greenmind/tiered-archive/before-direct-sequence-select-20261027.json`.
+
+Gateway 4,044 s / 43081728 Byte RAM-Spitze; Direct 6,152 s / 49606656 Byte.
+Ressourcenlimits unverändert: 192 MiB / 25 % CPU / 120 Sekunden Arbeitsbudget.
+Der erste Direct-Vergleich lief wegen zu häufiger Ressourcenabfragen in die
+Zeitgrenze. Gebündelte Prüfungen pro 64 KiB beziehungsweise 250 ms beheben den
+Aufwand; Bytegrenze weiterhin pro Block. Fünf Regressionstests bestanden.
+Lastpausen und fehlgeschlagene Versuche wurden erhalten; keine Grenzwerte erhöht.
+
+Alle eigenen Testdatenbanken/-dateien entfernt. Container/Startzeit, Profile,
+Ledger und PAUSE unverändert; Archivdienste und Timer inactive/disabled.
+Evidenz unter `outputs/greenmind-staging-timescale-full-20261027/` im Projekt.
+
+Diese Abnahme ersetzt NICHT das installierte periodische Backupformat. Dessen
+Timescale-komplette Integration und der Restore aus einem Storage-Box-Snapshot
+bleiben offen. Es gab keine Box-Uploads; keine Produktionsabnahme oder
+Löschfreigabe wird aus den lokalen Staging-Restores abgeleitet.
