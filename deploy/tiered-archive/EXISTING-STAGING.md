@@ -65,7 +65,7 @@ wieder her. Das Basisrelease und alle produktiven Laufzeiten bleiben unveränder
 
 Abnahme
 
-Die 30 lokalen Bindungstests prüfen insbesondere Produktionsquellen, versteckte
+Die 42 lokalen Bindungstests prüfen insbesondere Produktionsquellen, versteckte
 DB-Verbindungsparameter, Superuser-/S3-Rootzugänge, fremde Box-Wurzeln,
 Uploadzugänge im Leser und aktivierte Löschflags als Negativfälle.
 Native Quellen- und Ressourcenprüfung ist ein getrennter Nachweis. Ein durch
@@ -81,7 +81,7 @@ Löschtests und Produktionsfreigabe werden daraus ausdrücklich nicht abgeleitet
 
 Nachprüfung vom 27.10.2026
 
-- 105 unterschiedliche gezielte Tests bestanden; ein Sandbox-Socketfall wurde
+- 117 unterschiedliche gezielte Tests bestanden; ein Sandbox-Socketfall wurde
   separat mit freigegebenem lokalem Socketzugriff erfolgreich wiederholt.
 - Native v3: zwölf nacheinander erzeugte Adapter, null verbleibende Verbindungen;
   das bestehende Verbindungslimit drei bleibt unverändert.
@@ -109,3 +109,29 @@ freigegebenen manuellen Kopierlauf, anschliessend Snapshot-/Box-Restore der neue
 Formate, vollständigen SQL-Restore, Historien-/Mandantenabnahme und Beobachtung.
 Vorhandene frühere Abnahmen und Apple-Schlüsselwiederherstellung bleiben gültige
 historische Belege; sie werden weder neu eingerichtet noch als neue Tests ausgegeben.
+
+Freigegebener manueller Kopierlauf – abgeschlossen
+
+Nach ausdrücklicher Nutzerfreigabe wurden am 27.10.2026 um 16:18:42–16:19:00 UTC
+exakt eine Gateway- und eine vollständige Direct-WAV archiviert: 501688 Byte WAVs,
+zusätzlich 12399 Byte Parquet-Metadaten und 2926 Byte Manifeste. Sechs Dateien
+wurden über den bestehenden unabhängigen RO-Unteraccount vollständig gelesen,
+gehasht und inhaltlich geprüft; beide WAVs zusätzlich vollständig dekodiert.
+Die erste Ausführung hatte vor jedem Upload an der Versionsbindung gestoppt:
+EnvironmentFile überschrieb PYTHONPATH und die systemd-Credential-Pfade. Beide
+Profile wählen jetzt das Overlay; Credential-Pfade kommen ausschliesslich aus
+systemd. Zwölf zusätzliche Negativtests verhindern diese Profilkollision.
+Die Fortsetzung wurde erst nach bestätigtem Null-Upload und wirksamer Prüfung
+mit dem Dienstkonto ausgeführt. Keine blinde doppelte Übertragung.
+
+Der Lauf verwendete den vorhandenen Kopierdienst mit einer vorübergehenden,
+exakt begrenzten Startanweisung. Diese wurde anschliessend entfernt. Der Timer
+war nie aktiviert; beide Dienste sind wieder inactive/disabled, PAUSE gesetzt,
+INSTALLATION_READY entfernt. Die Rücknahme betrifft nur eigene Testdateien;
+Originaldaten und archivierte Pilotdateien bleiben erhalten.
+
+33 Ressourcensamples, 105,54 MiB cgroup-Spitze, keine high/max/OOM-Ereignisse;
+192 MiB RAM und 25 Prozent CPU blieben die Dienstgrenzen. Laufdauer 17,576 s.
+Der Archivstatus ist published, nicht snapshot-verified. Es gab keinen neuen
+Snapshot und keine Löschfreigabe. Ein vollständiger neuer Snapshot-/SQL-Restore,
+Mandanten-/Historienabnahme und unbeaufsichtigter Betrieb bleiben separate Schritte.

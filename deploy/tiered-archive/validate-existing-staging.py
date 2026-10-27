@@ -11,10 +11,19 @@ FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
          'TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED',
          'TIERED_ARCHIVE_DIRECT_LOCATORS_ACCEPTED', 'TIERED_ARCHIVE_FEATURE_READS_ACCEPTED')
 STATE = '/var/lib/greenmind/tiered-archive/staging'
+BACKEND = '/opt/greenmind/tiered-archive/overlays/existing-staging-ae624c30fdda/backend'
+CREDENTIAL_FIELDS = ('RAW_ARCHIVE_SFTP_KEY', 'RAW_ARCHIVE_SFTP_KNOWN_HOSTS',
+                     'RAW_ARCHIVE_READ_ONLY_SFTP_KEY', 'RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS',
+                     'CREDENTIALS_DIRECTORY')
 
 
 def validate(writer, reader, schedule):
     for profile in (writer, reader):
+        # EnvironmentFile overrides Environment=, including systemd %d credentials.
+        if profile.get('PYTHONPATH') != BACKEND:
+            raise ValueError('Profile must select the exact reviewed runtime overlay')
+        if any(key in profile for key in CREDENTIAL_FIELDS):
+            raise ValueError('Credential paths must come from systemd, not EnvironmentFile')
         for key in ('RAW_ARCHIVE_ENVIRONMENT', 'TIERED_ARCHIVE_ENVIRONMENT'):
             if profile.get(key) != 'staging':
                 raise ValueError('Explicit staging environment required')

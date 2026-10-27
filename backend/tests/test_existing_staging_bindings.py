@@ -13,6 +13,9 @@ spec.loader.exec_module(reuse)
 def profiles():
     writer = dict(line.split('=', 1) for line in (ROOT / 'deploy/tiered-archive/staging-copy.env.example').read_text().splitlines() if line and not line.startswith('#'))
     writer.update({k: 'false' for k in reuse.FLAGS})
+    writer['PYTHONPATH'] = reuse.BACKEND
+    for key in reuse.CREDENTIAL_FIELDS:
+        writer.pop(key, None)
     writer.update(TIERED_ARCHIVE_SOURCE_ORIGIN='existing_archive_host_staging_copy',
                   RAW_ARCHIVE_WORKER_ROLE='existing-staging',
                   RAW_ARCHIVE_SFTP_USER='u676312', RAW_ARCHIVE_SFTP_HOST='u676312.your-storagebox.de',
@@ -26,6 +29,7 @@ def profiles():
         writer['RAW_ARCHIVE_' + kind + '_S3_ACCESS_KEY'] = 'gm-tiered-staging-ro'
         writer['RAW_ARCHIVE_' + kind + '_S3_SECRET_KEY'] = 'synthetic-test-only'
     reader = {k: 'false' for k in reuse.FLAGS}
+    reader['PYTHONPATH'] = reuse.BACKEND
     reader.update(RAW_ARCHIVE_ENVIRONMENT='staging', TIERED_ARCHIVE_ENVIRONMENT='staging',
                   TIERED_ARCHIVE_STATE_DIR=reuse.STATE, RAW_ARCHIVE_STATE_DIR=reuse.STATE + '/raw',
                   RAW_ARCHIVE_READ_ONLY_SFTP_USER='u676312-sub1',
@@ -69,5 +73,14 @@ def test_unsafe_writer_rejected(field, value):
 def test_reader_cannot_inherit_upload_or_change_root(field, value):
     writer, reader, schedule = profiles()
     reader[field] = value
+    with pytest.raises(ValueError):
+        reuse.validate(writer, reader, schedule)
+
+
+@pytest.mark.parametrize('profile_index', [0, 1])
+@pytest.mark.parametrize('field', ['PYTHONPATH', *reuse.CREDENTIAL_FIELDS])
+def test_environment_file_cannot_override_runtime_or_credentials(profile_index, field):
+    writer, reader, schedule = profiles()
+    (writer, reader)[profile_index][field] = '/old-release-or-private-key'
     with pytest.raises(ValueError):
         reuse.validate(writer, reader, schedule)
