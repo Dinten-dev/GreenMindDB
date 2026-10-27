@@ -32,6 +32,9 @@ def main():
     inventory.add_argument("--source", choices=("gateway", "direct"), required=True)
     backup = sub.add_parser("backup")
     backup.add_argument("--source", choices=("gateway", "direct"), required=True)
+    backup.add_argument(
+        "--format", choices=("schema-master-v2", "postgres-full-v1"), default="schema-master-v2"
+    )
     sql = sub.add_parser("archive-sql")
     sql.add_argument("--dataset", required=True)
     sql.add_argument("--organization", required=True)
@@ -129,7 +132,7 @@ def main():
         from .execution import bounded_job
 
         with bounded_job(runtime.state_root(), kind="backup-" + args.source):
-            result = runtime.backup(args.source)
+            result = runtime.backup(args.source, backup_format=args.format)
     elif args.operation == "inventory":
         from .source import Source
 

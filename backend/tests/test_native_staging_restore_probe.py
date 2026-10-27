@@ -9,7 +9,7 @@ import pytest
 
 from app.raw_archive.policy import ArchiveBlocked
 
-WORKER = Path(__file__).resolve().parents[2] / "deploy/tiered-archive/native-restore/worker.py"
+WORKER = Path(__file__).resolve().parents[1] / "app/tiered_archive/native_backup.py"
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def sink_type():
 
 def test_small_copy_records_do_not_poll_resources_per_row(sink_type):
     namespace, _, calls = sink_type
-    sink = namespace["Sink"]([0])
+    sink = namespace["Sink"]([0], namespace["check"])
     for _ in range(100_000):
         sink.write(b"12345678")
     assert sink.digest() == hashlib.sha256(b"12345678" * 100_000).hexdigest()
@@ -42,7 +42,7 @@ def test_small_copy_records_do_not_poll_resources_per_row(sink_type):
 
 def test_every_byte_counts_toward_budget_even_before_next_poll(sink_type):
     namespace, _, _ = sink_type
-    sink = namespace["Sink"]([namespace["MAX"] - 1])
+    sink = namespace["Sink"]([namespace["MAX"] - 1], namespace["check"])
     sink.write(b"a")
     with pytest.raises(ArchiveBlocked, match="budget"):
         sink.write(b"b")
@@ -50,7 +50,7 @@ def test_every_byte_counts_toward_budget_even_before_next_poll(sink_type):
 
 def test_sparse_copy_records_still_poll_by_elapsed_time(sink_type):
     namespace, clock, calls = sink_type
-    sink = namespace["Sink"]([0])
+    sink = namespace["Sink"]([0], namespace["check"])
     for i in range(1, 6):
         clock.now = i * 0.3
         sink.write(b"a")
@@ -59,7 +59,7 @@ def test_sparse_copy_records_still_poll_by_elapsed_time(sink_type):
 
 def test_final_digest_checks_resources_even_for_empty_table(sink_type):
     namespace, _, calls = sink_type
-    sink = namespace["Sink"]([0])
+    sink = namespace["Sink"]([0], namespace["check"])
     assert sink.digest() == hashlib.sha256(b"").hexdigest()
     assert len(calls) == 1
 
@@ -71,7 +71,7 @@ def test_large_copy_record_propagates_guard_failure_before_hashing(sink_type):
         raise ArchiveBlocked("paused")
 
     namespace["check"] = fail
-    sink = namespace["Sink"]([0])
+    sink = namespace["Sink"]([0], namespace["check"])
     with pytest.raises(ArchiveBlocked, match="paused"):
         sink.write(b"x" * 65536)
     assert sink.h.hexdigest() == hashlib.sha256(b"").hexdigest()

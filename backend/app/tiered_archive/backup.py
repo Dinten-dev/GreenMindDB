@@ -131,6 +131,7 @@ def require_current(receipts, *, source, environment, destination, now):
         files = receipt.get("files", [])
         if (
             not files
+            or files[0].get("backup_format") not in (None, "schema-master-v2")
             or type(files[0].get("master_proof_version")) is not int
             or files[0]["master_proof_version"] != MASTER_PROOF_VERSION
         ):

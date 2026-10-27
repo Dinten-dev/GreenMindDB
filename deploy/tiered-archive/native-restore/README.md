@@ -12,7 +12,7 @@ kein produktiver Gesamtbackup-Ersatz und noch kein Teil des periodischen Workers
 - Konsistenter vollständiger PostgreSQL-Dump mit exportiertem Snapshot,
   einschliesslich Timescale-Konfiguration und komprimierter Nutzdaten.
 - Bestehender Backupschlüssel via systemd LoadCredential; verschlüsselter Dump
-  wird vollständig authentifiziert, bevor pg_restore ihn verwenden darf.
+  und Metadaten werden vollständig authentifiziert, bevor pg_restore sie verwenden darf.
 - Alle öffentlichen Tabellen werden nach Primärschlüssel sortiert im nativen
   PostgreSQL-Binärformat verglichen. Ein Tabelleninhalt ohne Primärschlüssel
   wird nicht stillschweigend ausgelassen.
@@ -32,6 +32,33 @@ kein produktiver Gesamtbackup-Ersatz und noch kein Teil des periodischen Workers
 - Keine Box-Verbindung, keine neuen Konten, keine globalen Rechteänderungen.
   Der Test braucht nur bestehende SELECT-Rechte der ausdrücklich freigegebenen
   Staging-Objekte. Fehlende Rechte werden nicht automatisch vergeben.
+
+## Versioniertes Archivformat
+
+Der Prüflauf verwendet jetzt dasselbe `postgres-full-v1`-Modul wie der explizite
+CLI-Pfad `backup --format postgres-full-v1`. Das Paket enthält dieses Modul
+mit eigener SHA-256; der Supervisor legt es nur im neuen Testordner root-eigen
+und schreibgeschützt ab. Installierte Runtime, Dienstprofile und Zeitplan bleiben
+unverändert. Die standardmässige periodische Sicherung bleibt `schema-master-v2`.
+
+Das native Paket umfasst einen Parquet-Katalog, den verschlüsselten vollständigen
+PostgreSQL-Dump und verschlüsselte Wiederherstellungsmetadaten. Ein Manifest bindet
+Umgebung, Quellidentität, Zeitpunkt und alle Dateiprüfsummen. Metadaten binden
+zusätzlich den unverschlüsselten Dump-Hash, sämtliche Sequenzstände, Inhalts- und
+Strukturnachweise und die kopierten Timescale-Policies.
+
+Der Prüflauf veröffentlicht das Paket über die reguläre Pipeline ausschliesslich
+in einem eigenen lokalen Dateispeicher und liest alle Teile zurück. Die ersten
+Capture-Dateien werden entfernt, bevor der Restore die zurückgelesenen Teile
+vollständig authentifiziert. Das separate Testjournal bleibt `published`: Es wird
+kein Storage-Box-Snapshot simuliert oder als bestanden eingetragen. Originale,
+bestehendes Archivjournal und bestehende Löschfreigaben bleiben unberührt.
+
+Das Format ist auf die beiden bestehenden lokalen Staging-Datenbanken begrenzt;
+Produktionsquellen und Schreibrollen werden abgewiesen. Es erteilt noch keine
+Löschberechtigung, auch nicht mit einem nachträglich ergänzten alten Prüfversionsfeld.
+Der bisherige `restore-backup`-Befehl verweigert dieses Format; die vollständige
+Timescale-Rückspielung benötigt weiterhin diesen kontrollierten Supervisor.
 
 ## Privilegientrennung
 
@@ -65,7 +92,7 @@ PostgreSQL bleibt in seinem bereits bestehenden separaten 320-MiB-Container.
 
 Lokal erzeugt `package.py gateway <neuer-absoluter-Pfad>` beziehungsweise
 `package.py direct <neuer-absoluter-Pfad>` ein versioniertes Prüfskript mit
-Worker-Prüfsumme. Vorhandene Dateien/Symlinks werden nicht überschrieben. Die
+Worker- und Modulprüfsumme. Vorhandene Dateien/Symlinks werden nicht überschrieben. Die
 Paketierung führt nichts auf dem Server aus. Das Paket wird über den bestehenden
 administrativen Transport nach Prüfung seines genauen Umfangs ausgeführt.
 Es enthält keinen Schlüssel oder Quellpasswort; Bindungen werden erst auf dem
@@ -77,7 +104,9 @@ Ein erfolgreicher lokaler Restore beweist noch keinen Storage-Box-Upload,
 Snapshot-Restore, MinIO-Objektrestore, historischen API-/Mandantenvergleich oder
 24-Stunden-Gesamtbetrieb. Das installierte alte Schema-/Stammdatenformat wird
 hierdurch nicht automatisch zu einem Timescale-kompletten Archivformat.
-Dessen Integration, versionierter Nachweis und Box-Rücklesung bleiben erforderlich.
+Das neue Format ist lokal integriert und mit echten Staging-Kopien geprüft;
+seine Installation sowie tatsächliche Box-Veröffentlichung und Snapshot-Rücklesung
+bleiben gesonderte Schritte.
 Für grosse Produktionsquellen braucht es weiterhin die geplante begrenzte,
 partitionierte Archivierung; die 64-MiB-Staging-Grenze wird nicht angehoben.
 

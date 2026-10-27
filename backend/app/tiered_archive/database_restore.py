@@ -89,6 +89,8 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
         != [{key: value for key, value in part.items() if key != "key"} for part in parts[1:]]
     ):
         raise ArchiveBlocked("Encrypted backup index binding mismatch")
+    if body.get("backup_format") == "postgres-full-v1":
+        raise ArchiveBlocked("Native backup requires the controlled Timescale restore coordinator")
     proof = body.get("master_proof")
     if (
         not isinstance(proof, dict)

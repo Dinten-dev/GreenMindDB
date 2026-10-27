@@ -7,6 +7,7 @@ import pathlib
 import subprocess
 import sys
 import time
+from contextlib import ExitStack
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -16,11 +17,19 @@ state = root / "state"
 sys.path.insert(
     0, "/opt/greenmind/tiered-archive/overlays/staging-credentials-83fd3279eea3/backend"
 )
+import app.tiered_archive
 from app.raw_archive.health import HealthProbe
 from app.raw_archive.policy import ArchiveBlocked, checksum
+
+# Only the hash-pinned module shipped beside this temporary worker is overlaid.
+app.tiered_archive.__path__.insert(0, str(root))
 from app.tiered_archive import backup
+from app.tiered_archive import native_backup as native
 from app.tiered_archive.latency import LatencyGuard
+from app.tiered_archive.ledger import Ledger
+from app.tiered_archive.pipeline import publish, verify_file
 from app.tiered_archive.resources import read_cgroup
+from app.tiered_archive.storage import validate_key
 
 credentials = pathlib.Path(os.environ["CREDENTIALS_DIRECTORY"])
 profile = json.loads((credentials / "database").read_text())
@@ -147,143 +156,46 @@ def client(kind, args):
             raise
 
 
-class Sink:
-    def __init__(self, budget):
-        self.h = hashlib.sha256()
-        self.bytes = 0
-        self.budget = budget
-        self.checked_bytes = 0
-        self.checked_at = time.monotonic()
+class LocalStore:
+    """Exercise the real publication format without any Storage Box connection."""
 
-    def write(self, b):
-        self.bytes += len(b)
-        self.budget[0] += len(b)
-        if self.budget[0] > MAX:
-            raise ArchiveBlocked("Full binary content proof exceeds budget")
-        now = time.monotonic()
-        if self.bytes - self.checked_bytes >= 65536 or now - self.checked_at >= 0.25:
-            check()
-            self.checked_bytes, self.checked_at = self.bytes, now
-        self.h.update(b)
-        return len(b)
+    identity = "isolated-native-format-probe"
 
-    def digest(self):
-        check()
-        return self.h.hexdigest()
+    def __init__(self, directory):
+        self.root = directory
+        directory.mkdir(mode=0o700)
+
+    def publish(self, key, source):
+        validate_key(key)
+        target = self.root / key
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with source.open("rb") as src, target.open("xb") as dst:
+            while block := src.read(65536):
+                check()
+                dst.write(block)
+
+    def readback(self, reference, target):
+        validate_key(reference["key"])
+        with (self.root / reference["key"]).open("rb") as src, target.open("xb") as dst:
+            while block := src.read(65536):
+                check()
+                dst.write(block)
+        verify_file(target, reference, check)
 
 
 def sequence_proof(db):
-    quote = db.dialect.identifier_preparer.quote
-    rows = db.execute(
-        text(
-            "SELECT n.nspname,c.relname,s.seqstart,s.seqincrement,s.seqmax,s.seqmin,s.seqcache,s.seqcycle FROM pg_sequence s JOIN pg_class c ON c.oid=s.seqrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema' ORDER BY 1,2"
-        )
-    ).all()
-    values = {}
-    for schema, name, *settings in rows:
-        check()
-        last, called = db.execute(
-            text(
-                "SELECT last_value,is_called FROM " + quote(schema) + "." + quote(name)
-            )
-        ).one()
-        values[schema + "." + name] = {
-            "settings": settings,
-            "last_value": last,
-            "is_called": called,
-        }
-    return values
+    return native.sequence_proof(db, checkpoint=check)
 
 
 def content_proof(db):
-    db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
-    db.execute(text("SET LOCAL extra_float_digits=3"))
-    names = (
-        db.execute(
-            text(
-                "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert 1 <= len(names) <= 128
-    quote = db.dialect.identifier_preparer.quote
-    tables = {}
-    budget = [0]
-    for name in names:
-        check()
-        keys = (
-            db.execute(
-                text(
-                    "SELECT a.attname FROM pg_index i CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum WHERE i.indrelid=to_regclass(:name) AND i.indisprimary ORDER BY k.ord"
-                ),
-                {"name": "public." + quote(name)},
-            )
-            .scalars()
-            .all()
-        )
-        if not keys:
-            raise ArchiveBlocked(
-                "Full proof requires primary key for every public table"
-            )
-        count = db.execute(
-            text("SELECT count(*) FROM public." + quote(name))
-        ).scalar_one()
-        sink = Sink(budget)
-        with db.connection.driver_connection.cursor() as cursor:
-            cursor.copy_expert(
-                "COPY (SELECT * FROM public."
-                + quote(name)
-                + " ORDER BY "
-                + ",".join(quote(k) for k in keys)
-                + ") TO STDOUT WITH (FORMAT binary)",
-                sink,
-            )
-        tables[name] = {
-            "rows": count,
-            "binary_sha256": sink.digest(),
-            "bytes": sink.bytes,
-        }
-
-    def hash_query(query):
-        sink = Sink(budget)
-        with db.connection.driver_connection.cursor() as cursor:
-            cursor.copy_expert(
-                "COPY (" + query + ") TO STDOUT WITH (FORMAT binary)", sink
-            )
-        return sink.digest()
-
-    definitions = {
-        "columns": "SELECT c.relname,a.attnum,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,a.attidentity,a.attgenerated,pg_get_expr(d.adbin,d.adrelid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped ORDER BY c.relname,a.attnum",
-        "constraints": "SELECT c.relname,k.conname,pg_get_constraintdef(k.oid) FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' ORDER BY 1,2",
-        "indexes": "SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY 1,2",
-        "views": "SELECT viewname,definition FROM pg_views WHERE schemaname='public' ORDER BY 1",
-        "extensions": "SELECT e.extname,e.extversion,n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace ORDER BY 1",
-        "hypertables": "SELECT hypertable_schema,hypertable_name,num_dimensions,compression_enabled FROM timescaledb_information.hypertables ORDER BY 1,2",
-        "chunks": "SELECT hypertable_schema,hypertable_name,chunk_schema,chunk_name,is_compressed,range_start,range_end FROM timescaledb_information.chunks ORDER BY 1,2,3,4",
-        "dimensions": "SELECT hypertable_schema,hypertable_name,column_name,column_type::text,dimension_type,time_interval,integer_interval,num_partitions FROM timescaledb_information.dimensions ORDER BY hypertable_schema,hypertable_name,dimension_number",
-        "compression_settings": "SELECT hypertable_schema,hypertable_name,attname,segmentby_column_index,orderby_column_index,orderby_asc,orderby_nullsfirst FROM timescaledb_information.compression_settings ORDER BY hypertable_schema,hypertable_name,attname",
-    }
-    shapes = {name: hash_query(query) for name, query in definitions.items()}
-    return {
-        "public_tables": tables,
-        "structure": shapes,
-        "proof_bytes": budget[0],
-        "sequences": sequence_proof(db),
-    }
+    return native.content_proof(db, checkpoint=check)
 
 
 def jobs_proof(db):
-    rows = db.execute(
-        text(
-            "SELECT job_id,application_name,proc_schema,proc_name,schedule_interval::text,max_runtime::text,max_retries,retry_period::text,owner::text,scheduled,fixed_schedule,config::text FROM timescaledb_information.jobs WHERE job_id>=1000 ORDER BY job_id"
-        )
-    ).all()
-    return hashlib.sha256(
-        json.dumps([list(r) for r in rows], separators=(",", ":")).encode()
-    ).hexdigest()
+    return native.jobs_proof(db)
 
+
+contexts = ExitStack()
 
 stage = "identity"
 try:
@@ -293,77 +205,67 @@ try:
     key_path = credentials / "backup-key"
     assert checksum(key_path) == profile["key_sha256"]
     key = backup.key_from_file(key_path)
-    dump = state / "full.dump"
-    stage = "consistent_full_capture"
-    with (
-        source.connect().execution_options(isolation_level="REPEATABLE READ") as db,
-        db.begin(),
-    ):
-        db.execute(text("SET TRANSACTION READ ONLY"))
-        snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
-        expected = content_proof(db)
-        expected_jobs = jobs_proof(db)
-        client(
-            "source",
-            [
-                *backup.client_command("pg_dump"),
-                "--no-password",
-                "--format=custom",
-                "--no-owner",
-                "--no-acl",
-                "--snapshot=" + snapshot,
-                "--file=" + str(dump),
-            ],
-        )
-        if sequence_proof(db) != expected["sequences"]:
-            raise ArchiveBlocked("Source sequence changed during consistent capture")
-    assert 0 < dump.stat().st_size <= MAX
-    report["dump_bytes"] = dump.stat().st_size
-    encrypted = state / "full.bin"
-    reference = backup.encrypt(dump, encrypted, key, checkpoint=check)
-    dump.unlink()
     source.dispose()
-    metadata = state / "capture.json"
-    metadata.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "source_database": source_database,
-                "dump_plaintext_sha256": reference["plaintext_sha256"],
-                "proof": expected,
-                "jobs_proof": expected_jobs,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    )
-    sealed_metadata = state / "capture.bin"
-    metadata_reference = backup.encrypt(
-        metadata, sealed_metadata, key, checkpoint=check
-    )
-    metadata.unlink()
-    stage = "authenticated_decryption"
-    backup.decrypt(
-        sealed_metadata,
-        metadata,
+    capture_folder = state / "capture"
+    capture_folder.mkdir(mode=0o700)
+    stage = "native_archive_capture"
+    candidate, files = native.capture(
+        profile["source"]["url"],
+        "gateway" if source_database == "plantdb_staging" else "direct",
+        capture_folder,
         key,
-        metadata_reference["plaintext_sha256"],
+        environment="staging",
         checkpoint=check,
     )
-    recovered = json.loads(metadata.read_text())
-    metadata.unlink()
-    assert recovered["version"] == 1 and recovered["source_database"] == source_database
-    assert recovered["dump_plaintext_sha256"] == reference["plaintext_sha256"]
+    assert not (capture_folder / "native-full.dump").exists()
+    assert not (capture_folder / "native-metadata.json").exists()
+    stage = "local_archive_publication_and_readback"
+    store = LocalStore(state / "local-store")
+    ledger = Ledger(state / "local-ledger")
+    try:
+        receipt = publish(candidate, files, store, ledger, checkpoint=check)
+        assert receipt["state"] == "published"  # No invented snapshot proof.
+        report["archive_identity"] = candidate.identity
+        report["manifest_sha256"] = receipt["manifest"]["sha256"]
+        report["archive_bytes"] = (
+            sum(p["bytes"] for p in receipt["files"]) + receipt["manifest"]["bytes"]
+        )
+        recovered_folder = state / "recovered"
+        recovered_folder.mkdir(mode=0o700)
+        store.readback(receipt["manifest"], recovered_folder / "manifest.json")
+        for number, part in enumerate(receipt["files"]):
+            store.readback(part, recovered_folder / f"{number:04d}.{part['format']}")
+    finally:
+        ledger.close()
+    # Drop all capture inputs before database replay. Only readback artifacts remain.
+    for path, _ in files:
+        path.unlink()
+    capture_folder.rmdir()
+    stage = "authenticated_native_archive"
+    dump, recovered = contexts.enter_context(
+        native.authenticated_bundle(
+            recovered_folder,
+            receipt["manifest"]["sha256"],
+            key,
+            checkpoint=check,
+        )
+    )
     expected, expected_jobs = recovered["proof"], recovered["jobs_proof"]
+    report["backup_format"] = native.FORMAT
+    report["dump_bytes"] = dump.stat().st_size
     report["encrypted_parts"] = [
         {k: part[k] for k in ("bytes", "sha256", "plaintext_sha256")}
-        for part in (reference, metadata_reference)
+        for part in receipt["files"][1:]
     ]
-    backup.decrypt(
-        encrypted, dump, key, reference["plaintext_sha256"], checkpoint=check
+    report["encrypted_bytes"] = sum(p["bytes"] for p in receipt["files"][1:])
+    report["cases"].extend(
+        [
+            "consistent_native_archive_capture",
+            "real_pipeline_local_publication_and_readback",
+            "original_capture_artifacts_removed_before_replay",
+            "all_encrypted_parts_authenticated_before_replay",
+        ]
     )
-    report["encrypted_bytes"] = encrypted.stat().st_size
-    report["cases"].append("consistent_full_dump_encrypted_authenticated_existing_key")
     with target.connect() as db:
         assert db.execute(text("SHOW timescaledb.restoring")).scalar_one() == "on"
     stage = "native_pg_restore"
@@ -466,6 +368,7 @@ except Exception as e:  # noqa: BLE001 -- sanitize diagnostics; retain failed te
         report["sqlstate"] = getattr(orig, "pgcode", None)
     # Never emit actual row values or driver exception strings.
 finally:
+    contexts.close()
     for e in engines:
         e.dispose()
     report.update(seconds=round(time.monotonic() - started, 3), resources=read_cgroup())

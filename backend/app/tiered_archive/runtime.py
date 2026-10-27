@@ -463,12 +463,17 @@ def latest_snapshot():
         return max(snapshots, key=lambda row: row["created"])["id"]
 
 
-def backup(source):
+def backup(source, *, backup_format="schema-master-v2"):
     from . import parquet
     from .backup import decrypt, dump, encrypt, key_from_file
     from .codec import digest
     from .pipeline import publish
     from .policy import Candidate
+
+    if backup_format not in {"schema-master-v2", "postgres-full-v1"}:
+        raise ArchiveBlocked("Unknown database backup format")
+    if backup_format == "postgres-full-v1" and environment() != "staging":
+        raise ArchiveBlocked("Native full backup is currently restricted to Staging")
 
     with worker() as (ledger, store, checkpoint):
         from sqlalchemy.engine import make_url
@@ -487,6 +492,26 @@ def backup(source):
         key = key_from_file(Path(os.environ["TIERED_ARCHIVE_BACKUP_KEY_FILE"]))
         with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
             folder = Path(folder)
+            if backup_format == "postgres-full-v1":
+                from app.raw_archive.policy import checksum
+
+                from .native_backup import capture
+
+                if selected != expected:
+                    raise ArchiveBlocked("Native backup must use the exact existing source binding")
+                if checksum(Path(os.environ["TIERED_ARCHIVE_BACKUP_KEY_FILE"])) != os.environ.get(
+                    "TIERED_ARCHIVE_BACKUP_KEY_SHA256"
+                ):
+                    raise ArchiveBlocked("Native backup key differs from the recovery binding")
+                candidate, files = capture(
+                    database_url,
+                    source,
+                    folder,
+                    key,
+                    environment=environment(),
+                    checkpoint=checkpoint,
+                )
+                return publish(candidate, files, store, ledger, checkpoint=checkpoint)
             originals, proof = dump(
                 database_url,
                 source,

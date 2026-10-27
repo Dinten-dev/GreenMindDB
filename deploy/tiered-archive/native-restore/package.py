@@ -13,6 +13,9 @@ def package(source, output):
         raise ValueError("Only existing Staging sources are allowed")
     root = Path(__file__).resolve().parent
     worker = (root / "worker.py").read_bytes()
+    module = (
+        root.parents[2] / "backend/app/tiered_archive/native_backup.py"
+    ).read_bytes()
     supervisor = (root / "supervisor.template.py").read_text()
     if (
         supervisor.count("PAYLOAD = None") != 1
@@ -22,11 +25,14 @@ def package(source, output):
     payload = {
         "data": base64.b64encode(worker).decode("ascii"),
         "sha256": hashlib.sha256(worker).hexdigest(),
+        "native_data": base64.b64encode(module).decode("ascii"),
+        "native_sha256": hashlib.sha256(module).hexdigest(),
     }
     prepared = supervisor.replace(
         "PAYLOAD = None", "PAYLOAD = " + repr(payload)
     ).replace("SOURCE = None", "SOURCE = " + repr(source))
     compile(worker, "worker.py", "exec")
+    compile(module, "native_backup.py", "exec")
     compile(prepared, "supervisor.py", "exec")
     fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w") as target:
@@ -36,6 +42,7 @@ def package(source, output):
     return {
         "source": source,
         "worker_sha256": payload["sha256"],
+        "native_sha256": payload["native_sha256"],
         "package_sha256": hashlib.sha256(prepared.encode()).hexdigest(),
         "remote_execution": False,
     }

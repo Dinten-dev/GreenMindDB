@@ -36,6 +36,7 @@ out = {
     "utc": datetime.datetime.now(datetime.UTC).isoformat(),
     "original_changes": 0,
     "worker_sha256": PAYLOAD["sha256"],
+    "native_sha256": PAYLOAD["native_sha256"],
     "existing_staging_source_read_allowed": True,
     "box_accesses": 0,
     "archive_services_started": False,
@@ -154,6 +155,10 @@ try:
     assert hashlib.sha256(body).hexdigest() == PAYLOAD["sha256"]
     (root / "worker.py").write_bytes(body)
     (root / "worker.py").chmod(0o444)
+    module = base64.b64decode(PAYLOAD["native_data"])
+    assert hashlib.sha256(module).hexdigest() == PAYLOAD["native_sha256"]
+    (root / "native_backup.py").write_bytes(module)
+    (root / "native_backup.py").chmod(0o444)
     profile = {
         "marker": marker,
         "source_database": SOURCE_DATABASE,

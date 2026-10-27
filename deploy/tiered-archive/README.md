@@ -32,7 +32,15 @@ gegen isolierte Kopien. Snapshot-Abnahme, Backups und Produktion sind spätere P
 
 `backup` erzeugt Schema und erlaubte Stammdatentabellen aus demselben PostgreSQL-Snapshot. Dumps werden vor dem Upload mit einem privaten 32-Byte-Schlüssel authentifiziert verschlüsselt. Diesen Schlüssel separat vom Server und der Storage Box verwahren. Der Code erstellt keine stillschweigend ungesicherten Ersatzschlüssel.
 
-Neue Sicherungen enthalten zusätzlich typisierte Stammdaten-Prüfwerte aus genau
+Zusätzlich gibt es das explizite `backup --format postgres-full-v1` für die beiden
+bestehenden lokalen Staging-Vollkopien (je höchstens 64 MiB). Es enthält den nativen
+vollständigen Dump samt verschlüsselten Sequenz-, Inhalts- und Timescale-Nachweisen.
+Es ersetzt weder den Standard `schema-master-v2` noch den Zeitplan und autorisiert
+keine Löschung. Die kontrollierte native Rückspielung und Grenzen beschreibt
+[native-restore/README.md](native-restore/README.md). Die lokale Abnahme ersetzt
+keinen echten Storage-Box-Snapshot-Restore oder Produktionsnachweis.
+
+Neue Schema-/Stammdatensicherungen enthalten zusätzlich typisierte Stammdaten-Prüfwerte aus genau
 diesem Snapshot: Primärschlüsselreihenfolge, Spaltenformen, Datensatzzahlen und
 Inhaltsprüfsummen. Zeitwerte werden dafür in UTC gelesen. Die Daten-Dumps bleiben
 im bestätigten PostgreSQL-Format; es wird keine zweite vollständige Tabellenkopie
