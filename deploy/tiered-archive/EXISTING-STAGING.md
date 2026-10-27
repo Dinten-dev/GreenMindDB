@@ -375,3 +375,75 @@ Freigabeprüfung blockierte jedoch das Absenden des Agenten-Logins, weil zuvor
 eine persönliche Anmeldung verlangt wurde. Es gab keinen Umgehungsversuch;
 die persönliche Anmeldung wurde erneut angefordert. Keine Zugangsdaten wurden
 ausgegeben, keine Konten angelegt und keine Zugriffsrechte erweitert.
+
+Schema-/Stammdaten-Wiederherstellung – 27.10.2026
+
+Die fehlende vollständige Rückspielroutine wurde ergänzt. Neue Sicherungen
+berechnen ihre typisierten Stammdaten-Prüfwerte innerhalb desselben exportierten
+PostgreSQL-Snapshots wie Schema- und Daten-Dump. Der bestehende verschlüsselte
+Dump-Aufbau bleibt erhalten; der Parquet-Index enthält zusätzlich die Prüfwerte.
+Die Bedeutung von Altarchiven und die klare Trennung zwischen Datei-Restore und
+neuer vollständiger Werteabnahme sind im README dokumentiert.
+
+Die Bestandsprüfung zeigte, dass pg_dump, pg_restore und psql auf dem Archivhost
+fehlten. Die tatsächlich laufende PostgreSQL-15.10-Instanz enthält diese Programme
+unter Alpine Linux. Ihre vorhandenen Binärdateien, der musl-Loader und die über
+ldd ermittelten Bibliotheken wurden anhand ihrer SHA-256-Werte in eine separate
+root-eigene schreibgeschützte Laufzeit übernommen. Keine neue Datenbankinstanz,
+keine globale Paketinstallation und keine Docker-Berechtigung für den Worker.
+Die Clientprozesse laufen nativ innerhalb derselben begrenzten cgroup wie Python.
+
+Clientlaufzeit:
+`/opt/greenmind/tiered-archive/clients/postgresql-15.10-55bb10b9c0ca`.
+Manifest-SHA-256:
+`55bb10b9c0cac4be01ef2d14ca03e51e3ccd837fb7ec83c2a46d4359d4b0e6f0`.
+20 geprüfte reguläre Dateien, insgesamt 10762024 logische Byte. Die libc-Aliasdatei
+ist ein Hardlink zum Loader. Die Versionen aller drei Programme wurden unter dem
+bestehenden Dienstkonto mit 64 MiB RAM / 5 Prozent CPU und gesperrtem Netzwerk
+geprüft. Nach der Profilbindung wurde diese Prüfung erneut mit der echten
+EnvironmentFile durchgeführt: Spitze 12120064 Byte, keine Speicherereignisse.
+
+Der native vollständige Test benutzte ausschliesslich künstliche Daten in einer
+eindeutig markierten temporären Datenbank der vorhandenen Staging-Instanz. Die
+bestehende eingeschränkte Rolle war nur Eigentümer dieser temporären Datenbank;
+keine Rollenflags oder Zugriffe auf Originaldaten wurden erweitert. Die für den
+Test erzeugten Verschlüsselungsschlüssel blieben temporär; der vorhandene, bereits
+gesicherte Backupschlüssel wurde nicht verwendet oder geändert.
+
+Zwölf Fälle bestanden, jeweils für Gateway und Direct: konsistenter Snapshot
+trotz zeitgleicher Änderung von Stammdaten; falscher Schlüssel vor Datenbankzugriff;
+Rollback des gesamten Schema-/Datenimports bei SQL-Fehler; vollständige Rückspielung
+mit exakt verglichenen typisierten Werten; unverändertes gefülltes Ziel bei
+Wiederholungsversuch; gesperrte Erfolgsmeldung bei einem falschen Prüfwert nach
+Commit. Im letzten Fall bleibt die neue isolierte Datenbank zur Diagnose erhalten;
+der Testsupervisor entfernte sie erst nach seinen unabhängigen Eigentumsprüfungen.
+Die Schema-Abnahme umfasste zusätzlich Fremdschlüssel, Index und View.
+
+Finaler nativer Lauf: 28,662 Sekunden, Spitze 88764416 Byte (84,65 MiB), keine
+high/max/OOM-Ereignisse. Limit 192 MiB / 25 Prozent CPU, MemoryHigh 160 MiB,
+kein Swap; die bestehende PostgreSQL-Instanz behielt separat ihr 320-MiB-Limit.
+Ein erster Versuch stoppte an der Health-/Laufzeitprüfung, deren damalige Ausgabe
+den konkreten Auslöser nicht unterschied. Er zählt nicht als Erfolg. Nach
+bestätigtem Ende, vollständiger Bereinigung und neuer Ressourcenprüfung bestanden
+die zwei folgenden Läufe; die Schutzgrenzen wurden nicht verändert.
+
+Installiert: Commit `138fc4ac5f2434f28929567066654702129a4be3`,
+Overlay `/opt/greenmind/tiered-archive/overlays/staging-fullrestore-13a7d225d975`.
+Runtime-SHA-256: `13a7d225d975d8c4500d8700346439853e79404e24f237f9b62cd73ff78d45fa`.
+Manifest-SHA-256: `c33ff77ee73ea04c1e952284ee280c57ed079e1c7861a6256f5fc0cda9d811ce`.
+384 geprüfte schreibgeschützte Backenddateien, davon 380 unveränderte Hardlinks.
+202 gezielte lokale Tests bestanden; der unveränderte Socketfall bleibt durch
+seinen vorherigen separaten Nachweis abgedeckt. Lint und Diff-Prüfung bestanden.
+
+Die unabhängige Installationprüfung bestätigte beide nativen Quellprüfsummen,
+den gesamten Runtime-Fingerprint, alle Clientdateien, unveränderte bestehende
+Container und weiterhin inactive/disabled Archivdienste und Timer. PAUSE besteht,
+INSTALLATION_READY fehlt, alle acht Lösch-/Abnahmeflags bleiben false. Die zwei
+bisherigen WAV-Pilotbelege bleiben published; es gab keinen neuen Box-Upload,
+keinen Snapshot und keine Wiederherstellung echter Staging-Daten aus der Box.
+
+Rücknahme: Die fünf exakt verzeichneten Konfigurationsdateien aus
+`/etc/greenmind/tiered-archive/before-fullrestore-13a7d225d975/manifest.json`
+nach Hashprüfung zurücksetzen und daemon-reload ausführen. Keine Dienststarts;
+alte Overlays und Clientlaufzeit bleiben erhalten. Native Tests und Installation
+ersetzen weiterhin keine Storage-Box-/Snapshot-Abnahme oder Gesamtbeobachtung.
