@@ -15,7 +15,7 @@ from sqlalchemy.engine import make_url
 root = pathlib.Path(sys.argv[1])
 state = root / "state"
 sys.path.insert(
-    0, "/opt/greenmind/tiered-archive/overlays/staging-credentials-83fd3279eea3/backend"
+    0, "/opt/greenmind/tiered-archive/overlays/staging-native-76c7fa172272/backend"
 )
 import app.tiered_archive
 from app.raw_archive.health import HealthProbe

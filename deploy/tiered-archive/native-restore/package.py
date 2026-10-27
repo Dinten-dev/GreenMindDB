@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 
-def package(source, output):
+def package(source, output, *, retain_encrypted=False):
     if source not in {"gateway", "direct"}:
         raise ValueError("Only existing Staging sources are allowed")
     root = Path(__file__).resolve().parent
@@ -27,6 +27,7 @@ def package(source, output):
         "sha256": hashlib.sha256(worker).hexdigest(),
         "native_data": base64.b64encode(module).decode("ascii"),
         "native_sha256": hashlib.sha256(module).hexdigest(),
+        "retain_encrypted": bool(retain_encrypted),
     }
     prepared = supervisor.replace(
         "PAYLOAD = None", "PAYLOAD = " + repr(payload)
@@ -52,5 +53,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", choices=("gateway", "direct"))
     parser.add_argument("output", type=Path)
+    parser.add_argument(
+        "--retain-encrypted",
+        action="store_true",
+        help="Keep only locally verified encrypted archive parts for a separate upload review",
+    )
     args = parser.parse_args()
-    print(json.dumps(package(args.source, args.output)))
+    print(
+        json.dumps(
+            package(args.source, args.output, retain_encrypted=args.retain_encrypted)
+        )
+    )

@@ -111,3 +111,20 @@ Für grosse Produktionsquellen braucht es weiterhin die geplante begrenzte,
 partitionierte Archivierung; die 64-MiB-Staging-Grenze wird nicht angehoben.
 
 Referenz: https://www.tigerdata.com/docs/deploy/self-hosted/backup-and-restore/logical-backup
+
+## Vorbereiten einer konkreten Uploadfreigabe
+
+Mit `package.py gateway <neuer-absoluter-Pfad> --retain-encrypted` beziehungsweise
+`direct` bleiben nach bestandenem lokalen Vollrestore ausschliesslich die vier
+hashgeprüften Archivteile erhalten: Parquet-Index, zwei verschlüsselte Binärteile
+und Manifest. Klartext-Dumps, temporäre Testdatenbank und sonstige Testdateien
+werden wie bisher entfernt. Das unveränderliche Angebot liegt in einem neuen
+`staging/prepared-native-<quelle>-<identität>`-Ordner, root-eigen, Verzeichnis 0500,
+Dateien 0400. Bestehende Angebote werden nicht überschrieben. Ein zusätzliches
+`approval-scope.json` nennt Quellidentität, exakte Dateinamen, Zielschlüssel,
+Prüfsummen und Gesamtgrösse; pro Angebot maximal 5 MiB.
+
+Diese Option lädt nichts hoch und erstellt keinen Snapshot. Die Teile sind ein
+konkreter Prüfumfang für eine anschliessende separate Uploadfreigabe. Vor dieser
+Übertragung müssen Angebot und alle Dateien erneut gegen die freigegebenen Hashes
+geprüft werden. Ein erfolgreiches Angebot allein ist kein Box- oder Löschbeleg.

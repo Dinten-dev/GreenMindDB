@@ -5,7 +5,9 @@ import json
 import os
 import pathlib
 import pwd
+import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -86,6 +88,81 @@ def stopped_units():
         for s in result.values()
     )
     return result
+
+
+def retain_encrypted():
+    """Preserve only the four hash-pinned archive parts after a completed restore."""
+    test = out["test"]
+    assert test["passed"] and test["backup_format"] == "postgres-full-v1"
+    assert out["returncode"] == 0 and stopped
+    assert test["box_accesses"] == 0 and test["source_writes"] == 0
+    folder = root / "state/recovered"
+    manifest_path = folder / "manifest.json"
+    assert not manifest_path.is_symlink() and manifest_path.stat().st_size < 65536
+    assert (
+        hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        == test["manifest_sha256"]
+    )
+    manifest = json.loads(manifest_path.read_text())
+    identity = manifest["identity"]
+    assert (
+        re.fullmatch(r"[a-f0-9]{64}", identity) and identity == test["archive_identity"]
+    )
+    candidate = manifest["candidate"]
+    assert candidate["source"] == SOURCE and candidate["environment"] == "staging"
+    assert candidate["dataset"] == "database_backup"
+    assert candidate["organization"] == "00000000-0000-0000-0000-000000000000"
+    parts = manifest["files"]
+    assert [p["format"] for p in parts] == ["parquet", "bin", "bin"]
+    assert parts[0]["backup_format"] == "postgres-full-v1"
+    assert 0 < test["archive_bytes"] <= 5 * 1024**2
+    refs = [{"name": f"{i:04d}.{p['format']}", **p} for i, p in enumerate(parts)]
+    manifest_ref = {
+        "name": "manifest.json",
+        "sha256": test["manifest_sha256"],
+        "bytes": manifest_path.stat().st_size,
+        "key": f"staging/tiered/{candidate['organization']}/database_backup/{candidate['start'][:10]}/{test['manifest_sha256']}.json",
+    }
+    refs.append(manifest_ref)
+    assert sum(p["bytes"] for p in refs) == test["archive_bytes"]
+    for part in refs:
+        path = folder / part["name"]
+        st = path.lstat()
+        assert stat.S_ISREG(st.st_mode) and st.st_size == part["bytes"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == part["sha256"]
+    target = S / ("prepared-native-" + SOURCE + "-" + identity[:16])
+    target.mkdir(mode=0o700)  # Never overwrite any previous proposal.
+    out["preparation_directory"] = str(target)
+    for part in refs:
+        source = folder / part["name"]
+        dest = target / part["name"]
+        with source.open("rb") as src, dest.open("xb") as dst:
+            shutil.copyfileobj(src, dst, 65536)
+            dst.flush()
+            os.fsync(dst.fileno())
+        assert hashlib.sha256(dest.read_bytes()).hexdigest() == part["sha256"]
+        dest.chmod(0o400)
+    approval = {
+        "version": 1,
+        "source": SOURCE,
+        "identity": identity,
+        "manifest_sha256": test["manifest_sha256"],
+        "bytes": test["archive_bytes"],
+        "files": refs,
+        "root": str(target),
+        "uploaded": False,
+        "native_sha256": PAYLOAD["native_sha256"],
+        "worker_sha256": PAYLOAD["sha256"],
+    }
+    path = target / "approval-scope.json"
+    path.write_text(json.dumps(approval, sort_keys=True, indent=2))
+    path.chmod(0o400)
+    with path.open("rb") as f:
+        os.fsync(f.fileno())
+    target.chmod(0o500)
+    out["prepared_archive"] = dict(
+        approval, approval_sha256=hashlib.sha256(path.read_bytes()).hexdigest()
+    )
 
 
 try:
@@ -376,6 +453,15 @@ finally:
                 ["systemctl", "show", unit, "--property=ActiveState", "--value"]
             ).strip() in ("", "inactive", "failed")
     out["test_unit_stopped"] = stopped
+    if (
+        PAYLOAD.get("retain_encrypted")
+        and stopped
+        and out.get("test", {}).get("passed")
+    ):
+        try:
+            retain_encrypted()
+        except Exception as e:  # noqa: BLE001 -- keep sanitized failure and finish own cleanup
+            out["preparation_error_type"] = type(e).__name__
     out["cleanup"] = {}
     for name in created:
         try:
