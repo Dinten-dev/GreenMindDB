@@ -247,7 +247,8 @@ def test_no_arbitrary_executable_from_client_runtime():
 
 
 @pytest.mark.parametrize(
-    "name", ["alembic_version", "zone_access", "plant_sensor_assignment", "plant_observation_access"]
+    "name",
+    ["alembic_version", "zone_access", "plant_sensor_assignment", "plant_observation_access"],
 )
 def test_missing_access_or_assignment_table_blocks_backup(masters, name):
     with masters.begin() as db:
@@ -307,3 +308,104 @@ def test_access_tables_are_retained_and_never_expire_implicitly():
     from app.tiered_archive.source import RETAINED_TABLES
 
     assert {"zone_access", "plant_sensor_assignment", "plant_observation_access"} <= RETAINED_TABLES
+
+
+def systemd_key_acl(uid):
+    import struct
+
+    return struct.pack("<I", 2) + b"".join(
+        struct.pack("<HHI", *entry)
+        for entry in (
+            (1, 4, 0xFFFFFFFF),
+            (2, 4, uid),
+            (4, 0, 0xFFFFFFFF),
+            (16, 4, 0xFFFFFFFF),
+            (32, 0, 0xFFFFFFFF),
+        )
+    )
+
+
+def test_private_key_file_still_reads_exactly_32_bytes(tmp_path):
+    key = tmp_path / "key"
+    value = secrets.token_bytes(32)
+    key.write_bytes(value)
+    key.chmod(0o600)
+    assert backup.key_from_file(key) == value
+    key.chmod(0o644)
+    with pytest.raises(ArchiveBlocked, match="private"):
+        backup.key_from_file(key)
+
+
+def test_systemd_credential_acl_is_private_to_root_and_current_service(monkeypatch):
+    import os
+    from types import SimpleNamespace
+
+    info = SimpleNamespace(st_mode=0o100440, st_uid=0, st_gid=0)
+    seen = []
+
+    def read(fd, name):
+        seen.append((fd, name))
+        return systemd_key_acl(os.getuid())
+
+    monkeypatch.setattr(os, "getxattr", read, raising=False)
+    assert backup.private_key_permissions(123, info)
+    assert seen == [(123, "system.posix_acl_access")]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "other_user",
+        "owning_group",
+        "named_group",
+        "world",
+        "write",
+        "malformed",
+        "missing_acl",
+        "nonroot_owner",
+        "nonroot_group",
+        "writable_mode",
+    ],
+)
+def test_systemd_key_acl_never_allows_shared_or_writable_keys(monkeypatch, case):
+    import os
+    import struct
+    from types import SimpleNamespace
+
+    info = SimpleNamespace(st_mode=0o100440, st_uid=0, st_gid=0)
+    acl = bytearray(systemd_key_acl(os.getuid()))
+    if case == "other_user":
+        acl = systemd_key_acl(os.getuid() + 1)
+    elif case == "owning_group":
+        struct.pack_into("<H", acl, 22, 4)
+    elif case == "named_group":
+        acl += struct.pack("<HHI", 8, 4, 123)
+    elif case == "world":
+        struct.pack_into("<H", acl, 38, 4)
+    elif case == "write":
+        struct.pack_into("<H", acl, 14, 6)
+    elif case == "malformed":
+        acl = acl[:-1]
+    elif case == "nonroot_owner":
+        info.st_uid = 123
+    elif case == "nonroot_group":
+        info.st_gid = 123
+    elif case == "writable_mode":
+        info.st_mode = 0o100460
+
+    def read(*args):
+        if case == "missing_acl":
+            raise OSError("not supported")
+        return bytes(acl)
+
+    monkeypatch.setattr(os, "getxattr", read, raising=False)
+    assert not backup.private_key_permissions(123, info)
+
+
+def test_shared_key_mode_blocked_without_acl_api(monkeypatch):
+    import os
+    from types import SimpleNamespace
+
+    monkeypatch.delattr(os, "getxattr", raising=False)
+    info = SimpleNamespace(st_mode=0o100440, st_uid=0, st_gid=0)
+    assert not backup.private_key_permissions(123, info)

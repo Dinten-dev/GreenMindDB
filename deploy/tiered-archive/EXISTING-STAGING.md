@@ -637,3 +637,37 @@ oberhalb der bestehenden Grenze 1,0 bereits vor Teststart blockiert. Es wurde
 kein Grenzwert angehoben und kein Produktiv-/Archivdienst gestartet. Diese
 Versuche belegen ausdrücklich noch keinen tatsächlichen Datenbank-Restore.
 Nachweise: `outputs/greenmind-staging-realrestore-20261027/` im Projekt.
+
+
+### Privater systemd-Schlüssel und tatsächlicher Direct-Restore – 27.10.2026
+
+Der bestehende Schlüssel bleibt unverändert. systemd stellt ihn dem Dienst
+als root-eigene Datei mit Modus 0440 und privater POSIX-ACL bereit: ausschliesslich
+root und UID 993 dürfen lesen, die Gruppe und andere Benutzer nicht. Die bisherigen
+Modusbits allein verweigerten deshalb den Zugriff. Der Schlüssellader akzeptiert
+jetzt zusätzlich genau diese ACL-Form für die aktuelle Dienst-UID. Andere Benutzer,
+Gruppenrechte, Schreibrechte, fehlende oder ungültige ACLs bleiben gesperrt.
+Die Prüfung verwendet den bereits geöffneten Dateideskriptor; Symlinks bleiben
+verboten, Schlüssellänge und Eigentümerprüfung unverändert.
+
+172 relevante Tests bestanden (ein Docker-Test bewusst nicht ausgeführt),
+zusätzlich 88 Profil-/Betriebstests. Die native Prüfung nutzte denselben
+Schlüssellader und den bestehenden Schlüssel über systemd LoadCredential.
+
+Der anschliessende tatsächliche lokale Direct-Restore bestand: ein Gerät,
+eine Registrierung und 13 Sitzungen wurden konsistent aus der vorhandenen
+Staging-Kopie gesichert, verschlüsselt und in einer eigenen Testdatenbank
+mit pg_restore/psql wiederhergestellt. Typisierte Inhaltsnachweise stimmen
+für alle 15 Datensätze überein. Laufzeit 7,531 Sekunden, Spitzenverbrauch
+59.801.600 Byte, keine OOM-/Speichergrenzen-Ereignisse; Limit 192 MiB/25 % CPU.
+TimescaleDB 2.17.2 und das Schema sind vorhanden. Direct-Rohblöcke,
+Box-Upload und Wiederherstellung aus einem Box-Snapshot sind damit ausdrücklich
+noch nicht geprüft. Der Gateway-Timescale-Befund bleibt offen.
+
+Vorbereiteter unveränderlicher Installationsstand:
+`/opt/greenmind/tiered-archive/overlays/staging-credentials-83fd3279eea3`.
+Runtime-SHA-256:
+`83fd3279eea39f9351088699f580cce139d60f972ae8f91fd61f502d3ffddebb`.
+Installations- und unabhängiger Nachweis folgen in den gleichnamigen JSON-Dateien
+unter `outputs/greenmind-staging-realrestore-20261027/`. Erst ein erfolgreicher
+Nachweis bestätigt die Installation. Keine Dienststarts oder Löschfreigaben.

@@ -12,7 +12,7 @@ FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
          'TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED',
          'TIERED_ARCHIVE_DIRECT_LOCATORS_ACCEPTED', 'TIERED_ARCHIVE_FEATURE_READS_ACCEPTED')
 STATE = '/var/lib/greenmind/tiered-archive/staging'
-BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-mastercoverage-158bf0fc6bfb/backend'
+BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-credentials-83fd3279eea3/backend'
 CLIENT_DIR = '/opt/greenmind/tiered-archive/clients/postgresql-15.10-55bb10b9c0ca'
 CLIENT_MANIFEST = '55bb10b9c0cac4be01ef2d14ca03e51e3ccd837fb7ec83c2a46d4359d4b0e6f0'
 CREDENTIAL_FIELDS = ('RAW_ARCHIVE_SFTP_KEY', 'RAW_ARCHIVE_SFTP_KNOWN_HOSTS',

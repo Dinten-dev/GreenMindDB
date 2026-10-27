@@ -152,6 +152,33 @@ def require_current(receipts, *, source, environment, destination, now):
     raise ArchiveBlocked("Current snapshot-verified schema and master-data backup required")
 
 
+def private_key_permissions(fd, info):
+    """Accept private modes or systemd's root + current-user read-only ACL."""
+    mode = stat.S_IMODE(info.st_mode)
+    if not mode & 0o077:
+        return True
+    # systemd LoadCredential uses an ACL for the service uid. Its group-mode
+    # bits describe the ACL mask, not access for the file's owning group.
+    # Accept only the observed private shape, never generic group-readable keys.
+    if mode != 0o440 or info.st_uid != 0 or info.st_gid != 0:
+        return False
+    undefined = 0xFFFFFFFF
+    expected = struct.pack("<I", 2) + b"".join(
+        struct.pack("<HHI", tag, permission, identity)
+        for tag, permission, identity in (
+            (1, 4, undefined),  # owner root: read
+            (2, 4, os.getuid()),  # current service user: read
+            (4, 0, undefined),  # owning group: no access
+            (16, 4, undefined),  # ACL mask: read only
+            (32, 0, undefined),  # everyone else: no access
+        )
+    )
+    try:
+        return os.getxattr(fd, "system.posix_acl_access") == expected
+    except (AttributeError, OSError):
+        return False
+
+
 def key_from_file(path):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as body:
@@ -159,7 +186,7 @@ def key_from_file(path):
         if (
             not stat.S_ISREG(info.st_mode)
             or info.st_uid not in {0, os.getuid()}
-            or info.st_mode & 0o077
+            or not private_key_permissions(body.fileno(), info)
         ):
             raise ArchiveBlocked("Backup encryption key must be private")
         key = body.read(33)
