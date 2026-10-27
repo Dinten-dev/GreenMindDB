@@ -38,10 +38,12 @@ class WavSource:
         )
         self.expected, self.db = None, None
 
-    def export(self, reference, folder, *, maximum_bytes=None):
+    def export(self, reference, folder, *, maximum_bytes=None, maximum_wavs=None):
         records = self.catalog.resolve(reference)
         if not records:
             raise ArchiveBlocked("No verified WAVs in revision")
+        if maximum_wavs is not None and (maximum_wavs < 1 or len(records) > maximum_wavs):
+            raise ArchiveBlocked("WAV revision exceeds bounded file count")
         total = sum(record.size for record in records)
         budget = int(os.environ.get("TIERED_ARCHIVE_MAX_WAV_BUNDLE_BYTES", MAX_BYTES))
         if maximum_bytes is not None:

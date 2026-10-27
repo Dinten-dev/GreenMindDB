@@ -316,7 +316,7 @@ def publish_sql(source, dataset, organization, start, end, *, limit=500, after=N
             }
 
 
-def publish_wav(source, reference, *, maximum_bytes=None):
+def publish_wav(source, reference, *, maximum_bytes=None, maximum_wavs=None):
     from . import parquet
     from .pipeline import publish
 
@@ -325,7 +325,7 @@ def publish_wav(source, reference, *, maximum_bytes=None):
         with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
             folder = Path(folder)
             envelope, artifacts, flags = adapter.export(
-                reference, folder, maximum_bytes=maximum_bytes
+                reference, folder, maximum_bytes=maximum_bytes, maximum_wavs=maximum_wavs
             )
             path = folder / "metadata.parquet"
             metadata = dict(

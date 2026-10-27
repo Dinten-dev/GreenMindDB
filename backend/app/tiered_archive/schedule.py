@@ -16,6 +16,7 @@ from .ledger import Ledger
 from .policy import utc
 from .runtime import environment, state_root
 from .source import DATASETS
+from .wav_queue import WavQueue
 
 
 def private_json(path, maximum=1024 * 1024):
@@ -72,7 +73,8 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         "CREATE TABLE IF NOT EXISTS sweep(id TEXT PRIMARY KEY, cursor BLOB, day TEXT, due TEXT)"
     )
     db.commit()
-    result = {"published": 0, "verified": 0, "evicted": 0, "blocked": 0}
+    result = {"published": 0, "verified": 0, "evicted": 0, "blocked": 0, "deferred": 0}
+    pending = WavQueue(db)
     copied_wavs = copied_bytes = 0
     small_staging = environment() == "staging"
     try:
@@ -99,48 +101,110 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
             if time.monotonic() >= copy_deadline:
                 break
             identity = "wav-sweep-" + source
-            state = db.execute(
-                "SELECT cursor,day,due FROM sweep WHERE id=?", (identity,)
-            ).fetchone()
-            if state and utc(state[2]) > clock():
-                continue
-            cursor = decode(state[0]) if state and state[0] else None
             adapter = wav_source(source, lambda: None)
             before = clock().replace(hour=0, minute=0, second=0, microsecond=0)
-            references = adapter.catalog.page(cursor, before, 10)
-            for reference in references:
+
+            handled = set()
+
+            def advance(reference, identity=identity, before=before):
+                db.execute(
+                    "INSERT INTO sweep VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,due=excluded.due",
+                    (identity, encode(reference), before.isoformat(), clock().isoformat()),
+                )
+
+            def process(
+                reference,
+                *,
+                discovered,
+                source=source,
+                adapter=adapter,
+                handled=handled,
+                advance=advance,
+            ):
+                nonlocal copied_wavs, copied_bytes
                 if time.monotonic() >= copy_deadline:
-                    break
+                    return False
+                token = encode(reference)
+                if token in handled:
+                    if discovered:
+                        with db:
+                            advance(reference)
+                    return True
+                waiting = pending.get(source, reference)
+                if waiting and utc(waiting[0]) > clock():
+                    if discovered:
+                        with db:
+                            advance(reference)
+                    return True
                 if small_staging and (copied_wavs >= 10 or copied_bytes >= 5 * 1024**2):
-                    break
+                    return False
                 try:
                     planned = adapter.catalog.resolve(reference)
+                    total = sum(record.size for record in planned)
+                    if small_staging and (len(planned) > 10 or total > 5 * 1024**2):
+                        with db:
+                            pending.defer(
+                                source,
+                                reference,
+                                planned,
+                                clock(),
+                                max_wavs=10,
+                                max_bytes=5 * 1024**2,
+                            )
+                            if discovered:
+                                advance(reference)
+                        handled.add(token)
+                        result["deferred"] += 1
+                        result["blocked"] += 1
+                        return True
                     if small_staging and (
-                        copied_wavs + len(planned) > 10
-                        or copied_bytes + sum(record.size for record in planned) > 5 * 1024**2
+                        copied_wavs + len(planned) > 10 or copied_bytes + total > 5 * 1024**2
                     ):
-                        break
+                        # Fits a fresh run: retain its cursor for the next tick.
+                        return False
                     receipt = publish_wav(
                         source,
                         reference,
                         maximum_bytes=5 * 1024**2 - copied_bytes if small_staging else None,
+                        maximum_wavs=10 - copied_wavs if small_staging else None,
                     )
                     copied_wavs += sum(f["format"] == "wav" for f in receipt["files"])
                     copied_bytes += sum(
                         f["bytes"] for f in receipt["files"] if f["format"] == "wav"
                     )
                     result["published"] += 1
+                    with db:
+                        pending.published(source, reference, receipt, clock())
+                        if discovered:
+                            advance(reference)
+                    handled.add(token)
                 except SafetyPause:
                     raise
                 except ArchiveBlocked:
                     if small_staging:
                         raise
                     result["blocked"] += 1
-                with db:
-                    db.execute(
-                        "INSERT INTO sweep VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,due=excluded.due",
-                        (identity, encode(reference), before.isoformat(), clock().isoformat()),
-                    )
+                    # Previously queued entries stay pending on validation errors.
+                    if discovered:
+                        with db:
+                            advance(reference)
+                return True
+
+            # Retry independently of the daily sweep; never move its cursor
+            # backwards when processing an older pending revision.
+            for reference in pending.due(source, clock()):
+                if not process(reference, discovered=False):
+                    break
+            state = db.execute(
+                "SELECT cursor,day,due FROM sweep WHERE id=?", (identity,)
+            ).fetchone()
+            if state and utc(state[2]) > clock():
+                continue
+            cursor = decode(state[0]) if state and state[0] else None
+            references = adapter.catalog.page(cursor, before, 10)
+            for reference in references:
+                if not process(reference, discovered=True):
+                    break
             if not references:
                 with db:
                     db.execute(
@@ -277,6 +341,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                     body.flush()
                     os.fsync(body.fileno())
                 os.replace(temporary, state_root() / "catalog-reference.json")
+        result["pending_wavs"] = pending.count()
         return result
     finally:
         ledger.close()

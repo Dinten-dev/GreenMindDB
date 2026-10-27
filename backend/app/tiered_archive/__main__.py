@@ -50,6 +50,7 @@ def main():
     args = parser.parse_args()
     if args.operation == "status":
         from .ledger import Ledger
+        from .wav_queue import summary
 
         ledger = Ledger(runtime.state_root())
         try:
@@ -57,6 +58,7 @@ def main():
                 "policy": POLICY_SHA256,
                 "runtime": runtime.runtime_sha256(),
                 "states": ledger.status(),
+                "wav_backlog": summary(ledger.db),
             }
         finally:
             ledger.close()

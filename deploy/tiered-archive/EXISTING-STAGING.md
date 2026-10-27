@@ -135,3 +135,37 @@ Originaldaten und archivierte Pilotdateien bleiben erhalten.
 Der Archivstatus ist published, nicht snapshot-verified. Es gab keinen neuen
 Snapshot und keine Löschfreigabe. Ein vollständiger neuer Snapshot-/SQL-Restore,
 Mandanten-/Historienabnahme und unbeaufsichtigter Betrieb bleiben separate Schritte.
+
+Fortsetzung: nachvollziehbare Direct-Warteschlange
+
+Die neue lokale Software ergänzt `wav_pending` und `wav_pending_event` im bestehenden
+SQLite-Betriebskatalog. Revisionen oberhalb von zehn WAVs oder 5 MiB werden vollständig
+zurückgestellt: Identität/Revision, Anzahl, Bytes, Inhaltsfingerprint, Erstfund,
+Prüfzeitpunkt und Sperrgrund bleiben nachvollziehbar. Warteschlangeneintrag und
+Fortschritt des Suchlaufs werden gemeinsam gespeichert. Nachfolgende passende
+Revisionen können weiterlaufen; einzelne WAV-Teile werden nicht abgetrennt.
+
+Der Suchlauf und offene Einträge werden unabhängig fortgesetzt. Übergrössen werden
+frühestens nach 24 Stunden neu aufgelöst, höchstens zehn offene Einträge je Quelle
+und Durchlauf. Erst erfolgreiche Veröffentlichung entfernt einen offenen Eintrag;
+sein Ereignisprotokoll bleibt bestehen. Bei 5000 offenen Einträgen hält die Suche
+mit unverändertem Cursor an. Ein nur für das Restbudget zu grosser Auftrag bleibt
+für den nächsten Durchlauf am aktuellen Cursor stehen. Der jeweils zuerst
+verbrauchte Grenzwert – zehn WAVs oder 5 MiB insgesamt – beendet die Kopien.
+Der Export prüft die Dateianzahl erneut, falls die Quelle seit der Planung abwich.
+
+`python -m app.tiered_archive status` liefert zusätzlich `wav_backlog` mit Anzahl,
+ältestem Eintrag und nächster Prüfung je Quelle; keine Quellschlüssel werden
+in Routineausgaben veröffentlicht. `tick` meldet `deferred` und `pending_wavs`.
+Die Warteschlange ist kein Archivnachweis und keine Löschfreigabe. Eine grössere
+Revision bleibt offen, bis sie innerhalb eines separat geprüften Betriebsumfangs
+vollständig archiviert werden kann. Ein Verlust des lokalen Betriebskatalogs
+verlangt einen erneuten Quellsuchlauf; die Originale bleiben erhalten.
+
+Prüfung: 130 gezielte Tests erfolgreich. Ein zusätzlicher nativer SQLite-Test auf
+dem Archivserver mit künstlichen Daten bestätigte Prozessabbrüche unmittelbar
+vor/nach Commit, Wiederaufnahme, unveränderten Erstfund und Kapazitätsgrenze.
+Limit 64 MiB RAM / 5 Prozent CPU; gemessene Spitze 13627392 Byte, keine
+memory.high/max/OOM-Ereignisse. Netzwerk und Schlüsselverzeichnis waren gesperrt;
+keine Quellen-/Archivzugriffe. Nur sein neu erstelltes Testverzeichnis wurde entfernt.
+Die geänderte Software ist noch nicht in die gebundenen Archivdienste übernommen.
