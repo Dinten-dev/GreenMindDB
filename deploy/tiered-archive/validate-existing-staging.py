@@ -76,6 +76,9 @@ def validate(writer, reader, schedule):
             raise ValueError('Only the inventoried local read-only database binding')
         if url.query or url.fragment:
             raise ValueError('No hidden connection overrides')
+        backup_key = 'TIERED_ARCHIVE_' + source + '_BACKUP_DATABASE_URL'
+        if backup_key in writer and writer[backup_key] != writer['RAW_ARCHIVE_' + source + '_DATABASE_URL']:
+            raise ValueError('Backup must reuse the exact existing read-only Staging source')
         if writer.get('RAW_ARCHIVE_' + source + '_S3_ENDPOINT') != 'http://127.0.0.1:9002':
             raise ValueError('Only the existing local staging object store')
         if writer.get('RAW_ARCHIVE_' + source + '_S3_BUCKET') != bucket:

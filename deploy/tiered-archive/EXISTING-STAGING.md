@@ -579,3 +579,61 @@ erst Hashes prüfen, gespeicherte Dateien und Modi wiederherstellen, dann
 `daemon-reload`; keine Dienste starten. Das vorherige History-Overlay bleibt
 unverändert erhalten. Echte Datenbank-Backup-Bindungen, Leseumfang und ein
 vollständiger Restore aus der Box bleiben offen.
+
+### Freigegebene Backup-Leserechte und Timescale-Befund – 27.10.2026
+
+Nach ausdrücklicher Nutzerfreigabe wurden ausschliesslich fehlende SELECT-Rechte
+für die 31 benannten vorhandenen Tabellen ergänzt: 27 in `plantdb_staging`,
+vier in `greenmind_direct_staging`. Die bestehende Rolle
+`greenmind_archive_staging_ro` bleibt ohne Schreibrechte, privilegierte
+Rollenmerkmale oder zusätzliche Mitgliedschaften; Verbindungslimit drei und
+Read-only-Vorgabe bleiben erhalten. Keine neuen Konten oder Schlüssel.
+
+Die beiden `TIERED_ARCHIVE_*_BACKUP_DATABASE_URL`-Bindungen verwenden exakt die
+vorhandenen RAW_ARCHIVE-Quellverbindungen. Der erweiterte Validator weist andere
+Identitäten, Hosts, Datenbanken, Passwörter und versteckte Parameter zurück.
+66 Bindungstests bestanden. Der unabhängige Servernachweis bestätigt alle
+43 beziehungsweise 14 vorhandenen öffentlichen Tabellen als lesbar und weiterhin
+keine Schreibrechte. Zeitplan, Leserprofil, Schlüssel, Quellengeheimnisse,
+Archivledger und PAUSE blieben unverändert; keine Archivdienste gestartet.
+
+Writer-Profil-SHA-256:
+`7cb85d7e4dc43f47592f32f77057f7527f961ea9abc4fb7b0d77f0109131c4cc`.
+Validator-SHA-256:
+`9a6d90bc01b9c66eb4ea04a4268fe1d22df4dece191690dcd86e28395a744bc6`.
+Rücknahme und alte ACLs/Profile:
+`/etc/greenmind/tiered-archive/before-backup-bindings-20261027/journal.json`.
+Nur die dort ausdrücklich protokollierten neuen SELECT-Rechte nach Prüfung des
+unveränderten Nachher-ACL-Stands widerrufen. Bestehende Rechte nicht entfernen.
+
+Der erneute begrenzte Schema-Lesetest lief für beide Quellen erfolgreich durch
+(109565 beziehungsweise 22561 Byte). Es wurden keine Tabelleninhalte kopiert
+und keine Box-Verbindungen geöffnet. Vorhandene Client-Warnungen sind damit
+nicht als erledigt bewertet. Die eigenen Schema-Testdateien wurden entfernt.
+
+Ein zusätzlicher realer Schema-Befund verhindert weiterhin die Restore-Abnahme:
+Beide Quellen haben TimescaleDB 2.17.2. Gateway enthält die Hypertabelle
+`sensor_reading` mit einem Chunk und aktivierter Kompressionskonfiguration;
+Direct hat keine Hypertabelle. Der bisherige künstliche PostgreSQL-Test hatte
+keine Timescale-Erweiterung im Testdatenbankschema und belegt diesen Pfad nicht.
+
+Ein neuer Test mit künstlicher komprimierter Timescale-Hypertabelle reproduziert
+im installierten Restore `permission denied for schema _timescaledb_internal`.
+Keine Originaldaten waren beteiligt. Die Testdatenbank und ihre Dateien wurden
+nach bestätigtem Sitzungsende entfernt. Die vorübergehend noch belegte zweite
+Testdatenbank wurde erst nach frischer Identitäts- und Null-Sitzungsprüfung
+entfernt; keine fremden Sitzungen beendet.
+
+Offizieller Wiederherstellungsablauf und Einschränkungen selektiver Dumps:
+https://www.tigerdata.com/docs/deploy/self-hosted/backup-and-restore/logical-backup
+Der aktuelle Schema-/Stammdatenweg ist für Gateway damit nicht abgenommen:
+Timescale-Kataloge, Chunk-Zuordnung, Kompressionskonfiguration sowie kontrollierte
+Vor-/Nachbereitung müssen in den Wiederherstellungsnachweis einbezogen werden.
+Eine Wiederherstellung als gewöhnliche Tabelle genügt nicht.
+
+Der erste lokale Restore-Versuch mit den vorhandenen Direct-Stammdaten ergab
+noch kein verwertbares Prüfergebnis. Eine zweite Diagnose wurde bei Last 1,174
+oberhalb der bestehenden Grenze 1,0 bereits vor Teststart blockiert. Es wurde
+kein Grenzwert angehoben und kein Produktiv-/Archivdienst gestartet. Diese
+Versuche belegen ausdrücklich noch keinen tatsächlichen Datenbank-Restore.
+Nachweise: `outputs/greenmind-staging-realrestore-20261027/` im Projekt.

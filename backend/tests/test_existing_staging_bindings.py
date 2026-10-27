@@ -106,3 +106,29 @@ def test_reader_cannot_bypass_staging_latency_guard(field, value):
     reader[field] = value
     with pytest.raises(ValueError):
         reuse.validate(writer, reader, schedule)
+
+
+@pytest.mark.parametrize('source', ['GATEWAY', 'DIRECT'])
+def test_backup_binding_reuses_exact_existing_readonly_source(source):
+    writer, reader, schedule = profiles()
+    writer['TIERED_ARCHIVE_' + source + '_BACKUP_DATABASE_URL'] = writer['RAW_ARCHIVE_' + source + '_DATABASE_URL']
+    result = reuse.validate(writer, reader, schedule)
+    assert not result['activation_authorized'] and not result['deletion_enabled']
+
+
+@pytest.mark.parametrize('source', ['GATEWAY', 'DIRECT'])
+@pytest.mark.parametrize('change', ['owner', 'production', 'query', 'other_database', 'password', 'empty'])
+def test_backup_binding_cannot_expand_source_or_privileges(source, change):
+    writer, reader, schedule = profiles()
+    url = writer['RAW_ARCHIVE_' + source + '_DATABASE_URL']
+    mutations = {
+        'owner': url.replace('greenmind_archive_staging_ro', 'postgres'),
+        'production': url.replace('127.0.0.1', '188.245.247.156'),
+        'query': url + '?host=188.245.247.156',
+        'other_database': url.replace('_staging', '_production'),
+        'password': url.replace(':test@', ':different@'),
+        'empty': '',
+    }
+    writer['TIERED_ARCHIVE_' + source + '_BACKUP_DATABASE_URL'] = mutations[change]
+    with pytest.raises(ValueError, match='exact existing read-only'):
+        reuse.validate(writer, reader, schedule)
