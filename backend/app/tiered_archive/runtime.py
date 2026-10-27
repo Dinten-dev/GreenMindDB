@@ -521,7 +521,11 @@ def backup(source):
                 "body": body,
             }
             path = folder / "backup-index.parquet"
-            metadata = dict(parquet.write(path, [row], checkpoint=checkpoint), format="parquet")
+            metadata = dict(
+                parquet.write(path, [row], checkpoint=checkpoint),
+                format="parquet",
+                master_proof_version=proof["version"],
+            )
             from datetime import timedelta
 
             candidate = Candidate(

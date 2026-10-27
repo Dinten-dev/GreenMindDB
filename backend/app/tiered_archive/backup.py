@@ -15,8 +15,55 @@ from app.raw_archive.policy import ArchiveBlocked, checksum
 MAGIC = b"GMDBBACKUP1\0"
 BLOCK_BYTES = 1024 * 1024
 MAX_BYTES = 64 * 1024**2
-MASTER_TABLES = ("organization", "users", "zone", "gateway", "sensor", "plant")
+# Version 1 omitted access grants and plant/sensor assignments. Its encrypted
+# dumps remain file-restorable, but cannot prove the current recovery scope.
+MASTER_PROOF_VERSION = 2
+MASTER_TABLES = (
+    "alembic_version",
+    "organization",
+    "users",
+    "zone",
+    "gateway",
+    "sensor",
+    "plant",
+    "zone_access",
+    "plant_sensor_assignment",
+    "plant_observation_access",
+)
 DIRECT_MASTER_TABLES = ("direct_device", "direct_enrollment", "direct_session")
+
+
+def master_tables(source):
+    if source not in {"gateway", "direct"}:
+        raise ArchiveBlocked("Unknown backup source")
+    return MASTER_TABLES if source == "gateway" else DIRECT_MASTER_TABLES
+
+
+def check_master_tables(db, source, *, checkpoint):
+    """Fail before dumping if the explicit recovery scope is incomplete."""
+    from sqlalchemy import inspect, text
+
+    names = master_tables(source)
+    inspector = inspect(db)
+    schema = "public" if db.dialect.name == "postgresql" else None
+    present = set(inspector.get_table_names(schema=schema))
+    for name in names:
+        checkpoint()
+        if name not in present:
+            raise ArchiveBlocked("Required master-data table missing: " + name)
+        if (
+            schema
+            and not db.execute(
+                text("SELECT has_table_privilege(current_user, :table, 'SELECT')"),
+                {"table": "public." + name},
+            ).scalar_one()
+        ):
+            raise ArchiveBlocked("Required master-data SELECT permission missing: " + name)
+        # A new FK outside the fixed scope needs an explicit policy update.
+        for fk in inspector.get_foreign_keys(name, schema=schema):
+            if fk["referred_table"] not in names or fk.get("referred_schema") not in (None, schema):
+                raise ArchiveBlocked("Master-data dependency outside backup scope: " + name)
+    return names
 
 
 def client_command(name):
@@ -79,6 +126,13 @@ def require_current(receipts, *, source, environment, destination, now):
             or origin["environment"] != environment
             or receipt.get("destination") != destination
             or receipt.get("policy") != POLICY_SHA256
+        ):
+            continue
+        files = receipt.get("files", [])
+        if (
+            not files
+            or type(files[0].get("master_proof_version")) is not int
+            or files[0]["master_proof_version"] != MASTER_PROOF_VERSION
         ):
             continue
         snapshot = receipt.get("snapshot", {})
@@ -196,16 +250,19 @@ def master_proof(db, source, *, checkpoint):
 
     from .codec import encode
 
-    if source not in {"gateway", "direct"}:
-        raise ArchiveBlocked("Unknown backup source")
+    tables = check_master_tables(db, source, checkpoint=checkpoint)
     if db.dialect.name == "postgresql":
         db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
-    tables = MASTER_TABLES if source == "gateway" else DIRECT_MASTER_TABLES
     result = {}
     total = 0
     for name in tables:
         checkpoint()
-        table = Table(name, MetaData(), autoload_with=db)
+        table = Table(
+            name,
+            MetaData(),
+            schema="public" if db.dialect.name == "postgresql" else None,
+            autoload_with=db,
+        )
         keys = list(table.primary_key.columns)
         if not keys:
             raise ArchiveBlocked("Master-data proof requires stable primary keys")
@@ -234,7 +291,7 @@ def master_proof(db, source, *, checkpoint):
                 digest.update(raw)
                 count += 1
         result[name] = {"rows": count, "content_sha256": digest.hexdigest()}
-    return {"version": 1, "tables": result}
+    return {"version": MASTER_PROOF_VERSION, "tables": result}
 
 
 def dump(database_url, source, output, *, checkpoint, executable=None, with_proof=False):
@@ -242,6 +299,7 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
 
+    tables = master_tables(source)
     url = make_url(database_url)
     env = {
         **os.environ,
@@ -253,7 +311,6 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
         "PGCONNECT_TIMEOUT": "3",
         "PGOPTIONS": "-c statement_timeout=8000 -c lock_timeout=150",
     }
-    tables = MASTER_TABLES if source == "gateway" else DIRECT_MASTER_TABLES
     engine = create_engine(database_url, pool_size=1, max_overflow=0)
     try:
         with (
@@ -261,13 +318,17 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
             db.begin(),
         ):
             db.execute(text("SET TRANSACTION READ ONLY"))
+            check_master_tables(db, source, checkpoint=checkpoint)
             snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
             outputs = []
             for label, args in [
                 ("schema", ["--schema-only"]),
                 (
                     "masters",
-                    ["--data-only", *[flag for table in tables for flag in ("--table", table)]],
+                    [
+                        "--data-only",
+                        *[flag for table in tables for flag in ("--table", "public." + table)],
+                    ],
                 ),
             ]:
                 target = output / (label + ".dump")

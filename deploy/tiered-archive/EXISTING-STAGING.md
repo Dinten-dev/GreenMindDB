@@ -524,3 +524,39 @@ per SHA-256. Der eigentliche Archivledger wurde bewusst nicht umgeschrieben:
 beide Belege bleiben `published`; keine Löschfreigabe. Die reguläre Pipeline
 muss gemeinsame aktuelle Nachweise vor jedem späteren Löschlauf selbst führen.
 Vollständiger DB-/Direct-Restore und Gesamtabnahme bleiben getrennt offen.
+
+### Stammdatenumfang und vorhandene Rechte – 27.10.2026
+
+Die lesende Bestandsaufnahme bestätigt bereits vorhandene Tabellen für
+`zone_access`, `plant_sensor_assignment` und `plant_observation_access`.
+Der bisherige Gateway-Backupumfang liess diese Rechte und Zuordnungen aus.
+Neue Sicherungen verwenden daher Nachweisversion 2 und zehn Gateway-Tabellen:
+`alembic_version`, `organization`, `users`, `zone`, `gateway`, `sensor`, `plant`,
+`zone_access`, `plant_sensor_assignment`, `plant_observation_access`.
+Direct bleibt bei `direct_device`, `direct_enrollment`, `direct_session`.
+Das ist ausdrücklich kein vollständiger Nutzdaten-Restore: Messwerte, Direct-
+Blöcke, Betriebszustände und weitere Tabellen benötigen ihre jeweiligen Archive.
+
+Vor dem Dump werden Tabellen, SELECT-Rechte und Fremdschlüssel-Abhängigkeiten
+geprüft. Fehlende Tabellen oder Abhängigkeiten ausserhalb dieses festen Umfangs
+blockieren den Lauf. Schema und Zeilen stammen weiterhin aus einem gemeinsamen
+PostgreSQL-Snapshot. Versionsnummer, Tabellenmenge und vollständige typisierte
+Inhalte werden beim Restore verglichen. Der Versionsnachweis ist auch im
+manifestgebundenen Index enthalten; alte unvollständige Sicherungen erfüllen
+keine aktuelle Löschvoraussetzung. Bestehende verschlüsselte Dateien bleiben
+unverändert und über die bisherige Datei-Wiederherstellung lesbar.
+
+Die vorhandene Rolle `greenmind_archive_staging_ro` darf unter anderem `users`,
+`zone_access`, `plant_observation_access` und `alembic_version` noch nicht lesen.
+Die getrennten `TIERED_ARCHIVE_*_BACKUP_DATABASE_URL`-Bindungen fehlen im
+installierten Writer-Profil. Keine neue Rolle oder Schlüssel nötig allein aus
+diesem Befund: zuerst den tatsächlichen erforderlichen Leseumfang klären.
+Insbesondere kann ein vollständiger Schema-Dump zusätzliche Tabellenrechte
+benötigen. Es wurden keine Berechtigungen erweitert und keine echten Dumps
+hochgeladen. Das erste Zwei-WAV-Profil bleibt im bisherigen Umfang gesperrt.
+
+Nachweise: `outputs/greenmind-staging-mastercoverage-20261027/` im Projekt.
+Vorhandener Box-/Snapshot-Nachweis wird nicht wiederholt. Archivdienste, Timer,
+Löschschalter und Originaldaten bleiben unverändert. Die neue Quellfassung ist
+noch nicht als installierter Stand abgenommen; native Prüfung und gebundene
+Installation werden getrennt dokumentiert.

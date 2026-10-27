@@ -35,7 +35,7 @@ def package(tmp_path, change=None):
         "at": AT,
         "files": [dict(part) for part in parts],
         "master_proof": {
-            "version": 1,
+            "version": backup.MASTER_PROOF_VERSION,
             "tables": {
                 table: {"rows": 0, "content_sha256": "a" * 64} for table in backup.MASTER_TABLES
             },
@@ -50,7 +50,11 @@ def package(tmp_path, change=None):
         "time_us": 1,
         "body": body,
     }
-    index = dict(parquet.write(folder / "0000.parquet", [row]), format="parquet")
+    index = dict(
+        parquet.write(folder / "0000.parquet", [row]),
+        format="parquet",
+        master_proof_version=backup.MASTER_PROOF_VERSION,
+    )
     candidate = Candidate(
         "staging",
         "gateway",
@@ -116,9 +120,9 @@ def test_index_and_dump_binding_cannot_diverge(tmp_path):
     [
         None,
         {"version": 2},
-        {"version": 1, "tables": {}},
+        {"version": backup.MASTER_PROOF_VERSION, "tables": {}},
         {
-            "version": 1,
+            "version": backup.MASTER_PROOF_VERSION,
             "tables": {name: {"rows": -1, "content_sha256": "x"} for name in backup.MASTER_TABLES},
         },
     ],
@@ -240,3 +244,66 @@ def test_symlink_client_runtime_is_rejected(tmp_path, monkeypatch):
 def test_no_arbitrary_executable_from_client_runtime():
     with pytest.raises(ArchiveBlocked, match="Unknown"):
         backup.client_command("sh")
+
+
+@pytest.mark.parametrize(
+    "name", ["alembic_version", "zone_access", "plant_sensor_assignment", "plant_observation_access"]
+)
+def test_missing_access_or_assignment_table_blocks_backup(masters, name):
+    with masters.begin() as db:
+        db.execute(text(f'DROP TABLE "{name}"'))
+        with pytest.raises(ArchiveBlocked, match="Required master-data table missing: " + name):
+            backup.master_proof(db, "gateway", checkpoint=lambda: None)
+
+
+def test_permission_and_assignment_changes_invalidate_proof(masters):
+    with masters.begin() as db:
+        db.execute(text("DROP TABLE zone_access"))
+        db.execute(
+            text(
+                "CREATE TABLE zone_access(user_id INTEGER, zone_id INTEGER, PRIMARY KEY(user_id,zone_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(zone_id) REFERENCES zone(id))"
+            )
+        )
+        db.execute(text("INSERT INTO zone_access VALUES(1,1),(1,2)"))
+        before = backup.master_proof(db, "gateway", checkpoint=lambda: None)
+        assert before["version"] == backup.MASTER_PROOF_VERSION
+        db.execute(text("DELETE FROM zone_access WHERE user_id=1 AND zone_id=2"))
+        db.execute(
+            text("UPDATE plant_sensor_assignment SET payload=:value WHERE id=1"),
+            {"value": b"different sensor"},
+        )
+        after = backup.master_proof(db, "gateway", checkpoint=lambda: None)
+    assert before["tables"]["zone_access"]["rows"] == 2
+    assert after["tables"]["zone_access"]["rows"] == 1
+    for name in ("zone_access", "plant_sensor_assignment"):
+        assert before["tables"][name] != after["tables"][name]
+
+
+def test_new_foreign_key_dependency_requires_explicit_backup_scope(masters):
+    with masters.begin() as db:
+        db.execute(text("CREATE TABLE external_owner(id INTEGER PRIMARY KEY)"))
+        db.execute(text("DROP TABLE plant_sensor_assignment"))
+        db.execute(
+            text(
+                "CREATE TABLE plant_sensor_assignment(id INTEGER PRIMARY KEY, owner INTEGER REFERENCES external_owner(id))"
+            )
+        )
+        with pytest.raises(ArchiveBlocked, match="dependency outside backup scope"):
+            backup.master_proof(db, "gateway", checkpoint=lambda: None)
+
+
+def test_legacy_proof_cannot_claim_current_access_coverage(tmp_path):
+    def legacy(body, parts, folder):
+        body["master_proof"]["version"] = 1
+        for name in ("zone_access", "plant_sensor_assignment", "plant_observation_access"):
+            del body["master_proof"]["tables"][name]
+
+    folder, sha, key = package(tmp_path, legacy)
+    with pytest.raises(ArchiveBlocked, match="proof"):
+        restore_backup(folder, URL, sha, key, checkpoint=lambda: None)
+
+
+def test_access_tables_are_retained_and_never_expire_implicitly():
+    from app.tiered_archive.source import RETAINED_TABLES
+
+    assert {"zone_access", "plant_sensor_assignment", "plant_observation_access"} <= RETAINED_TABLES

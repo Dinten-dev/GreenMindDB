@@ -14,6 +14,7 @@ from app.raw_archive.policy import ArchiveBlocked, checksum
 from . import parquet
 from .backup import (
     DIRECT_MASTER_TABLES,
+    MASTER_PROOF_VERSION,
     MASTER_TABLES,
     MAX_BYTES,
     client_command,
@@ -89,7 +90,13 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
     ):
         raise ArchiveBlocked("Encrypted backup index binding mismatch")
     proof = body.get("master_proof")
-    if not isinstance(proof, dict) or proof.get("version") != 1:
+    if (
+        not isinstance(proof, dict)
+        or type(proof.get("version")) is not int
+        or proof.get("version") != MASTER_PROOF_VERSION
+        or type(parts[0].get("master_proof_version")) is not int
+        or parts[0]["master_proof_version"] != MASTER_PROOF_VERSION
+    ):
         raise ArchiveBlocked("Backup lacks typed master-data proof; retain legacy dumps")
     names = MASTER_TABLES if candidate.source == "gateway" else DIRECT_MASTER_TABLES
     tables = proof.get("tables")

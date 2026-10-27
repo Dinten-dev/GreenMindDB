@@ -1029,13 +1029,14 @@ def test_wav_full_decode_must_match_feature_sample_count(tmp_path):
 def test_master_backup_proof_must_match_source_destination_and_be_current():
     import copy
 
-    from app.tiered_archive.backup import require_current
+    from app.tiered_archive.backup import MASTER_PROOF_VERSION, require_current
 
     now = AT + timedelta(days=100)
     receipt = {
         "state": "verified",
         "policy": POLICY_SHA256,
         "destination": "box-a",
+        "files": [{"master_proof_version": MASTER_PROOF_VERSION}],
         "source": {
             "dataset": "database_backup",
             "source": "gateway",
@@ -1053,6 +1054,9 @@ def test_master_backup_proof_must_match_source_destination_and_be_current():
     assert require_current([receipt], **kwargs) == receipt
     for change in (
         {"state": "published"},
+        {"files": []},
+        {"files": [{"master_proof_version": 1}]},
+        {"files": [{"master_proof_version": True}]},
         {"destination": "box-b"},
         {"policy": "0" * 64},
         {"source": dict(receipt["source"], source="direct")},
