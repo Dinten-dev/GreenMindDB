@@ -1132,3 +1132,230 @@ def test_release_verification_rejects_unlisted_executable_content(tmp_path):
     (release / "sitecustomize.py").write_text("unexpected=1\n")
     with pytest.raises(ValueError, match="Unexpected"):
         verify(release, expected)
+
+
+@pytest.mark.parametrize("step", [600, 3600, 604800])
+@pytest.mark.parametrize(
+    "source,dataset", [("gateway", "visual_reading"), ("direct", "direct_visual_point")]
+)
+def test_cold_window_filters_original_intervals_before_display_buckets(
+    bundle, tmp_path, step, source, dataset
+):
+    from app.tiered_archive.reader import cold_data
+
+    original, _, _, ledger, box, seed = bundle
+    rows = []
+    # The first ends exactly at the left boundary; the last starts at the
+    # exclusive right boundary. Rebinning must not pull either into the window.
+    for index, (offset, seconds, value) in enumerate(
+        [(240, 60, 900), (299, 60, 2), (330, 1, 4), (360, 60, 800)]
+    ):
+        stamp = AT + timedelta(seconds=offset)
+        rows.append(
+            dict(
+                seed[0],
+                identity=str(index),
+                time_us=codec.epoch_us(stamp),
+                body={
+                    "row": dict(
+                        seed[0]["body"]["row"],
+                        bucket=stamp,
+                        seconds=seconds,
+                        n=1,
+                        total=value,
+                        total2=value * value,
+                        minimum=value,
+                        maximum=value,
+                    ),
+                    "context": {},
+                },
+            )
+        )
+    path = tmp_path / "boundaries.parquet"
+    metadata = dict(parquet.write(path, rows), format="parquet")
+    candidate = replace(
+        original,
+        source=source,
+        dataset=dataset,
+        rows=len(rows),
+        content_sha256=metadata["content_sha256"],
+    )
+    now = AT + timedelta(days=2)
+    publish(candidate, [(path, metadata)], box, ledger, checkpoint=lambda: None, now=now)
+    receipt = verify_snapshot(
+        candidate, box, ledger, Provider(now), 3, checkpoint=lambda: None, now=now
+    )
+    ledger.save(candidate, "deleting", receipt)
+    ledger.save(candidate, "evicted", receipt)
+    scope = dict(
+        environment="staging",
+        source=source,
+        organization=ORG,
+        dataset=dataset,
+        sensor=SENSOR,
+        start=AT + timedelta(seconds=300),
+        end=AT + timedelta(seconds=360),
+        step=step,
+    )
+    result = cold_data(ledger, Cache(tmp_path / "boundary-cache"), box, **scope)["series"]
+    assert len(result) == 1 and len(result[0]["data"]) == 1
+    point = result[0]["data"][0]
+    assert point["reading_count"] == 2
+    assert point["value"] == 3
+    assert (point["minimum"], point["maximum"]) == (2, 4)
+    assert point["rms"] == pytest.approx(10**0.5)
+    assert point["resolution_seconds"] == step
+    assert not cold_data(
+        ledger,
+        Cache(tmp_path / "boundary-cache"),
+        box,
+        **(scope | {"organization": str(uuid.uuid4())}),
+    )["series"]
+
+
+@pytest.mark.parametrize("source", ["gateway", "direct"])
+@pytest.mark.parametrize("days", [1, 7, 90, 365, 3650])
+def test_http_chart_and_csv_share_hot_cold_values(bundle, tmp_path, monkeypatch, source, days):
+    """Real routes, archive files and merge; SQL/authentication are fixture adapters.
+
+    This proves response parity and the authorization call barrier, not live
+    PostgreSQL rollups, authentication, or production tenant provisioning.
+    """
+    import csv
+    import io
+    import zipfile
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from fastapi.testclient import TestClient
+
+    from app.auth import get_current_user
+    from app.database import get_db
+    from app.tiered_archive import runtime
+    from app.visualization import api, direct, direct_api
+    from app.visualization.resolution import display_step
+
+    original, path, metadata, ledger, box, _ = bundle
+    candidate = replace(
+        original,
+        source=source,
+        dataset="visual_reading" if source == "gateway" else "direct_visual_point",
+    )
+    now = AT + timedelta(days=2)
+    publish(candidate, [(path, metadata)], box, ledger, checkpoint=lambda: None, now=now)
+    receipt = verify_snapshot(
+        candidate, box, ledger, Provider(now), 3, checkpoint=lambda: None, now=now
+    )
+    ledger.save(candidate, "deleting", receipt)
+    ledger.save(candidate, "evicted", receipt)
+    monkeypatch.setenv("TIERED_ARCHIVE_READS_ENABLED", "true")
+    monkeypatch.setenv("TIERED_ARCHIVE_ENVIRONMENT", "staging")
+    for name in ("TIERED_ARCHIVE_READ_BROKER_SOCKET", "RAW_ARCHIVE_READ_BROKER_SOCKET"):
+        monkeypatch.delenv(name, raising=False)
+    reads = []
+
+    def resources():
+        reads.append(1)
+        return Ledger(ledger.root, read_only=True), Cache(tmp_path / "http-cache"), box
+
+    monkeypatch.setattr(runtime, "reader_resources", resources)
+    end = AT + timedelta(days=days)
+    step = display_step(AT, end)
+
+    def local(*_):
+        return points(
+            [
+                dict(
+                    kind="temperature",
+                    unit="C",
+                    bucket=AT,
+                    seconds=600,
+                    n=1,
+                    total=9,
+                    total2=81,
+                    minimum=9,
+                    maximum=9,
+                )
+            ],
+            source=source,
+            step=step,
+        )
+
+    monkeypatch.setattr(api, "_query_local_series", local)
+    monkeypatch.setattr(direct, "_query_local_series", local)
+    allowed = True
+
+    def authorize(*_):
+        if not allowed:
+            raise HTTPException(404, "Sensor not found")
+        return {"mode": "DIRECT"}
+
+    monkeypatch.setattr(api, "authorize", authorize)
+    monkeypatch.setattr(direct_api, "authorize", authorize)
+    monkeypatch.setattr(api.limiter, "enabled", False)
+    result = SimpleNamespace(scalar_one=lambda: ORG, scalar=lambda: None)
+    result.mappings = lambda: SimpleNamespace(one=lambda: {"sensor": {}, "gateway": {}, "zone": {}})
+    db = SimpleNamespace(execute=lambda *_args, **_kwargs: result)
+    overrides = dict(api.app.dependency_overrides)
+    api.app.dependency_overrides[get_db] = lambda: db
+    api.app.dependency_overrides[direct_api.connection] = lambda: db
+    api.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id="fixture-user")
+    prefix = (
+        f"/api/v1/sensors/{SENSOR}"
+        if source == "gateway"
+        else f"/api/v1/visualization/direct/{SENSOR}"
+    )
+    params = {"from_dt": AT.isoformat(), "to_dt": end.isoformat()}
+    try:
+        with TestClient(api.app) as client:
+            chart = client.get(prefix + "/data", params=params)
+            exported = client.get(prefix + "/export", params=params)
+            assert chart.status_code == exported.status_code == 200
+            assert chart.headers["cache-control"] == "private, no-store"
+            point = chart.json()[0]["data"][0]
+            assert point["reading_count"] == 3 and point["value"] == 5
+            assert point["minimum"] == 2 and point["maximum"] == 9
+            assert point["resolution_seconds"] == max(600, step)
+            assert not any(key.startswith("_") for key in point)
+            if source == "gateway":
+                with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+                    content = archive.read(archive.namelist()[0]).decode()
+            else:
+                content = exported.text
+            rows = list(
+                csv.DictReader(line for line in content.splitlines() if not line.startswith("#"))
+            )
+            assert len(rows) == 1
+            row = rows[0]
+            assert row["timestamp_utc"] == point["timestamp"]
+            for field in ("minimum", "maximum", "rms", "standard_deviation", "resolution_seconds"):
+                assert float(row[field]) == pytest.approx(point[field])
+            assert float(row["value" if source == "gateway" else "mean"]) == point["value"]
+            assert (
+                int(row["reading_count" if source == "gateway" else "sample_count"])
+                == point["reading_count"]
+            )
+            expected_reads = 2
+            if days == 365:
+                from concurrent.futures import ThreadPoolExecutor
+
+                def repeated(index):
+                    route = "/data" if index % 2 == 0 else "/export"
+                    response = client.get(prefix + route, params=params)
+                    assert response.status_code == 200
+                    if route == "/data":
+                        assert response.json() == chart.json()
+                    else:
+                        assert response.content  # CSV/ZIP was fully assembled.
+
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    list(pool.map(repeated, range(8)))
+                expected_reads += 8
+            assert len(reads) == expected_reads
+            allowed = False
+            assert client.get(prefix + "/data", params=params).status_code == 404
+            assert client.get(prefix + "/export", params=params).status_code == 404
+            assert len(reads) == expected_reads  # A rejected caller cannot reach the archive.
+    finally:
+        api.app.dependency_overrides.clear()
+        api.app.dependency_overrides.update(overrides)

@@ -2,7 +2,7 @@
 
 import math
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.raw_archive.policy import ArchiveBlocked
 
@@ -19,8 +19,12 @@ def archived_statistics(
 
     from .parquet import STAT_TYPES, statistics
 
-    receipts = ledger.scope(environment, source, organization, dataset, start, end)
-    if len(receipts) > 2048 or not 1 <= step <= 86400:
+    # Retained source buckets are at most ten minutes. Discover a partition
+    # ending before start if its final bucket still intersects the window.
+    receipts = ledger.scope(
+        environment, source, organization, dataset, start - timedelta(seconds=600), end
+    )
+    if len(receipts) > 2048 or type(step) is not int or not 1 <= step <= 604800:
         raise ArchiveBlocked("Historical query exceeds archive partition budget")
     columns = [
         "identity",
@@ -76,8 +80,16 @@ def archived_statistics(
                         """INSERT OR REPLACE INTO moments SELECT identity,stat_kind,stat_unit,stat_bucket_us,
                         stat_seconds,stat_n,stat_total,stat_total2,stat_minimum,stat_maximum,stat_duration
                         FROM cold_partition WHERE organization=? AND sensor=? AND time_us>=? AND time_us<?
-                        AND stat_n>0 AND stat_seconds>0""",
-                        [organization, sensor, epoch_us(start), epoch_us(end)],
+                        AND stat_n>0 AND stat_seconds>0
+                        AND stat_bucket_us<? AND stat_bucket_us+CAST(stat_seconds AS BIGINT)*1000000>?""",
+                        [
+                            organization,
+                            sensor,
+                            epoch_us(start - timedelta(seconds=600)),
+                            epoch_us(end),
+                            epoch_us(end),
+                            epoch_us(start),
+                        ],
                     )
                     db.unregister("cold_partition")
             cursor = db.execute(
@@ -379,14 +391,12 @@ def strip_internal(series):
 def cold_data(
     ledger, cache, store, *, environment, source, organization, dataset, sensor, start, end, step
 ):
-    from datetime import timedelta
-
     scope = dict(
         environment=environment,
         source=source,
         organization=organization,
         sensor=sensor,
-        start=start - timedelta(seconds=600),
+        start=start,
         end=end,
         step=step,
     )

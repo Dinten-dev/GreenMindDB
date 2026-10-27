@@ -447,3 +447,24 @@ Rücknahme: Die fünf exakt verzeichneten Konfigurationsdateien aus
 nach Hashprüfung zurücksetzen und daemon-reload ausführen. Keine Dienststarts;
 alte Overlays und Clientlaufzeit bleiben erhalten. Native Tests und Installation
 ersetzen weiterhin keine Storage-Box-/Snapshot-Abnahme oder Gesamtbeobachtung.
+
+### Historische Zeitfenster und CSV – lokale Prüfung 27.10.2026
+
+- Archivabfragen unterstützen jetzt auch die vorgesehene Wochenauflösung.
+- Originalintervalle werden vor der Anzeigeverdichtung auf Überschneidung geprüft.
+- Ausgeschlossene Randwerte verändern keine Mittelwerte oder Extremwerte mehr.
+- Gateway-CSV ergänzt `reading_count` als letzte Spalte.
+- Bestehende CSV-Spalten und deren Reihenfolge bleiben erhalten.
+- Sechs Regressionen reproduzierten beide Archivfehler vor der Korrektur.
+- Zehn HTTP-Fälle vergleichen Diagramm, CSV und zusammengeführte Archivwerte.
+- Geprüfte Zeiträume: 24 Stunden, sieben, 90, 365, 3650 Tage.
+- Jahresabfragen bestanden zusätzlich mit vier parallelen lokalen Abrufen.
+- Abgewiesene Anfragen erreichen den Archivleser nicht.
+
+Diese Prüfung verwendet künstliche Parquet-Dateien, den echten Ledger-/Cache-/
+DuckDB-Lesepfad und echte HTTP-Routen. SQL und Anmeldung sind Testadapter.
+Sie ersetzt weder native PostgreSQL-Vergleiche noch die reale Mandantenabnahme.
+Die Retention-Altersgrenzen werden durch gewählte Abfragezeiträume nicht geprüft.
+Der bisher installierte Stand bleibt unverändert; diese Korrektur ist noch nicht
+auf dem Archivserver installiert. Keine Dienste, Timer oder Löschungen gestartet.
+Nachweis: `outputs/greenmind-staging-history-20261027/` im Projektverzeichnis.

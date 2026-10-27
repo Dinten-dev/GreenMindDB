@@ -405,6 +405,7 @@ def export(
                     "source_interval_start",
                     "source_interval_end",
                     "timing_overlap_seconds",
+                    "reading_count",
                 ]
             )
             for row in item["data"]:
@@ -423,6 +424,7 @@ def export(
                         row.get("source_interval_start", ""),
                         row.get("source_interval_end", ""),
                         row.get("timing_overlap_seconds", ""),
+                        row["reading_count"],
                     ]
                 )
                 if out.tell() + size > settings.sensor_export_max_bytes:
