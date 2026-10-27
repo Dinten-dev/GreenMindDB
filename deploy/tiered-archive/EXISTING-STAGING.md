@@ -496,3 +496,31 @@ Runtime-SHA-256: `8ace20b9064ac33b2e835a1a82854c8f431ebb1af8f627f156564ba0335629
 Vorheriges Overlay und Konfiguration werden zur Rücknahme erhalten. Installation
 und unabhängige Nachprüfung werden separat in der Ausführungsakte nachgewiesen:
 `outputs/greenmind-staging-history-native-20261027/` im Projektverzeichnis.
+
+Die vorgenannte History-Bindung wurde anschliessend installiert und unabhängig
+geprüft: 384 root-eigene schreibgeschützte Dateien, 382 unveränderte Hardlinks,
+Manifest-SHA-256 `04374c61eca2782602550908a4d4fac12f1bfa2533124d795e79cabff62661b1`.
+Rücknahme: `/etc/greenmind/tiered-archive/before-history-8ace20b9064a/manifest.json`.
+Fünf exakte Vorgängerkonfigurationen sind dort erhalten. Keine Dienststarts;
+Container, Archivledger, Startsperren und deaktivierte Löschschalter bestätigt.
+
+### Snapshot der bestehenden zwei Pilotpakete – 27.10.2026
+
+Nach persönlicher Anmeldung wurde Snapshot `1528896` auf Box `658321` erstellt:
+`2026-10-27T19-03-50`, Beschreibung `GreenMind-Staging-Zwei-WAVs-20261027`.
+Alle sechs vorherigen Snapshots blieben erhalten. Keine Rotation oder Rücksetzung.
+Die vorhandenen zwei WAVs samt zwei Parquets und zwei Manifesten wurden daraus
+vollständig zurückgelesen und geprüft: 517013 Byte insgesamt, davon 501688 WAV-Byte.
+Gateway 22800 und Direct 228000 Frames, jeweils 380 Hz, mono, 16 Bit.
+Provideridentität vor und nach der Rücklesung per bestehendem GET-Zugang bestätigt.
+Der vorhandene primäre SFTP-Zugang wurde nur für Snapshot-GETs verwendet;
+keine Erweiterung des RO-Unteraccounts und kein zusätzlicher Upload.
+
+Finaler begrenzter Test: 5,904 Sekunden, 41385984 Byte Speichermaximum,
+keine Speicherereignisse, eigene Testdateien nach bestätigtem Ende entfernt.
+Die vollständige Diagnose ist unter `outputs/greenmind-staging-snapshot-20261027/`
+gesichert. `Snapshot-Pruefnachweis.json` bindet API-Nachweise und Dateiresultate
+per SHA-256. Der eigentliche Archivledger wurde bewusst nicht umgeschrieben:
+beide Belege bleiben `published`; keine Löschfreigabe. Die reguläre Pipeline
+muss gemeinsame aktuelle Nachweise vor jedem späteren Löschlauf selbst führen.
+Vollständiger DB-/Direct-Restore und Gesamtabnahme bleiben getrennt offen.
