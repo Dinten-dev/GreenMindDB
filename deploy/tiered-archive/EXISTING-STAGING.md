@@ -1004,3 +1004,80 @@ rund 39,67 MiB, keine OOM-Ereignisse.
 Das belegt die Fehlerpfade an der Clientprozessgrenze mit künstlichen Daten;
 eine tatsächliche Provider-Quota wurde nicht ausgeschöpft. Nachweis:
 `outputs/greenmind-staging-faulttests-20261028/Transportfehler-v2.json`.
+
+### Tagesarchive, Snapshot-Katalog und native SQL-Transaktionen – 28.10.2026
+
+Der ausdrücklich freigegebene Umfang von 17 Dateien/78’492 Byte ist abgeschlossen.
+Sieben Parquet-Tagesarchive enthalten zwei `visual_reading`-, zwei `visual_wave`-
+und drei `direct_visual_point`-Partitionen, zusammen 46 Originalzeilen. Sieben
+Manifeste, ein komprimierter Katalogteil, dessen Wurzel und ein separater
+Wiederherstellungsindex vervollständigen das Paket. Vor dem ersten Box-Schreiben
+wurden alle unveränderlichen lokalen Dateien geprüft; nach jeder Veröffentlichung
+folgte eine unabhängige vollständige SFTP-Rücklesung mit SHA-256-Vergleich.
+Bestehende WAV-, Datenbank- und Attributarchive wurden lediglich referenziert.
+
+Nach eigenen alten Snapshot-Löschungen des Nutzers bestand die Ausgangsliste aus
+`1482905,1495096,1501404,1508571,1529628,1531446`. Genau ein zusätzlicher manueller
+Snapshot wurde erstellt: `1532426`, Name `2026-10-28T10-54-04`, Beschreibung
+`GreenMind-Staging-Tagesarchive-20261028`. Die UI meldete zeitweise einen Timeout;
+es gab keinen zweiten Erstellversuch. Sichtbare Snapshot-Liste und unabhängige
+GET-API bestätigten die einmalige Erstellung. Alle sechs Ausgangs-Snapshots sind
+nach dem Test weiterhin vorhanden; durch diese Arbeit wurde keiner gelöscht.
+
+Der Restore-Prozess erhielt keine lokalen Archivnutzdaten oder Quellkatalogkopie.
+Alle 17 Dateien kamen ausschliesslich per GET aus diesem Snapshot. Die 46
+typisierten Messwertzeilen waren gegen bestehende read-only Staging-Abfragen
+identisch. Der operative Katalog liess sich allein daraus mit seinen zwei echten
+`published`-WAV-Nachweisen rekonstruieren. Der separate Wiederherstellungsindex
+verknüpft zusätzlich alle sieben SQL-Manifeste sowie die bestehenden nativen
+PostgreSQL- und Attributsicherungen. Die sieben SQL-Archive wurden weder in den
+Hauptkatalog eingefügt noch als operativ verifiziert oder entfernt ausgegeben.
+
+Mit diesen echten Snapshot-Parquet-Dateien bestanden die acht nativen
+HTTP-/CSV-/JWT-/Mandantenfälle beider Quellen für 1/7/90/365 Tage, dazu je Quelle
+vier parallele Jahresansicht-/CSV-Aufrufe. Abgelehnte Aufrufe erreichten keinen
+Archivabruf. Archivbesitz wurde ausschliesslich im Prüfprozess simuliert; es gab
+keine tatsächliche Quellentfernung und keinen gestarteten Archivlesedienst.
+Der bekannte Gleitkommavertrag blieb absolut 1e-9/relativ 1e-12, maximale
+abgeleitete Differenz etwa 1,947e-12. Originalwerte und übrige Vergleichsfelder
+waren exakt. Laufzeit 36,813 Sekunden, cgroup-Spitze 123,367 MiB; Grenze
+192 MiB/25 Prozent CPU, keine Speicherereignisse.
+
+Zusätzlich bestanden neun native SQL-Fälle in genau einer eigenen Datenbank
+mit ausschliesslich künstlichen Werten: typisierter Export bei weiter gesperrter
+Retention, geänderte Werte, NOWAIT-Zeilensperre, atomarer Transaktions-Rollback,
+Abgleich nach bereits erfolgtem Commit, verspätete Aggregation als Delta,
+wartende Wiederholung gegenüber erhaltenen Identitäten, geänderte Direct-
+Revision und geänderte Direct-Werte. Eigene Datenbank und Testdateien sind
+entfernt; Laufzeit 5,195 Sekunden, Spitze 60,531 MiB, keine Speicherereignisse.
+Das sind echte PostgreSQL-Transaktionen mit künstlichen Daten; weder eine
+SQL-Löschfreigabe noch der vollständige Löschcontroller mit Prozessabsturz wurden
+ausgeführt. Diese zusätzliche Prozessabsturz-Abnahme bleibt offen.
+
+Der bestehende 389-MiB-Altkatalog wurde ausschliesslich per indizierter Identität
+und einem begrenzten 64-Zeilen-Präfix für bekannte Bucketnamen gelesen. Es gab
+keinen Vollscan, Quell- oder Boxzugriff. Null Alt-Identitäten passten; der neue
+Katalog lieferte drei reine Inhaltskandidaten. Einer ist die zweite Gateway-Datei
+mit identischen WAV-Bytes. Das belegt keine dritte archivierte Objektversion und
+auch nicht das Fehlen anderer Box-Dateien. Zwei genaue WAV-Restores bestehen;
+weitere 681 Objektidentitäten benötigen noch ihren vollständigen Archivbeleg.
+Änderungen des aktiven Altkatalogs während der Lesung sind ausdrücklich erfasst.
+
+Die unabhängige Abschlussprüfung bestätigte unveränderte Originale, Profile,
+Hauptkatalog, PAUSE und acht false-Lösch-/Abnahmeflags. Beide neuen Archivdienste
+und der Timer sind inactive/disabled, ohne Startzeit; INSTALLATION_READY fehlt.
+Die installierte Runtime bleibt `55c067b4c8e5`/Codecommit `db847ed2`.
+Temporäre Testeinheiten sind beendet und deren neue Testdateien entfernt.
+
+Nachweise: `outputs/greenmind-staging-boxcoverage-20261028/Ergebnis.json`,
+`Upload-Ergebnis.json`, `Snapshot-Restore-Ergebnis-v2.json`,
+`SQL-Lebenszyklus-v2.json` und `Abschlusspruefung.json` im Projekt.
+Serverseitige Restore-Belegdatei:
+`/etc/greenmind/tiered-archive/gm-history-snapshot-c5qxp0uk-result.json`, SHA-256
+`a920268d0ea7a88731b740da388aefc65a3af9dfde9e3ad9480e3bb3b331c471`.
+
+Vor Gesamtabnahme verbleiben die vollständige Objektzuordnung, operative
+SQL-Katalog-/Laufplanbindung, vollständige native SQL-Prozessabsturzfälle,
+externe Alarmzustellung und nach eigener Startfreigabe der unveränderte echte
+24-Stunden-Kopier-/Lesebetrieb. Produktionsanbindung, Ressourcen-/Durchsatz-
+Nachweis und unabhängige zweite Schlüsselwiederherstellung bleiben gesondert.
