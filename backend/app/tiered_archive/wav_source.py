@@ -38,9 +38,9 @@ class WavSource:
         )
         self.expected, self.db = None, None
 
-    def export(self, reference, folder, *, maximum_bytes=None, maximum_wavs=None):
+    def metadata(self, reference, *, maximum_bytes=None, maximum_wavs=None):
         records = self.catalog.resolve(reference)
-        if not records:
+        if not records or len(records) > 1024:
             raise ArchiveBlocked("No verified WAVs in revision")
         if maximum_wavs is not None and (maximum_wavs < 1 or len(records) > maximum_wavs):
             raise ArchiveBlocked("WAV revision exceeds bounded file count")
@@ -54,7 +54,6 @@ class WavSource:
             or any(not 0 < record.size <= budget for record in records)
         ):
             raise ArchiveBlocked("WAV revision exceeds bounded bundle budget")
-        disk_reserve(folder, total * 2)
         with self.sessions() as db:
             if self.kind == "gateway":
                 from app.models.wav_file import WavFile
@@ -114,16 +113,52 @@ class WavSource:
                     }
                     for run in revision.manifest["runs"]
                 }
-        artifacts = []
-        snapshots = []
-        for number, record in enumerate(records):
+        at = min(record.started_at for record in records)
+        envelope = {
+            "identity": digest(reference),
+            "organization": organization,
+            "sensor": sensor,
+            "time_us": epoch_us(at),
+            "body": {
+                "reference": reference,
+                "metadata": metadata,
+                "originals": [{"recording": record_json(record)} for record in records],
+            },
+        }
+        return (
+            envelope,
+            headers,
+            dict(
+                complete=bool(complete),
+                features_verified=True,
+                projections_verified=bool(projections),
+                dependencies_complete=True,
+            ),
+        )
+
+    def prepare(self, reference, *, maximum_bytes=None, maximum_wavs=None):
+        envelope, headers, flags = self.metadata(
+            reference, maximum_bytes=maximum_bytes, maximum_wavs=maximum_wavs
+        )
+        for item in envelope["body"]["originals"]:
             self.checkpoint()
-            snapshot = self.objects.snapshot(record)
+            item["snapshot"] = self.objects.snapshot(Recording.from_receipt(item["recording"]))
+        return envelope, headers, flags
+
+    def export(self, reference, folder, *, maximum_bytes=None, maximum_wavs=None):
+        envelope, headers, flags = self.prepare(
+            reference, maximum_bytes=maximum_bytes, maximum_wavs=maximum_wavs
+        )
+        originals = envelope["body"]["originals"]
+        disk_reserve(folder, sum(item["recording"]["size"] for item in originals) * 2)
+        artifacts = []
+        for number, item in enumerate(originals):
+            self.checkpoint()
+            record = Recording.from_receipt(item["recording"])
             path = folder / f"original-{number}.wav"
-            self.objects.download(record, snapshot, path)
+            self.objects.download(record, item["snapshot"], path)
             if checksum(path) != record.sha256 or path.stat().st_size != record.size:
                 raise ArchiveBlocked("Source WAV differs from scientific metadata")
-            snapshots.append({"recording": record_json(record), "snapshot": snapshot})
             artifacts.append(
                 (
                     path,
@@ -136,24 +171,7 @@ class WavSource:
                     },
                 )
             )
-        at = min(record.started_at for record in records)
-        envelope = {
-            "identity": digest(reference),
-            "organization": organization,
-            "sensor": sensor,
-            "time_us": epoch_us(at),
-            "body": {"reference": reference, "metadata": metadata, "originals": snapshots},
-        }
-        return (
-            envelope,
-            artifacts,
-            dict(
-                complete=bool(complete),
-                features_verified=True,
-                projections_verified=bool(projections),
-                dependencies_complete=True,
-            ),
-        )
+        return envelope, artifacts, flags
 
     def candidate(self, envelope, metadata, flags):
         records = [

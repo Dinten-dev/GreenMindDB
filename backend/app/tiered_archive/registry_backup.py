@@ -3,7 +3,9 @@
 import gzip
 import json
 import os
+import re
 import tempfile
+import uuid
 from pathlib import Path
 
 from app.raw_archive.policy import ArchiveBlocked, checksum
@@ -21,6 +23,7 @@ def backup(ledger, store, *, checkpoint):
     buffer = []
     size = 0
     template = None
+    copy_indexes = False
     with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
         folder = Path(folder)
 
@@ -85,12 +88,50 @@ def backup(ledger, store, *, checkpoint):
                 flush()
             buffer.append(row)
             size += len(row) + 1
+        if ledger.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='wav_copy'"
+        ).fetchone():
+            for (
+                candidate,
+                source,
+                reference,
+                metadata_digest,
+                bindings,
+                destination,
+            ) in ledger.db.execute(
+                "SELECT candidate,source,reference,metadata_digest,bindings,destination "
+                "FROM wav_copy WHERE completed=1 ORDER BY candidate"
+            ):
+                checkpoint()
+                receipt = ledger.get(candidate)
+                if (
+                    not receipt
+                    or receipt["destination"] != destination
+                    or receipt["source"]["source"] != source
+                ):
+                    raise ArchiveBlocked("Completed WAV copy index differs from catalogue")
+                row = encode(
+                    {
+                        "type": "wav_copy",
+                        "candidate": candidate,
+                        "source": source,
+                        "reference": decode(reference),
+                        "metadata_digest": metadata_digest,
+                        "bindings": bindings,
+                        "destination": destination,
+                    }
+                )
+                if size + len(row) > 1024 * 1024:
+                    flush()
+                buffer.append(row)
+                size += len(row) + 1
+                copy_indexes = True
         flush()
         index = folder / "index.json"
         index.write_text(
             json.dumps(
                 {
-                    "schema": 1,
+                    "schema": 2 if copy_indexes else 1,
                     "policy": POLICY_SHA256,
                     "environment": template.environment,
                     "parts": references,
@@ -125,12 +166,21 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
             raise ArchiveBlocked("Catalogue root checksum mismatch")
         index = json.loads(path.read_text())
         if (
-            index.get("schema") != 1
+            index.get("schema") not in {1, 2}
             or index.get("policy") != POLICY_SHA256
             or index.get("environment", expected_environment) != expected_environment
             or len(index["parts"]) > 65536
         ):
             raise ArchiveBlocked("Unknown catalogue format")
+        if ledger.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='wav_copy'"
+        ).fetchone():
+            if ledger.db.execute("SELECT 1 FROM wav_copy LIMIT 1").fetchone():
+                raise ArchiveBlocked("Catalogue restore requires empty WAV transfer index")
+        if index["schema"] == 2:
+            from .wav_copy import initialize
+
+            initialize(ledger.db)
         count = 0
         with ledger.db:
             for number, part in enumerate(index["parts"]):
@@ -185,6 +235,38 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
                                     item["candidate"],
                                     item["state"],
                                     item["body"],
+                                ),
+                            )
+                        elif item["type"] == "wav_copy" and index["schema"] == 2:
+                            receipt = ledger.get(item["candidate"])
+                            reference = item["reference"]
+                            if (
+                                not receipt
+                                or receipt["source"]["kind"] != "wav"
+                                or receipt["source"]["source"] != item["source"]
+                                or receipt["destination"] != item["destination"]
+                                or not re.fullmatch("[a-f0-9]{64}", item["metadata_digest"])
+                                or not re.fullmatch("[a-f0-9]{64}", item["bindings"])
+                                or not isinstance(reference, list)
+                                or len(reference) != (1 if item["source"] == "gateway" else 2)
+                                or item["source"] not in {"gateway", "direct"}
+                            ):
+                                raise ArchiveBlocked("Invalid restored WAV transfer identity")
+                            uuid.UUID(reference[0])
+                            if item["source"] == "direct" and (
+                                type(reference[1]) is not int or reference[1] < 1
+                            ):
+                                raise ArchiveBlocked("Invalid restored WAV revision")
+                            ledger.db.execute(
+                                "INSERT INTO wav_copy VALUES(?,?,?,?,?,?,NULL,?,1)",
+                                (
+                                    item["candidate"],
+                                    item["source"],
+                                    encode(reference),
+                                    item["metadata_digest"],
+                                    item["bindings"],
+                                    item["destination"],
+                                    encode([]),
                                 ),
                             )
                         else:

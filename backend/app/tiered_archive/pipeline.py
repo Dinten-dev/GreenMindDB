@@ -84,6 +84,11 @@ def publish(candidate, files, store, ledger, *, checkpoint, now=None):
         raise ArchiveBlocked("Source partition and primary archive differ")
     if previous and previous.get("files") != references:
         raise ArchiveBlocked("Changed archive encoding requires a separately versioned migration")
+    return _publish_manifest(candidate, references, store, ledger, previous, checkpoint, now)
+
+
+def _publish_manifest(candidate, references, store, ledger, previous, checkpoint, now):
+    checkpoint()
     manifest = {
         "version": 1,
         "policy": POLICY_SHA256,
@@ -114,6 +119,64 @@ def publish(candidate, files, store, ledger, *, checkpoint, now=None):
             "published_at": previous["published_at"] if previous else now.isoformat(),
         },
         now,
+    )
+
+
+def complete_staged_wav(candidate, references, store, ledger, *, checkpoint, now=None):
+    """Publish one whole revision only after independent readback of every staged file.
+
+    Transfers into the staging journal are separately bounded per invocation;
+    the normal publish() artifact ceiling remains unchanged.
+    """
+    from app.raw_archive.policy import Recording
+
+    candidate.validate()
+    if candidate.kind != "wav" or not 2 <= len(references) <= 1025:
+        raise ArchiveBlocked("Complete bounded staged WAV revision required")
+    if len({reference["key"] for reference in references}) != len(references):
+        raise ArchiveBlocked("Duplicate artifact in staged WAV revision")
+    previous = ledger.get(candidate.identity)
+    if previous and previous.get("destination") != store.identity:
+        raise ArchiveBlocked("Archive destination changed; retain original binding")
+    if previous and previous["state"] in {"deleting", "evicted"}:
+        return previous
+    primary = references[0]
+    if (
+        primary.get("format") != "parquet"
+        or primary.get("content_sha256") != candidate.content_sha256
+        or primary.get("rows") != candidate.rows
+        or candidate.rows != 1
+    ):
+        raise ArchiveBlocked("Staged WAV metadata differs from source")
+    with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
+        path = Path(folder) / "returned"
+        for index, reference in enumerate(references):
+            checkpoint()
+            store.download(reference["key"], path, reference["bytes"])
+            verify_file(path, reference, checkpoint)
+            if index == 0:
+                rows = list(parquet.read(path, reference, checkpoint=checkpoint))
+                if len(rows) != 1 or rows[0]["organization"] != candidate.organization:
+                    raise ArchiveBlocked("Staged WAV ownership differs")
+                originals = rows[0]["body"]["originals"]
+                expected = [Recording.from_receipt(item["recording"]) for item in originals]
+                if (
+                    len(expected) != len(references) - 1
+                    or any(record.kind != candidate.source for record in expected)
+                    or [
+                        (record.remote_key(candidate.environment), record.sha256, record.size)
+                        for record in expected
+                    ]
+                    != [(ref["key"], ref["sha256"], ref["bytes"]) for ref in references[1:]]
+                    or any(ref.get("format") != "wav" for ref in references[1:])
+                    or sum(record.size for record in expected) > 64 * 1024**2
+                ):
+                    raise ArchiveBlocked("Staged WAV set is incomplete or changed")
+            path.unlink()
+    if previous and previous.get("files") != references:
+        raise ArchiveBlocked("Changed archive encoding requires a separately versioned migration")
+    return _publish_manifest(
+        candidate, references, store, ledger, previous, checkpoint, now or datetime.now(UTC)
     )
 
 

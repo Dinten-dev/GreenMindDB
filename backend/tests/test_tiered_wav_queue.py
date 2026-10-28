@@ -26,6 +26,8 @@ def harness(tmp_path, monkeypatch):
     rows = {}
     uploads = []
     inspected = []
+    staged = {}
+    batches = []
     now = [AT]
 
     class Catalog:
@@ -52,6 +54,37 @@ def harness(tmp_path, monkeypatch):
             "files": [{"format": "wav", "bytes": size} for size in sizes],
         }
 
+    def stage(source, reference, maximum_bytes, maximum_wavs, can_continue):
+        token = tuple(reference)
+        sizes = rows[token]
+        done = staged.get(token, 0)
+        copied = size = 0
+        while (
+            done < len(sizes)
+            and copied < maximum_wavs
+            and size + sizes[done] <= maximum_bytes
+            and can_continue()
+        ):
+            size += sizes[done]
+            copied += 1
+            done += 1
+        staged[token] = done
+        batches.append((token, copied, size))
+        complete = done == len(sizes)
+        if complete and token not in uploads:
+            uploads.append(token)
+        return {
+            "complete": complete,
+            "copied_wavs": copied,
+            "copied_bytes": size,
+            "receipt": {
+                "candidate": "staged-" + str(token),
+                "files": [{"format": "wav", "bytes": n} for n in sizes],
+            }
+            if complete
+            else None,
+        }
+
     @contextmanager
     def worker():
         ledger = Ledger(root)
@@ -73,6 +106,7 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(schedule, "health_probe", lambda kind: Healthy())
     monkeypatch.setattr(runtime, "wav_source", lambda *args: SimpleNamespace(catalog=Catalog()))
     monkeypatch.setattr(runtime, "publish_wav", publish)
+    monkeypatch.setattr(runtime, "stage_wav", stage)
     monkeypatch.setattr(runtime, "worker", worker)
     monkeypatch.setenv("TIERED_ARCHIVE_DELETE_ENABLED", "false")
     path = tmp_path / "schedule.json"
@@ -83,6 +117,7 @@ def harness(tmp_path, monkeypatch):
         rows=rows,
         uploads=uploads,
         inspected=inspected,
+        batches=batches,
         now=now,
         tick=lambda: schedule.tick(path, clock=lambda: now[0]),
     )
@@ -93,12 +128,13 @@ def query(h, sql):
         return db.execute(sql).fetchall()
 
 
-def test_187_run_revision_is_durable_and_does_not_starve_next_wav(harness):
+def test_187_run_revision_progresses_without_starving_next_wav(harness):
     h = harness
     h.rows.update({("a", 187): [804] * 187, ("b", 601): [456044]})
     result = h.tick()
     assert result["published"] == 1
-    assert result["deferred"] == result["blocked"] == result["pending_wavs"] == 1
+    assert result["deferred"] == result["pending_wavs"] == 1
+    assert result["blocked"] == 0
     assert result["evicted"] == 0
     assert h.uploads == [("b", 601)]
     raw, attempts, first = query(h, "SELECT evidence,attempts,first_seen FROM wav_pending")[0]
@@ -106,19 +142,22 @@ def test_187_run_revision_is_durable_and_does_not_starve_next_wav(harness):
     assert proof["reference"] == ["a", 187]
     assert proof["wavs"] == 187 and proof["bytes"] == 150348
     assert proof["max_wavs"] == 10 and proof["max_bytes"] == 5 * MIB
+    assert proof["reason"] == "copy_in_progress"
     assert len(proof["recordings_sha256"]) == 64
     assert attempts == 1 and first == AT.isoformat()
     assert decode(query(h, "SELECT cursor FROM sweep")[0][0]) == ["b", 601]
-    h.now[0] += timedelta(minutes=5)
-    assert h.tick()["pending_wavs"] == 1
-    assert h.inspected.count(("a", 187)) == 1
-    h.now[0] += timedelta(days=1)
-    h.tick()
-    assert h.inspected.count(("a", 187)) == 2
-    assert query(h, "SELECT attempts,first_seen FROM wav_pending") == [(2, first)]
+    for _ in range(40):
+        h.now[0] += timedelta(minutes=5)
+        result = h.tick()
+        assert result["copied_wavs"] <= 10 and result["copied_wav_bytes"] <= 5 * MIB
+        if not result["pending_wavs"]:
+            break
+    assert h.uploads == [("b", 601), ("a", 187)]
+    assert result["pending_wavs"] == 0 and result["evicted"] == 0
+    assert sum(count for _, count, _ in h.batches) == 187
 
 
-@pytest.mark.parametrize("sizes", [[5 * MIB + 1], [1] * 11])
+@pytest.mark.parametrize("sizes", [[5 * MIB + 1]])
 def test_oversized_revision_never_uploads_any_part(harness, sizes):
     h = harness
     h.rows.update({("a", 1): sizes, ("b", 1): [1]})
@@ -183,7 +222,7 @@ def test_retry_revalidates_and_records_resolution_without_duplicate_upload(harne
     assert result["published"] == 1 and result["pending_wavs"] == 0
     assert h.uploads == [("a", 1)]
     assert query(h, "SELECT state FROM wav_pending_event ORDER BY ordinal") == [
-        ("deferred",),
+        ("copying",),
         ("published",),
     ]
 

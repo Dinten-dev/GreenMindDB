@@ -56,7 +56,18 @@ class WavQueue:
             )
         ]
 
-    def defer(self, source, reference, records, now, *, max_wavs, max_bytes):
+    def defer(
+        self,
+        source,
+        reference,
+        records,
+        now,
+        *,
+        max_wavs,
+        max_bytes,
+        reason="revision_exceeds_run_budget",
+        retry_delay=RETRY_DELAY,
+    ):
         # Caller commits this together with the discovery cursor. A crash must
         # never advance past an oversized revision without a durable explanation.
         identity = digest([source, reference])
@@ -66,7 +77,7 @@ class WavQueue:
             dict(
                 source=source,
                 reference=reference,
-                reason="revision_exceeds_run_budget",
+                reason=reason,
                 wavs=len(records),
                 bytes=sum(record.size for record in records),
                 max_wavs=max_wavs,
@@ -86,13 +97,18 @@ class WavQueue:
                 encode(reference),
                 now.isoformat(),
                 now.isoformat(),
-                (now + RETRY_DELAY).isoformat(),
+                (now + retry_delay).isoformat(),
                 evidence,
             ),
         )
         self.db.execute(
             "INSERT INTO wav_pending_event(at,id,state,evidence) VALUES(?,?,?,?)",
-            (now.isoformat(), identity, "deferred", evidence),
+            (
+                now.isoformat(),
+                identity,
+                "copying" if reason == "copy_in_progress" else "deferred",
+                evidence,
+            ),
         )
 
     def published(self, source, reference, receipt, now):

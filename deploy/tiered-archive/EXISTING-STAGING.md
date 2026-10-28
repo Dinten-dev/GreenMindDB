@@ -1199,7 +1199,7 @@ Serverbeleg:
 Ausführung und unabhängige Abschlussprüfung liegen unter
 `outputs/greenmind-staging-operative-bindings-20261028/` im Projekt.
 
-Offen bleiben die ausdrücklich angefragte erstmalige geschützte Übertragung
+Offen blieben zu diesem Prüfzeitpunkt die erstmalige geschützte Übertragung
 des bestehenden Nur-Lese-API-Tokens auf den Archivserver, ein bestätigtes
 externes Alarmziel, die vollständigen Archivbelege weiterer 681 WAV-Identitäten
 und die reale Dienst-/API-Integration mit anschliessendem echten 24-Stunden-Lauf.
@@ -1207,3 +1207,104 @@ Eine manuelle Startfreigabe muss auch den konkreten Uploadumfang festlegen;
 die bisherigen exakten Einmalfreigaben autorisieren keinen allgemeinen Laufplan.
 Produktionsanbindung, Durchsatz, unabhängige zweite Schlüsselwiederherstellung
 und separate echte Löschpiloten sind weiterhin gesondert abzunehmen.
+
+### Vorhandener Snapshot-Token gebunden – 28.10.2026
+
+Nach ausdrücklicher Zustimmung wurde genau der vorhandene Mac-Token einmalig
+nach `/etc/greenmind/tiered-archive/staging-snapshot-api.token` übertragen:
+root-eigen, Modus 0600, kein Symlink. Die Mac-Datei blieb erhalten. Es wurden
+weder Token noch Konten neu erzeugt. Die private Übergabedatei ist entfernt;
+keine Zugangsdaten stehen in Berichten oder Programmargumenten.
+
+Nur der bestehende Kopierdienst erhält die Datei über `LoadCredential` und
+`TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE=%d/snapshot-api`. Der Leser erhält keine
+Tokenbindung. Der neue root-eigene, schreibgeschützte Drop-in liegt unter
+`/etc/systemd/system/greenmind-tiered-archive-staging.service.d/50-snapshot-api.conf`,
+SHA-256 `ef48c3d4732282ce74ef5dae9d03d78a0771d1e6527ea8461b58cc2a5d5416a2`.
+Es erfolgte ausschliesslich `daemon-reload`, kein Dienststart. Die bisherigen
+Netzwerkgrenzen blieben erhalten. Zur Rücknahme kann diese neue Bindung entfernt
+und die Unitkonfiguration erneut geladen werden; bestehende Schlüssel und die
+Mac-Datei werden dabei nicht gelöscht.
+
+Der Installer prüfte Snapshot 1532426 per GET über eine geschützte temporäre
+Laufzeitdatei. Eine unabhängige, begrenzte Prüfung las denselben Snapshot über
+die endgültige root-private Tokenablage. Sie bestätigte zusätzlich alle 398
+installierten Dateien, Kataloge, Rücknahmedateien, vier unveränderte Container,
+inaktive/deaktivierte Archiv-Units und acht false-Schutzschalter. Der erste
+unabhängige Prüfversuch hatte wegen fehlendem `httpx` im System-Python keinen
+API-Zugriff ausgeführt; bestanden ist die anschliessende Prüfung unter der
+vorhandenen isolierten CPython-3.12-Laufzeit.
+
+Unabhängiger Serverbeleg:
+`/etc/greenmind/tiered-archive/snapshot-token-verify-848ec9f18ed7e013d7eba0c2-result.json`,
+SHA-256 `361dc92fbffdd40a37fe340dab9e48e2a62186bfe4359104d46b3c08aa018c6a`.
+Lokaler Nachweis: `Token-Bindung-Abschlusspruefung-v2.json` unter
+`outputs/greenmind-staging-operative-bindings-20261028/` im Projekt.
+
+### WAV-Zuordnung und vorbereitete Kopierkorrektur – 28.10.2026
+
+Alle 683 vorhandenen WAV-Objekte wurden ihren wissenschaftlichen Metadaten und
+verifizierbaren Quellkatalogen zugeordnet: zwei Gateway-WAVs, 681 Direct-WAVs,
+42 aktuelle versiegelte Direct-Revisionen. Deren Manifeste sind 26-mal vollständig
+und 16-mal lückenhaft. Die Objektinventare stimmen unverändert mit der früheren
+vollständigen SHA-/Dekodierprüfung überein. Dieser neue Lauf verwendete nur
+SELECT und LIST; er las keine Objektinhalte und griff nicht auf die Box zu.
+Zwei exakte veröffentlichte WAV-Identitäten bestehen. Für die weiteren 681 fehlen
+weiterhin Veröffentlichung, unabhängige Rücklesung und Snapshot-Nachweis.
+
+Vier Revisionen besitzen 187, 188, 181 beziehungsweise 87 WAV-Teilstücke. Alle
+sind lückenhaft. Die bisherige Dateigrenze stellte sie dauerhaft zurück; drei
+überschritten ausserdem die 128-Dateien-Grenze der normalen Veröffentlichung.
+Der vorbereitete Code kopiert solche vollständigen Revisionssätze über mehrere
+begrenzte Aufrufe. Fortschritt wird erst nach unabhängigem Rücklesen dauerhaft
+gespeichert. Maximal zehn WAVs beziehungsweise 5 MiB gelten weiterhin gemeinsam
+pro Staging-Zyklus, die zuerst erreichte Grenze zählt. Folgende kleine Aufnahmen
+erhalten ebenfalls Kapazität. Ein Revisionsmanifest wird erst nach kompletter
+erneuter Inhalts-/Dekodierprüfung veröffentlicht. Lückenhafte Verarbeitung bleibt
+ein Löschhindernis; keine Löschgrenze oder Richtlinie wurde erweitert.
+
+Der Wiederanlauf behandelt einen Abbruch nach PUT vor Journal sowie nach
+Veröffentlichung vor Wiederherstellung der alten WAV-URLs. Vollständige
+Kopieridentitäten werden im Katalogformat 2 mitgesichert und ohne ursprüngliche
+Objektinhalte wiederhergestellt. Format 1 bleibt lesbar. Ältere Restoreprogramme
+unterstützen Format 2 nicht; dafür muss die neue Programmversion verfügbar sein.
+Unvollständige Pläne bleiben im lokalen Journal; ihre Originale dürfen nicht
+gelöscht werden und ihre Metadaten sind vor den WAV-Teilstücken veröffentlicht.
+
+227 lokale Archivtests bestanden, 15 Docker-Tests wurden bewusst ausgelassen;
+die Prüfung startet keine Container. Sechs native künstliche Fälle bestanden
+unter 192 MiB/25 Prozent CPU, gemessene Spitze 58’359’808 Byte, keine
+Speicherereignisse. Der grösste Fall übertrug 187 WAVs in 19 begrenzten Aufrufen.
+Store und Snapshotprovider waren dabei künstlich; der operative Dienst wurde
+nicht getestet oder gestartet. Nur neue Testdateien wurden entfernt.
+
+Zusätzlich wurden die zwei bestehenden Staging-WAVs unter installiertem und
+vorbereitetem Exportcode ausschliesslich lesend verglichen. Metadatenbytes,
+WAV-Bytes, Header, Verarbeitungsbedingungen und aktuelle Kandidatenidentitäten
+stimmen überein. Gegenüber den früheren veröffentlichten Pilotidentitäten
+unterscheiden sie sich ausschliesslich durch die bereits zuvor ergänzten
+Objektattribute. Der erste Vergleich fing genau diese bekannte Formatänderung
+ab; der zweite leitete die alten Identitäten nach Entfernen nur dieser Ergänzung
+exakt her. Keine neue Identität wurde auf die Box hochgeladen oder bestätigt.
+
+Die Kopierkorrektur ist geprüft, aber **nicht installiert**. Installierte Runtime
+bleibt `cdc65fbaf137e8e244d4e760b7de62a13970dd8b6556b80be8e8063b5b6d6697`.
+Vorbereitet/getestet ist Runtime
+`999cbf0c5d2a72dec374a900a0f1f80ac52791aa423e7011020ec7a3c7ab6d93`.
+Ein späterer Einbau muss auch die bestehende Restore-Phasenbindung passend
+erneuern; deren Prüfung darf nicht umgangen werden.
+
+Native Serverbelege:
+- Zuordnung: `/etc/greenmind/tiered-archive/gm-wav-provenance-hki4tai9-result.json`,
+  SHA-256 `43d6d2e72b2730551432ffe310ec756fb1523197044d1b0244a996c00a35e4d0`.
+- Kopierkern: `/etc/greenmind/tiered-archive/wav-copy-native-2js8sbef-result.json`,
+  SHA-256 `83f78b9929beb64f9ab54c556bd15c66029b081e191b4c4b99498e88baec3331`.
+- Exportvergleich: `/etc/greenmind/tiered-archive/wav-export-compat-77hp4bz6-result.json`,
+  SHA-256 `6315d9d97d854198c2dde20a78fe11d23e0632e802031bb48de0a3c58c1ac220`.
+
+Helfer, Ergebnisse und lokale Regressionen liegen unter
+`outputs/greenmind-staging-wav-provenance-20261028/` im Projekt. Archivdienste,
+Timer, PAUSE, Aktivierungssperre, Profile, beide Kataloge und Originale bleiben
+unverändert. Offen sind Einbau der geprüften Korrektur, reales Alarmziel,
+konkret freigegebener Kopier-/Lesebetrieb samt tatsächlicher API-Integration,
+vollständige Archivbelege und danach der echte unveränderte 24-Stunden-Nachweis.

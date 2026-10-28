@@ -341,6 +341,28 @@ def publish_wav(source, reference, *, maximum_bytes=None, maximum_wavs=None):
             return receipt
 
 
+def stage_wav(source, reference, *, maximum_bytes, maximum_wavs, can_continue=lambda: True):
+    from .wav_copy import advance
+
+    with worker() as (ledger, store, checkpoint):
+        adapter = wav_source(source, checkpoint)
+        result = advance(
+            adapter,
+            reference,
+            store,
+            ledger,
+            bindings=bindings_sha256(store),
+            checkpoint=checkpoint,
+            maximum_bytes=maximum_bytes,
+            maximum_wavs=maximum_wavs,
+            can_continue=can_continue,
+        )
+        envelope = result.pop("envelope", None)
+        if result["complete"] and envelope is not None:
+            adapter.publish_legacy_receipts(envelope, store.transport, datetime.now(UTC))
+        return result
+
+
 def verify(identity, snapshot_id):
     import httpx
 

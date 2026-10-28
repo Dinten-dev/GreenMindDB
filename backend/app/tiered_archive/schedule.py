@@ -48,6 +48,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         latest_snapshot,
         publish_sql,
         publish_wav,
+        stage_wav,
         verify,
         wav_source,
     )
@@ -75,7 +76,15 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         "CREATE TABLE IF NOT EXISTS sweep(id TEXT PRIMARY KEY, cursor BLOB, day TEXT, due TEXT)"
     )
     db.commit()
-    result = {"published": 0, "verified": 0, "evicted": 0, "blocked": 0, "deferred": 0}
+    result = {
+        "published": 0,
+        "verified": 0,
+        "evicted": 0,
+        "blocked": 0,
+        "deferred": 0,
+        "copied_wavs": 0,
+        "copied_wav_bytes": 0,
+    }
     pending = WavQueue(db)
     copied_wavs = copied_bytes = 0
     small_staging = environment() == "staging"
@@ -154,7 +163,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                     planning_checkpoint()
                     planned = adapter.catalog.resolve(reference)
                     total = sum(record.size for record in planned)
-                    if small_staging and (len(planned) > 10 or total > 5 * 1024**2):
+                    if small_staging and (total > 5 * 1024**2):
                         with db:
                             pending.defer(
                                 source,
@@ -170,6 +179,44 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                         result["deferred"] += 1
                         result["blocked"] += 1
                         return True
+                    if len(planned) > (10 if small_staging else 127):
+                        # Leave capacity for the following revision. A fragmented
+                        # capture must neither starve small arrivals nor stay
+                        # deferred forever just because it has many WAV runs.
+                        remaining = 10 - copied_wavs if small_staging else 127
+                        batch = stage_wav(
+                            source,
+                            reference,
+                            maximum_wavs=max(1, remaining // 2) if small_staging else remaining,
+                            maximum_bytes=5 * 1024**2 - copied_bytes
+                            if small_staging
+                            else 64 * 1024**2,
+                            can_continue=lambda: time.monotonic() < copy_deadline,
+                        )
+                        copied_wavs += batch["copied_wavs"]
+                        copied_bytes += batch["copied_bytes"]
+                        result["copied_wavs"] += batch["copied_wavs"]
+                        result["copied_wav_bytes"] += batch["copied_bytes"]
+                        with db:
+                            if batch["complete"]:
+                                pending.published(source, reference, batch["receipt"], clock())
+                            else:
+                                pending.defer(
+                                    source,
+                                    reference,
+                                    planned,
+                                    clock(),
+                                    max_wavs=10,
+                                    max_bytes=5 * 1024**2,
+                                    reason="copy_in_progress",
+                                    retry_delay=timedelta(minutes=5),
+                                )
+                            if discovered:
+                                advance(reference)
+                        result["published"] += int(batch["complete"])
+                        result["deferred"] += int(not batch["complete"])
+                        handled.add(token)
+                        return True
                     if small_staging and (
                         copied_wavs + len(planned) > 10 or copied_bytes + total > 5 * 1024**2
                     ):
@@ -183,6 +230,10 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                     )
                     copied_wavs += sum(f["format"] == "wav" for f in receipt["files"])
                     copied_bytes += sum(
+                        f["bytes"] for f in receipt["files"] if f["format"] == "wav"
+                    )
+                    result["copied_wavs"] += sum(f["format"] == "wav" for f in receipt["files"])
+                    result["copied_wav_bytes"] += sum(
                         f["bytes"] for f in receipt["files"] if f["format"] == "wav"
                     )
                     result["published"] += 1
