@@ -13,13 +13,12 @@ from app.raw_archive.policy import ArchiveBlocked, checksum
 
 from . import parquet
 from .backup import (
-    DIRECT_MASTER_TABLES,
     MASTER_PROOF_VERSION,
-    MASTER_TABLES,
     MAX_BYTES,
     client_command,
     decrypt,
     master_proof,
+    master_tables,
 )
 from .codec import digest
 from .pipeline import verify_file
@@ -95,12 +94,13 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
     if (
         not isinstance(proof, dict)
         or type(proof.get("version")) is not int
-        or proof.get("version") != MASTER_PROOF_VERSION
+        or proof.get("version") not in {2, 3}
         or type(parts[0].get("master_proof_version")) is not int
-        or parts[0]["master_proof_version"] != MASTER_PROOF_VERSION
+        or parts[0]["master_proof_version"] != proof["version"]
     ):
         raise ArchiveBlocked("Backup lacks typed master-data proof; retain legacy dumps")
-    names = MASTER_TABLES if candidate.source == "gateway" else DIRECT_MASTER_TABLES
+    proof_version = proof["version"]
+    names = master_tables(candidate.source, proof_version=proof_version)
     tables = proof.get("tables")
     if (
         not isinstance(tables, dict)
@@ -204,12 +204,16 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
 
             db.execute(text("SET TRANSACTION READ ONLY"))
             db.execute(text("SET LOCAL statement_timeout='8000ms'"))
-            actual = master_proof(db, candidate.source, checkpoint=checkpoint)
+            actual = master_proof(
+                db, candidate.source, checkpoint=checkpoint, proof_version=proof_version
+            )
         if actual != proof:
             raise ArchiveBlocked("Restored master-data proof differs; isolated database retained")
         return {
             "schema_restored": True,
             "typed_values_verified": True,
+            "master_proof_version": proof_version,
+            "current_recovery_scope": proof_version == MASTER_PROOF_VERSION,
             "master_tables": len(actual["tables"]),
             "master_rows": sum(item["rows"] for item in actual["tables"].values()),
             "source_accesses": 0,

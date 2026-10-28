@@ -15,10 +15,10 @@ from app.raw_archive.policy import ArchiveBlocked, checksum
 MAGIC = b"GMDBBACKUP1\0"
 BLOCK_BYTES = 1024 * 1024
 MAX_BYTES = 64 * 1024**2
-# Version 1 omitted access grants and plant/sensor assignments. Its encrypted
-# dumps remain file-restorable, but cannot prove the current recovery scope.
-MASTER_PROOF_VERSION = 2
-MASTER_TABLES = (
+# Older proofs remain file-restorable, but cannot prove today's authority scope:
+# v1 omitted access grants/assignments; v2 omitted sessions and invitations.
+MASTER_PROOF_VERSION = 3
+LEGACY_MASTER_TABLES_V2 = (
     "alembic_version",
     "organization",
     "users",
@@ -30,20 +30,30 @@ MASTER_TABLES = (
     "plant_sensor_assignment",
     "plant_observation_access",
 )
+MASTER_TABLES = (
+    *LEGACY_MASTER_TABLES_V2,
+    "form_submission",
+    "access_invitation",
+    "auth_session",
+)
 DIRECT_MASTER_TABLES = ("direct_device", "direct_enrollment", "direct_session")
 
 
-def master_tables(source):
+def master_tables(source, *, proof_version=MASTER_PROOF_VERSION):
     if source not in {"gateway", "direct"}:
         raise ArchiveBlocked("Unknown backup source")
-    return MASTER_TABLES if source == "gateway" else DIRECT_MASTER_TABLES
+    if type(proof_version) is not int or proof_version not in {2, 3}:
+        raise ArchiveBlocked("Unsupported master-data proof version")
+    if source == "direct":
+        return DIRECT_MASTER_TABLES
+    return LEGACY_MASTER_TABLES_V2 if proof_version == 2 else MASTER_TABLES
 
 
-def check_master_tables(db, source, *, checkpoint):
+def check_master_tables(db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION):
     """Fail before dumping if the explicit recovery scope is incomplete."""
     from sqlalchemy import inspect, text
 
-    names = master_tables(source)
+    names = master_tables(source, proof_version=proof_version)
     inspector = inspect(db)
     schema = "public" if db.dialect.name == "postgresql" else None
     present = set(inspector.get_table_names(schema=schema))
@@ -272,13 +282,13 @@ def decrypt(source, target, key, expected_sha256, *, checkpoint):
         raise ArchiveBlocked("Restored database backup checksum mismatch")
 
 
-def master_proof(db, source, *, checkpoint):
+def master_proof(db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION):
     """Bounded typed readback in the caller's consistent database transaction."""
     from sqlalchemy import MetaData, Table, select, text
 
     from .codec import encode
 
-    tables = check_master_tables(db, source, checkpoint=checkpoint)
+    tables = check_master_tables(db, source, checkpoint=checkpoint, proof_version=proof_version)
     if db.dialect.name == "postgresql":
         db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
     result = {}
@@ -319,7 +329,7 @@ def master_proof(db, source, *, checkpoint):
                 digest.update(raw)
                 count += 1
         result[name] = {"rows": count, "content_sha256": digest.hexdigest()}
-    return {"version": MASTER_PROOF_VERSION, "tables": result}
+    return {"version": proof_version, "tables": result}
 
 
 def dump(database_url, source, output, *, checkpoint, executable=None, with_proof=False):

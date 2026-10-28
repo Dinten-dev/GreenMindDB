@@ -27,6 +27,12 @@ FORMAT = "postgres-full-v1"
 MAX = backup.MAX_BYTES
 SYSTEM_ORG = "00000000-0000-0000-0000-000000000000"
 SOURCE_DATABASES = {"gateway": "plantdb_staging", "direct": "greenmind_direct_staging"}
+# Authenticated postgres-full-v1 archives retain their original minimum scope.
+# New captures/seals must additionally cover every current authority table.
+NATIVE_V1_MINIMUM_TABLES = {
+    "gateway": backup.LEGACY_MASTER_TABLES_V2,
+    "direct": backup.DIRECT_MASTER_TABLES,
+}
 
 
 class Sink:
@@ -163,8 +169,10 @@ def jobs_proof(db):
     ).hexdigest()
 
 
-def validate_proof(proof, source):
+def validate_proof(proof, source, *, current_scope=False):
     """Reject incomplete native metadata before it can drive a restore."""
+    current = backup.master_tables(source)
+    required = current if current_scope else NATIVE_V1_MINIMUM_TABLES[source]
     if not isinstance(proof, dict) or set(proof) != {
         "public_tables",
         "structure",
@@ -176,7 +184,7 @@ def validate_proof(proof, source):
     if (
         not isinstance(tables, dict)
         or not 1 <= len(tables) <= 128
-        or not set(backup.master_tables(source)) <= set(tables)
+        or not set(required) <= set(tables)
         or not isinstance(sequences, dict)
         or not 1 <= len(sequences) <= 128
         or type(proof["proof_bytes"]) is not int
@@ -304,7 +312,7 @@ def capture(database_url, source, output, key, *, environment, checkpoint):
             captured_at = db.execute(text("SELECT transaction_timestamp()")).scalar_one()
             snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
             proof = content_proof(db, checkpoint=checkpoint)
-            validate_proof(proof, source)
+            validate_proof(proof, source, current_scope=True)
             jobs = jobs_proof(db)
             run_client(
                 [
@@ -332,7 +340,7 @@ def seal(source, captured_at, dump, proof, jobs, key, output, *, checkpoint):
     """Build the regular catalogue/manifest inputs without publishing anything."""
     if source not in SOURCE_DATABASES or captured_at.tzinfo is None:
         raise ArchiveBlocked("Known native Staging source and capture time required")
-    validate_proof(proof, source)
+    validate_proof(proof, source, current_scope=True)
     if not re.fullmatch(r"[a-f0-9]{64}", str(jobs)):
         raise ArchiveBlocked("Native policy proof missing")
     output = Path(output)

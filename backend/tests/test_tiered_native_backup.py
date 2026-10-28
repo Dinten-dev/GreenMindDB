@@ -3,8 +3,10 @@
 import copy
 import json
 import secrets
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -60,15 +62,20 @@ def no_postgres(monkeypatch):
 
 
 @pytest.fixture
-def bundle(tmp_path):
+def bundle(tmp_path, request, monkeypatch):
     folder = tmp_path / "capture"
     folder.mkdir(mode=0o700)
     plain = folder / "original.dump"
     plain.write_bytes(b"PGDMP synthetic authenticated full data")
     key = secrets.token_bytes(32)
-    candidate, files = native.seal(
-        "gateway", AT, plain, proof(), "c" * 64, key, folder, checkpoint=lambda: None
-    )
+    historical = getattr(request, "param", "current") == "historical"
+    # Reproduce the original producer's exact minimum, then read with current code.
+    with monkeypatch.context() as producer:
+        if historical:
+            producer.setattr(backup, "MASTER_TABLES", backup.LEGACY_MASTER_TABLES_V2)
+        candidate, files = native.seal(
+            "gateway", AT, plain, proof(), "c" * 64, key, folder, checkpoint=lambda: None
+        )
     ledger, box = Ledger(tmp_path / "ledger"), Box(tmp_path / "box")
     published = publish(candidate, files, box, ledger, checkpoint=lambda: None, now=AT)
     receipt = verify_snapshot(
@@ -120,6 +127,7 @@ def test_regular_publication_snapshot_readback_and_native_authentication(bundle)
     assert not list(folder.glob("native-auth-*"))
 
 
+@pytest.mark.parametrize("bundle", ["current", "historical"], indirect=True)
 def test_wrong_key_never_reaches_database_and_removes_decrypted_files(bundle):
     folder, sha, _, _, _ = bundle
     with pytest.raises(ArchiveBlocked, match="authentication"):
@@ -130,6 +138,7 @@ def test_wrong_key_never_reaches_database_and_removes_decrypted_files(bundle):
     assert not list(folder.glob("native-auth-*"))
 
 
+@pytest.mark.parametrize("bundle", ["current", "historical"], indirect=True)
 def test_ciphertext_tamper_rejected_even_with_recomputed_outer_hashes(bundle):
     folder, _, key, _, _ = bundle
     manifest = json.loads((folder / "manifest.json").read_text())
@@ -150,6 +159,7 @@ def test_ciphertext_tamper_rejected_even_with_recomputed_outer_hashes(bundle):
 @pytest.mark.parametrize(
     "change", ["source", "database", "capture_time", "dump_hash", "proof_hash", "version"]
 )
+@pytest.mark.parametrize("bundle", ["current", "historical"], indirect=True)
 def test_authenticated_but_wrong_metadata_bindings_are_rejected(bundle, change):
     folder, _, key, _, _ = bundle
     manifest = json.loads((folder / "manifest.json").read_text())
@@ -207,6 +217,118 @@ def test_incomplete_proof_rejected_before_sealing(change):
         value["proof_bytes"] = native.MAX + 1
     with pytest.raises(ArchiveBlocked):
         native.validate_proof(value, "gateway")
+
+
+@pytest.mark.parametrize("bundle", ["historical"], indirect=True)
+def test_historical_auth_free_native_archive_retains_exact_original_recovery_scope(bundle):
+    folder, sha, key, receipt, _ = bundle
+    with native.authenticated_bundle(folder, sha, key, checkpoint=lambda: None) as (dump, metadata):
+        assert dump.read_bytes() == b"PGDMP synthetic authenticated full data"
+        assert set(metadata["proof"]["public_tables"]) == set(backup.LEGACY_MASTER_TABLES_V2)
+        assert metadata["proof_sha256"] == digest(metadata["proof"])
+        with pytest.raises(ArchiveBlocked, match="scope"):
+            native.validate_proof(metadata["proof"], "gateway", current_scope=True)
+    with pytest.raises(ArchiveBlocked, match="master-data backup"):
+        backup.require_current(
+            [receipt],
+            source="gateway",
+            environment="staging",
+            destination=receipt["destination"],
+            now=AT,
+        )
+
+
+@pytest.mark.parametrize("missing", backup.LEGACY_MASTER_TABLES_V2)
+def test_historical_native_scope_never_ignores_a_missing_original_authority_table(missing):
+    value = proof()
+    value["public_tables"].pop(missing)
+    with pytest.raises(ArchiveBlocked, match="scope"):
+        native.validate_proof(value, "gateway")
+
+
+@pytest.mark.parametrize("missing", ["auth_session", "access_invitation", "form_submission"])
+def test_new_native_seal_requires_current_auth_authority_tables(tmp_path, missing):
+    value = proof()
+    value["public_tables"].pop(missing)
+    with pytest.raises(ArchiveBlocked, match="scope"):
+        native.seal(
+            "gateway",
+            AT,
+            tmp_path / "never-read.dump",
+            value,
+            "c" * 64,
+            secrets.token_bytes(32),
+            tmp_path,
+            checkpoint=lambda: None,
+        )
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("table", ["auth_session", "access_invitation", "form_submission"])
+@pytest.mark.parametrize("blocked", ["missing_table", "missing_select"])
+def test_new_native_capture_stops_before_dump_without_auth_scope(
+    tmp_path, monkeypatch, table, blocked
+):
+    queries = []
+
+    class Connection:
+        dialect = SimpleNamespace(name="postgresql")
+
+        def execution_options(self, **kwargs):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def begin(self):
+            return nullcontext()
+
+        def execute(self, statement, parameters=None):
+            sql = str(statement)
+            queries.append(sql)
+            if sql.startswith("SET TRANSACTION"):
+                return None
+            if sql == "SHOW transaction_read_only":
+                return SimpleNamespace(scalar_one=lambda: "on")
+            if "FROM pg_roles" in sql:
+                return SimpleNamespace(one=lambda: (False,) * 5)
+            if "pg_database_size" in sql:
+                return SimpleNamespace(scalar_one=lambda: 100)
+            if "has_table_privilege" in sql:
+                allowed = blocked != "missing_select" or parameters["table"] != "public." + table
+                return SimpleNamespace(scalar_one=lambda: allowed)
+            pytest.fail("Export or dump reached before current authority scope check")
+
+    names = set(backup.MASTER_TABLES)
+    if blocked == "missing_table":
+        names.remove(table)
+    inspector = SimpleNamespace(
+        get_table_names=lambda **kwargs: list(names),
+        get_foreign_keys=lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr("sqlalchemy.inspect", lambda db: inspector)
+    monkeypatch.setattr(
+        native,
+        "create_engine",
+        lambda *args, **kwargs: SimpleNamespace(
+            connect=Connection,
+            dispose=lambda: None,
+        ),
+    )
+    with pytest.raises(ArchiveBlocked, match="Required master-data"):
+        native.capture(
+            "postgresql+psycopg2://greenmind_archive_staging_ro:synthetic@127.0.0.1:5433/plantdb_staging",
+            "gateway",
+            tmp_path,
+            secrets.token_bytes(32),
+            environment="staging",
+            checkpoint=lambda: None,
+        )
+    assert not any("pg_export_snapshot" in sql for sql in queries)
+    assert not list(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize(

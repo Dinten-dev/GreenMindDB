@@ -1056,6 +1056,7 @@ def test_master_backup_proof_must_match_source_destination_and_be_current():
         {"state": "published"},
         {"files": []},
         {"files": [{"master_proof_version": 1}]},
+        {"files": [{"master_proof_version": 2}]},
         {"files": [{"master_proof_version": True}]},
         {"destination": "box-b"},
         {"policy": "0" * 64},

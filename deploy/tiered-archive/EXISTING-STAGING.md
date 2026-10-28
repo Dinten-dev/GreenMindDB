@@ -556,6 +556,43 @@ benötigen. Es wurden keine Berechtigungen erweitert und keine echten Dumps
 hochgeladen. Das erste Zwei-WAV-Profil bleibt im bisherigen Umfang gesperrt.
 
 Nachweise: `outputs/greenmind-staging-mastercoverage-20261027/` im Projekt.
+
+### Persistierte Zugangsautorität – lokaler Softwarestand 28.10.2026
+
+Neue Schema-/Stammdatensicherungen verwenden Master-Proof-Version 3 mit dreizehn
+Gateway-Tabellen. Zusätzlich zu Version 2 gehören `auth_session`,
+`access_invitation` und dessen Fremdschlüsselziel `form_submission` dazu.
+Benutzerbezüge bleiben durch die vorhandene Tabelle `users` gedeckt. Alle Zeilen
+einschliesslich abgelaufener, eingelöster und widerrufener Zustände werden ohne
+Filter aus demselben Snapshot gelesen und typisiert geprüft. Ein Restore darf
+Sitzungswiderrufe oder den Einladungsursprung nicht verlieren. Alle drei Tabellen
+bleiben lokal aufbewahrte Autoritätsdaten; sie erhalten keine Archiv-Löschregel.
+
+Das Format `schema-master-v2` und die Dateiverschlüsselung bleiben unverändert.
+Version-1-/Version-2-Proofs autorisieren keine aktuelle Löschung und bestätigen
+keinen vollständigen heutigen Stammdaten-Restore. Version 2 bleibt kontrolliert
+mit genau ihrem festen damaligen Zehn-Tabellen-Umfang wiederherstellbar: Index
+und Body müssen dieselbe ganzzahlige Version tragen; alle damaligen Tabellen
+und typisierten Werte werden nachgerechnet. Das Ergebnis nennt ausdrücklich
+`master_proof_version=2` und `current_recovery_scope=false`. Version 1 bleibt für
+diesen bereits zuvor strengeren Restoreweg gesperrt. Alle verschlüsselten
+Dateien bleiben mit der bisherigen Datei-Wiederherstellung lesbar. Direct verwendet
+weiterhin dieselben drei Stammdatentabellen; neue Master-Proofs tragen ebenfalls
+die aktuelle Version 3.
+
+Historische `postgres-full-v1`-Archive bleiben separat lesbar: ihr fest benannter
+Mindestumfang `NATIVE_V1_MINIMUM_TABLES` bindet die damaligen zehn Gateway-Tabellen
+beziehungsweise drei Direct-Tabellen. Format-/Metadatenversion, authentifizierter
+Dump, verschlüsselte Metadaten, Inhalts-/Struktur-/Sequenzprüfwerte und Manifest
+müssen weiterhin vollständig zusammenpassen. Fehlende damalige Pflichtdaten
+werden nicht ignoriert. Neue native Captures und Seals verlangen dagegen den
+aktuellen vollständigen Autoritätsumfang. Native Archive bleiben unabhängig von
+ihrem Alter ausdrücklich ohne Löschfreigabe.
+
+Fehlende neue Tabellen oder SELECT-Rechte blockieren vor Snapshot-Export und
+Dump. Diese Softwareänderung vergibt keine Rechte, ändert keine Profile und
+startet keine Dienste. Lokale synthetische SQL-/Datei-Tests ersetzen keinen neuen
+nativen PostgreSQL-/Storage-Box-Restore oder eine aktive Authentifizierungsabnahme.
 Vorhandener Box-/Snapshot-Nachweis wird nicht wiederholt. Archivdienste, Timer,
 Löschschalter und Originaldaten bleiben unverändert. Der abschliessende native Test bestand 13 Fälle mit künstlichen Daten:
 31,533 Sekunden, 72679424 Byte Speichermaximum, keine Speicherereignisse.
