@@ -1127,10 +1127,83 @@ Serverbeleg:
 Details und der exakt ausgeführte Supervisor liegen im Projekt unter
 `outputs/greenmind-staging-sql-crash-20261028/`.
 
-Die aktuelle Konfiguration bleibt noch in der ersten Kopierphase:
+Die damalige Konfiguration blieb noch in der ersten Kopierphase:
 `TIERED_ARCHIVE_READS_ENABLED=false`, SQL-Scopes nur für `wav_feature` und
 `direct_visual_point`, keine Snapshot-Bindung. Der bestehende Validator verbietet
 ausdrücklich Inline-Backups und Snapshot-Bindung in dieser Phase. Der nächste
 operative Schritt muss die vorhandenen sieben SQL-Archive und den bestandenen
 Restore kontrolliert an Katalog, Laufplan und diese Phasenvalidierung binden;
 eine pauschale Schalteraktivierung wäre dadurch nicht gerechtfertigt.
+
+### Restore-geprüfte Katalogbindung – 28.10.2026
+
+Der installierte Code ist jetzt `39d7e5bd45f92ef10caa9fba5682f1888ccf0e8a`:
+`/opt/greenmind/tiered-archive/overlays/staging-snapshots-cdc65fbaf137`, Runtime
+`cdc65fbaf137e8e244d4e760b7de62a13970dd8b6556b80be8e8063b5b6d6697`,
+Manifest-SHA-256
+`733e0566e7161fea559ef32a59bcbe219e1fc401749a97748d89e8f85bf0052e`.
+Die unabhängige Prüfung bestätigt alle 398 Dateien als root-eigen und
+schreibgeschützt; 387 unveränderte Dateien sind Hardlinks. Frühere Overlays und
+fünf gesicherte Konfigurationsdateien erlauben die Software-Rücknahme.
+
+Neu veröffentlichte Archive warten jetzt ohne falschen Prüferfolg auf einen
+Snapshot, der nach dem Upload entstand. Nur dieser konkrete Zustand wird
+zurückgestellt; beschädigte Inhalte und zukünftige Snapshot-Zeitstempel bleiben
+harte Sperren. Vier native Ablaufprüfungen und 190 lokale Regressionstests
+bestanden. Das ersetzt keinen tatsächlichen Kopier-/Lesebetrieb.
+
+Die bereits übertragenen sieben SQL-Archive wurden unter dieser Runtime
+erneut vollständig aus aktueller Box und Snapshot 1532426 gelesen: je 14
+Manifest-/Parquet-Dateien. Alle 46 typisierten Zeilen stimmen mit den bestehenden
+SELECT-Quellen überein. Es gab weder Uploads noch Originaländerungen. Der
+Operator bestätigte die echte Provider-Identität vor und nach der Prüfung;
+der API-Token blieb dabei auf dem Mac.
+
+Der operative Staging-Hauptkatalog und seine Leseansicht enthalten nun sieben
+`verified`-SQL-Bundles und die zwei bisherigen `published`-WAV-Bundles. Deren
+Receipts und die ersten beiden Ereignisse sind unverändert erhalten; insgesamt
+bestehen 16 Ereignisse. SQL-Abhängigkeiten bleiben ausdrücklich unvollständig,
+sämtliche Lösch-/Abnahmeflags false. Kein WAV wurde künstlich verifiziert.
+
+Der Laufplan behält seine vorhandenen Scopes und ergänzt `visual_reading` und
+`visual_wave` ab 07.09.2026 sowie Snapshot 1532426. `backups` bleibt leer und
+`scheduled_snapshots=false`. Beide Leseeinstellungen stehen jetzt true; der
+separate Restore-Phasenvalidator prüft den hashgebundenen, root-eigenen
+Beleg `/etc/greenmind/tiered-archive/staging-restore-evidence.json`, SHA-256
+`afd5e46535b433896c13a17aab986fd6120ed516e387ecbbfb4350b5741ea26d`.
+Diese Konfiguration erteilt weder Start- noch Löschfreigabe.
+
+Die Übernahme ist vor jeder Änderung protokolliert. Sechs alte Metadatendateien
+sind unter
+`/etc/greenmind/tiered-archive/before-restore-bindings-afd5e46535b4-v2/`
+vollständig und root-privat gesichert. Ein leerer, unbenutzter SQLite-WAL und
+seine Shared-Memory-Datei wurden zusätzlich unverändert unter
+`/var/lib/greenmind/tiered-archive/staging/retained-catalog-control-afd5e46535b4/`
+aufbewahrt. Ein erster Dateisystem-Grenzfall wurde vor der Katalogänderung
+abgefangen und exakt zurückgenommen. Sieben Rücknahmeprüfungen bestätigen
+Fehler-, Unterbrechungs- und Fremdänderungssperren. Der erfolgreiche Helfer blieb
+unter 192 MiB/25 Prozent CPU, gemessene Spitze 13’152’256 Byte, keine
+Speicherereignisse. Nur dessen neue temporäre Hilfsdateien wurden entfernt.
+
+Die unabhängige Abschlussprüfung bestätigt beide Kataloge, alle Sicherungen,
+vier unveränderte bestehende Staging-Container und sämtliche Schutzschalter.
+Archivdienste und Timer bleiben inactive/disabled ohne Startzeit; PAUSE bleibt
+vorhanden, INSTALLATION_READY fehlt. Die drei benötigten Restore-Snapshots
+1529628, 1531446 und 1532426 bestehen weiterhin. Gegenüber der letzten Inventur
+fehlt kein weiterer Snapshot; insgesamt bestehen sieben. Kein Snapshot wurde
+hier erzeugt, geändert oder entfernt.
+
+Serverbeleg:
+`/etc/greenmind/tiered-archive/catalog-bindings-apply-xz2wy34u-result.json`, SHA-256
+`560d03137895139dc52876903a5a937fed629842516703f84394560d53e8ee9c`.
+Ausführung und unabhängige Abschlussprüfung liegen unter
+`outputs/greenmind-staging-operative-bindings-20261028/` im Projekt.
+
+Offen bleiben die ausdrücklich angefragte erstmalige geschützte Übertragung
+des bestehenden Nur-Lese-API-Tokens auf den Archivserver, ein bestätigtes
+externes Alarmziel, die vollständigen Archivbelege weiterer 681 WAV-Identitäten
+und die reale Dienst-/API-Integration mit anschliessendem echten 24-Stunden-Lauf.
+Eine manuelle Startfreigabe muss auch den konkreten Uploadumfang festlegen;
+die bisherigen exakten Einmalfreigaben autorisieren keinen allgemeinen Laufplan.
+Produktionsanbindung, Durchsatz, unabhängige zweite Schlüsselwiederherstellung
+und separate echte Löschpiloten sind weiterhin gesondert abzunehmen.
