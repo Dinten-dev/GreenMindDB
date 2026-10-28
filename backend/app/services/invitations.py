@@ -52,9 +52,7 @@ def send_invitation(db: Session, submission_id, creator, previous_id=None):
     existing_user = db.execute(
         select(User).where(func.lower(User.email) == email)
     ).scalar_one_or_none()
-    if existing_user and (
-        existing_user.is_verified or not existing_user.is_active or existing_user.role == Role.ADMIN
-    ):
+    if existing_user and (existing_user.is_verified or not existing_user.is_active):
         raise HTTPException(409, "Account requires administrator review")
     history = (
         db.execute(
@@ -125,7 +123,7 @@ def redeem_invitation(db: Session, data):
         user = db.execute(
             select(User).where(func.lower(User.email) == invitation.email).with_for_update(of=User)
         ).scalar_one_or_none()
-        if user and (user.is_verified or not user.is_active or user.role == Role.ADMIN):
+        if user and (user.is_verified or not user.is_active):
             db.rollback()
             raise HTTPException(409, "Account requires administrator review")
         if user is None:

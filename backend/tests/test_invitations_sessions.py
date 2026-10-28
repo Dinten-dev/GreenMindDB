@@ -88,7 +88,7 @@ def test_invalid_invitation_states_rejected(client, db, invitation, state):
         (False, True, Role.MEMBER, 201),
         (True, True, Role.OWNER, 409),
         (False, False, Role.OWNER, 409),
-        (False, True, Role.ADMIN, 409),
+        (False, True, Role.ADMIN, 201),
     ],
 )
 def test_existing_accounts_preserved(client, db, invitation, verified, active, role, expected):

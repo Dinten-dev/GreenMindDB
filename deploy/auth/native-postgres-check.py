@@ -124,6 +124,15 @@ with ThreadPoolExecutor(max_workers=2) as pool:
 assert sorted(row[0] for row in outcomes) == [201, 409]
 with Session(engine) as db:
     assert db.scalar(select(func.count()).select_from(User).where(User.email == "collision@example.com")) == 1
+    existing_admin = User(email="pending-admin@example.com", name="Existing administrator", role=Role.ADMIN, password_hash="pending", is_verified=False, is_active=True)
+    db.add(existing_admin)
+    db.commit()
+    existing_admin_id = existing_admin.id
+_, existing_admin_token = invite("pending-admin@example.com")
+assert accept(existing_admin_token)[0] == 201
+with Session(engine) as db:
+    assert db.get(User, existing_admin_id).role == Role.ADMIN
+    assert db.get(User, existing_admin_id).is_verified
 
 from fastapi.testclient import TestClient
 
