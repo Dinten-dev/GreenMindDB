@@ -12,12 +12,13 @@ FLAGS = ('TIERED_ARCHIVE_DELETE_ENABLED', 'RAW_ARCHIVE_DELETE_ENABLED',
          'TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED',
          'TIERED_ARCHIVE_DIRECT_LOCATORS_ACCEPTED', 'TIERED_ARCHIVE_FEATURE_READS_ACCEPTED')
 STATE = '/var/lib/greenmind/tiered-archive/staging'
-BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-ready-55c067b4c8e5/backend'
+BACKEND = '/opt/greenmind/tiered-archive/overlays/staging-snapshots-cdc65fbaf137/backend'
 CLIENT_DIR = '/opt/greenmind/tiered-archive/clients/postgresql-15.10-55bb10b9c0ca'
 CLIENT_MANIFEST = '55bb10b9c0cac4be01ef2d14ca03e51e3ccd837fb7ec83c2a46d4359d4b0e6f0'
 CREDENTIAL_FIELDS = ('RAW_ARCHIVE_SFTP_KEY', 'RAW_ARCHIVE_SFTP_KNOWN_HOSTS',
                      'RAW_ARCHIVE_READ_ONLY_SFTP_KEY', 'RAW_ARCHIVE_READ_ONLY_SFTP_KNOWN_HOSTS',
-                     'CREDENTIALS_DIRECTORY', 'TIERED_ARCHIVE_LATENCY_BASELINE')
+                     'CREDENTIALS_DIRECTORY', 'TIERED_ARCHIVE_LATENCY_BASELINE',
+                     'TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE')
 
 
 def validate(writer, reader, schedule):
@@ -123,4 +124,81 @@ def validate(writer, reader, schedule):
         raise ValueError('Unknown WAV source')
     return {'validated': True, 'source_ports': [5433, 9002],
             'destination_prefix': 'greenmind-raw/staging/', 'deletion_enabled': False,
+            'activation_authorized': False}
+
+
+def validate_restored(writer, reader, schedule, evidence, *, now=None):
+    """Bind a separately verified restore; never authorize service start/deletion.
+
+    The installing operator must load evidence from its hash-pinned, private,
+    root-owned proof file. This pure validator does not grant that trust itself.
+    The initial validate() contract remains unchanged for first-copy installs.
+    """
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    def stamp(value):
+        result = datetime.fromisoformat(value)
+        if result.tzinfo is None:
+            raise ValueError('Timezone-aware restore evidence required')
+        return result.astimezone(UTC)
+
+    def require(condition):
+        if not condition:
+            raise ValueError('Complete matching restore-bound Staging evidence required')
+
+    current = now or datetime.now(UTC)
+    require(current.tzinfo is not None)
+    # Reuse every existing endpoint, identity, resource and privilege guard.
+    validate(writer, reader, {**schedule, 'snapshot_id': None})
+    require(all(p.get('TIERED_ARCHIVE_READS_ENABLED') == 'true' for p in (writer, reader)))
+    snapshot = evidence.get('snapshot', {})
+    require(evidence.get('schema') == 1 and evidence.get('environment') == 'staging')
+    require(evidence.get('phase') == 'restore_verified_configuration')
+    require(evidence.get('runtime_sha256') == 'cdc65fbaf137e8e244d4e760b7de62a13970dd8b6556b80be8e8063b5b6d6697')
+    require(evidence.get('activation_authorized') is False and evidence.get('deletion_enabled') is False)
+    require(evidence.get('existing_receipts_preserved') is True)
+    require(evidence.get('box_writes') == 0 and evidence.get('source_writes') == 0)
+    require(evidence.get('historical_snapshot_restore_passed') is True)
+    require(type(snapshot.get('id')) is int and snapshot['id'] > 0)
+    require(snapshot.get('storage_box') == 658321 and schedule.get('snapshot_id') == snapshot['id'])
+    require(bool(re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}', snapshot.get('name', ''))))
+    require(schedule.get('scheduled_snapshots') is False and not schedule.get('backups'))
+    verified = stamp(evidence['verified_at'])
+    require(stamp(snapshot['created']) <= verified <= current)
+    require(current - verified <= timedelta(hours=24))
+    require(current - stamp(snapshot['created']) <= timedelta(hours=24))
+    require(bool(re.fullmatch('[0-9a-f]{64}', evidence.get('bindings_sha256', ''))))
+    require(bool(re.fullmatch('[0-9a-f]{64}', evidence.get('previous_ledger_sha256', ''))))
+    archives = evidence.get('sql_archives', [])
+    require(isinstance(archives, list) and 0 < len(archives) <= 256)
+    require(evidence.get('sql_bundles_added') == len(archives))
+    require(len({a.get('identity') for a in archives}) == len(archives))
+    scopes = schedule.get('scopes', [])
+    require(isinstance(scopes, list) and len(scopes) <= 256)
+    require(evidence.get('wav_sources') == schedule.get('wav_sources'))
+    for archive in archives:
+        require(bool(re.fullmatch('[0-9a-f]{64}', archive.get('identity', ''))))
+        require(bool(re.fullmatch('[0-9a-f]{64}', archive.get('manifest_sha256', ''))))
+        require(type(archive.get('rows')) is int and 0 < archive['rows'] <= 500)
+        uuid.UUID(archive['organization'])
+        require(archive.get('source') == ('direct' if archive['dataset'] == 'direct_visual_point' else 'gateway'))
+        require(archive['dataset'] in ('visual_reading', 'visual_wave', 'direct_visual_point'))
+        require(archive.get('current_readback_verified') is True)
+        require(archive.get('snapshot_readback_verified') is True)
+        require(archive.get('source_matches_current') is True)
+        require(archive.get('state') == 'verified')
+        require(archive.get('dependencies_complete') is False)
+        require(stamp(archive['start']) < stamp(archive['end']))
+        require(stamp(archive['published_at']) <= stamp(snapshot['created']))
+        require(stamp(snapshot['created']) <= stamp(archive['verified_at']) <= verified)
+        require(any(
+            scope.get('dataset') == archive['dataset']
+            and scope.get('organization') == archive['organization']
+            and stamp(scope['start']) <= stamp(archive['start'])
+            for scope in scopes
+        ))
+    return {'validated': True, 'phase': 'restore_verified_configuration',
+            'source_ports': [5433, 9002], 'snapshot_id': snapshot['id'],
+            'sql_bundles': len(archives), 'deletion_enabled': False,
             'activation_authorized': False}

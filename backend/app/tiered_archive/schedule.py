@@ -14,6 +14,7 @@ from app.raw_archive.policy import ArchiveBlocked
 from .codec import decode, encode
 from .latency import health_probe
 from .ledger import Ledger
+from .pipeline import SnapshotPending
 from .policy import utc
 from .runtime import environment, state_root
 from .source import DATASETS
@@ -299,6 +300,12 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                 try:
                     verify(receipt["candidate"], snapshot_id)
                     result["verified"] += 1
+                except SnapshotPending:
+                    # The selected snapshot can legitimately predate a new
+                    # upload from this very tick. Retain its published state;
+                    # a later snapshot must pass the full independent check.
+                    result["deferred"] += 1
+                    continue
                 except SafetyPause:
                     raise
                 except ArchiveBlocked:

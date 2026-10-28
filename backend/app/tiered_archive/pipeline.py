@@ -14,6 +14,10 @@ from . import parquet
 from .policy import POLICY_SHA256, utc
 
 
+class SnapshotPending(ArchiveBlocked):
+    """Published bytes need a newer snapshot before they can be verified."""
+
+
 def candidate_json(candidate):
     return {
         key: value.isoformat() if isinstance(value, datetime) else value
@@ -124,8 +128,10 @@ def verify_snapshot(candidate, store, ledger, provider, snapshot_id, *, checkpoi
     checkpoint()
     snapshot = provider.read(snapshot_id)
     created = utc(snapshot["created"])
-    if not utc(receipt["published_at"]) <= created <= now:
-        raise ArchiveBlocked("Snapshot predates completed archive publication")
+    if created > now:
+        raise ArchiveBlocked("Snapshot proof is future-dated")
+    if created < utc(receipt["published_at"]):
+        raise SnapshotPending("Snapshot predates completed archive publication")
     with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
         for number, reference in enumerate([receipt["manifest"], *receipt["files"]]):
             checkpoint()
