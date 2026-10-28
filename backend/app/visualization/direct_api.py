@@ -291,6 +291,10 @@ def install(app):
         ).scalar()
         if not segment:
             raise HTTPException(404, "Keine Originaldaten für diesen Zeitpunkt")
+        from app.tiered_archive.client import release_read_connection
+
+        # load_source opens its own snapshot; keep the single read connection available.
+        release_read_connection(db)
         source = direct.load_source(*direct.resources(), segment)
         if not source:
             raise HTTPException(
