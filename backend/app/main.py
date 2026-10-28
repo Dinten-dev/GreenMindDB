@@ -11,6 +11,7 @@ from prometheus_client import REGISTRY
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.responses import JSONResponse
 
 from app.config import settings
 from app.logging_config import get_logger, setup_logging
@@ -95,6 +96,7 @@ from app.routers import (  # noqa: E402
     ws_router,
     zones_router,
 )
+from app.routers.invitations import router as invitations_router  # noqa: E402
 
 # ── App initialization ───────────────────────────────────────────────
 
@@ -140,6 +142,8 @@ async def add_security_headers(request: Request, call_next):
         production=_is_production
     )
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if request.url.path.startswith(("/api/v1/auth/", "/api/v1/admin/", "/api/v1/administration/")):
+        response.headers["Cache-Control"] = "private, no-store"
     if _is_production:
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
@@ -167,10 +171,31 @@ async def log_requests(request: Request, call_next):
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.middleware("http")
+async def admin_write_origin(request: Request, call_next):
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and request.url.path.startswith(
+        ("/api/v1/admin/", "/api/v1/administration/")
+    ):
+        from urllib.parse import urlsplit
+
+        expected = urlsplit(settings.frontend_url)
+        origin = f"{expected.scheme}://{expected.netloc}"
+        if request.headers.get("origin") != origin:
+            return JSONResponse(
+                {"detail": "Unexpected request origin"},
+                403,
+                headers={"Cache-Control": "private, no-store"},
+            )
+    return await call_next(request)
+
+
 # ── Routers ──────────────────────────────────────────────────────────
 api_v1_router = APIRouter(prefix="/api/v1")
 
 api_v1_router.include_router(auth_router)
+
+api_v1_router.include_router(invitations_router)
 api_v1_router.include_router(administration_router)
 api_v1_router.include_router(organizations_router)
 api_v1_router.include_router(zones_router)

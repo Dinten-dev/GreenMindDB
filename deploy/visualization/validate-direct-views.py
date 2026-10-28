@@ -11,7 +11,7 @@ import uuid
 import wave
 from datetime import timedelta
 
-from app.auth import create_access_token
+from app.validation_auth import validation_access_token as create_access_token
 from app.visualization.api import read_engine
 from app.visualization.direct import resources
 from sqlalchemy import text

@@ -2,16 +2,19 @@
 
 import uuid as uuid_mod
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 import jwt
 from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.access import AuthSession
 from app.models.user import Role, User
 
 # New credentials use bcrypt-sha256 so passwords are not silently truncated at
@@ -44,6 +47,9 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    if not isinstance(data.get("sid"), str):
+        raise ValueError("A persisted session identifier is required")
+    uuid_mod.UUID(data["sid"])
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
@@ -52,10 +58,45 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 def decode_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp", "sub", "sid"]}
+        )
+        uuid_mod.UUID(payload["sid"])
         return payload
-    except InvalidTokenError:
+    except (InvalidTokenError, ValueError, TypeError, AttributeError):
         return None
+
+
+def create_session_token(db: Session, user_id, expires_delta: timedelta | None = None) -> str:
+    """Caller commits session and other login changes together before returning a token."""
+    lifetime = expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    session = AuthSession(user_id=user_id, expires_at=datetime.now(UTC) + lifetime)
+    db.add(session)
+    db.flush()
+    return create_access_token({"sub": str(user_id), "sid": str(session.id)}, lifetime)
+
+
+def session_is_valid(db: Session, payload: dict) -> bool:
+    """SELECT only: also used by read-only visualization services and fresh WS checks."""
+    try:
+        session_id = uuid_mod.UUID(payload["sid"])
+        user_id = uuid_mod.UUID(payload["sub"])
+    except (KeyError, ValueError, TypeError, AttributeError):
+        return False
+    try:
+        return (
+            db.query(AuthSession.id)
+            .filter(
+                AuthSession.id == session_id,
+                AuthSession.user_id == user_id,
+                AuthSession.revoked_at.is_(None),
+                AuthSession.expires_at > datetime.now(UTC),
+            )
+            .first()
+            is not None
+        )
+    except SQLAlchemyError:
+        raise HTTPException(503, "Authentication unavailable") from None
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
@@ -78,6 +119,9 @@ def delete_auth_cookie(response: Response) -> None:
         key=COOKIE_NAME,
         path="/",
         domain=settings.cookie_domain or None,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
     )
 
 
@@ -111,6 +155,9 @@ def get_current_user(
             detail="Invalid or expired token",
         )
 
+    if not session_is_valid(db, payload):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or revoked session")
+
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
@@ -135,15 +182,25 @@ def get_current_user(
     return user
 
 
+def require_expected_origin(request: Request) -> None:
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    expected = urlsplit(settings.frontend_url)
+    if request.headers.get("origin") != f"{expected.scheme}://{expected.netloc}":
+        raise HTTPException(403, "Unexpected request origin")
+
+
 def require_role(allowed_roles: list[Role]):
     """Dependency that checks the user has one of the allowed roles."""
 
-    async def _check(current_user: User = Depends(get_current_user)):
+    async def _check(request: Request, current_user: User = Depends(get_current_user)):
         if current_user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",
             )
+        if allowed_roles == [Role.ADMIN]:
+            require_expected_origin(request)
         return current_user
 
     return _check

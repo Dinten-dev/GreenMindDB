@@ -8,10 +8,10 @@ import pytest
 from fastapi import HTTPException
 
 from app import gateway_auth
-from app.auth import create_access_token
 from app.models.timeseries import SensorReading
 from app.models.user import Role, User
 from app.routers import ingest
+from tests.session_helpers import create_access_token
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +140,7 @@ def test_committed_upload_reaches_authorized_live_subscriber(client, db, setup_t
     )
     db.add(viewer)
     db.commit()
-    client.cookies.set("access_token", create_access_token({"sub": str(viewer.id)}))
+    client.cookies.set("access_token", create_access_token(db, {"sub": str(viewer.id)}))
     sensor = setup_test_data["sensor"]
     with client.websocket_connect(
         f"/api/v1/ws/sensor/{sensor.id}", headers={"origin": "http://localhost:3000"}

@@ -35,6 +35,13 @@ const nextConfig = {
           { key: 'Content-Security-Policy', value: contentSecurityPolicy },
         ],
       },
+      ...['/signup', '/:locale/signup'].map((source) => ({
+        source,
+        headers: [
+          { key: 'Cache-Control', value: 'private, no-store' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+        ],
+      })),
     ];
   },
   async rewrites() {

@@ -37,14 +37,14 @@ class TestAuthBoundary:
         A token without 'sub' must return 401, not 500.
         """
         # Create a structurally valid JWT without the required 'sub' claim
-        token = create_access_token({"role": "admin"})  # no 'sub' key
+        token = create_access_token({"role": "admin", "sid": "00000000-0000-0000-0000-000000000001"})  # no 'sub' key
 
         response = client.get(
             "/api/v1/zones",
             cookies={"access_token": token},
         )
         assert response.status_code == 401
-        assert "Invalid token payload" in response.json()["detail"]
+        assert "Invalid or expired token" in response.json()["detail"]
 
 
 # ── Ingest Endpoint ─────────────────────────────────────────────────────

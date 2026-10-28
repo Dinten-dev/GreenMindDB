@@ -3,10 +3,8 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
-class SignupRequest(BaseModel):
-    email: EmailStr = Field(max_length=255)
+class PasswordRequest(BaseModel):
     password: str = Field(max_length=128)
-    name: str = Field("", max_length=200)
 
     @field_validator("password")
     @classmethod
@@ -20,6 +18,12 @@ class SignupRequest(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must include a number")
         return v
+
+
+class SignupRequest(PasswordRequest):
+    model_config = ConfigDict(extra="forbid")
+    invitation_token: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    name: str = Field(min_length=1, max_length=200)
 
 
 class LoginRequest(BaseModel):

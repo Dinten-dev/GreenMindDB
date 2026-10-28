@@ -5,12 +5,13 @@ from uuid import uuid4
 
 import pytest
 
-from app.auth import create_access_token, verify_password
+from app.auth import verify_password
 from app.config import settings
 from app.models.audit_log import AuditLog
 from app.models.master import Zone
 from app.models.user import Organization, Role, User
 from app.models.zone_access import ZoneAccess
+from tests.session_helpers import create_access_token
 
 
 @pytest.fixture
@@ -113,7 +114,7 @@ def test_profile_name_cannot_grant_admin_access(client, db, management):
     )
     db.add(user)
     db.commit()
-    token = create_access_token({"sub": str(user.id)})
+    token = create_access_token(db, {"sub": str(user.id)})
     headers = {"Authorization": "Bearer " + token}
     assert client.get("/api/v1/administration/capabilities", headers=headers).json() == {
         "can_manage": False
@@ -145,7 +146,7 @@ def test_create_move_revoke_deactivate_and_audit(client, db, management):
     saved = db.query(User).filter_by(email="new.member@example.com").one()
     assert verify_password(payload["password"], saved.password_hash)
     assert payload["password"] not in str([x.details for x in db.query(AuditLog).all()])
-    member_headers = {"Authorization": "Bearer " + create_access_token({"sub": uid})}
+    member_headers = {"Authorization": "Bearer " + create_access_token(db, {"sub": uid})}
     assert [z["id"] for z in client.get("/api/v1/zones", headers=member_headers).json()] == [
         str(a.id)
     ]
@@ -310,7 +311,7 @@ def test_delete_confirmation_protection_session_and_company_retained(client, db,
     db.add(member)
     db.commit()
     uid = str(member.id)
-    token = create_access_token({"sub": uid})
+    token = create_access_token(db, {"sub": uid})
     route = "/api/v1/administration/users/" + uid
     assert (
         client.request(
@@ -465,7 +466,7 @@ def test_company_zone_blocks_deletion_and_member_sees_only_selected_zone(client,
             "zone_ids": [z.json()["id"]],
         },
     ).json()
-    member_headers = {"Authorization": "Bearer " + create_access_token({"sub": user["id"]})}
+    member_headers = {"Authorization": "Bearer " + create_access_token(db, {"sub": user["id"]})}
     assert [x["id"] for x in client.get("/api/v1/zones", headers=member_headers).json()] == [
         z.json()["id"]
     ]

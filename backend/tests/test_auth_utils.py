@@ -65,7 +65,7 @@ class TestJWTTokens:
 
     def test_create_and_decode_token(self):
         """A created token should decode back to the original payload."""
-        data = {"sub": "user-123", "role": "admin"}
+        data = {"sid": "00000000-0000-0000-0000-000000000001", "sub": "user-123", "role": "admin"}
         token = create_access_token(data)
         payload = decode_token(token)
 
@@ -76,7 +76,7 @@ class TestJWTTokens:
 
     def test_expired_token_returns_none(self):
         """An expired token should return None on decode."""
-        data = {"sub": "user-123"}
+        data = {"sid": "00000000-0000-0000-0000-000000000001", "sub": "user-123"}
         token = create_access_token(data, expires_delta=timedelta(seconds=-1))
         payload = decode_token(token)
         assert payload is None
@@ -88,7 +88,7 @@ class TestJWTTokens:
 
     def test_tampered_token_returns_none(self):
         """A tampered token should return None."""
-        data = {"sub": "user-123"}
+        data = {"sid": "00000000-0000-0000-0000-000000000001", "sub": "user-123"}
         token = create_access_token(data)
         tampered = token[:-5] + "XXXXX"
         payload = decode_token(tampered)
@@ -96,7 +96,7 @@ class TestJWTTokens:
 
     def test_custom_expiry(self):
         """Token with custom expiry should still decode within validity."""
-        data = {"sub": "user-456"}
+        data = {"sid": "00000000-0000-0000-0000-000000000001", "sub": "user-456"}
         token = create_access_token(data, expires_delta=timedelta(hours=1))
         payload = decode_token(token)
         assert payload is not None

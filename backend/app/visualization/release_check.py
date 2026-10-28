@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import text
 
-from app.auth import COOKIE_NAME, create_access_token
+from app.auth import COOKIE_NAME
+from app.validation_auth import validation_access_token as create_access_token
 from app.visualization.api import read_engine
 from app.visualization.direct import resources
 

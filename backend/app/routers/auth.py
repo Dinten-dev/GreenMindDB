@@ -5,17 +5,20 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.auth import (
-    create_access_token,
+    COOKIE_NAME,
+    create_session_token,
+    decode_token,
     delete_auth_cookie,
     get_current_user,
-    get_password_hash,
     set_auth_cookie,
     verify_password_and_update,
 )
 from app.database import get_db
+from app.models.access import AuthSession
 from app.models.user import EmailVerification, Role, User
 from app.rate_limit import limiter
 from app.schemas.auth import (
@@ -28,6 +31,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
 )
 from app.services.email_service import EmailService
+from app.services.invitations import redeem_invitation
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,39 +46,10 @@ def _verification_token_digest(token: str) -> str:
 @router.post("/signup", response_model=AuthResponse, status_code=201)
 @limiter.limit("5/minute")
 async def signup(request: Request, data: SignupRequest, db: Session = Depends(get_db)):
-    """Create a new user account pending email verification."""
-    existing = db.query(User).filter(User.email == data.email.lower()).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Could not create account"
-        )
-
-    user = User(
-        email=data.email.lower(),
-        name=data.name or data.email.split("@")[0],
-        password_hash=get_password_hash(data.password),
-        role=Role.OWNER,
-        is_verified=False,
-    )
-    db.add(user)
-    db.flush()  # get user.id
-
-    # Create email verification token
-    token_str = secrets.token_hex(16)
-    verification = EmailVerification(
-        user_id=user.id,
-        token=_verification_token_digest(token_str),
-        expires_at=datetime.now(UTC) + timedelta(hours=24),
-    )
-    db.add(verification)
-    db.commit()
-    db.refresh(user)
-
-    # Dispatch Verification Email
-    EmailService.send_verification_email(to_email=user.email, token=token_str)
-
+    """Redeem one invitation; its email is the only account identity accepted."""
+    user = redeem_invitation(db, data)
     return AuthResponse(
-        detail="Account created. Verify your email before signing in.",
+        detail="Invitation accepted. You can now sign in.",
         user=_user_response(user),
     )
 
@@ -178,17 +153,42 @@ async def login(
 
     if replacement_hash:
         user.password_hash = replacement_hash
-        db.commit()
-
-    token = create_access_token(data={"sub": str(user.id)})
+    user.last_login = datetime.now(UTC)
+    token = create_session_token(db, user.id)
+    db.commit()
     set_auth_cookie(response, token)
 
     return AuthResponse(user=_user_response(user))
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Clear authentication cookie."""
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Revoke all presented sessions, then clear the cookie; retry safe."""
+    tokens = {request.cookies.get(COOKIE_NAME)}
+    authorization = request.headers.get("authorization", "")
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() == "bearer":
+        tokens.add(value)
+    for token in tokens:
+        payload = decode_token(token) if token else None
+        if payload:
+            import uuid
+
+            try:
+                user_id = uuid.UUID(payload["sub"])
+                session_id = uuid.UUID(payload["sid"])
+            except (ValueError, TypeError, AttributeError):
+                continue
+            db.execute(
+                update(AuthSession)
+                .where(
+                    AuthSession.id == session_id,
+                    AuthSession.user_id == user_id,
+                    AuthSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=datetime.now(UTC))
+            )
+    db.commit()
     delete_auth_cookie(response)
     return {"detail": "Logged out"}
 
