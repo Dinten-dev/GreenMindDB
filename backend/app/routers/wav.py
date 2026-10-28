@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import math
+import os
 import tempfile
 import uuid
 from datetime import UTC, datetime
@@ -257,6 +258,10 @@ def list_wav_files(
     files = query.order_by(desc(WavFile.started_at)).limit(limit).all()
     from app.raw_archive.reader import verified_objects
 
+    if os.getenv("TIERED_ARCHIVE_READS_ENABLED", "false") == "true":
+        from app.tiered_archive.client import release_read_connection
+
+        release_read_connection(db)
     archived = verified_objects(
         "gateway", "greenmind-raw", [f.s3_key for f in files if f.raw_deleted_at is not None]
     )
@@ -480,13 +485,18 @@ def download_wav(
         sensor_name=sensor_name,
         started_at=wav_file.started_at,
     )
+    s3_key, file_size = wav_file.s3_key, wav_file.file_size_bytes
+    if os.getenv("TIERED_ARCHIVE_READS_ENABLED", "false") == "true":
+        from app.tiered_archive.client import release_read_connection
+
+        release_read_connection(db)
 
     return StreamingResponse(
-        wav_service.stream_wav_bytes(wav_file.s3_key),
+        wav_service.stream_wav_bytes(s3_key),
         media_type="audio/wav",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(wav_file.file_size_bytes),
+            "Content-Length": str(file_size),
         },
     )
 
@@ -562,6 +572,10 @@ def download_wav_bundle(
         ended_at=wav_files[-1].ended_at,
         extension="zip",
     )
+    if os.getenv("TIERED_ARCHIVE_READS_ENABLED", "false") == "true":
+        from app.tiered_archive.client import release_read_connection
+
+        release_read_connection(db)
 
     logger.info(
         "WAV bundle download: %d files, ~%.1f MB, sensor=%s",

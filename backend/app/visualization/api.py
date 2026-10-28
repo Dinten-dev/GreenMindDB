@@ -478,6 +478,9 @@ def waveform(
         raise HTTPException(
             404, "Für diesen Zeitpunkt ist kein zeitlich zuordenbares WAV verfügbar."
         )
+    from app.tiered_archive.client import release_read_connection
+
+    release_read_connection(db)
     response = get_object(
         _get_s3_client(), Bucket="greenmind-raw", Key=item["s3_key"], kind="gateway"
     )

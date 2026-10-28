@@ -252,6 +252,9 @@ def install(app):
             row = archived.manifest if archived else None
         if not row or not 0 <= run_index < len(row["runs"]):
             raise HTTPException(404, "Aufnahme nicht gefunden")
+        from app.tiered_archive.client import release_read_connection
+
+        release_read_connection(db)
         try:
             payload, _ = direct.read_wav(
                 direct.resources()[1],

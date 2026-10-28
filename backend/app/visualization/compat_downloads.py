@@ -80,6 +80,9 @@ def install(app):
                 if revision.raw_deleted_at is not None
                 for run in revision.manifest["runs"]
             ]
+            from app.tiered_archive.client import release_read_connection
+
+            release_read_connection(db)
             try:
                 available = verified_objects("direct", bucket, keys[:1000]) if keys else set()
             except ArchiveBlocked as error:
