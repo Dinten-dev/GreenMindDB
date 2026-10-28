@@ -90,6 +90,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass  # Object identities and credentials must never enter access logs.
 
+    def authorized_peer(self, uid):
+        return uid == os.getuid()
+
     def do_POST(self):
         self.connection.settimeout(10)
         acquired = False
@@ -98,7 +101,7 @@ class Handler(BaseHTTPRequestHandler):
                 _, uid, _ = struct.unpack(
                     "3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
                 )
-                if uid != os.getuid():
+                if not self.authorized_peer(uid):
                     raise ArchiveBlocked("Unauthorized peer")
             size = int(self.headers.get("Content-Length", "0"))
             if not 0 < size <= 1024 * 1024 or self.headers.get("Transfer-Encoding"):

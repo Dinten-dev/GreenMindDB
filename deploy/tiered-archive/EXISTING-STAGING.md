@@ -1308,3 +1308,90 @@ Timer, PAUSE, Aktivierungssperre, Profile, beide Kataloge und Originale bleiben
 unverändert. Offen sind Einbau der geprüften Korrektur, reales Alarmziel,
 konkret freigegebener Kopier-/Lesebetrieb samt tatsächlicher API-Integration,
 vollständige Archivbelege und danach der echte unveränderte 24-Stunden-Nachweis.
+
+### Bestehende API-Anbindung und private Benutzergrenze – 28.10.2026
+
+Die reine Bestandsprüfung bestätigt eine konkrete weitere Integrationslücke:
+Die laufenden API-Images enthalten weder `app.tiered_archive` noch den neuen
+privaten Lesebroker. True-Leseflags im Hostprofil binden diese APIs nicht an.
+Es müssen keine weiteren API-Konten oder dauerhaften Lesecontainer entstehen:
+`gm-zones-staging-1b449e928a54-visual-1` bedient bereits
+`app.visualization.api:app` und hat `VISUAL_DIRECT_ENABLED=true`. Die aktuelle
+Lesesoftware dieses Moduls stellt Gateway und Direct gemeinsam bereit.
+Der daneben vorhandene `admin-direct`-Container startet `app.direct.main:app`
+und ist ein Empfangsdienst. Er darf nicht als vermeintlicher Leser ersetzt werden.
+
+Identität des vorhandenen Lesers:
+Container `f43bed3146d14c3456d309f13d01eed02e393b95f5310af69f58741e963824f5`,
+Image `sha256:bf289dcfcb03aaca67d3671be95c20ed890a0b560e04cdd1c58d7926c90a537b`,
+UID/GID 10001, bisher ohne zusätzliche Gruppe oder Broker-Mount. Der Hostleser
+verwendet dagegen UID 995/GID 982 (`greenmind-archive-read`), ein 0700-Verzeichnis
+und eine 0600-Socketdatei. Zusätzlich lehnt der bisherige Broker fremde Peer-UIDs
+ab. Eine blosse Dateifreigabe oder ein zusätzlicher Mount löst das nicht.
+
+Vorbereitet ist deshalb eine explizite, begrenzte Erweiterung des historischen
+Lesers: `TIERED_ARCHIVE_READ_PEER_UIDS=10001`. Sie verlangt einen vom Leser selbst
+besessenen Verzeichnispfad mit seiner Gruppe und exakt Modus 0750; die Socketdatei
+erhält 0660. Linux-Peer-Credentials prüfen weiterhin die tatsächliche Prozess-UID.
+Nur die explizite API-UID kommt hinzu; die eigene Leser-UID bleibt erlaubt.
+Ungültige, leere Teilwerte, Root-UID, Wildcards und zu lange Listen blockieren.
+Ohne die neue Einstellung bleiben Socketmodus 0600 und der eigene Benutzer
+massgeblich. Der alte Raw-Broker behält unabhängig davon ausschliesslich seine
+eigene Benutzerkennung. Upload-, Auth- und beliebige andere Endpunkte werden
+dadurch nicht freigegeben. Die Erweiterung ist **nicht installiert**.
+
+Zwölf native Fälle bestätigen den echten Kernelzugriff zwischen unterschiedlichen
+Benutzern: API-UID mit GID 982 erlaubt, dieselbe UID ohne Gruppe auf Dateisystemebene
+gesperrt, fremde UID trotz Gruppe sowie Root im HTTP-Broker gesperrt, eigene UID
+weiterhin erlaubt, PAUSE wirksam, Schreibmethoden nicht vorhanden, Socketneuanlage
+im erhaltenen Verzeichnis weiterhin erreichbar und alte Brokerregel unverändert.
+Antworten waren vollständig künstlich, Quellen/Box/Schlüssel wurden nicht benutzt.
+Der operative `read_service.main`-Einstieg und bestehende Dienste wurden nicht gestartet.
+
+Die API-UID existiert nur im vorhandenen Containerimage. Die Prüfung verwendete
+deshalb kurzlebige Clients aus exakt diesem bereits vorhandenen Image; kein
+Hostkonto und kein Image wurde erzeugt. Zuvor gestoppte Prüfversuche hatten
+fehlendes CAP_SETUID beziehungsweise die fehlende Host-Benutzerkennung korrekt
+abgefangen. Diese Grenzen wurden nicht erweitert. Ein weiterer Prüfversuch
+erkannte den privaten cgroup-Namensraum des Containers; bestanden ist die
+Prüfung mit kontrollierten Kernelgrenzen und verifizierter Docker-Elterngruppe.
+
+Alle Testprozesse zusammen waren durch eine eigene temporäre Slice auf 192 MiB,
+keinen Swap und 25 Prozent CPU begrenzt. Gemessene Spitze 56’799’232 Byte,
+33,695 Sekunden, keine Speicherereignisse. Die Clients hatten kein Netzwerk,
+keine Capabilities und ausschliesslich den neuen künstlichen Testpfad schreibgeschützt
+eingebunden. Alle Testprozesse, Testcontainer, Slice-Konfiguration und Testdateien
+sind entfernt. Ursprüngliche Profile, Kataloge, PAUSE und inaktive/deaktivierte
+Archiv-Units blieben unverändert. 254 lokale Archiv-/Broker-Regressionen bestanden;
+15 Docker-Fixturetests wurden ausgelassen. Die nativen Containerclients waren ein
+separater Test mit dem vorhandenen Image.
+
+Native Laufzeit dieser vorbereiteten Erweiterung:
+`8aeb5df8d08ae462a167399819cc500df4156bd9ec15e965daaed53af0f857b1`.
+Serverbeleg:
+`/etc/greenmind/tiered-archive/socket-access-native-t9jhitv7-result.json`, SHA-256
+`b626291b9218cb563343c840fa01fbabf29afc11b72153337d1a37713d6fbf21`.
+Einzelheiten und Metadateninventar liegen im Projekt unter
+`outputs/greenmind-staging-api-integration-20261028/`.
+
+Vor dem tatsächlichen API-Einbau sind zusätzlich die realen Quellbindungen und
+das Verbindungsbudget fertigzustellen. Der bestehende Leser verwendet derzeit
+`plantuser` und `greenmind_direct_staging`; der reine SELECT-Zugang des Kopierers
+ist noch nicht daran gebunden. Die begrenzte Rolle hat drei Verbindungen insgesamt;
+Gateway-/Direct-Lesepools und Kopierer müssen dieses gemeinsame Budget einhalten.
+Neue Rollen oder Rechte sind daraus nicht abzuleiten. Die neue Direct-Konfiguration
+verlangt ausserhalb Development HTTPS oder die ausdrücklich geprüfte private
+Verbindung; vorhandenes internes Staging-HTTP darf nicht durch falsches Umschalten
+auf Development akzeptiert werden. Auch der Original-WAV-Fallback braucht seine
+konkrete Staging-Brokerbindung; der historische Leser erlaubt derzeit nur seine
+drei historischen Endpunkte. Diese Wege sind noch nicht operativ abgenommen.
+
+57 von 58 Kernabhängigkeiten stimmen versionsgenau mit dem Lock überein.
+Im bestehenden Image liegt PyJWT 2.13.0, erforderlich ist 2.15.0. Das bereits
+vorhandene, gelockte Offline-Wheel wurde lokal anhand des Lock-Hashes geprüft:
+SHA-256 `7a3742debf6b879e912dbb9819ceec1594be812452b78c5f2e2dfc56564954f8`.
+19 unveränderte Paketdateien sind als möglicher schreibgeschützter Overlay
+vorbereitet. Nichts wurde im API-Container installiert. Die reine Versionsinventur
+prüft keine Wheelbytes im Container und ersetzt weder einen Import- noch einen
+JWT-/Mandanten-/Lastvergleich. Der spätere Review muss genau diese minimale
+Abhängigkeitskorrektur samt erhaltener bestehender JWT-Konfiguration enthalten.

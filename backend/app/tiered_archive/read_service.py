@@ -1,6 +1,7 @@
 """Standalone private read service; no source writer or upload credential fallback."""
 
 import os
+import socket
 import stat
 import threading
 from contextlib import closing
@@ -17,6 +18,9 @@ from .resources import monitored, pause
 
 
 class ReadHandler(Handler):
+    def authorized_peer(self, uid):
+        return super().authorized_peer(uid) or uid in getattr(self.server, "read_peer_uids", ())
+
     def do_POST(self):
         state = Path(os.environ["TIERED_ARCHIVE_STATE_DIR"])
         if (state / "PAUSE").exists() or (state / "control/PAUSE").exists():
@@ -28,6 +32,36 @@ class ReadHandler(Handler):
         super().do_POST()
 
 
+def peer_uids():
+    """Explicit API process identities; legacy brokers keep their own-UID rule."""
+    value = os.environ.get("TIERED_ARCHIVE_READ_PEER_UIDS", "")
+    if not value:
+        return frozenset()
+    values = value.split(",")
+    if len(values) > 8 or any(
+        not 1 <= len(part) <= 10
+        or not part.isascii()
+        or not part.isdecimal()
+        or not 1 <= int(part) <= 2**32 - 2
+        for part in values
+    ):
+        raise ArchiveBlocked("Explicit non-root historical API peer UIDs required")
+    return frozenset(map(int, values))
+
+
+def socket_permissions(path, peers):
+    if peers:
+        parent = path.parent.lstat()
+        if (
+            not stat.S_ISDIR(parent.st_mode)
+            or parent.st_uid != os.getuid()
+            or parent.st_gid != os.getgid()
+            or stat.S_IMODE(parent.st_mode) != 0o750
+        ):
+            raise ArchiveBlocked("Historical API socket needs its private owner/group directory")
+    path.chmod(0o660 if peers else 0o600)
+
+
 def main():
     if os.environ.get("TIERED_ARCHIVE_READS_ENABLED") != "true":
         raise ArchiveBlocked("Historical reads disabled")
@@ -35,6 +69,9 @@ def main():
         raise ArchiveBlocked("Read service cannot delete")
     if any(name.startswith("RAW_ARCHIVE_SFTP_") for name in os.environ):
         raise ArchiveBlocked("No upload credentials in historical read service")
+    peers = peer_uids()
+    if peers and not hasattr(socket, "SO_PEERCRED"):
+        raise ArchiveBlocked("Historical API peers require Linux process credentials")
     destination = configured_read_only_box()
     if destination is None:
         raise ArchiveBlocked("Dedicated read-only Storage Box subaccount required")
@@ -83,7 +120,8 @@ def main():
             ) as server,
         ):
             checked_health()
-            path.chmod(0o600)
+            socket_permissions(path, peers)
+            server.read_peer_uids = peers
             server.RequestHandlerClass = ReadHandler
             # BaseServer runs this on every loop, even with idle or busy clients.
             server.service_actions = checked_health
