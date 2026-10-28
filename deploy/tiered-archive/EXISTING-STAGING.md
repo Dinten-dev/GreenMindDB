@@ -731,3 +731,59 @@ Diese Abnahme ersetzt NICHT das installierte periodische Backupformat. Dessen
 Timescale-komplette Integration und der Restore aus einem Storage-Box-Snapshot
 bleiben offen. Es gab keine Box-Uploads; keine Produktionsabnahme oder
 Löschfreigabe wird aus den lokalen Staging-Restores abgeleitet.
+
+### Vollbackup aus Storage-Box-Snapshot – 27./28.10.2026
+
+Der installierte Stand ist jetzt `695aca566dd0669186e1f7a169845528cdff7940`,
+Overlay `/opt/greenmind/tiered-archive/overlays/staging-native-76c7fa172272`.
+Die acht ausdrücklich freigegebenen Sicherungsdateien (2’638’048 Byte) wurden
+nach `greenmind-raw/staging/` übertragen und vollständig zurückgelesen.
+Snapshot `1529628`, Name `2026-10-27T21-27-48`, wurde genau einmal erstellt;
+sieben vorherige Snapshots blieben erhalten.
+
+Die anschliessenden Restores verwendeten ausschliesslich Snapshot-Inhalte:
+Gateway 43 Tabellen / 110 Zeilen / zehn Sequenzen, Direct 14 Tabellen /
+32’373 Zeilen / elf Sequenzen. Werte, Strukturen und Sequenzen stimmten
+vollständig überein. Nur die eigenen temporären Restore-Datenbanken und
+Testdateien wurden entfernt. Die 192-MiB-/25-Prozent-Grenzen galten für die
+Prüfprozesse; PostgreSQL blieb im bestehenden separaten 320-MiB-Container.
+
+Nachweise: `outputs/greenmind-staging-nativebox-20261027/` im Projekt.
+Serverseitig liegt der manuelle Nachweis root-eigen mit Modus 0400 unter
+`/etc/greenmind/tiered-archive/native-snapshot-1529628-proof.json`.
+Seine Ablage am 28.10. erneuert nicht den Prüfzeitpunkt vom 27.10.
+Der Löschledger blieb unverändert; daraus folgt keine automatische Freigabe.
+
+### Objektmetadaten vor vollständigem MinIO-Restore – 28.10.2026
+
+Die reine Bestandsprüfung fand zwei Gateway-Objekte (91’288 Byte) sowie
+681 Direct-Objekte (12’250’764 Byte). Beide Staging-Buckets sind unversioniert.
+Gateway wurde vollständig gelesen; für den gesamten Direct-Bestand liegt
+bislang nur ein paginiertes Metadateninventar vor. Dieses ist keine atomare
+MinIO-Sicherung und kein vollständiger Restore.
+
+Der Quelladapter bewahrte bisher nur Version, ETag, Länge und Änderungszeit.
+Der neue, noch nicht installierte Stand ergänzt HTTP- und Nutzermetadaten:
+ContentType, ContentEncoding, ContentLanguage, ContentDisposition, CacheControl,
+Expires, WebsiteRedirectLocation und Metadata. Neue Downloads vergleichen
+Identität und Metadaten sowohl mit der GET-Antwort als auch mit einem
+abschliessenden versionsgebundenen HEAD. Fehlende Metadaten (`MissingMeta`),
+überlange Metadaten und verkürzte Datenströme sperren die Verarbeitung.
+Ältere Nachweise bleiben lesbar, erlauben ohne diese Metadaten aber keine
+Quelllöschung. Tags, ACLs, Bucket-Konfiguration und Versionswiederherstellung
+sind damit noch nicht vollständig abgenommen.
+
+Die neue Adapterdatei wurde isoliert auf dem Archivserver getestet:
+zwei bestehende Staging-WAVs, 501’688 Byte, vollständige Dekodierung,
+JSON-Rundlauf und identische Metadaten vor/nach Download. Diese Auswahl ist
+nicht identisch mit dem früheren Zwei-WAV-Uploadpilot; es erfolgte nur ein
+Quell-Lesetest, kein Upload und kein neuer Snapshot. 45,2 MiB gemessene
+Prozessgruppenspitze; keine Speicherereignisse. Eigene Testdateien entfernt;
+Profile, Katalog, Container, PAUSE und deaktivierte Units unverändert.
+Nachweise: `outputs/greenmind-staging-objectmetadata-20261028/` im Projekt.
+
+683 lokale Regressionstests bestanden, elf Docker-Integrationstests übersprungen.
+Der erste breite Aufruf mit `--noconftest` war wegen fehlender Fixtures und
+Sandbox-Sockets ungeeignet; der vollständige Aufruf mit regulären Fixtures
+und erlaubten lokalen Testsockets bestand. Der neue Code ist damit geprüft,
+aber noch kein installierter Stand und kein vollständiger MinIO-Restore.

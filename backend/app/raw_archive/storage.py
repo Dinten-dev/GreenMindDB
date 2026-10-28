@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
@@ -20,6 +21,41 @@ from .policy import ArchiveBlocked, Recording, RemoteMissing, cutoff
 from .telemetry import measure
 
 SFTP_TIMEOUT_SECONDS = 300
+
+OBJECT_HEADERS = (
+    "ContentType",
+    "ContentEncoding",
+    "ContentLanguage",
+    "ContentDisposition",
+    "CacheControl",
+    "Expires",
+    "WebsiteRedirectLocation",
+    "Metadata",
+)
+
+
+def object_headers(head):
+    """Preserve restorable HTTP/user metadata, without credentials or ACLs."""
+    if head.get("MissingMeta", 0):
+        raise ArchiveBlocked("Source object metadata is incomplete")
+    values = {name: head[name] for name in OBJECT_HEADERS if name in head}
+    if isinstance(values.get("Expires"), datetime):
+        values["Expires"] = values["Expires"].astimezone(UTC).isoformat()
+    if len(json.dumps(values, sort_keys=True).encode()) > 16 * 1024:
+        raise ArchiveBlocked("Source object metadata exceeds bounded budget")
+    return values
+
+
+def verify_object_snapshot(head, snapshot):
+    if (
+        head.get("ETag") != snapshot["ETag"]
+        or head.get("ContentLength") != snapshot["ContentLength"]
+        or head.get("LastModified") is None
+        or head["LastModified"].isoformat() != snapshot["LastModified"]
+        or (head.get("VersionId") or "null") != (snapshot.get("VersionId") or "null")
+        or object_headers(head) != snapshot["ObjectHeaders"]
+    ):
+        raise ArchiveBlocked("Source object identity or metadata changed")
 
 
 def catalog_capacity(output):
@@ -54,16 +90,20 @@ class S3Source:
             raise ArchiveBlocked("Source size changed")
         return {name: head.get(name) for name in ("VersionId", "ETag", "ContentLength")} | {
             "LastModified": head["LastModified"].isoformat(),
+            "ObjectHeaders": object_headers(head),
         }
 
     def download(self, recording: Recording, snapshot: dict, path: Path) -> None:
         args = {"Bucket": recording.bucket, "Key": recording.key, "IfMatch": snapshot["ETag"]}
         if snapshot.get("VersionId") not in (None, "null"):
             args["VersionId"] = snapshot["VersionId"]
-        body = self.client.get_object(**args)["Body"]
+        response = self.client.get_object(**args)
+        body = response["Body"]
         written = 0
         started = time.monotonic()
         try:
+            if "ObjectHeaders" in snapshot:
+                verify_object_snapshot(response, snapshot)
             with path.open("xb") as target:
                 while block := body.read(256 * 1024):
                     written += len(block)
@@ -73,6 +113,11 @@ class S3Source:
                     time.sleep(max(0, written / 1048576 - (time.monotonic() - started)))
                 target.flush()
                 os.fsync(target.fileno())
+            if written != recording.size:
+                raise ArchiveBlocked("Source is shorter than declared length")
+            if "ObjectHeaders" in snapshot:
+                head_args = {key: value for key, value in args.items() if key != "IfMatch"}
+                verify_object_snapshot(self.client.head_object(**head_args), snapshot)
         finally:
             body.close()
 
@@ -85,6 +130,8 @@ class S3Source:
         version = "null" if version in (None, "", "null") else version
         if datetime.fromisoformat(snapshot["LastModified"]) >= cutoff(datetime.now(UTC)):
             raise ArchiveBlocked("The object itself is not from a closed Swiss calendar day")
+        if "ObjectHeaders" not in snapshot:
+            raise ArchiveBlocked("Object metadata archive proof required before deletion")
         if (
             self.diagnostic_client.get_bucket_versioning(Bucket=recording.bucket).get("Status")
             != "Enabled"
@@ -107,12 +154,7 @@ class S3Source:
             if error.response["Error"]["Code"] in {"NoSuchKey", "NoSuchVersion", "404"}:
                 return  # Durable deleting receipt + fresh remote readback permits recovery.
             raise
-        if (
-            head["ETag"] != snapshot["ETag"]
-            or head["ContentLength"] != snapshot["ContentLength"]
-            or head["LastModified"].isoformat() != snapshot["LastModified"]
-        ):
-            raise ArchiveBlocked("Immutable source snapshot changed")
+        verify_object_snapshot(head, snapshot)
         # Two entries already disprove the required single-version state. Never
         # load an arbitrarily long history merely to reject it afterward.
         versions = self.client.list_object_versions(

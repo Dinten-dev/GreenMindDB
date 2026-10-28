@@ -14,7 +14,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.raw_archive.policy import ArchiveBlocked, Recording
-from app.raw_archive.storage import S3Source
+from app.raw_archive.storage import S3Source, object_headers
 
 pytestmark = pytest.mark.integration
 # The production RepoDigest is no longer publicly pullable. Require the actual
@@ -134,6 +134,7 @@ def test_existing_null_version_can_be_addressed_without_reupload(minio, monkeypa
     )
     snapshot = {
         "VersionId": None,
+        "ObjectHeaders": object_headers(original),
         "ETag": original["ETag"],
         "ContentLength": len(payload),
         "LastModified": original["LastModified"].isoformat(),
@@ -175,6 +176,7 @@ def test_explicit_null_removal_never_removes_a_concurrent_new_version(minio, mon
     )
     snapshot = {
         "VersionId": None,
+        "ObjectHeaders": object_headers(original),
         "ETag": original["ETag"],
         "ContentLength": 3,
         "LastModified": old.isoformat(),
