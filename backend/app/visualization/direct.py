@@ -326,7 +326,7 @@ def _query_local_series(db, device_id, start, end, step):
                 "minimum": r["minimum"],
                 "maximum": r["maximum"],
                 "rms": rms,
-                "standard_deviation": math.sqrt(max(0, rms * rms - mean * mean)),
+                "standard_deviation": math.sqrt(max(0, r["total2"] / int(r["n"]) - mean * mean)),
                 "resolution_seconds": r["seconds"],
                 "reading_count": int(r["n"]),
                 "coverage_ratio": min(1, r["duration"] / r["seconds"]),

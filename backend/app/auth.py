@@ -91,7 +91,7 @@ def _extract_token(
     return request.cookies.get(COOKIE_NAME)
 
 
-async def get_current_user(
+def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),

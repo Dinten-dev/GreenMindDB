@@ -124,6 +124,18 @@ def assessment(samples, started_at, now):
         reason = row.get("guard", {}).get("reason")
         if reason:
             pauses[reason] = pauses.get(reason, 0) + 1
+    headroom_failures = sum(
+        row.get("headroom") is not True
+        or not isinstance(row.get("guard"), dict)
+        or "reason" not in row["guard"]
+        or row["guard"]["reason"] is not None
+        for row in ordered
+    )
+    valid_window = (
+        now >= datetime.fromisoformat(started_at)
+        and len(set(times)) == len(times)
+        and all(datetime.fromisoformat(started_at) <= stamp <= now for stamp in times)
+    )
     complete = elapsed >= 86400
     passed = (
         complete
@@ -132,6 +144,8 @@ def assessment(samples, started_at, now):
         and not errors
         and not changes
         and not unhealthy
+        and not headroom_failures
+        and valid_window
         and all(progress.values())
     )
     return {
@@ -144,6 +158,8 @@ def assessment(samples, started_at, now):
         "errors": errors,
         "protected_changes": changes,
         "unhealthy_samples": unhealthy,
+        "headroom_failures": headroom_failures,
+        "sample_window_valid": valid_window,
         "pauses": pauses,
         "deleted_files": 0,
         # This never substitutes for snapshot, restore, full reconciliation or human consent.
