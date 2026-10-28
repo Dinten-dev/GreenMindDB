@@ -14,86 +14,46 @@ from app.models.user import EmailVerification, Organization, Role, User
 
 
 class TestSignup:
-    """POST /api/v1/auth/signup – account creation."""
-
-    def test_signup_success(self, client: TestClient, db: Session, mocker):
-        """Happy path: new user is created but receives no session before verification."""
-        mocker.patch("app.routers.auth.EmailService.send_verification_email")
-
+    def test_free_signup_rejected(self, client):
         response = client.post(
             "/api/v1/auth/signup",
-            json={
-                "email": "new@example.com",
-                "password": "ValidPass1",
-                "name": "New User",
-            },
+            json={"email": "new@example.com", "password": "ValidPass1", "name": "New User"},
         )
-        assert response.status_code == 201
-        data = response.json()
-        assert data["user"]["email"] == "new@example.com"
-        assert data["user"]["name"] == "New User"
-        assert data["detail"] == "Account created. Verify your email before signing in."
-        assert "access_token" not in response.cookies
+        assert response.status_code == 422
+        assert response.headers["cache-control"] == "private, no-store"
 
-    def test_signup_duplicate_email(self, client: TestClient, db: Session, mocker):
-        """Boundary: email already exists → 400."""
-        mocker.patch("app.routers.auth.EmailService.send_verification_email")
+    def test_weak_password_rejected(self, client):
+        response = client.post(
+            "/api/v1/auth/signup",
+            json={"invitation_token": "a" * 64, "password": "Ab1", "name": "New User"},
+        )
+        assert response.status_code == 422
 
-        # Create user first
+    def test_existing_verification_link_remains_functional(self, client, db):
+        import hashlib
+        from datetime import timedelta
+
         user = User(
-            email="dup@example.com",
-            password_hash=get_password_hash("SomePass1"),
-            role=Role.MEMBER,
-            is_active=True,
+            email="verify@example.com",
+            password_hash=get_password_hash("ValidPass1"),
+            role=Role.OWNER,
             is_verified=False,
         )
         db.add(user)
+        db.flush()
+        raw = "a" * 32
+        db.add(
+            EmailVerification(
+                user_id=user.id,
+                token=hashlib.sha256(raw.encode()).hexdigest(),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
         db.commit()
-
-        response = client.post(
-            "/api/v1/auth/signup",
-            json={"email": "dup@example.com", "password": "ValidPass1"},
-        )
-        assert response.status_code == 400
-        assert "Could not create account" in response.json()["detail"]
-
-    def test_signup_stores_only_token_digest_and_raw_token_still_verifies(
-        self, client: TestClient, db: Session, mocker
-    ):
-        send = mocker.patch("app.routers.auth.EmailService.send_verification_email")
-        response = client.post(
-            "/api/v1/auth/signup",
-            json={"email": "token-digest@example.com", "password": "ValidPass1"},
-        )
-        assert response.status_code == 201
-        raw_token = send.call_args.kwargs["token"]
-        verification = db.query(EmailVerification).one()
-        assert verification.token != raw_token
-        assert len(verification.token) == 64
-
-        verified = client.post(
-            "/api/v1/auth/verify-email",
-            json={"token": raw_token},
-        )
-        assert verified.status_code == 200
-        user = db.query(User).filter_by(email="token-digest@example.com").one()
-        assert user.is_verified is True
-
-    def test_signup_weak_password(self, client: TestClient):
-        """Boundary: password too short (< 8 chars) → 422 validation error."""
-        response = client.post(
-            "/api/v1/auth/signup",
-            json={"email": "weak@example.com", "password": "Ab1"},
-        )
-        assert response.status_code == 422
-
-    def test_signup_password_no_uppercase(self, client: TestClient):
-        """Boundary: password missing uppercase → 422."""
-        response = client.post(
-            "/api/v1/auth/signup",
-            json={"email": "lower@example.com", "password": "alllower1"},
-        )
-        assert response.status_code == 422
+        response = client.post("/api/v1/auth/verify-email", json={"token": raw})
+        assert response.status_code == 200
+        db.refresh(user)
+        assert user.is_verified
 
 
 class TestLogin:

@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketDisconnect
 
-from app.auth import create_access_token, get_password_hash
+from app.auth import get_password_hash
 from app.config import Settings, settings
 from app.gateway_auth import (
     authenticate_gateway_api_key,
@@ -41,6 +41,7 @@ from app.schemas.gateway import RegisterGatewayRequest
 from app.schemas.ingest import IngestRequest
 from app.services.gateway_remote_service import toggle_app_release, upload_app_release
 from app.services.gateway_service import gateway_commands_cache, register_gateway
+from tests.session_helpers import create_access_token
 
 
 def _user(
@@ -246,7 +247,7 @@ def test_unverified_existing_token_is_rejected(client: TestClient, db: Session):
         organization_id=None,
         verified=False,
     )
-    token = create_access_token({"sub": str(user.id)})
+    token = create_access_token(db, {"sub": str(user.id)})
 
     response = client.get("/api/v1/auth/me", cookies={"access_token": token})
 

@@ -45,7 +45,9 @@ async def provisioning_ws(
     The Gateway connects here to receive real-time notifications about new provisioning jobs.
     """
     try:
-        gateway = authenticate_gateway_api_key(db, x_api_key)
+        gateway = authenticate_gateway_api_key(
+            db, x_api_key, websocket.client.host if websocket.client else "unknown"
+        )
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

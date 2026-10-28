@@ -3,12 +3,13 @@
 import asyncio
 import uuid
 from collections import Counter
+from contextlib import suppress
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.auth import COOKIE_NAME, decode_token
+from app.auth import COOKIE_NAME, decode_token, session_is_valid
 from app.config import settings
 from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
@@ -16,6 +17,7 @@ from app.models.user import User
 from app.zone_access import zone_access_filter
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
+SESSION_CHECK_INTERVAL = 20
 
 
 class ConnectionManager:
@@ -176,6 +178,11 @@ def _authenticate_websocket(websocket: WebSocket, db: Session) -> User | None:
         return None
     if not user_uuid:
         return None
+    try:
+        if not session_is_valid(db, payload):
+            return None
+    except Exception:
+        return None
     return (
         db.query(User)
         .filter(
@@ -217,6 +224,38 @@ def live_zone_guard(websocket, bind, zone_id, sensor_id=None):
     return permitted
 
 
+async def _watch_session(websocket):
+    while True:
+        await asyncio.sleep(SESSION_CHECK_INTERVAL)
+        try:
+            allowed = await asyncio.wait_for(
+                run_in_threadpool(manager.authorization_checks[websocket]), timeout=2
+            )
+        except Exception:
+            allowed = False
+        if not allowed:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+
+async def _receive_authenticated(websocket):
+    watcher = asyncio.create_task(_watch_session(websocket))
+    try:
+        while True:
+            await asyncio.wait_for(
+                websocket.receive_text(), timeout=settings.websocket_idle_timeout_seconds
+            )
+    except TimeoutError:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        watcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await watcher
+        manager.disconnect(websocket)
+
+
 @router.websocket("/zone/{zone_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -238,20 +277,16 @@ async def websocket_endpoint(
         await _reject(websocket)
         return
 
-    if not await manager.connect(websocket, str(zone.id), str(user.id), _client_ip(websocket)):
+    zone_identity, user_identity, bind = zone.id, user.id, db.get_bind()
+    # A long-lived socket must not retain the handshake's pooled SQL connection.
+    db.rollback()
+    if not await manager.connect(
+        websocket, str(zone_identity), str(user_identity), _client_ip(websocket)
+    ):
         return
 
-    manager.authorization_checks[websocket] = live_zone_guard(websocket, db.get_bind(), zone.id)
-    try:
-        while True:
-            await asyncio.wait_for(
-                websocket.receive_text(),
-                timeout=settings.websocket_idle_timeout_seconds,
-            )
-    except (TimeoutError, WebSocketDisconnect):
-        pass
-    finally:
-        manager.disconnect(websocket)
+    manager.authorization_checks[websocket] = live_zone_guard(websocket, bind, zone_identity)
+    await _receive_authenticated(websocket)
 
 
 @router.websocket("/sensor/{sensor_id}")
@@ -283,21 +318,15 @@ async def sensor_websocket_endpoint(
         await _reject(websocket)
         return
 
+    sensor_identity, zone_identity = sensor.id, sensor.gateway.zone_id
+    user_identity, bind = user.id, db.get_bind()
+    db.rollback()
     if not await manager.connect_sensor(
-        websocket, str(sensor.id), str(user.id), _client_ip(websocket)
+        websocket, str(sensor_identity), str(user_identity), _client_ip(websocket)
     ):
         return
 
     manager.authorization_checks[websocket] = live_zone_guard(
-        websocket, db.get_bind(), sensor.gateway.zone_id, sensor.id
+        websocket, bind, zone_identity, sensor_identity
     )
-    try:
-        while True:
-            await asyncio.wait_for(
-                websocket.receive_text(),
-                timeout=settings.websocket_idle_timeout_seconds,
-            )
-    except (TimeoutError, WebSocketDisconnect):
-        pass
-    finally:
-        manager.disconnect(websocket)
+    await _receive_authenticated(websocket)

@@ -5,12 +5,14 @@ import uuid
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import Role
-from app.schemas.auth import SignupRequest
+from app.schemas.auth import PasswordRequest
 from app.schemas.zone import ZoneCreate
 
 
-class AdminUserCreate(SignupRequest):
+class AdminUserCreate(PasswordRequest):
     model_config = ConfigDict(extra="forbid")
+    email: EmailStr = Field(max_length=255)
+    name: str = Field("", max_length=200)
     password: str = Field(min_length=12, max_length=128)
     organization_id: uuid.UUID
     role: Role = Role.MEMBER

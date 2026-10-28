@@ -17,7 +17,8 @@ from app.visualization import compat_downloads as compat
 
 
 def test_gateway_download_keeps_real_zone_grants(db, setup_test_data, monkeypatch):
-    from app.auth import create_access_token
+    from tests.session_helpers import create_access_token
+
     from app.database import get_db
     from app.models.user import Role, User
     from app.models.wav_file import WavFile
@@ -60,7 +61,7 @@ def test_gateway_download_keeps_real_zone_grants(db, setup_test_data, monkeypatc
     app = FastAPI()
     app.dependency_overrides[get_db] = database
     compat.install(app)
-    headers = {"Authorization": "Bearer " + create_access_token({"sub": str(member.id)})}
+    headers = {"Authorization": "Bearer " + create_access_token(db, {"sub": str(member.id)})}
     with TestClient(app) as client:
         path = f"/api/v1/wav/download/{recording.id}"
         assert client.get(path).status_code == 401

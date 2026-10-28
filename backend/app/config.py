@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     gateway_release_signing_public_key_path: str = Field("", max_length=1_024)
 
     # Resend / Email
+    email_transport: Literal["resend", "smtp"] = "resend"
+    smtp_host: str = "asmtp.mail.hostpoint.ch"
+    smtp_port: int = Field(465, ge=1, le=65535)
+    smtp_username: str = ""
+    smtp_password_file: str = ""
+    staging_email_to: str = ""
     resend_api_key: str = ""
     email_from: str = "onboarding@biolingo.org"
     frontend_url: str = "https://biolingo.org"
@@ -158,8 +164,11 @@ class Settings(BaseSettings):
             "S3_ACCESS_KEY_ID": self.s3_access_key_id,
             "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
         }
-        if self.service_role == "application":
+        if self.service_role == "application" and self.email_transport == "resend":
             deployed_secrets["RESEND_API_KEY"] = self.resend_api_key
+        if self.service_role == "application" and self.email_transport == "smtp":
+            if not self.smtp_username or not self.smtp_password_file:
+                raise ValueError("SMTP requires a username and a mounted password file")
         for setting_name, value in deployed_secrets.items():
             if not value.strip() or _looks_like_placeholder(value):
                 raise ValueError(

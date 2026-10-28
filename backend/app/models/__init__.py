@@ -1,5 +1,6 @@
 """All SQLAlchemy models – re-exported for Alembic and app use."""
 
+from app.models.access import AccessInvitation, AuthSession
 from app.models.audit_log import AuditLog
 from app.models.biosignal import BioAggregate, BioSession
 from app.models.evaluation import PlantEvaluation
@@ -31,6 +32,8 @@ from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
 from app.models.zone_access import ZoneAccess
 
 __all__ = [
+    "AccessInvitation",
+    "AuthSession",
     "User",
     "Organization",
     "Role",

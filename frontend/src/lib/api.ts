@@ -52,13 +52,13 @@ interface AuthResponse {
 }
 
 export async function apiSignup(
-  email: string,
+  invitationToken: string,
   password: string,
   name: string
 ): Promise<AuthResponse> {
   return apiFetch<AuthResponse>('/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({ invitation_token: invitationToken, password, name }),
   });
 }
 

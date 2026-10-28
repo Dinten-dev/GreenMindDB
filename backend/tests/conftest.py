@@ -25,12 +25,13 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.auth import create_access_token, get_password_hash
+from app.auth import get_password_hash
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import Organization, Role, User
+from tests.session_helpers import create_access_token
 
 # ── SQLite-based fixtures (no Docker required) ──────────────────────
 
@@ -101,6 +102,9 @@ def _reset_tables(monkeypatch):
     from app.rate_limit import limiter
 
     limiter.reset()
+    from app.gateway_auth import clear_gateway_auth_cache
+
+    clear_gateway_auth_cache()
     monkeypatch.setattr(settings, "wav_feature_extraction_enabled", False)
     Base.metadata.create_all(bind=_sqlite_engine)
     yield
@@ -128,7 +132,7 @@ def client(db: Session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, headers={"Origin": settings.frontend_url.rstrip("/")}) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -223,7 +227,7 @@ def tenant_admin_token(db: Session, setup_test_data: dict) -> str:
     )
     db.add(user)
     db.commit()
-    return create_access_token({"sub": str(user.id)})
+    return create_access_token(db, {"sub": str(user.id)})
 
 
 # ── Docker-based fixtures (full-stack, skipped in CI) ───────────────

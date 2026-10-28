@@ -9,7 +9,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app import zone_access
-from app.auth import create_access_token
 from app.config import settings
 from app.direct.models import Base as DirectBase
 from app.direct.models import Device
@@ -17,6 +16,7 @@ from app.models.master import Zone
 from app.models.user import Organization, Role, User
 from app.routers.administration import is_management_admin
 from app.visualization import direct_api
+from tests.session_helpers import create_access_token
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def operator_scope(db, monkeypatch, tmp_path):
                 spool_bytes=0,
             )
         )
-    headers = {"Authorization": "Bearer " + create_access_token({"sub": str(operator.id)})}
+    headers = {"Authorization": "Bearer " + create_access_token(db, {"sub": str(operator.id)})}
     yield SimpleNamespace(
         user=operator, zones=zones, engine=engine, device=identity, headers=headers
     )

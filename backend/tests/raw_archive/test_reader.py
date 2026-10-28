@@ -125,9 +125,9 @@ def test_ungranted_zone_cannot_trigger_archive_access(client, db, setup_test_dat
     from datetime import UTC, datetime
     from uuid import uuid4
 
-    from app.auth import create_access_token
     from app.models.user import Role, User
     from app.models.wav_file import WavFile
+    from tests.session_helpers import create_access_token
 
     member = User(
         email="no-archive-zone@example.test",
@@ -157,5 +157,5 @@ def test_ungranted_zone_cannot_trigger_archive_access(client, db, setup_test_dat
         pytest.fail("Unauthorized request reached archive storage")
 
     monkeypatch.setattr(reader, "restore_object", forbidden)
-    headers = {"Authorization": "Bearer " + create_access_token({"sub": str(member.id)})}
+    headers = {"Authorization": "Bearer " + create_access_token(db, {"sub": str(member.id)})}
     assert client.get(f"/api/v1/wav/download/{recording.id}", headers=headers).status_code == 404

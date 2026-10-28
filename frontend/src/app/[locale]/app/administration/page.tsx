@@ -11,6 +11,12 @@ export default function AdministrationPage() {
         <p className="mt-1 text-sm text-gray-500">Serverspeicher und Benutzerzugänge verwalten.</p>
       </div>
       <StorageMonitor />
+      <Link href={`/${locale}/app/administration/access-requests`} className="glass-card block p-6">
+        <h2 className="text-lg font-semibold">Zugangsanfragen &amp; Einladungen →</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          Early-Access-Anfragen prüfen und Einladungen versenden.
+        </p>
+      </Link>
       <Link
         href={`/${locale}/app/administration/users`}
         className="glass-card block p-6 transition-colors hover:border-emerald-300"

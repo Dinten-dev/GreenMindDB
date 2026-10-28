@@ -2,13 +2,29 @@
 
 import BrandLogo from '@/components/BrandLogo';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocale } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiSignup } from '@/lib/api';
 
 export default function SignupPage() {
+  const locale = useLocale();
+  const router = useRouter();
+  const initialized = useRef(false);
+  const [invitationToken, setInvitationToken] = useState('');
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    const token = new URLSearchParams(window.location.hash.slice(1)).get('invitation_token');
+    window.history.replaceState(null, '', window.location.pathname);
+    if (!token || !/^[0-9a-f]{64}$/.test(token)) {
+      router.replace(`/${locale}/early-access`);
+      return;
+    }
+    setInvitationToken(token);
+  }, [locale, router]);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -20,7 +36,7 @@ export default function SignupPage() {
     setNotice('');
     setLoading(true);
     try {
-      const response = await apiSignup(email, password, name);
+      const response = await apiSignup(invitationToken, password, name);
       setNotice(response.detail);
       setPassword('');
     } catch (err: unknown) {
@@ -34,6 +50,7 @@ export default function SignupPage() {
     }
   };
 
+  if (!invitationToken) return <p role="status">Einladung wird geprüft …</p>;
   return (
     <div className="min-h-screen flex items-center justify-center px-6 bg-apple-gray-100">
       <div className="w-full max-w-sm">
@@ -43,7 +60,7 @@ export default function SignupPage() {
           </Link>
           <h1 className="text-2xl font-bold text-apple-gray-800">Konto erstellen</h1>
           <p className="text-sm text-apple-gray-400 mt-2">
-            Beginnen Sie noch heute mit der Überwachung Ihres Gewächshauses.
+            Der Zugang wird für die E-Mail-Adresse Ihrer Einladung aktiviert.
           </p>
         </div>
 
@@ -69,17 +86,6 @@ export default function SignupPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">E-Mail</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 placeholder-apple-gray-400 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:border-transparent transition-all text-sm"
-                placeholder="sie@beispiel.com"
-              />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-apple-gray-600 mb-1.5">
                 Passwort
               </label>
@@ -94,7 +100,7 @@ export default function SignupPage() {
             </div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !!notice}
               className="w-full py-2.5 bg-gm-green-500 text-white rounded-apple font-medium hover:bg-gm-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               {loading ? 'Konto wird erstellt…' : 'Konto erstellen'}

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 from weakref import WeakKeyDictionary
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from fastapi.routing import APIRoute
 from prometheus_client import Histogram
 from sqlalchemy.exc import IntegrityError
@@ -55,12 +55,12 @@ INGEST_STAGE = Histogram(
 )
 
 
-def _persist(data, api_key, bind):
+def _persist(data, api_key, bind, peer="internal"):
     # Own the session completely within this worker thread. Nothing lazy-loaded
     # or ORM-backed crosses into the async response/notification path.
     with Session(bind=bind, autoflush=False) as db:
         with INGEST_STAGE.labels("authenticate").time():
-            gateway = authenticate_gateway_api_key(db, api_key)
+            gateway = authenticate_gateway_api_key(db, api_key, peer)
         if gateway.hardware_id != data.gateway_serial:
             raise HTTPException(status_code=403, detail="Gateway identity mismatch")
         gateway_id = str(gateway.id)
@@ -138,20 +138,22 @@ async def _broadcast(zone_id, gateway_id, measurement_id, readings, sensor_messa
 
 @router.post("", response_model=IngestResponse, status_code=201)
 async def ingest_data(
+    request: Request,
     data: IngestRequest,
     background_tasks: BackgroundTasks,
     x_api_key: str | None = Header(None, alias="X-Api-Key"),
     db: Session = Depends(get_db),
 ):
     started = perf_counter()
+    peer = request.client.host if request.client else "unknown"
     if len(data.readings) > 500:
         # Reuse one worker's SQL allocator arenas for large requests. Ordinary
         # reports retain the shared worker pool and cannot queue behind a bulk.
         result = await asyncio.get_running_loop().run_in_executor(
-            _large_upload_worker, _persist, data, x_api_key, db.get_bind()
+            _large_upload_worker, _persist, data, x_api_key, db.get_bind(), peer
         )
     else:
-        result = await run_in_threadpool(_persist, data, x_api_key, db.get_bind())
+        result = await run_in_threadpool(_persist, data, x_api_key, db.get_bind(), peer)
     status, ingested, gateway_id, zone_id, alerts, readings, messages = result
     for alert in alerts:
         background_tasks.add_task(

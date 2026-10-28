@@ -28,6 +28,8 @@ def test_two_authenticated_requests_finish_with_one_database_connection():
             return self
 
         def first(self):
+            if self.held:
+                return user
             if not available.acquire(timeout=0.5):
                 raise TimeoutError("Authentication blocked the event loop")
             self.held = True
@@ -56,7 +58,7 @@ def test_two_authenticated_requests_finish_with_one_database_connection():
         return {"id": str(current.id)}
 
     async def exercise():
-        token = create_access_token({"sub": str(identity)})
+        token = create_access_token({"sub": str(identity), "sid": str(uuid.uuid4())})
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:

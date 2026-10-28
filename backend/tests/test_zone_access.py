@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.auth import create_access_token, get_current_user
+from app.auth import get_current_user
 from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.models.master import Gateway, Sensor, Zone
@@ -17,6 +17,7 @@ from app.models.zone_access import ZoneAccess
 from app.routers.ws import ConnectionManager
 from app.visualization import api as visual
 from app.zone_access import allowed_zone_ids
+from tests.session_helpers import create_access_token
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ def access_data(db, setup_test_data):
     for zone in zones[1:]:
         db.add(ZoneAccess(user_id=member.id, zone_id=zone.id))
     db.commit()
-    token = create_access_token({"sub": str(member.id)})
+    token = create_access_token(db, {"sub": str(member.id)})
     return member, zones, sensors, {"Authorization": "Bearer " + token}
 
 
@@ -246,7 +247,7 @@ def test_live_guard_checks_current_grants_and_sensor_moves(db, access_data):
     origin = origins if isinstance(origins, str) else origins[0]
     socket = SimpleNamespace(
         headers={"origin": origin},
-        cookies={COOKIE_NAME: create_access_token({"sub": str(member.id)})},
+        cookies={COOKIE_NAME: create_access_token(db, {"sub": str(member.id)})},
     )
     guard = live_zone_guard(socket, db.get_bind(), zones[1].id, sensors[1].id)
     assert guard()
