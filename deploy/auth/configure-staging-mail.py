@@ -27,5 +27,5 @@ os.chmod(path, 0o640)
 env = root / "mail.env"
 fd = os.open(env, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
 with os.fdopen(fd, "w") as output:
-    output.write("EMAIL_TRANSPORT=smtp\nSMTP_HOST=asmtp.mail.hostpoint.ch\nSMTP_PORT=465\nSMTP_USERNAME=info@green-mind.ch\nEMAIL_FROM=info@green-mind.ch\nSMTP_PASSWORD_FILE=/run/secrets/greenmind-smtp-password\nSTAGING_EMAIL_TO=traver.dinten@outlook.com\n")
+    output.write("EMAIL_TRANSPORT=smtp\nSMTP_HOST=asmtp.mail.hostpoint.ch\nSMTP_PORT=587\nSMTP_SECURITY=starttls\nSMTP_USERNAME=info@green-mind.ch\nEMAIL_FROM=info@green-mind.ch\nSMTP_PASSWORD_FILE=/run/secrets/greenmind-smtp-password\nSTAGING_EMAIL_TO=traver.dinten@outlook.com\n")
 print("Staging SMTP credential prepared. No service changed; no email sent.")

@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     email_transport: Literal["resend", "smtp"] = "resend"
     smtp_host: str = "asmtp.mail.hostpoint.ch"
     smtp_port: int = Field(465, ge=1, le=65535)
+    smtp_security: Literal["ssl", "starttls"] = "ssl"
     smtp_username: str = ""
     smtp_password_file: str = ""
     staging_email_to: str = ""

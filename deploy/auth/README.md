@@ -21,7 +21,12 @@ production-fleet rotation proof. The compatibility fallback remains enabled.
 
 ## Mail configuration
 
-Hostpoint uses authenticated SMTP over SSL on `asmtp.mail.hostpoint.ch:465`.
+Hostpoint supports SMTP over SSL on `asmtp.mail.hostpoint.ch:465` and mandatory
+STARTTLS on port 587. Staging can reach port 587; port 465 timed out during the
+release check. Configure `SMTP_PORT=587` and `SMTP_SECURITY=starttls` there.
+Certificate verification and TLS negotiation must succeed before authentication;
+there is no plaintext or automatic transport fallback. Existing configurations
+default to `SMTP_SECURITY=ssl` and keep their current SSL behavior.
 The sender and SMTP username are `info@green-mind.ch`. Use
 `configure-staging-mail.py` for terminal-only hidden password entry. Never put
 the password in chat, a command argument, a Git file, or an environment dump.

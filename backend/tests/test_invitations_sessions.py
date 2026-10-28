@@ -351,6 +351,8 @@ def test_smtp_acceptance_failure_and_staging_recipient_boundary(monkeypatch, tmp
     secret = tmp_path / "smtp-password"
     secret.write_text("test-secret")
     monkeypatch.setattr(settings, "email_transport", "smtp")
+    monkeypatch.setattr(settings, "smtp_security", "ssl")
+    monkeypatch.setattr(settings, "smtp_port", 465)
     monkeypatch.setattr(settings, "smtp_username", "info@green-mind.ch")
     monkeypatch.setattr(settings, "smtp_password_file", str(secret))
     calls = []

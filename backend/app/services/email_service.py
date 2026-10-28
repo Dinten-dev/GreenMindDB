@@ -33,12 +33,23 @@ def dispatch_email(to_email: str, subject: str, *, text: str = "", html: str = "
             )
             if html:
                 message.add_alternative(html, subtype="html")
-            with smtplib.SMTP_SSL(
-                settings.smtp_host,
-                settings.smtp_port,
-                timeout=10,
-                context=ssl.create_default_context(),
-            ) as smtp:
+            context = ssl.create_default_context()
+            if settings.smtp_security == "starttls":
+                connection = smtplib.SMTP(
+                    settings.smtp_host, settings.smtp_port, timeout=10
+                )
+            else:
+                connection = smtplib.SMTP_SSL(
+                    settings.smtp_host,
+                    settings.smtp_port,
+                    timeout=10,
+                    context=context,
+                )
+            with connection as smtp:
+                if settings.smtp_security == "starttls":
+                    smtp.ehlo()
+                    smtp.starttls(context=context)
+                    smtp.ehlo()
                 smtp.login(settings.smtp_username, password)
                 return not smtp.send_message(message)
         if not settings.resend_api_key:
