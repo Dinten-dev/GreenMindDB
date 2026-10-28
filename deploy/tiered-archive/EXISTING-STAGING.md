@@ -1081,3 +1081,56 @@ SQL-Katalog-/Laufplanbindung, vollständige native SQL-Prozessabsturzfälle,
 externe Alarmzustellung und nach eigener Startfreigabe der unveränderte echte
 24-Stunden-Kopier-/Lesebetrieb. Produktionsanbindung, Ressourcen-/Durchsatz-
 Nachweis und unabhängige zweite Schlüsselwiederherstellung bleiben gesondert.
+
+### Echte SQL-Core-Prozessabbrüche – 28.10.2026
+
+Die fehlende Prozessabsturzprüfung des SQL-Kerns ist nachgeholt. Versionierte
+Helfer liegen unter `deploy/tiered-archive/native-sql-crash/`. Sie verwenden den
+unveränderten installierten `deletion.evict`-Pfad, echten `Source`, echtes
+`Ledger` und PostgreSQL, ausschliesslich gegen neu erzeugte künstliche Daten in
+einer eigenen, per Zufallsname und Eigentumskommentar gebundenen Datenbank.
+Jeder Kindprozess prüft diese Bindung unabhängig vor dem ersten Zugriff.
+
+Vier Kindprozesse endeten mit `os._exit`, ohne Python-/SQLAlchemy-Aufräumcode:
+nach dauerhaftem Löschintent vor DELETE, nach DELETE vor SQL-COMMIT, nach
+SQL-COMMIT vor lokalem Abschluss und nach dauerhaftem lokalem Abschluss.
+Ein gefsyncter Phasenmarker und die echten Exitcodes 71–74 bestätigen die
+Abbruchstellen. Ein PostgreSQL-Trigger zählt nur bestätigte DELETEs. Nach zwei
+Wiederaufnahmen je Fall bestand genau ein bestätigtes DELETE des je Fall neu
+erzeugten Testdatensatzes; Aggregate-Referenzen blieben erhalten, Archivbytes
+unverändert. Damit sind sowohl Rollback vor COMMIT als auch idempotenter Abgleich
+nach COMMIT nativ nachgewiesen.
+
+Fünf weitere Fälle blieben ohne DELETE und im Zustand `verified`: geänderte
+Quellwerte, geänderte Firma, 25 Stunden alter Nachweis, offene Direct-
+Nachlieferungsfrist und geänderte Direct-Verarbeitungsrevision.
+
+Provider, Zeit und Freigaben waren ausdrücklich künstliche Test-Fixtures.
+Die SQL-Retention-Akzeptanz war ausschliesslich im Kindprozess gesetzt; echte
+Betriebsprofile, Aktivierungsdateien und sämtliche acht Schalter blieben
+unverändert false. Der operative Einstieg `runtime.evict`, ein echter
+24-Stunden-Betrieb und eine echte SQL-Pilotfreigabe wurden nicht ausgeführt
+oder als bestanden ausgegeben. Die Prüfung ersetzt diese späteren Schritte
+nicht. Es gab keine Original- oder Boxzugriffe, keine neuen Konten oder Schlüssel.
+
+Der erste Versuch blieb vor jeder Testeinheit an der Ressourcenprüfung stehen.
+Nach unabhängig bestätigtem Spielraum lief die erfolgreiche Prüfung in
+58,947 Sekunden mit 86,961 MiB cgroup-Spitze, null Speicherereignissen und
+unveränderten Grenzen von 192 MiB/25 Prozent CPU. Alle Testprozesse sind beendet,
+eigene Datenbank und Testdateien entfernt. Eine zusätzliche unabhängige
+Abschlussprüfung bestätigt den Hauptzustand samt deaktivierten/inaktiven Units,
+unverändertem Katalog/Profilen/PAUSE und abwesendem INSTALLATION_READY.
+
+Serverbeleg:
+`/etc/greenmind/tiered-archive/gm-sql-crash-p4aubxbw-result.json`, SHA-256
+`5c2e933ab5bc8fc0e431a396b5f08896f3d15498111db87c8d3837521f1ae976`.
+Details und der exakt ausgeführte Supervisor liegen im Projekt unter
+`outputs/greenmind-staging-sql-crash-20261028/`.
+
+Die aktuelle Konfiguration bleibt noch in der ersten Kopierphase:
+`TIERED_ARCHIVE_READS_ENABLED=false`, SQL-Scopes nur für `wav_feature` und
+`direct_visual_point`, keine Snapshot-Bindung. Der bestehende Validator verbietet
+ausdrücklich Inline-Backups und Snapshot-Bindung in dieser Phase. Der nächste
+operative Schritt muss die vorhandenen sieben SQL-Archive und den bestandenen
+Restore kontrolliert an Katalog, Laufplan und diese Phasenvalidierung binden;
+eine pauschale Schalteraktivierung wäre dadurch nicht gerechtfertigt.
