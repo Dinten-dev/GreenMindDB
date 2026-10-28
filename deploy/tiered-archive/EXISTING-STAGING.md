@@ -825,3 +825,54 @@ belegt Versionsadressierung und Metadaten-Rückschreibung dieser MinIO-Instanz;
 sie ersetzt weder den vollständigen Restore aller realen Objekte aus der
 Storage Box noch dessen Versions-/Tag-/Berechtigungsabnahme. Archivdienste,
 Timer, PAUSE und alle Lösch-/Abnahmeflags bleiben unverändert gesperrt.
+
+### Zwei echte WAVs aus Snapshot inklusive Objektattributen – 28.10.2026
+
+Für die zwei bereits archivierten Pilotaufnahmen wurden die fehlenden
+Objektattribute einmalig ergänzt: zwei Dateien, zusammen 4’753 Byte,
+Attributinhalt mit dem bestehenden Backupschlüssel verschlüsselt. Die
+Quellidentitäten und SHA-256 stimmten bei der Vorbereitung mit den alten
+Archivnachweisen überein. Keine WAV wurde erneut auf die Storage Box geladen.
+Upload und vollständige unabhängige Rücklesung bestanden. Der zusätzlich
+freigegebene manuelle Snapshot `1531446` (`2026-10-28T08-44-05`, Beschreibung
+`GreenMind-Staging-WAV-Attribute-20261028`) wurde erstellt; alle acht vorherigen
+Snapshots blieben erhalten.
+
+Der Restore las ausschliesslich diesen Snapshot: sechs bestehende Archivteile
+und die zwei Ergänzungsdateien. Verschlüsselungsauthentifizierung, Manifest-
+und Parquet-Inhalte, Quellidentitäten und vollständige WAV-Dekodierung wurden
+geprüft. Beide WAVs wurden in einen eigenen, vorher nicht vorhandenen,
+markierten Staging-Testbucket mit aktivierter Versionierung zurückgeschrieben
+und versionsgebunden vollständig zurückgelesen. Gateway: 45’644 Byte und
+22’800 Samples; Direct: 456’044 Byte und 228’000 Samples. Jeweils 380 Hz,
+mono, 16 Bit. SHA-256, HTTP-/Nutzermetadaten, Tags und native ACLs stimmten.
+Beide Aufnahmen haben keine Tags und jeweils einen CanonicalUser-FULL_CONTROL-
+Eintrag. Diese MinIO-Version liefert eine leere Owner-ID und keine Grantee-ID;
+die vollständigen nativen ACLs wurden mit Zielbucket und Zielobjekten exakt
+verglichen. Die neu erzeugten Version-IDs sind im Nachweis zugeordnet; alte
+Version-IDs und Änderungszeiten bleiben Archivmetadaten.
+
+Vor dem erfolgreichen Lauf scheiterten Prüfhelfer schreibfrei an fehlendem
+PYTHONPATH für den SFTP-Unterprozess und an der MinIO-ACL-Darstellung.
+Fehlversuche und lesende ACL-Diagnose bleiben dokumentiert. Erst der vierte
+Restore-Helfer erreichte MinIO-Schreiboperationen. Ausschliesslich dessen zwei
+exakt protokollierte Testversionen wurden entfernt, anschliessend der leere
+eigene Bucket; HEAD bestätigte seine Abwesenheit. Eigene lokale Testdateien
+wurden entfernt. Es gab keine Quellzugriffe während der Restore-Läufe,
+keine Katalogmutation, keinen Dienststart und keine Löschfreigabe.
+
+Erfolgreicher Lauf: 7,822 Sekunden, Prozessgruppenspitze 64,44 MiB, Limit
+192 MiB RAM / 25 Prozent CPU, keine Speicherereignisse. Der bestehende
+MinIO-Server behielt sein separates 256-MiB-Limit. Profile, Katalog, Container,
+PAUSE und deaktivierte Dienste/Timer blieben unverändert.
+
+Nachweise: `outputs/greenmind-staging-wavrestore-20261028/`, insbesondere
+`Restore-Ergebnis-v4.json`, `Abschlusspruefung.json` und `Snapshots-nachher.json`.
+Dauerhafter Servernachweis:
+`/etc/greenmind/tiered-archive/wav-restore-83ef79ef947d49e2a7bb5f9682393ac6-v4-result.json`,
+SHA-256 `519287a6d691b9e4ca969bcea4ecee474950c8711fafc36772d3c895d065d116`.
+
+Dieser abgegrenzte Restore ist bestanden. Er ist keine vollständige
+Staging-/Produktionsabnahme: die übrigen realen MinIO-Objekte, historische
+API-/CSV-/Mandantenvergleiche, Fehlerfälle, externer Alarmweg, Durchsatz und
+24-Stunden-Betrieb bleiben gesondert nachzuweisen. Löschautomatik bleibt aus.
