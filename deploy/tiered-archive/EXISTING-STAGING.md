@@ -787,3 +787,41 @@ Der erste breite Aufruf mit `--noconftest` war wegen fehlender Fixtures und
 Sandbox-Sockets ungeeignet; der vollständige Aufruf mit regulären Fixtures
 und erlaubten lokalen Testsockets bestand. Der neue Code ist damit geprüft,
 aber noch kein installierter Stand und kein vollständiger MinIO-Restore.
+
+### Installation und native MinIO-Versionierungsprobe – 28.10.2026
+
+Die oben beschriebene Metadatensicherung ist jetzt installiert: Commit
+`380e87a713bd1025180474c7f688ea7faaf1efbc`, Overlay
+`/opt/greenmind/tiered-archive/overlays/staging-objects-604352b27ded`, Runtime
+`604352b27ded26d3f5805570df684996dc85fcdfc3de08dff63b18c131e6a49b`.
+385 Dateien wurden unabhängig geprüft; 380 unveränderte Dateien sind mit dem
+vorherigen unveränderlichen Stand verlinkt. Neben der einen Laufzeitdatei
+wurden vier abweichende Testdateien konsolidiert. Rücknahme unter
+`/etc/greenmind/tiered-archive/before-objects-604352b27ded/`; der vorherige
+Stand bleibt erhalten. Nachweise: `outputs/greenmind-staging-objectinstall-20261028/`.
+
+Im bestehenden Staging-MinIO wurde anschliessend genau ein UUID-gebundener
+Testbucket mit künstlichen WAV-Inhalten geprüft. Keine neuen Konten, keine
+Originaldatenübertragung und keine Veränderung der ursprünglichen Buckets.
+Eine unversioniert angelegte Testdatei blieb nach Einschalten der Versionierung
+im Testbucket als `VersionId=null` adressierbar. Nach Schreiben einer neuen
+Version waren beide Inhalte getrennt lesbar. Die alte Version wurde in einen
+neuen Testschlüssel zurückgeschrieben: SHA-256, HTTP-/Nutzermetadaten und alle
+drei künstlichen Samples stimmten überein. Die vom Ziel neu erzeugte Version-ID
+wurde als Zuordnung dokumentiert; Version-IDs werden nicht als identisch behauptet.
+Dies war eine sequenzielle Versionsprobe, kein Lasttest paralleler Schreibprozesse.
+
+Alle drei erzeugten Objektversionen wurden anhand ihres exakten Schlüssels und
+ihrer Version-ID im besitzmarkierten Testbucket entfernt. Danach wurde nur der
+leere eigene Testbucket entfernt und seine Abwesenheit unabhängig per HEAD
+bestätigt. Vorherige Versionen oder Snapshots auf der Storage Box waren nicht
+beteiligt. Der bestehende Staging-MinIO-Container blieb unverändert gestartet.
+Prozesslimit 64 MiB / 5 Prozent CPU, gemessene Spitze 43,6 MiB, keine OOM-Ereignisse.
+Der MinIO-Server behielt sein separates bestehendes 256-MiB-Limit.
+
+Nachweise: `outputs/greenmind-staging-minio-versiontest-20261028/`.
+Die ursprünglichen Staging-Buckets bleiben unversioniert. Die synthetische Probe
+belegt Versionsadressierung und Metadaten-Rückschreibung dieser MinIO-Instanz;
+sie ersetzt weder den vollständigen Restore aller realen Objekte aus der
+Storage Box noch dessen Versions-/Tag-/Berechtigungsabnahme. Archivdienste,
+Timer, PAUSE und alle Lösch-/Abnahmeflags bleiben unverändert gesperrt.
