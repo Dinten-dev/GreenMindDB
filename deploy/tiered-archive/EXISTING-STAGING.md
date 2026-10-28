@@ -876,3 +876,131 @@ Dieser abgegrenzte Restore ist bestanden. Er ist keine vollständige
 Staging-/Produktionsabnahme: die übrigen realen MinIO-Objekte, historische
 API-/CSV-/Mandantenvergleiche, Fehlerfälle, externer Alarmweg, Durchsatz und
 24-Stunden-Betrieb bleiben gesondert nachzuweisen. Löschautomatik bleibt aus.
+
+### Vollständige WAV-Inhaltsprüfung und native Historienvergleiche – 28.10.2026
+
+Der gesamte vorhandene Staging-MinIO-Bestand wurde jetzt vollständig gelesen:
+683 WAV-Objektversionen, 12’342’052 Byte. Gateway: zwei Objekte/91’288 Byte;
+Direct: 681 Objekte/12’250’764 Byte. SHA-256 und vollständige Sample-Dekodierung
+bestanden für jedes Objekt. Inventare vor/nach der Lesung und objektgebundene
+HEAD-/GET-/HEAD-Nachweise waren stabil. Beide Quellbuckets bleiben unversioniert.
+Keine Boxzugriffe, neuen Konten oder Originaländerungen. 54,222 Sekunden,
+47,68 MiB cgroup-Spitze, Limit 192 MiB/25 Prozent CPU, keine Speicherereignisse.
+
+Die begrenzte, wiederverwendbare Prüfung ist als `object-audit.py` abgelegt.
+Sie prüft alle Inventarseiten, alte konkrete Versionen, Abbruchgrenzen und
+kurze/beschädigte WAVs. Native Protokollunterschiede sind berücksichtigt:
+LIST enthält Millisekunden, HTTP-HEAD ganze Sekunden; ein leerer Versionscursor
+ist in dieser unversionierten MinIO-Instanz zulässig, wenn der Schlüssel fortschreitet.
+Beide Zeitangaben bleiben im Nachweis erhalten. Zwölf gezielte Tests bestanden.
+Nachweise: `outputs/greenmind-staging-full-objectaudit-20261028/`.
+Dies ersetzt weiterhin kein vollständiges Box-Backup/Restore aller 683 Objekte.
+
+Für Diagramme und CSVs wurden echte Staging-Daten beider Quellen verwendet:
+zwei `visual_reading`-, zwei `visual_wave`- und 42 `direct_visual_point`-Zeilen.
+Der fehlende Index `tiered_visual_reading_scan` wurde additiv in
+`plantdb_staging` ergänzt. Vorher/nachher waren alle drei Tabellenzeilen samt
+Inhaltsprüfsumme identisch; keine Berechtigungs- oder Messwertänderung.
+
+Die echte HTTP-/JWT-/Mandantenprüfung lief im kurzlebigen Prüfprozess, ohne
+Listener/Dienststart. Vorhandene aktive, bestätigte Benutzer aus zwei Firmen
+wurden mit einem ausschliesslich im Prüfprozess erzeugten Signierschlüssel
+geprüft. Keine Anmeldepasswörter oder bestehenden JWT-Schlüssel verwendet.
+Die Staging-SQL-Verbindungen waren read-only, pro Datenbank auf eine gepoolte
+Verbindung begrenzt. Dagegen wurden lokale Parquet-Dateien mit simuliertem
+Archivbesitz verglichen; die wirklichen Quellen wurden dabei nicht entfernt.
+
+Dabei wurde eine reale Parallelblockade aufgedeckt: synchrone DB-Abfragen in
+der asynchronen Authentifizierungsabhängigkeit blockierten die Ereignisschleife,
+während ein zweiter Aufruf auf die begrenzte Verbindung wartete. Die Abhängigkeit
+läuft jetzt synchron in FastAPIs Workerthread. Der Fehler ist lokal reproduziert;
+der Regressionstest sowie der native Parallelzugriff bestehen. Direct verwendet
+für die Standardabweichung jetzt dieselbe zweite Originalmoment-Berechnung wie
+der Archivleser, ohne das unnötige Rückquadrieren des zuvor berechneten RMS-Werts.
+
+Acht native Bereichsfälle bestanden: Gateway/Direct, jeweils 1, 7, 90 und
+365 Tage, Diagramm/CSV, Ablehnung fremder Firmen und anonymer Aufrufe.
+Abgelehnte Aufrufe erreichten den Archivleser nicht. Je Quelle zusätzlich vier
+Jahresansicht-/CSV-Anfragen mit zwei gleichzeitigen Nutzern bestanden.
+Typisierte Archivoriginale, Zeitstempel, Anzahlen, Extremwerte und gerundete
+Mittelwerte wurden exakt verglichen. Nur abgeleitete Standardabweichung, RMS
+und Abdeckung haben den dokumentierten Gleitkommavertrag: absolut 1e-9,
+relativ 1e-12. Der grösste gemessene Unterschied war etwa 3,13e-12.
+Der Ratenbegrenzer wurde nur im Prüfprozess für die vielen Testexports deaktiviert.
+Diese lokale Besitzsimulation ersetzt keinen vollständigen SQL-Entfernungs- oder
+Box-Lesebroker-Test nach tatsächlicher Datenentfernung.
+
+Die 24-Stunden-Auswertung wurde zusätzlich verschärft: Ressourcenpausen,
+fehlende Pflichtmessungen sowie doppelte oder ausserhalb des Messfensters
+liegende Samples können keine erfolgreiche Abnahme mehr ergeben. Sechs
+gezielte Auswertungstests bestehen. Insgesamt bestanden 92 relevante lokale
+Archiv-/HTTP-/CSV-/Parallelregressionen, 27 Authentifizierungstests und
+66 Bindungstests; diese Gruppen überlappen und sind nicht zu addieren.
+
+### Konsolidierter installierter Stand – 28.10.2026
+
+Codecommit `db847ed294cc59b22429392871b6ad2aa17b8c62`, Overlay
+`/opt/greenmind/tiered-archive/overlays/staging-ready-55c067b4c8e5`, Runtime
+`55c067b4c8e5d7aa5bf737a0d2e3299548ce620a841793b0ac8bab65044cf5f4`.
+390 Dateien sind unabhängig hashgeprüft, root-eigen und schreibgeschützt;
+381 unveränderte Dateien verwenden Hardlinks. Der unveränderte Vorgänger und
+fünf gesicherte Konfigurationsdateien unter
+`/etc/greenmind/tiered-archive/before-ready-55c067b4c8e5/` erlauben die Rücknahme.
+Die Installation selbst lief begrenzt mit 192 MiB/25 Prozent CPU und benötigte
+14,24 MiB Spitze. Keine Archivdienste gestartet, Timer disabled, PAUSE vorhanden,
+INSTALLATION_READY weiterhin abwesend, sämtliche Lösch-/Abnahmeflags false.
+
+Auch der tatsächlich installierte, nicht mehr injizierte Stand bestand alle
+acht nativen Historienfälle: 22,689 Sekunden, etwa 124,84 MiB cgroup-Spitze,
+keine Speicherereignisse. Profile, Katalog, Originale und Containerstartzustände
+blieben im Prüflauf identisch. Dies ist eine native Testabnahme der beschriebenen
+Pfade, kein gestarteter Archivbetrieb und kein 24-Stunden-Betriebsnachweis.
+
+Nachweise: `outputs/greenmind-staging-readiness-20261028/` und
+`outputs/greenmind-staging-readyinstall-20261028/` im Projekt. Insbesondere
+`Historien-Installierter-Stand.json` und `Installationsnachweis.json`.
+Externer Alarmweg, die verbleibenden nativen Fehlerfälle, vollständiges
+Box-/Katalog-Restore des erweiterten Umfangs und der unveränderte 24-Stunden-
+Gesamtbetrieb bleiben eigene offene Schritte. Produktionsanbindung und
+Produktionsbeobachtung sind weiterhin keine erledigten Staging-Nachweise.
+
+### Nativer künstlicher Speichermangel – 28.10.2026
+
+Ein eigener schlüsselloser Testprozess wurde unter einer harten 64-MiB-
+Speichergrenze und fünf Prozent CPU gezielt durch den Kernel beendet.
+Der installierte ExecStopPost-Pfad erkannte `oom-kill`, las die tatsächlichen
+cgroup-Zähler (`oom=1`, `oom_kill=1`, Spitze exakt 64 MiB), schrieb Fehlermetrik
+und dauerhafte Pause ausschliesslich in den eigenen Testzustand. Ein separater
+Folgelauf verweigerte seine Arbeit wegen dieser Pause; die Sentineldatei wurde
+nicht angelegt. Beide Testeinheiten sind beendet, nur eigene Testdateien wurden
+entfernt. Haupt-PAUSE, Profile, Katalog sowie inaktive/deaktivierte Archivunits
+blieben exakt gleich. Keine Quell-/Boxzugriffe oder Credentials im Testprozess.
+Der eigentliche Fehlerprozess war absichtlich nicht speichergesampelt; dieser
+Nachweis belegt Kernel-OOM, Nachbehandlung und Wiederanlaufsperre, keinen
+vollständigen unterbrochenen Archivzyklus.
+
+Nachweis: `outputs/greenmind-staging-faulttests-20261028/Speicherfehler.json`.
+
+### Native Veröffentlichung bei simulierten Transportfehlern – 28.10.2026
+
+Zwei weitere Fehlerfälle liefen gegen den installierten Publikations-,
+SFTP-Fehlerklassifikations- und ExecStopPost-Pfad: Quota erschöpft und Abbruch
+während eines PUT. Ein künstlicher Clientprozess lieferte die entsprechenden
+Fehler; keine Netzverbindung oder echte Box-/Quell-/Schlüsselzugriffe.
+Der GET-Existenzcheck war eine explizite Fehlend-Fixture. Der fest auf
+`/usr/bin/sftp` gebundene Grössenwächter wurde dadurch nicht ausgeführt und
+nicht verändert; der erste ungeeignete Testaufbau bleibt dokumentiert.
+
+Beide Fälle erzeugten einen fehlgeschlagenen Lauf, Fehlermetrik und eigene
+dauerhafte Pause. Es entstanden null veröffentlichte Archivnachweise.
+Die künstliche Parquet-Quelle blieb unverändert. Beim simulierten Abbruch blieb
+die eigene 128-Byte-Teildatei bis zur abschliessenden Testbereinigung bestehen.
+Ein jeweils eigener Folgelauf startete wegen der Pause weder Arbeit noch einen
+weiteren Transportversuch. Alle Testeinheiten sind beendet, ausschliesslich
+eigene Testdateien entfernt. Hauptprofile, Katalog, PAUSE und deaktivierte
+Archivunits unverändert. Je 128 MiB RAM/fünf Prozent CPU; gemessene Spitzen
+rund 39,67 MiB, keine OOM-Ereignisse.
+
+Das belegt die Fehlerpfade an der Clientprozessgrenze mit künstlichen Daten;
+eine tatsächliche Provider-Quota wurde nicht ausgeschöpft. Nachweis:
+`outputs/greenmind-staging-faulttests-20261028/Transportfehler-v2.json`.
