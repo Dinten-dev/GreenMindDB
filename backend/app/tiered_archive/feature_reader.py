@@ -64,7 +64,7 @@ def history(
     from app.models.master import Gateway, Sensor, Zone
     from app.zone_access import zone_access_filter
 
-    from .client import request
+    from .client import release_read_connection, request
     from .codec import unpack
 
     def bound(value, default):
@@ -88,6 +88,7 @@ def history(
     if len(sensors) > 1000:
         raise ArchiveBlocked("Select a sensor before historical feature lookup")
     merged = {str(row.id): row for row in live}
+    release_read_connection(db)
     for identity, organization in sensors:
         connection, response = request(
             "/tiered-features",

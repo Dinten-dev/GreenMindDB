@@ -3,6 +3,7 @@
 import csv
 import io
 import math
+import os
 import uuid
 from datetime import UTC, datetime
 
@@ -47,6 +48,10 @@ def authorize(db, legacy, user, device_id):
     if not row:
         raise HTTPException(404, "Sensor not found")
     require_zone_access(legacy, user, row["zone_id"])
+    if os.getenv("TIERED_ARCHIVE_READS_ENABLED") == "true":
+        from app.tiered_archive.client import release_read_connection
+
+        release_read_connection(legacy)
     return row
 
 

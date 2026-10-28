@@ -9,6 +9,16 @@ from pathlib import Path
 from app.raw_archive.policy import ArchiveBlocked
 
 
+def release_read_connection(db):
+    """Keep the small SQL pool available while an independent archive RPC waits."""
+    from sqlalchemy.orm import Session
+
+    if isinstance(db, Session):
+        if db.new or db.dirty or db.deleted or db.in_nested_transaction():
+            raise ArchiveBlocked("Archive RPC requires completed read-only source queries")
+        db.close()
+
+
 class Connection(http.client.HTTPConnection):
     def __init__(self, path, timeout):
         super().__init__("localhost", timeout=timeout)

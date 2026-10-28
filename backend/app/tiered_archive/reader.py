@@ -322,7 +322,9 @@ def history(live, db, sensor, start, end, step, *, source, limit=20000):
     if os.getenv("TIERED_ARCHIVE_READ_BROKER_SOCKET") or os.getenv(
         "RAW_ARCHIVE_READ_BROKER_SOCKET"
     ):
-        from .client import request
+        from .client import release_read_connection, request
+
+        release_read_connection(db)
 
         connection, response = request(
             "/tiered-series",

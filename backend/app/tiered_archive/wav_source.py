@@ -295,5 +295,13 @@ class WavSource:
                         "verified_at": now.isoformat(),
                     },
                 )
+            group = os.environ.get("TIERED_ARCHIVE_READ_GID")
+            state = os.environ.get("TIERED_ARCHIVE_STATE_DIR")
+            if group and state:
+                from pathlib import Path
+
+                from app.raw_archive.read_catalog import publish
+
+                publish(ledger.db, Path(state), int(group), checkpoint=self.checkpoint)
         finally:
             ledger.close()

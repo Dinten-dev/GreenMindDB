@@ -18,6 +18,9 @@ from .resources import monitored, pause
 
 
 class ReadHandler(Handler):
+    def acquire_read_slot(self):
+        return self.server.read_slot.acquire(timeout=15)
+
     def authorized_peer(self, uid):
         return super().authorized_peer(uid) or uid in getattr(self.server, "read_peer_uids", ())
 
@@ -26,7 +29,10 @@ class ReadHandler(Handler):
         if (state / "PAUSE").exists() or (state / "control/PAUSE").exists():
             self.send_error(503, "Staging archive paused")
             return
-        if self.path not in {"/tiered-series", "/tiered-features", "/tiered-revision"}:
+        allowed = {"/tiered-series", "/tiered-features", "/tiered-revision"}
+        if os.getenv("TIERED_ARCHIVE_RAW_READS_ENABLED", "false") == "true":
+            allowed |= {"/read", "/available"}
+        if self.path not in allowed:
             self.send_error(404)
             return
         super().do_POST()
@@ -72,12 +78,26 @@ def main():
     peers = peer_uids()
     if peers and not hasattr(socket, "SO_PEERCRED"):
         raise ArchiveBlocked("Historical API peers require Linux process credentials")
-    destination = configured_read_only_box()
-    if destination is None:
-        raise ArchiveBlocked("Dedicated read-only Storage Box subaccount required")
     config = configuration()
     if config.delete_enabled:
         raise ArchiveBlocked("Raw deletion disabled in read service")
+    raw_reads = os.getenv("TIERED_ARCHIVE_RAW_READS_ENABLED", "false")
+    if raw_reads not in {"true", "false"}:
+        raise ArchiveBlocked("Explicit WAV fallback setting required")
+    if raw_reads == "true":
+        state = Path(os.environ["TIERED_ARCHIVE_STATE_DIR"])
+        view = Path(os.environ.get("RAW_ARCHIVE_READ_CATALOG_FILE", ""))
+        if (
+            config.root != state / "raw"
+            or view != state / "raw-read.sqlite3"
+            or not view.is_file()
+            or view.is_symlink()
+            or config.namespace != os.environ.get("TIERED_ARCHIVE_ENVIRONMENT")
+        ):
+            raise ArchiveBlocked("Matching independent WAV read catalogue required")
+    destination = configured_read_only_box()
+    if destination is None:
+        raise ArchiveBlocked("Dedicated read-only Storage Box subaccount required")
     path = Path(os.environ["TIERED_ARCHIVE_READ_BROKER_SOCKET"])
     if not path.is_absolute() or not path.parent.is_dir():
         raise ArchiveBlocked("Private runtime socket directory required")

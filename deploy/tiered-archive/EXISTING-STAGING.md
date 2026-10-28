@@ -1395,3 +1395,78 @@ vorbereitet. Nichts wurde im API-Container installiert. Die reine Versionsinvent
 prüft keine Wheelbytes im Container und ersetzt weder einen Import- noch einen
 JWT-/Mandanten-/Lastvergleich. Der spätere Review muss genau diese minimale
 Abhängigkeitskorrektur samt erhaltener bestehender JWT-Konfiguration enthalten.
+
+### Abgeschlossene Anschlussprüfungen – 28.10.2026
+
+Die erneute Prüfung der tatsächlichen, serverlokalen Profile bestätigt bereits
+HTTPS für Direct: `https://test.green-mind.ch:9443`. Eine neue Tunnel- oder
+Development-Ausnahme ist unnötig. `staging-api-profile.py` bereitet ausschliesslich
+den vorhandenen Dashboard-Leser vor: bestehender JWT-Schlüssel und Endpunkte
+bleiben erhalten; die vorhandenen SELECT-/GET-Zugänge werden serverlokal
+übernommen. Der reine Profiltest hat weder Zugangswerte ausgegeben noch
+Konfiguration verändert. Die bestehenden Netzwerkaliase wurden gegen die
+inventarisierten PostgreSQL-/MinIO-Container geprüft.
+
+Der vorbereitete API-Code begrenzt Gateway und Direct jeweils auf eine
+Datenbankverbindung, ohne Überlauf. Eine dritte Verbindung bleibt dem Kopierer.
+Die PostgreSQL-Verbindungen der API sind ausdrücklich transaktionsweise nur
+lesend. Vor unabhängigen Archivabrufen werden abgeschlossene SELECT-Sitzungen
+freigegeben. Bereits geladene Werte bleiben verfügbar; offene ORM-Änderungen
+und verschachtelte Transaktionen blockieren diese Freigabe. Vier gleichzeitige
+Anfragen werden vom historischen Leser innerhalb seiner bestehenden Grenze von
+vier Verbindungen bis zu 15 Sekunden gesammelt und mit einem Archivarbeiter
+bedient. Der bisherige Raw-Broker bleibt bei sofortiger Überlastablehnung.
+Die tatsächliche Container-Startkonfiguration muss beim Einbau weiterhin genau
+einen API-Arbeiter erzwingen; eine blosse Umgebungsvariable ersetzt das nicht.
+
+Der optionale WAV-Fallback des historischen Lesers benötigt zusätzlich
+`TIERED_ARCHIVE_RAW_READS_ENABLED=true` und die unabhängige Lesesicht
+`/var/lib/greenmind/tiered-archive/staging/raw-read.sqlite3`.
+Der Kopierer veröffentlicht diese vollständig und atomar mit Modus 0640 und
+GID 982. Der private Writer-WAL bleibt unzugänglich. Alte Leser behalten beim
+Austausch ihren vollständigen vorherigen Stand; neue Leser sehen den neuen.
+Abgebrochene Veröffentlichung erhält den bisherigen Stand. Ohne diese explizite
+Freigabe bleiben `/read` und `/available` gesperrt; `/authenticate` bleibt immer
+gesperrt. Die Startprüfung verlangt die passende Staging-Umgebung und Pfade.
+
+317 lokale Archiv-/WAV-/Dashboard-Tests bestanden, 46 Umgebungstests wurden
+ausgelassen. Zwei zusätzliche native Prüfungen verwendeten die vorbereitete
+Runtime `98ec8a46c0ab1dbef8daabfadd2733eca6d4d0261f0af2a3954576af71875a2a`:
+
+- Bestehendes Image: API-Import, PyJWT 2.13→2.15, synthetische alte Tokens,
+  Ablehnung gefälschter/abgelaufener Tokens, vorhandene Export-Steuerwege,
+  keine Empfangsrouten, erhaltenes Direct-HTTPS und acht historische Anfragen
+  über echte private Sockets; je vier parallel pro Messweg, ein SQL-Poolplatz.
+  Spitze 134’443’008 Byte; 21,611 Sekunden; keine Speicherereignisse.
+- Bestehende Benutzer: Writer 993 erzeugt die Lesesicht, Leser 995 liest sie,
+  API 10001/GID 982 erhält Gateway- und Direct-WAVs über den privaten Socket.
+  Beide WAVs vollständig gehasht und dekodiert; künstliche Beschädigung
+  gesperrt; Writer-Verzeichnis für Leser und API unzugänglich; Kataloge
+  unverändert. Spitze 64’327’680 Byte; 9,879 Sekunden; keine Speicherereignisse.
+
+Alle Helfer gemeinsam waren jeweils auf 192 MiB RAM, keinen Swap und 25 Prozent
+CPU begrenzt. Es gab keine Quellen-, Box- oder Originalschlüsselzugriffe.
+Testprozesse, Container, Slice und eigene Testdateien sind entfernt. Die echten
+Archivdienste wurden nicht gestartet. Profile, Kataloge, PAUSE und deaktivierte
+Units blieben unverändert. Dies ersetzt noch keine tatsächliche API-Anbindung
+und keinen unveränderten 24-Stunden-Betrieb.
+
+Native Belege:
+`/etc/greenmind/tiered-archive/api-bootstrap-native-x641yags-result.json`,
+SHA-256 `e2ac79d5aded44c3f8b3c1ab36b1a56e24203f97e07a1525907f2bfcfb37fb63`, und
+`/etc/greenmind/tiered-archive/wav-view-bootstrap-native-bq_6x34x-result.json`,
+SHA-256 `996a3e063306d59d7f6e03e5ee7381c19902ca8ad89a74f3a7b63d9a33254b10`.
+
+Der Nur-Lese-GET vom 28.10.2026, 16:20 UTC bestätigt sieben manuelle Snapshots,
+darunter 1529628, 1531446 und 1532426. Ein automatischer Snapshotplan ist
+derzeit **nicht konfiguriert**. Vor unbeaufsichtigten neuen Uploads muss eine
+konkrete Snapshot-Folge feststehen; der vorhandene Nur-Lese-Token erzeugt keine
+Snapshots. Es wurden keine neuen Tokens, Konten oder Snapshots angelegt.
+
+Der Einbau bleibt eine eigene, gemeinsame Versionsprüfung. Danach müssen die
+passende Restore-Phasenbindung und frische Rücklesebelege erneuert werden;
+deren derzeitige feste Runtime-Bindung darf nicht umgangen werden. Noch offen
+bleiben reales Alarmziel, tatsächliche API-Anbindung, konkreter Uploadumfang,
+ausdrücklich freigegebener manueller Start und anschliessende 24-Stunden-Abnahme.
+Die weiteren 681 WAV-Objektidentitäten haben noch keinen vollständigen
+Archivnachweis. Alle acht Lösch-/Abnahmeflags bleiben false.

@@ -35,11 +35,16 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 read_engine = create_engine(
     os.environ.get("DATABASE_URL", "postgresql+psycopg2://localhost/plantdb"),
-    pool_size=1 if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true" else 3,
+    pool_size=1
+    if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true"
+    or os.environ.get("TIERED_ARCHIVE_READS_ENABLED") == "true"
+    else 3,
     max_overflow=0,
     pool_timeout=5,
     pool_pre_ping=True,
-    connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"},
+    connect_args={
+        "options": "-c default_transaction_read_only=on -c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"
+    },
 )
 attach_read_guards(read_engine, statement_ms=8000, lock_ms=150, work_mem_kib=8192)
 

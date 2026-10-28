@@ -3,12 +3,12 @@
 import hashlib
 import json
 import shutil
-import sqlite3
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from .policy import ArchiveBlocked, Recording, checksum
+from .read_catalog import connect
 
 
 @contextmanager
@@ -21,8 +21,7 @@ def archived_file(config, destination, *, kind, bucket, key, scratch=None):
     config.guard(reading=True)
     identity = json.dumps([kind, bucket, key], separators=(",", ":"))
     archive_id = hashlib.sha256(identity.encode()).hexdigest()
-    journal = config.root / "archive.sqlite3"
-    with closing(sqlite3.connect(journal.as_uri() + "?mode=ro", uri=True, timeout=2)) as db:
+    with connect(config) as db:
         row = db.execute("SELECT state, receipt FROM archive WHERE id=?", (archive_id,)).fetchone()
     if not row or row[0] not in {"verified", "deleting", "evicted"}:
         raise ArchiveBlocked("No verified archive receipt exists")

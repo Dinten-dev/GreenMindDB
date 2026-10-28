@@ -6,16 +6,15 @@ import json
 import os
 import socket
 import socketserver
-import sqlite3
 import stat
 import struct
-from contextlib import closing
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from threading import BoundedSemaphore
 from urllib.request import urlopen
 
 from .policy import ArchiveBlocked, checksum
+from .read_catalog import connect
 from .restore import archived_file
 from .worker import configuration
 
@@ -46,12 +45,7 @@ def validate(data, *, listing=False):
 
 def available(config, kind, bucket, keys):
     result = []
-    with closing(
-        sqlite3.connect(
-            (config.root / "archive.sqlite3").as_uri() + "?mode=ro", uri=True, timeout=2
-        )
-    ) as db:
-        db.execute("PRAGMA query_only=ON")
+    with connect(config) as db:
         for key in keys:
             identity = hashlib.sha256(
                 json.dumps([kind, bucket, key], separators=(",", ":")).encode()
@@ -93,6 +87,9 @@ class Handler(BaseHTTPRequestHandler):
     def authorized_peer(self, uid):
         return uid == os.getuid()
 
+    def acquire_read_slot(self):
+        return self.server.read_slot.acquire(blocking=False)
+
     def do_POST(self):
         self.connection.settimeout(10)
         acquired = False
@@ -114,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
                 from app.tiered_archive.codec import encode
                 from app.tiered_archive.revisions import private_revision
 
-                acquired = self.server.read_slot.acquire(blocking=False)
+                acquired = self.acquire_read_slot()
                 if not acquired:
                     raise ArchiveBlocked("Historical read busy")
                 self.server.health_check()
@@ -132,7 +129,7 @@ class Handler(BaseHTTPRequestHandler):
                 from app.tiered_archive.codec import pack
                 from app.tiered_archive.feature_reader import private_features
 
-                acquired = self.server.read_slot.acquire(blocking=False)
+                acquired = self.acquire_read_slot()
                 if not acquired:
                     raise ArchiveBlocked("Historical read busy")
                 self.server.health_check()
@@ -155,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
             ):
                 from app.tiered_archive.reader import private_series
 
-                acquired = self.server.read_slot.acquire(blocking=False)
+                acquired = self.acquire_read_slot()
                 if not acquired:
                     raise ArchiveBlocked("Historical read concurrency exhausted")
                 self.server.health_check()
@@ -192,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(payload)
                 return
-            acquired = self.server.read_slot.acquire(blocking=False)
+            acquired = self.acquire_read_slot()
             if not acquired:
                 raise ArchiveBlocked("Read concurrency exhausted")
             self.server.health_check()

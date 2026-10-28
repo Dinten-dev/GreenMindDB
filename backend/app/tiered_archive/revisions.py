@@ -41,9 +41,10 @@ def fetch(db, segment_id, revision):
     )
     if locator is None:
         return None
-    from .client import request
+    from .client import release_read_connection, request
     from .codec import decode
 
+    release_read_connection(db)
     connection, response = request(
         "/tiered-revision",
         {"identity": locator["archive_candidate"], "segment": segment_id, "revision": revision},

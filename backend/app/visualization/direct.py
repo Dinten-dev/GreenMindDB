@@ -43,13 +43,20 @@ def resources():
     if os.environ.get("VISUAL_DIRECT_ENABLED") != "true":
         return None
     cfg = DirectSettings(max_segment_bytes=8_000_000)
+    private_reads = (
+        os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true"
+        or os.environ.get("TIERED_ARCHIVE_READS_ENABLED") == "true"
+    )
+    options = "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"
+    if private_reads:
+        options = "-c default_transaction_read_only=on " + options
     engine = create_engine(
         cfg.database_url.get_secret_value(),
         pool_size=1,
-        max_overflow=0 if os.environ.get("ARCHIVE_REMOTE_AUTH_ENABLED") == "true" else 1,
+        max_overflow=0 if private_reads else 1,
         pool_pre_ping=True,
         pool_timeout=3,
-        connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=8192"},
+        connect_args={"options": options},
     )
     attach_read_guards(engine, statement_ms=8000, lock_ms=150, work_mem_kib=8192)
     return engine, ArtifactStore(cfg)
