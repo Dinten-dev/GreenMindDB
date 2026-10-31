@@ -1,7 +1,6 @@
 """Restore authenticated schema/master dumps into an empty local test database."""
 
 import json
-import re
 import subprocess
 import tempfile
 import time
@@ -16,11 +15,13 @@ from .backup import (
     MASTER_PROOF_VERSION,
     MAX_BYTES,
     client_command,
+    current_v4_descriptor,
     decrypt,
     master_proof,
-    master_tables,
+    v4_descriptor,
+    validate_master_proof,
 )
-from .codec import digest
+from .codec import decode, digest
 from .pipeline import verify_file
 from .recovery import restore_url
 from .runtime import candidate_from_json
@@ -67,8 +68,8 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
         or candidate.organization != "00000000-0000-0000-0000-000000000000"
         or candidate.rows != 1
         or candidate.identity != manifest.get("identity")
-        or len(parts) != 3
-        or [part["format"] for part in parts] != ["parquet", "bin", "bin"]
+        or len(parts) not in (3, 4)
+        or [part["format"] for part in parts] != ["parquet", *(["bin"] * (len(parts) - 1))]
         or parts[0]["rows"] != 1
     ):
         raise ArchiveBlocked("Complete schema/master backup bundle required")
@@ -94,26 +95,24 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
     if (
         not isinstance(proof, dict)
         or type(proof.get("version")) is not int
-        or proof.get("version") not in {2, 3}
+        or proof.get("version") not in {2, 3, 4}
         or type(parts[0].get("master_proof_version")) is not int
         or parts[0]["master_proof_version"] != proof["version"]
     ):
         raise ArchiveBlocked("Backup lacks typed master-data proof; retain legacy dumps")
     proof_version = proof["version"]
-    names = master_tables(candidate.source, proof_version=proof_version)
-    tables = proof.get("tables")
-    if (
-        not isinstance(tables, dict)
-        or set(tables) != set(names)
-        or any(
-            not isinstance(item, dict)
-            or type(item.get("rows")) is not int
-            or item["rows"] < 0
-            or not re.fullmatch("[a-f0-9]{64}", str(item.get("content_sha256", "")))
-            for item in tables.values()
-        )
-    ):
-        raise ArchiveBlocked("Incomplete typed master-data proof")
+    validate_master_proof(proof, candidate.source)
+    if proof_version == 4:
+        from .backup_scope import FORMAT
+
+        if (
+            body.get("backup_format") != FORMAT
+            or not current_v4_descriptor(parts)
+            or any(parts[0].get(k) != v for k, v in v4_descriptor(proof, body["files"]).items())
+        ):
+            raise ArchiveBlocked("V4 authenticated backup scope binding differs")
+    elif len(parts) != 3 or body.get("backup_format") not in (None, "schema-master-v2"):
+        raise ArchiveBlocked("Legacy master backup file version differs")
     env = {
         "PATH": "/usr/bin:/bin",
         "LANG": "C.UTF-8",
@@ -128,6 +127,28 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
     checkpoint()
     with tempfile.TemporaryDirectory(prefix="restore-private-", dir=folder) as temporary:
         work = Path(temporary)
+        if proof_version == 4:
+            from .backup_scope import AUTH_FORMAT
+
+            authenticated = work / "proof-auth.json"
+            decrypt(
+                folder / "0003.bin",
+                authenticated,
+                key,
+                parts[3]["plaintext_sha256"],
+                checkpoint=checkpoint,
+            )
+            expected = dict(
+                schema=AUTH_FORMAT,
+                version=4,
+                source=candidate.source,
+                captured_at=candidate.end,
+                master_proof=proof,
+                master_proof_sha256=digest(proof),
+                dump_files=body["files"][:2],
+            )
+            if decode(authenticated.read_bytes()) != expected:
+                raise ArchiveBlocked("Authenticated V4 source, capture or proof binding differs")
         # Authenticate BOTH dumps completely before opening a database session.
         for index, name in ((1, "schema"), (2, "masters")):
             decrypt(
@@ -205,7 +226,11 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
             db.execute(text("SET TRANSACTION READ ONLY"))
             db.execute(text("SET LOCAL statement_timeout='8000ms'"))
             actual = master_proof(
-                db, candidate.source, checkpoint=checkpoint, proof_version=proof_version
+                db,
+                candidate.source,
+                checkpoint=checkpoint,
+                proof_version=proof_version,
+                **({"schema_scope": proof["schema_scope"]} if proof_version == 4 else {}),
             )
         if actual != proof:
             raise ArchiveBlocked("Restored master-data proof differs; isolated database retained")
@@ -213,7 +238,8 @@ def restore_backup(folder, database_url, manifest_sha256, key, *, checkpoint):
             "schema_restored": True,
             "typed_values_verified": True,
             "master_proof_version": proof_version,
-            "current_recovery_scope": proof_version == MASTER_PROOF_VERSION,
+            "current_recovery_scope": proof_version
+            in ({3, 4} if candidate.source == "gateway" else {MASTER_PROOF_VERSION}),
             "master_tables": len(actual["tables"]),
             "master_rows": sum(item["rows"] for item in actual["tables"].values()),
             "source_accesses": 0,

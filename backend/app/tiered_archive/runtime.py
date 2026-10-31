@@ -467,6 +467,7 @@ def evict(identity):
                 environment=environment(),
                 destination=store.identity,
                 now=at,
+                schema_scope=lambda: current_backup_schema_scope(candidate.source, checkpoint),
             )
             import httpx
 
@@ -504,6 +505,7 @@ def evict(identity):
                 environment=environment(),
                 destination=store.identity,
                 now=datetime.now(UTC),
+                schema_scope=lambda: current_backup_schema_scope(candidate.source, checkpoint),
             )
 
         adapter = wav_source(candidate.source, checkpoint, writing=True)
@@ -551,6 +553,28 @@ def latest_snapshot():
         if not snapshots or len(snapshots) > 100:
             raise ArchiveBlocked("Scheduled Storage Box snapshot unavailable")
         return max(snapshots, key=lambda row: row["created"])["id"]
+
+
+def current_backup_schema_scope(source, checkpoint):
+    from sqlalchemy.engine import make_url
+
+    from app.raw_archive.runner import metadata_source_settings
+
+    from .backup import fresh_schema_scope
+
+    if source != "gateway":
+        raise ArchiveBlocked("V4 live schema scope requires Gateway source")
+    checkpoint()
+    database_url = os.environ["TIERED_ARCHIVE_GATEWAY_BACKUP_DATABASE_URL"]
+    expected = make_url(metadata_source_settings(source, environment())["database"])
+    selected = make_url(database_url)
+    if (expected.host, expected.port or 5432, expected.database) != (
+        selected.host,
+        selected.port or 5432,
+        selected.database,
+    ):
+        raise ArchiveBlocked("Backup profile belongs to another source database")
+    return fresh_schema_scope(database_url, checkpoint=checkpoint)
 
 
 def backup(source, *, backup_format="schema-master-v2"):
@@ -619,12 +643,31 @@ def backup(source, *, backup_format="schema-master-v2"):
                 path.unlink()
                 files.append((sealed, metadata))
             at = datetime.now(UTC)
+            proof_metadata = {}
+            if proof["version"] == 4:
+                from .backup import seal_master_proof, v4_descriptor
+                from .backup_scope import FORMAT
+
+                files.append(
+                    seal_master_proof(
+                        folder,
+                        proof,
+                        source,
+                        at,
+                        [meta for _, meta in files],
+                        key,
+                        checkpoint=checkpoint,
+                    )
+                )
+                proof_metadata = v4_descriptor(proof, [meta for _, meta in files])
             body = {
                 "source": source,
                 "at": at,
                 "files": [meta for _, meta in files],
                 "master_proof": proof,
             }
+            if proof["version"] == 4:
+                body["backup_format"] = FORMAT
             # The backup catalogue has an explicit system namespace and is never
             # returned through tenant-facing historical query routes.
             system_org = "00000000-0000-0000-0000-000000000000"
@@ -641,6 +684,7 @@ def backup(source, *, backup_format="schema-master-v2"):
                 format="parquet",
                 master_proof_version=proof["version"],
             )
+            metadata.update(proof_metadata)
             from datetime import timedelta
 
             candidate = Candidate(

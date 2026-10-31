@@ -15,6 +15,7 @@ from app.raw_archive.policy import ArchiveBlocked, checksum
 MAGIC = b"GMDBBACKUP1\0"
 BLOCK_BYTES = 1024 * 1024
 MAX_BYTES = 64 * 1024**2
+AUTH_MAX_BYTES = 256 * 1024
 # Older proofs remain file-restorable, but cannot prove today's authority scope:
 # v1 omitted access grants/assignments; v2 omitted sessions and invitations.
 MASTER_PROOF_VERSION = 3
@@ -39,21 +40,27 @@ MASTER_TABLES = (
 DIRECT_MASTER_TABLES = ("direct_device", "direct_enrollment", "direct_session")
 
 
-def master_tables(source, *, proof_version=MASTER_PROOF_VERSION):
+def master_tables(source, *, proof_version=MASTER_PROOF_VERSION, schema_scope=None):
     if source not in {"gateway", "direct"}:
         raise ArchiveBlocked("Unknown backup source")
-    if type(proof_version) is not int or proof_version not in {2, 3}:
+    if type(proof_version) is not int or proof_version not in {2, 3, 4}:
         raise ArchiveBlocked("Unsupported master-data proof version")
+    if proof_version == 4:
+        from .backup_scope import names
+
+        return names(source, schema_scope, full_tables=MASTER_TABLES)
     if source == "direct":
         return DIRECT_MASTER_TABLES
     return LEGACY_MASTER_TABLES_V2 if proof_version == 2 else MASTER_TABLES
 
 
-def check_master_tables(db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION):
+def check_master_tables(
+    db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION, schema_scope=None
+):
     """Fail before dumping if the explicit recovery scope is incomplete."""
     from sqlalchemy import inspect, text
 
-    names = master_tables(source, proof_version=proof_version)
+    names = master_tables(source, proof_version=proof_version, schema_scope=schema_scope)
     inspector = inspect(db)
     schema = "public" if db.dialect.name == "postgresql" else None
     present = set(inspector.get_table_names(schema=schema))
@@ -122,7 +129,7 @@ def client_command(name):
     return [str(root / loader), "--library-path", str(root / "lib"), str(root / binary)]
 
 
-def require_current(receipts, *, source, environment, destination, now):
+def require_current(receipts, *, source, environment, destination, now, schema_scope=None):
     from datetime import timedelta
 
     from .policy import POLICY_SHA256, utc
@@ -139,13 +146,33 @@ def require_current(receipts, *, source, environment, destination, now):
         ):
             continue
         files = receipt.get("files", [])
+        version = files[0].get("master_proof_version") if files else None
         if (
             not files
-            or files[0].get("backup_format") not in (None, "schema-master-v2")
-            or type(files[0].get("master_proof_version")) is not int
-            or files[0]["master_proof_version"] != MASTER_PROOF_VERSION
+            or type(version) is not int
+            or (
+                source == "gateway"
+                and not (
+                    (version == 4 and current_v4_descriptor(files))
+                    or (
+                        version == MASTER_PROOF_VERSION
+                        and files[0].get("backup_format") in (None, "schema-master-v2")
+                    )
+                )
+            )
+            or (
+                source == "direct"
+                and (
+                    version != MASTER_PROOF_VERSION
+                    or files[0].get("backup_format") not in (None, "schema-master-v2")
+                )
+            )
         ):
             continue
+        if version == 4:
+            live = schema_scope() if callable(schema_scope) else schema_scope
+            if live is None or live != files[0]["master_schema_scope"]:
+                continue
         snapshot = receipt.get("snapshot", {})
         if not snapshot.get("provider_id") or not snapshot.get("box_id"):
             continue
@@ -163,6 +190,126 @@ def require_current(receipts, *, source, environment, destination, now):
         ):
             return receipt
     raise ArchiveBlocked("Current snapshot-verified schema and master-data backup required")
+
+
+def validate_master_proof(proof, source):
+    import re
+
+    if (
+        not isinstance(proof, dict)
+        or type(proof.get("version")) is not int
+        or proof["version"] not in (2, 3, 4)
+    ):
+        raise ArchiveBlocked("Backup lacks typed master-data proof; retain legacy dumps")
+    version = proof["version"]
+    if version == 4 and set(proof) != {"version", "tables", "schema_scope"}:
+        raise ArchiveBlocked("Explicit V4 master-data proof required")
+    names = master_tables(source, proof_version=version, schema_scope=proof.get("schema_scope"))
+    tables = proof.get("tables")
+    if (
+        not isinstance(tables, dict)
+        or set(tables) != set(names)
+        or any(
+            not isinstance(v, dict)
+            or (version == 4 and set(v) != {"rows", "content_sha256"})
+            or type(v.get("rows")) is not int
+            or v["rows"] < 0
+            or not re.fullmatch("[a-f0-9]{64}", str(v.get("content_sha256", "")))
+            for v in tables.values()
+        )
+    ):
+        raise ArchiveBlocked("Incomplete typed master-data proof")
+    return names
+
+
+def v4_descriptor(proof, files):
+    from .backup_scope import FORMAT
+    from .codec import digest
+
+    validate_master_proof(proof, "gateway")
+    if proof["version"] != 4 or len(files) != 3:
+        raise ArchiveBlocked("Complete V4 authenticated file set required")
+    return dict(
+        backup_format=FORMAT,
+        master_proof_version=4,
+        master_schema_scope=proof["schema_scope"],
+        master_proof_sha256=digest(proof),
+        master_table_names=sorted(proof["tables"]),
+        master_auth_plaintext_sha256=files[2]["plaintext_sha256"],
+        master_dump_plaintext_sha256=[v["plaintext_sha256"] for v in files[:2]],
+    )
+
+
+def current_v4_descriptor(files):
+    import re
+
+    from .backup_scope import FORMAT, validate_scope
+
+    try:
+        if (
+            len(files) != 4
+            or files[0].get("backup_format") != FORMAT
+            or [f.get("format") for f in files] != ["parquet", "bin", "bin", "bin"]
+            or type(files[3].get("bytes")) is not int
+            or not 0 < files[3]["bytes"] <= AUTH_MAX_BYTES + 128
+        ):
+            return False
+        primary = files[0]
+        scope = validate_scope(primary["master_schema_scope"])
+        names = master_tables("gateway", proof_version=4, schema_scope=scope)
+        return (
+            primary["master_table_names"] == sorted(names)
+            and isinstance(primary["master_proof_sha256"], str)
+            and bool(re.fullmatch("[a-f0-9]{64}", primary["master_proof_sha256"]))
+            and primary["master_auth_plaintext_sha256"] == files[3]["plaintext_sha256"]
+            and primary["master_dump_plaintext_sha256"]
+            == [f["plaintext_sha256"] for f in files[1:3]]
+            and all(
+                isinstance(f.get("plaintext_sha256"), str)
+                and re.fullmatch("[a-f0-9]{64}", f["plaintext_sha256"])
+                for f in files[1:]
+            )
+        )
+    except (ArchiveBlocked, KeyError, TypeError, ValueError):
+        return False
+
+
+def seal_master_proof(folder, proof, source, at, files, key, *, checkpoint):
+    from .backup_scope import AUTH_FORMAT
+    from .codec import digest, encode
+
+    validate_master_proof(proof, source)
+    if proof["version"] != 4 or source != "gateway" or len(files) != 2:
+        raise ArchiveBlocked("Explicit V4 Gateway proof authentication required")
+    value = dict(
+        schema=AUTH_FORMAT,
+        version=4,
+        source=source,
+        captured_at=at,
+        master_proof=proof,
+        master_proof_sha256=digest(proof),
+        dump_files=files,
+    )
+    raw = encode(value)
+    if len(raw) > AUTH_MAX_BYTES:
+        raise ArchiveBlocked("Authenticated master metadata exceeds its bounded budget")
+    plain = Path(folder) / "proof-auth.json"
+    sealed = Path(folder) / "proof-auth.encrypted"
+    with plain.open("xb") as stream:
+        os.chmod(plain, 0o600)
+        stream.write(raw)
+        stream.flush()
+        os.fsync(stream.fileno())
+    try:
+        metadata = encrypt(plain, sealed, key, checkpoint=checkpoint)
+        returned = Path(folder) / "proof-auth.verify"
+        try:
+            decrypt(sealed, returned, key, metadata["plaintext_sha256"], checkpoint=checkpoint)
+        finally:
+            returned.unlink(missing_ok=True)
+        return sealed, metadata
+    finally:
+        plain.unlink(missing_ok=True)
 
 
 def private_key_permissions(fd, info):
@@ -284,13 +431,22 @@ def decrypt(source, target, key, expected_sha256, *, checkpoint):
         raise ArchiveBlocked("Restored database backup checksum mismatch")
 
 
-def master_proof(db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION):
+def master_proof(db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION, schema_scope=None):
     """Bounded typed readback in the caller's consistent database transaction."""
     from sqlalchemy import MetaData, Table, select, text
 
     from .codec import encode
 
-    tables = check_master_tables(db, source, checkpoint=checkpoint, proof_version=proof_version)
+    if proof_version == 4:
+        from .backup_scope import capture_scope
+
+        actual = capture_scope(db, checkpoint=checkpoint)
+        if schema_scope is not None and actual != schema_scope:
+            raise ArchiveBlocked("Master schema scope changed during capture")
+        schema_scope = actual
+    tables = check_master_tables(
+        db, source, checkpoint=checkpoint, proof_version=proof_version, schema_scope=schema_scope
+    )
     if db.dialect.name == "postgresql":
         db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
     result = {}
@@ -331,7 +487,33 @@ def master_proof(db, source, *, checkpoint, proof_version=MASTER_PROOF_VERSION):
                 digest.update(raw)
                 count += 1
         result[name] = {"rows": count, "content_sha256": digest.hexdigest()}
-    return {"version": proof_version, "tables": result}
+    proof = {"version": proof_version, "tables": result}
+    if proof_version == 4:
+        if capture_scope(db, checkpoint=checkpoint) != schema_scope:
+            raise ArchiveBlocked("Master schema scope changed during capture")
+        proof["schema_scope"] = schema_scope
+    return proof
+
+
+def fresh_schema_scope(database_url, *, checkpoint):
+    """Independent short RO catalog snapshot; never shares the dump's old snapshot."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import NullPool
+
+    from .backup_scope import capture_scope
+
+    engine = create_engine(database_url, poolclass=NullPool, connect_args={"connect_timeout": 3})
+    try:
+        with (
+            engine.connect().execution_options(isolation_level="REPEATABLE READ") as db,
+            db.begin(),
+        ):
+            db.execute(text("SET TRANSACTION READ ONLY"))
+            db.execute(text("SET LOCAL statement_timeout='8000ms'"))
+            db.execute(text("SET LOCAL lock_timeout='150ms'"))
+            return capture_scope(db, checkpoint=checkpoint)
+    finally:
+        engine.dispose()
 
 
 def dump(database_url, source, output, *, checkpoint, executable=None, with_proof=False):
@@ -339,7 +521,11 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
 
-    tables = master_tables(source)
+    # V2/V3 remain unchanged file-restorable contracts. New Gateway captures
+    # use an explicit V4 scope; Direct has no Alembic/auth-table contract.
+    version = 4 if source == "gateway" else MASTER_PROOF_VERSION
+    scope = fresh_schema_scope(database_url, checkpoint=checkpoint) if version == 4 else None
+    tables = master_tables(source, proof_version=version, schema_scope=scope)
     url = make_url(database_url)
     env = {
         **os.environ,
@@ -358,7 +544,14 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
             db.begin(),
         ):
             db.execute(text("SET TRANSACTION READ ONLY"))
-            check_master_tables(db, source, checkpoint=checkpoint)
+            check_master_tables(
+                db, source, checkpoint=checkpoint, proof_version=version, schema_scope=scope
+            )
+            if version == 4:
+                from .backup_scope import capture_scope
+
+                if capture_scope(db, checkpoint=checkpoint) != scope:
+                    raise ArchiveBlocked("Master schema scope changed before dump")
             snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
             outputs = []
             for label, args in [
@@ -404,8 +597,17 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
                         raise
                 os.chmod(target, 0o600)
                 outputs.append(target)
+            proof = (
+                master_proof(
+                    db, source, checkpoint=checkpoint, proof_version=version, schema_scope=scope
+                )
+                if with_proof
+                else None
+            )
+            if version == 4 and fresh_schema_scope(database_url, checkpoint=checkpoint) != scope:
+                raise ArchiveBlocked("Master schema scope changed between captures")
             if with_proof:
-                return outputs, master_proof(db, source, checkpoint=checkpoint)
+                return outputs, proof
             return outputs
     finally:
         engine.dispose()
