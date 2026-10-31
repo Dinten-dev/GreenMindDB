@@ -207,7 +207,7 @@ def engine(source, *, writing=False):
     )
 
 
-def wav_source(source, checkpoint, *, writing=False):
+def wav_source(source, checkpoint, *, writing=False, copy_published_history=False):
     import boto3
     from botocore.config import Config as BotoConfig
     from sqlalchemy.orm import sessionmaker
@@ -220,6 +220,8 @@ def wav_source(source, checkpoint, *, writing=False):
     from .wav_source import WavSource
 
     checkpoint()  # The planning caller also holds the actual source authority.
+    if writing and copy_published_history:
+        raise ArchiveBlocked("Historical Direct copies cannot request a deletion source")
     settings = source_settings(source, environment())
     sessions = sessionmaker(engine(source, writing=writing), expire_on_commit=False)
     catalog = (
@@ -227,6 +229,10 @@ def wav_source(source, checkpoint, *, writing=False):
         if source == "gateway"
         else DirectCatalog(sessions, settings["bucket"])
     )
+    if source == "direct" and copy_published_history:
+        from app.raw_archive.direct_copy_catalog import PublishedDirectCopyCatalog
+
+        catalog = PublishedDirectCopyCatalog(sessions, settings["bucket"])
     client = boto3.client(
         "s3",
         endpoint_url=settings["endpoint"],
@@ -237,7 +243,14 @@ def wav_source(source, checkpoint, *, writing=False):
         config=BotoConfig(connect_timeout=3, read_timeout=8, retries={"max_attempts": 1}),
     )
     return WavSource(
-        sessions, catalog, S3Source(client), source, environment(), configuration(), checkpoint
+        sessions,
+        catalog,
+        S3Source(client),
+        source,
+        environment(),
+        configuration(),
+        checkpoint,
+        copy_published_history=copy_published_history,
     )
 
 
@@ -336,7 +349,7 @@ def publish_wav(source, reference, *, maximum_bytes=None, maximum_wavs=None):
     from .pipeline import publish
 
     with worker() as (ledger, store, checkpoint):
-        adapter = wav_source(source, checkpoint)
+        adapter = wav_source(source, checkpoint, copy_published_history=True)
         with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
             folder = Path(folder)
             envelope, artifacts, flags = adapter.export(
@@ -367,7 +380,7 @@ def stage_wav(
     from .wav_copy import advance
 
     with worker() as (ledger, store, checkpoint):
-        adapter = wav_source(source, checkpoint)
+        adapter = wav_source(source, checkpoint, copy_published_history=True)
         result = advance(
             adapter,
             reference,

@@ -258,7 +258,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
             if time.monotonic() >= copy_deadline:
                 break
             identity = "wav-sweep-" + source
-            adapter = wav_source(source, planning_checkpoint)
+            adapter = wav_source(source, planning_checkpoint, copy_published_history=True)
             before = clock().replace(hour=0, minute=0, second=0, microsecond=0)
 
             handled = set()

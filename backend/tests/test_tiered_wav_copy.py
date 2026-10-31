@@ -220,7 +220,7 @@ def test_retry_after_legacy_binding_failure_repairs_original_urls(tmp_path, monk
     h.store.transport = object()
     h.adapter.publish_legacy_receipts = legacy
     monkeypatch.setattr(runtime, "worker", worker)
-    monkeypatch.setattr(runtime, "wav_source", lambda *args: h.adapter)
+    monkeypatch.setattr(runtime, "wav_source", lambda *args, **kwargs: h.adapter)
     monkeypatch.setattr(runtime, "bindings_sha256", lambda *args: "b" * 64)
     try:
         options = dict(maximum_wavs=10, maximum_bytes=5 * 1024**2)

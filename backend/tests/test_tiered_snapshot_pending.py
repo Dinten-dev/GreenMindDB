@@ -40,7 +40,7 @@ def waiting(bundle, tmp_path, monkeypatch):  # noqa: F811 - Pytest injects the i
     monkeypatch.setattr(
         runtime,
         "wav_source",
-        lambda *_: SimpleNamespace(catalog=SimpleNamespace(page=lambda *_: [])),
+        lambda *_, **kwargs: SimpleNamespace(catalog=SimpleNamespace(page=lambda *_: [])),
     )
     monkeypatch.setattr(
         runtime,

@@ -25,7 +25,20 @@ def record_json(record):
 
 
 class WavSource:
-    def __init__(self, sessions, catalog, objects, kind, environment, raw_config, checkpoint):
+    def __init__(
+        self,
+        sessions,
+        catalog,
+        objects,
+        kind,
+        environment,
+        raw_config,
+        checkpoint,
+        *,
+        copy_published_history=False,
+    ):
+        if type(copy_published_history) is not bool:
+            raise ArchiveBlocked("Explicit boolean COPY-only history scope required")
         self.sessions, self.catalog, self.objects = sessions, catalog, objects
         self.kind, self.environment, self.raw_config, self.checkpoint = (
             kind,
@@ -36,6 +49,7 @@ class WavSource:
         self.expected, self.db = None, None
         self.deletion_guard = None
         self.deletion_intent_active = False
+        self.copy_published_history = copy_published_history
 
     def metadata(self, reference, *, maximum_bytes=None, maximum_wavs=None):
         records = self.catalog.resolve(reference)
@@ -53,6 +67,50 @@ class WavSource:
             or any(not 0 < record.size <= budget for record in records)
         ):
             raise ArchiveBlocked("WAV revision exceeds bounded bundle budget")
+        if self.kind == "direct" and self.copy_published_history:
+            historical = self.catalog.historical_metadata(reference)
+            if historical is not None:
+                from app.raw_archive.direct_history import COPY_SCOPE
+
+                manifest = historical["revision"]["manifest"]
+                if any(
+                    record.feature_digest != historical["revision"]["manifest_sha256"]
+                    for record in records
+                ):
+                    raise ArchiveBlocked("Historical source changed between metadata reads")
+                config = manifest["config"]
+                return (
+                    {
+                        "identity": digest(reference),
+                        # Preserve existing current-organization access routing;
+                        # the body explicitly distinguishes it from capture truth.
+                        "organization": historical["observed_assignment"]["organization_id"],
+                        "sensor": manifest["device_id"],
+                        "time_us": epoch_us(min(record.started_at for record in records)),
+                        "body": {
+                            "reference": reference,
+                            "copy_scope": COPY_SCOPE,
+                            "metadata": historical,
+                            "originals": [{"recording": record_json(r)} for r in records],
+                        },
+                    },
+                    {
+                        run["key"]: {
+                            "frames": run["frame_count"],
+                            "rate": config["sample_rate"],
+                            "channels": config["channels"],
+                            "width": config["sample_bits"] // 8,
+                        }
+                        for run in manifest["runs"]
+                    },
+                    dict(
+                        complete=False,
+                        features_verified=True,
+                        projections_verified=False,
+                        dependencies_complete=False,
+                        quarantined=True,
+                    ),
+                )
         with self.sessions() as db:
             if self.kind == "gateway":
                 from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
@@ -210,7 +268,32 @@ class WavSource:
                     },
                 )
             )
+        if envelope["body"].get("copy_scope"):
+            # Single-call publishing has the same metadata/object change fence
+            # as the resumable wav_copy.advance path.
+            fresh, _, fresh_flags = self.metadata(reference)
+            scientific = dict(
+                envelope,
+                body=dict(
+                    envelope["body"],
+                    originals=[{"recording": item["recording"]} for item in originals],
+                ),
+            )
+            if digest(scientific) != digest(fresh) or fresh_flags != flags:
+                raise ArchiveBlocked("Historical scientific source changed during WAV copy")
+            for item in originals:
+                if (
+                    self.objects.snapshot(Recording.from_receipt(item["recording"]))
+                    != item["snapshot"]
+                ):
+                    raise ArchiveBlocked("Historical WAV object version changed during copy")
         return envelope, artifacts, flags
+
+    def _require_deletion_scope(self):
+        if self.copy_published_history or any(
+            item.get("body", {}).get("copy_scope") for item in (self.expected or [])
+        ):
+            raise ArchiveBlocked("Historical COPY-only proof never authorizes WAV deletion")
 
     def candidate(self, envelope, metadata, flags):
         records = [
@@ -234,6 +317,7 @@ class WavSource:
 
     @contextmanager
     def exclusive(self, candidate):
+        self._require_deletion_scope()
         if not self.expected:
             raise ArchiveBlocked("Exact restored WAV metadata required")
         if (
@@ -330,6 +414,7 @@ class WavSource:
                 self.db = None
 
     def absent(self, candidate):
+        self._require_deletion_scope()
         absent = []
         for item in self.expected[0]["body"]["originals"]:
             record = Recording.from_receipt(item["recording"])
@@ -341,6 +426,7 @@ class WavSource:
         return all(absent)
 
     def inspect(self, candidate):
+        self._require_deletion_scope()
         body = self.expected[0]["body"]
         actual = self.catalog.resolve(body["reference"])
         expected = [item["recording"] for item in body["originals"]]
@@ -393,6 +479,7 @@ class WavSource:
         return candidate
 
     def delete(self, candidate):
+        self._require_deletion_scope()
         body = self.expected[0]["body"]
         for item in body["originals"]:
             self.checkpoint()
@@ -404,6 +491,7 @@ class WavSource:
 
     def complete_eviction(self, candidate):
         """Commit only the retained catalog marker, including crash recovery."""
+        self._require_deletion_scope()
         body = self.expected[0]["body"]
         if self.kind == "gateway":
             from app.models.wav_file import WavFile

@@ -104,7 +104,9 @@ def harness(tmp_path, monkeypatch):
             pass
 
     monkeypatch.setattr(schedule, "health_probe", lambda kind: Healthy())
-    monkeypatch.setattr(runtime, "wav_source", lambda *args: SimpleNamespace(catalog=Catalog()))
+    monkeypatch.setattr(
+        runtime, "wav_source", lambda *args, **kwargs: SimpleNamespace(catalog=Catalog())
+    )
     monkeypatch.setattr(runtime, "publish_wav", publish)
     monkeypatch.setattr(runtime, "stage_wav", stage)
     monkeypatch.setattr(runtime, "worker", worker)
