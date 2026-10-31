@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
+from app.raw_archive.metadata_projection import one, rows, scientific_row
 from app.raw_archive.policy import ArchiveBlocked, Recording, checksum
 from app.raw_archive.policy import Ledger as RawLedger
 
@@ -21,10 +22,6 @@ def record_json(record):
         key: value.isoformat() if isinstance(value, datetime) else value
         for key, value in asdict(record).items()
     }
-
-
-def row_dict(row):
-    return {column.name: getattr(row, column.name) for column in row.__table__.columns}
 
 
 class WavSource:
@@ -58,13 +55,19 @@ class WavSource:
             raise ArchiveBlocked("WAV revision exceeds bounded bundle budget")
         with self.sessions() as db:
             if self.kind == "gateway":
-                from app.models.wav_file import WavFile
+                from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
 
-                wav = db.get(WavFile, uuid.UUID(records[0].identity))
+                wav = one(db, WavFile, "gateway", WavFile.id == uuid.UUID(records[0].identity))
+                feature = one(db, WavFeature, "gateway", WavFeature.wav_file_id == wav.id)
+                versions = rows(
+                    db, WavFeatureVersion, "gateway", WavFeatureVersion.wav_file_id == wav.id
+                )
                 metadata = {
-                    "wav": row_dict(wav),
-                    "feature": row_dict(wav.feature),
-                    "feature_versions": [row_dict(v) for v in wav.feature_versions],
+                    "wav": scientific_row(wav, "gateway", "wav_file"),
+                    "feature": scientific_row(feature, "gateway", "wav_feature"),
+                    "feature_versions": [
+                        scientific_row(v, "gateway", "wav_feature_version") for v in versions
+                    ],
                 }
                 row = db.execute(
                     text("""SELECT z.organization_id FROM sensor s JOIN gateway g ON g.id=s.gateway_id
@@ -86,8 +89,8 @@ class WavSource:
                 complete = wav.timing_status == "complete"
                 headers = {
                     wav.s3_key: {
-                        "frames": wav.feature.sample_count,
-                        "rate": wav.feature.sample_rate,
+                        "frames": feature.sample_count,
+                        "rate": feature.sample_rate,
                         "channels": 1,
                         "width": 2,
                     }
@@ -100,17 +103,31 @@ class WavSource:
                 from app.direct.models import Device, Enrollment, Revision, Segment
                 from app.direct.models import Session as CaptureSession
 
-                segment = db.get(Segment, reference[0])
-                revision = db.get(Revision, tuple(reference))
-                device = db.get(Device, segment.device_id)
-                session = db.get(CaptureSession, (segment.device_id, segment.session_id))
+                segment = one(db, Segment, "direct", Segment.id == reference[0])
+                revision = one(
+                    db,
+                    Revision,
+                    "direct",
+                    Revision.segment_id == reference[0],
+                    Revision.revision == reference[1],
+                )
+                device = one(db, Device, "direct", Device.id == segment.device_id)
+                session = one(
+                    db,
+                    CaptureSession,
+                    "direct",
+                    CaptureSession.device_id == segment.device_id,
+                    CaptureSession.id == segment.session_id,
+                )
                 metadata = {
-                    "segment": row_dict(segment),
-                    "revision": row_dict(revision),
-                    "session": row_dict(session),
+                    "segment": scientific_row(segment, "direct", "direct_segment"),
+                    "revision": scientific_row(revision, "direct", "direct_revision"),
+                    "session": scientific_row(session, "direct", "direct_session"),
                 }
                 organization, sensor = str(device.organization_id), segment.device_id
-                enrollment = db.query(Enrollment).filter_by(device_id=device.id).one_or_none()
+                enrollment = one(
+                    db, Enrollment, "direct", Enrollment.device_id == device.id, optional=True
+                )
                 metadata["assignment"] = {
                     "device_id": device.id,
                     "organization_id": organization,

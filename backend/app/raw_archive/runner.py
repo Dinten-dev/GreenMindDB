@@ -181,15 +181,15 @@ def destination_from_environment():
     )
 
 
-def run(metrics=None):
+def run(metrics=None, *, health_factory=None):
     from .coordination import lease
 
     metrics = metrics or Metrics()
     with lease("copy"), ExitStack() as cleanup:
-        return _run(metrics, cleanup)
+        return _run(metrics, cleanup, health_factory=health_factory)
 
 
-def _run(metrics, cleanup):
+def _run(metrics, cleanup, *, health_factory=None):
     config = configuration()
     # Before keys, settings, engines, state files or health/network requests.
     if not config.enabled:
@@ -198,7 +198,9 @@ def _run(metrics, cleanup):
     if config.delete_enabled:
         config.guard(deleting=True)
     limits = limits_from_environment()
-    healthy = health_probe(allow_low_source_space=config.delete_enabled, metrics=metrics)
+    healthy = (health_factory or health_probe)(
+        allow_low_source_space=config.delete_enabled, metrics=metrics
+    )
     cleanup.callback(healthy.close)
     if (config.root / "PAUSE").exists():
         healthy.close()

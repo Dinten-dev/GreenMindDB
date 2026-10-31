@@ -10,6 +10,7 @@ from pathlib import Path
 
 from app.raw_archive.health import SafetyPause
 from app.raw_archive.policy import ArchiveBlocked
+from app.raw_archive.remote_lease import source_checkpoint, source_copy_only
 
 from .codec import decode, encode
 from .latency import health_probe
@@ -53,6 +54,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         wav_source,
     )
 
+    source_checkpoint()  # Before reading the plan or opening the local ledger.
     plan = private_json(path)
     if plan.get("environment") != environment() or plan.get("schema") != 1:
         raise ArchiveBlocked("Schedule environment differs")
@@ -70,6 +72,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
     started = time.monotonic()
     deadline = started + min(300, seconds)
     copy_deadline = started + min(150, seconds / 2)
+    source_checkpoint()
     ledger = Ledger(state_root())
     db = ledger.db
     db.execute(
@@ -93,6 +96,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         planning_health = health_probe("copy")
 
         def planning_checkpoint():
+            source_checkpoint()
             if (ledger.root / "PAUSE").exists() or (ledger.root / "control/PAUSE").exists():
                 raise SafetyPause("manual_pause")
             if not planning_health():
@@ -100,6 +104,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
 
         planning_checkpoint()
         for source in backups:
+            planning_checkpoint()
             if time.monotonic() >= copy_deadline:
                 break
             identity = "database-backup-" + source
@@ -119,6 +124,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                     ),
                 )
         for source in wav_sources:
+            planning_checkpoint()
             if time.monotonic() >= copy_deadline:
                 break
             identity = "wav-sweep-" + source
@@ -256,6 +262,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
 
             # Retry independently of the daily sweep; never move its cursor
             # backwards when processing an older pending revision.
+            planning_checkpoint()
             for reference in pending.due(source, clock()):
                 if not process(reference, discovered=False):
                     break
@@ -285,6 +292,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
 
         queue = deque(tasks)
         while queue:
+            planning_checkpoint()
             task = queue.popleft()
             if time.monotonic() >= copy_deadline:
                 break
@@ -324,11 +332,13 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                 )
             if due <= clock():
                 queue.append(task)
+        planning_checkpoint()
         snapshot_id = plan.get("snapshot_id") or (
             latest_snapshot() if plan.get("scheduled_snapshots") else None
         )
         deleted_wavs = deleted_bytes = deleted_sql = 0
         for (raw,) in db.execute("SELECT receipt FROM bundle ORDER BY start"):
+            planning_checkpoint()
             if time.monotonic() >= deadline:
                 break
             receipt = json.loads(raw)
@@ -364,7 +374,10 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                         raise
                     result["blocked"] += 1
                     continue
-            if os.getenv("TIERED_ARCHIVE_DELETE_ENABLED", "false") == "true":
+            if (
+                not source_copy_only()
+                and os.getenv("TIERED_ARCHIVE_DELETE_ENABLED", "false") == "true"
+            ):
                 if receipt["source"].get("kind") != "wav":
                     continue
                 if receipt["source"].get("active"):

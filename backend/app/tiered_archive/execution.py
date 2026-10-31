@@ -26,7 +26,7 @@ def atomic_json(path, value):
 
 
 @contextmanager
-def bounded_job(root, *, seconds=300, kind="copy"):
+def bounded_job(root, *, seconds=300, kind="copy", emit=True):
     root = Path(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     if (root / "PAUSE").exists() or (root / "control/PAUSE").exists():
@@ -66,4 +66,5 @@ def bounded_job(root, *, seconds=300, kind="copy"):
         atomic_json(path, state)
         # cgroup memory.peak and child processes are measured separately by the
         # native staging acceptance. ru_maxrss is deliberately not called that.
-        print(json.dumps({"event": "tiered_job_finished", **state}), flush=True)
+        if emit:
+            print(json.dumps({"event": "tiered_job_finished", **state}), flush=True)

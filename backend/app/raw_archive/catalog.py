@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import text
 
+from .metadata_projection import one as metadata_one
 from .policy import ArchiveBlocked, Recording, cutoff, sensor_folder
 
 
@@ -53,7 +54,7 @@ class GatewayCatalog:
                     .one_or_none()
                 )
             else:
-                wav = db.get(WavFile, wav_id)
+                wav = metadata_one(db, WavFile, "gateway", WavFile.id == wav_id, optional=True)
             if wav is None or wav.raw_deleted_at is not None:
                 raise ArchiveBlocked("Missing or previously deleted WAV")
             if self.copy_only:
@@ -70,7 +71,11 @@ class GatewayCatalog:
                     wav.started_at,
                     sensor_folder(wav.sensor_mac, "gateway", wav.sensor_id),
                 )
-            feature = wav.feature
+            from app.models.wav_file import WavFeature
+
+            feature = metadata_one(
+                db, WavFeature, "gateway", WavFeature.wav_file_id == wav.id, optional=True
+            )
             from app.services.wav_feature_service import (
                 EXTRACTOR_VERSION,
                 PARAMETER_HASH,
@@ -229,8 +234,17 @@ class DirectCatalog:
                     .one_or_none()
                 )
             else:
-                segment = db.get(Segment, segment_id)
-            revision = db.get(Revision, (segment_id, revision_number))
+                segment = metadata_one(
+                    db, Segment, "direct", Segment.id == segment_id, optional=True
+                )
+            revision = metadata_one(
+                db,
+                Revision,
+                "direct",
+                Revision.segment_id == segment_id,
+                Revision.revision == revision_number,
+                optional=True,
+            )
             if (
                 segment is None
                 or (not self.copy_only and not segment.sealed)

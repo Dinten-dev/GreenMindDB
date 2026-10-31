@@ -114,3 +114,27 @@ Required introduction
 6. Complete a fresh full24-hour production observation and throughput assessment.
 7. Review exact WAV pilot identities and recovery; then separately activate.
 8. Keep SQL pruning and unrelated deletion disabled until their own acceptance.
+
+Copy-only production integration
+Retain the existing app.raw_archive.archive_copy_once entry and admission
+wrapper. Legacy remains the default. The explicit RAW_ARCHIVE_COPY_MODE=
+tiered-copy-only mode additionally requires TIERED_ARCHIVE_ENABLED=true,
+TIERED_ARCHIVE_ENVIRONMENT=production, TIERED_ARCHIVE_DELETE_ENABLED=false and
+an absolute TIERED_ARCHIVE_SCHEDULE_FILE. The existing accepted owner guard
+runs before state/source I/O. Its actual120-second remote catalog lease is
+bound to the current invocation and checked before planning and every worker
+checkpoint, including calls inside the resource-check throttle. The original
+RAW_ARCHIVE_MAX_SECONDS ceiling of75seconds remains. No second copier, new
+account or changed timer is required. This invocation cannot perform eviction,
+even if a deletion flag changes later. Only the existing entry emits its single
+JSON result; paused/incomplete runs preserve the existing Exit75 behavior.
+
+WAV metadata projections reuse the existing wav_catalog.COLUMNS and nested
+JSON allowlists. Explicit scientific SELECTs prevent future ORM additions from
+silently expanding access or exporting device key hashes and operational error
+fields. Necessary verified/sealed/revision/feature/projection gates remain.
+The existing copy role lacks direct_visual_segment.error, which is required to
+reject failed projections: use a separately reviewed existing Direct reader
+binding for that readiness read, or explicitly review the necessary grant.
+Never omit the gate or archive that operational error field. Full private
+master-data recovery still belongs to its encrypted backup contract.

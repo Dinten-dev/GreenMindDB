@@ -65,15 +65,15 @@ def test_source_lease_checked_before_health_and_probe_restored(monkeypatch):
     monkeypatch.setattr(copier, "catalog_lease", lease)
     monkeypatch.setattr(copier.runner, "health_probe", original)
 
-    def run():
-        probe = copier.runner.health_probe()
+    def run(*, health_factory):
+        probe = health_factory()
         assert probe() is True and probe.last == {"reason": "memory"}
         probe.close()
         return {"status": "complete", "deleted": 0}
 
     monkeypatch.setattr(copier.runner, "run", run)
     assert copier.run()["deleted"] == 0
-    assert events == ["lease", "health", "close"]
+    assert events == ["lease", "lease", "health", "close"]
     assert copier.runner.health_probe is original
 
 

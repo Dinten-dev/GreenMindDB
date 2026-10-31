@@ -97,10 +97,12 @@ def worker(*, deleting=False):
 
     from app.raw_archive.coordination import lease
     from app.raw_archive.health import SafetyPause
+    from app.raw_archive.remote_lease import source_checkpoint
     from app.raw_archive.runner import destination_from_environment
 
     from .latency import health_probe
 
+    source_checkpoint(deleting=deleting)  # Before any state or source IO.
     if os.getenv("TIERED_ARCHIVE_ENABLED", "false") != "true":
         raise ArchiveBlocked("Tiered worker disabled")
     environment()
@@ -140,6 +142,7 @@ def worker(*, deleting=False):
             last_check = [0.0]
 
             def checkpoint():
+                source_checkpoint(deleting=deleting)
                 if (root / "PAUSE").exists() or (root / "control/PAUSE").exists():
                     raise SafetyPause("manual_pause")
                 if time.monotonic() - last_check[0] < 1:
@@ -216,6 +219,7 @@ def wav_source(source, checkpoint, *, writing=False):
 
     from .wav_source import WavSource
 
+    checkpoint()  # The planning caller also holds the actual source authority.
     settings = source_settings(source, environment())
     sessions = sessionmaker(engine(source, writing=writing), expire_on_commit=False)
     catalog = (

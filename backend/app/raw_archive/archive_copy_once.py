@@ -9,7 +9,7 @@ from pathlib import Path
 from . import runner
 from .health import SafetyPause
 from .policy import ArchiveBlocked
-from .remote_lease import catalog_lease
+from .remote_lease import bound_source_lease, catalog_lease, source_checkpoint
 
 OWNER = Path("/etc/greenmind/archive-copy-owner.json")
 
@@ -79,16 +79,42 @@ class LeasedProbe:
 
 def run():
     guard()  # Before locks, SQL, source keys or remote upload access.
+    mode = os.getenv("RAW_ARCHIVE_COPY_MODE", "legacy")
+    if mode not in {"legacy", "tiered-copy-only"}:
+        raise ArchiveBlocked("Explicit supported copy mode required")
+    if mode == "tiered-copy-only" and (
+        os.getenv("TIERED_ARCHIVE_ENABLED") != "true"
+        or os.getenv("TIERED_ARCHIVE_ENVIRONMENT") != "production"
+        or os.getenv("TIERED_ARCHIVE_DELETE_ENABLED") != "false"
+    ):
+        raise ArchiveBlocked("Explicit tiered production copy-only configuration required")
     os.environ["RAW_ARCHIVE_REUSE_SSH"] = "true"
-    original = runner.health_probe
-    with catalog_lease() as check:
-        # Existing catalog transport has the same immutable 120-second limit,
-        # source reserve and receiver checks. No SSH capability is added.
-        runner.health_probe = lambda *args, **kwargs: LeasedProbe(original(*args, **kwargs), check)
-        try:
-            return runner.run()
-        finally:
-            runner.health_probe = original
+    with catalog_lease() as check, bound_source_lease(check, copy_only=True):
+        # Existing catalog transport keeps its immutable 120-second authority.
+        if mode == "legacy":
+            return runner.run(
+                health_factory=lambda *args, **kwargs: LeasedProbe(
+                    runner.health_probe(*args, **kwargs), check
+                )
+            )
+        from app.tiered_archive import runtime
+        from app.tiered_archive.execution import bounded_job
+        from app.tiered_archive.schedule import tick
+
+        source_checkpoint()
+        seconds = int(os.environ["RAW_ARCHIVE_MAX_SECONDS"])
+        schedule = Path(os.environ["TIERED_ARCHIVE_SCHEDULE_FILE"])
+        if not schedule.is_absolute():
+            raise ArchiveBlocked("Absolute tiered schedule required")
+        with bounded_job(runtime.state_root(), seconds=seconds, emit=False):
+            result = tick(schedule, seconds=seconds)
+        if result.get("evicted", 0):
+            raise ArchiveBlocked("Copy-only schedule attempted eviction")
+        return {
+            **result,
+            "status": "incomplete" if result.get("blocked", 0) else "complete",
+            "deleted": 0,
+        }
 
 
 def main():

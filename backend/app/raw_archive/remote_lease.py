@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from .coordination import lease
@@ -17,6 +18,40 @@ from .health import SafetyPause
 from .policy import ArchiveBlocked
 
 PREFIX = "RAW_ARCHIVE_LEASE_"
+_BOUND_SOURCE_LEASE = ContextVar("archive_source_lease", default=None)
+
+
+@contextmanager
+def bound_source_lease(check, *, copy_only=False):
+    """Bind the actual source authority to this invocation, never globally."""
+    check()
+    token = _BOUND_SOURCE_LEASE.set((check, copy_only))
+    try:
+        yield
+    finally:
+        _BOUND_SOURCE_LEASE.reset(token)
+
+
+def source_checkpoint(*, deleting=False):
+    authority = _BOUND_SOURCE_LEASE.get()
+    if authority is None:
+        if (
+            os.getenv("RAW_ARCHIVE_WORKER_ROLE") == "archive"
+            and os.getenv("RAW_ARCHIVE_ENVIRONMENT") == "production"
+        ):
+            raise SafetyPause("source_lease_required")
+        return
+    check, copy_only = authority
+    check()  # Always, including calls inside the resource-probe throttle.
+    if deleting and copy_only:
+        raise ArchiveBlocked("Copy-only source authority forbids deletion")
+
+
+def source_copy_only():
+    authority = _BOUND_SOURCE_LEASE.get()
+    return authority is not None and authority[1]
+
+
 SOURCE_PAUSES = {
     "source_memory",
     "source_load",
