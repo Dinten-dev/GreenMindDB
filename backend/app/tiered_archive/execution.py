@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.raw_archive.failure_diagnostics import failure_diagnostic, failure_reason
 from app.raw_archive.health import SafetyPause
 
 from .resources import monitored
@@ -52,7 +53,8 @@ def bounded_job(root, *, seconds=300, kind="copy", emit=True):
         state["state"] = "success"
     except BaseException as error:
         state["state"] = "paused" if isinstance(error, SafetyPause) else "failed"
-        state["reason"] = error.code if isinstance(error, SafetyPause) else type(error).__name__
+        state["reason"] = failure_reason(error)
+        state["diagnostic"] = failure_diagnostic(error)
         raise
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)

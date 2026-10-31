@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from . import runner
+from .failure_diagnostics import failure_diagnostic, failure_reason
 from .health import SafetyPause
 from .policy import ArchiveBlocked
 from .remote_lease import bound_source_lease, catalog_lease, source_checkpoint
@@ -123,8 +124,9 @@ def main():
     except Exception as error:
         result = {
             "status": "paused" if isinstance(error, SafetyPause) else "blocked",
-            "reason": error.code if isinstance(error, SafetyPause) else type(error).__name__,
+            "reason": failure_reason(error),
             "deleted": 0,
+            "diagnostic": failure_diagnostic(error),
         }
     print(json.dumps(result))
     if result.get("status") in {"complete", "disabled"}:
