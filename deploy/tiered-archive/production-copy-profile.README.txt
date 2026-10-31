@@ -1,0 +1,104 @@
+Produktions-Copy-Pilot: reine Vorbereitung, kein Installer
+
+production-copy-profile.py nimmt ausschliesslich bereits bestehende Bindungen als
+Mappings entgegen. prepare(...) führt keine Dateizugriffe, SQL-Abfragen,
+SSH-Verbindungen oder Dienststeuerung aus. write_private_bundle(...) schreibt nur
+neue Vorbereitungsdateien in ein neues privates Verzeichnis. Zielprofile werden
+dabei weder gelesen noch geändert. CLI-Eingaben und Ausgaben bleiben privat;
+stdout enthält ausschliesslich Hashes/Status und niemals Datenbankpasswörter.
+
+Reale Mappings ausschliesslich auf dem Archivserver erstellen und verarbeiten.
+Keine Originalprofile oder privaten Datenbank-URLs auf den Mac exportieren.
+Die optional angebotene CLI liest nur eine lokale0600-Eingabedatei. Ein bereits
+vorhandener Root-Helfer kann prepare direkt mit Mappings im Arbeitsspeicher
+aufrufen; eine zusätzliche geheime Eingabedatei ist dafür nicht nötig.
+
+Eingaben
+- copy_environment: vollständige bestehende EnvironmentFile-Reihenfolge zusammengeführt.
+- original_overlay: unveränderte Originalbytes des letzten runtime.env-Overlays.
+- overlay_path: exakt /opt/greenmind/repair-thischat-20261012/runtime.env.
+- unit: tatsächliche bestehende Unit-/Timer-/Ressourcen-/Dateihash-Metadaten.
+- owner: bestehender acceptedSingleWriterOwner samt Dateihash und Quelljournalbindung.
+- release: endgültiger geprüfter Commit, Runtime-/Manifesthash und unveränderlicher Backendpfad.
+- direct_reader: bestehende Reader-RO-URL sowie hashgebundene Katalogrechte-/Identitätsmetadaten.
+- pilot: ausschliesslich wav_jobs und wav_limits.
+
+release.capabilities muss production-explicit-wav-jobs-v1 enthalten. Dies darf
+erst nach Integration und Prüfung des exakten Corevertrags gesetzt werden.
+Basis9e9f272 alleine enthält diesen Vertrag noch nicht. Die Vorbereitungsdateien
+sind ausdrücklich kein Nachweis einer vorhandenen Installation oder Freigabe.
+
+Der existente Admissionwrapper4d250e... und sein tatsächlicher ExecStartce7623...
+sind fest gepinnt. MemoryMax192MiB und CPU25% bleiben unverändert; sämtliche
+anderen ursprünglichen Unitwerte und EnvironmentFile-Hashes werden als
+Einbauvorbedingungen mitgeführt. Ownerguard, Quelllease, maximal75Sekunden und
+bestehende Speicher-/Lastreserven bleiben im vorhandenen Copyentrypoint.
+
+Direct-Reader-Bindung
+Die bestehende Copy-Spaltenrolle darf direct_visual_segment.error nicht lesen.
+Die neue wissenschaftliche Projektion entfernt unnötige private ORM-Felder;
+den notwendigen Projektionsfehler-Gate entfernt sie ausdrücklich nicht.
+Für diesen Pilot wird gezielt die bestehende Direct-Reader-RO-URL über6432
+verwendet, mit nachgewiesen identischer physischer Produktionsdatenbank,
+transaction_read_only, fehlenden Schreibrechten und SELECT auf error.
+Der URL-Hash bindet das Rechtzeugnis an genau diese Zugangskonfiguration.
+Keine Grants, neuen Konten oder neuen Schlüssel. Neue Tiered-Quellbindung
+nachweisen; den alten Legacy-Queuevertrag nicht still umdeuten.
+
+Artefakte
+profile.env: neues Root0600-Overlay; einziges vorhandenes Bindungsziel oben.
+schedule.json: Copy-eigene0600-Datei unter neuem kleinen Legacy-State-Unterordner.
+original-profile.env: exakte Rücknahmebytes; Root0600, separat unter /etc sichern.
+install-plan.private.json: zusammenhängende Hash-, Einbau-, Abnahme- und Rücknahmedaten.
+
+Der neue Ledger und sein Diskcache liegen vollständig unter dem bereits
+beschreibbaren /var/lib/greenmind/archive-copy-20261010. Der
+Legacyzustand wird nicht ersetzt. Vollständig publizierte WAV-Bundles können
+kompatible Referenzbelege über den bestehenden Legacyledger ergänzen. Seine
+Dateipfade/URLs, bestehendes SFTP-Ziel und Keydateien bleiben erhalten.
+Die weiterhin verwendete Cacheklasse begrenzt ihren Diskcache auf512MiB;
+dies ist kein RAM-Puffer. Der Pilot verlangt keine historischen SQL-Scans,
+Datenbanksicherungen, Snapshotzugriffe oder Löschjobs.
+
+Exakter Zeitplan
+schema=1, environment=production, wav_jobs=[{source,reference}],
+wav_limits={max_wavs:1..10,max_bytes:1..5242880}.
+Gateway benötigt genau eine kanonische WAV-UUID; Direct zusätzlich die exakte
+Revision1..2147483647. Maximal zehn eindeutige Jobs. Sobald eine der beiden
+Kopiergrenzen erreicht ist, endet der Durchlauf resumierbar. Der Core nimmt
+keine Dataset-/Katalogsuche vor und akzeptiert keine gemischten Jobs.
+Nur abgeschlossene UTC-Tage gemäss bestehendem Settling-/Readinessvertrag.
+
+Kontrollierter Einbau durch vorhandenen Root-Weg, später
+1. Alle tatsächlichen Profile/Unitdateien/Owner/Codehashes erneut vergleichen.
+2. Den bereits vorhandenen Timer kurz ruhen lassen; Enabledzustand behalten.
+3. Tatsächliches Ende des bestehenden Copydienstes abwarten, keine Forcekills.
+4. Kleine neue State-/Cacheordner und private Originalsicherung anlegen.
+5. Zeitplan schreiben; alle Pfade müssen symlinkfrei bleiben.
+6. Originalbytes und Pins erneut prüfen; nur letztes Overlay atomar ersetzen.
+7. Genau denselben bestehenden Dienst manuell starten und tatsächlich beobachten.
+8. Nach Prozessende Originaloverlay per Kandidatenhash-CAS zurücksetzen.
+9. Ursprünglichen Timerlaufzustand wiederherstellen; Enabledzustand nicht ändern.
+
+Es gibt keinen zweiten Dienst, keinen neuen Timer und keinen daemon-reload.
+Bei fremder Profildrift nichts überschreiben. Alle neuen Belege, Ledger und
+bereits publizierten Box-Dateien bleiben erhalten. Zurücknahme löscht nichts.
+Ein reiner Overlay-Austausch bei weiterlaufendem Timer wäre bereits eine
+unbeaufsichtigte Aktivierung und ist deshalb kein neutraler Vorbereitungsschritt.
+
+Exit0 alleine reicht nicht für die Pilotabnahme. Alle exakten Referenzen müssen
+vollständig publiziert und zurückgelesen sein; blocked/deferred müssen erledigt
+sein. Snapshot-/Restore-/Schema-/Privatstammdatenbeweise bleiben getrennte
+Folgeschritte. Snapshotzugriff erst mit tatsächlich vorhandenen, rechtmässig
+gebundenen API-/Token-/Boxrechten; keine neuen Schlüssel hierfür erzeugen.
+Private Stammdaten werden weiter separat verschlüsselt gesichert.
+
+Offene Interpreter-Kompatibilität
+Admission verwendet weiterhin fest archive-python-20261008-v4/bin/python.
+Ein neuer PYTHONPATH ersetzt diesen Interpreter und seine Pakete nicht.
+Vor Aktivierung dessen Import-/Versionskompatibilität mit den gepinnten neuen
+Parquet-/DuckDB-/Codec-Abhängigkeiten nachweisen. Reine Profilvorbereitung ist
+kein Nachweis dafür. Fehlende Pakete werden hier weder behauptet noch installiert.
+Kein blindes pip im geteilten Reader-Runtime und kein PYTHONHOME-Umleiten.
+Falls unvereinbar, zuerst eine separat geprüfte minimale Runtimebindung unter
+Erhalt des Admission-/Owner-/SingleWriter-Vertrags herstellen.

@@ -61,6 +61,8 @@ def advance(
     maximum_wavs,
     maximum_bytes,
     can_continue=lambda: True,
+    maximum_object_bytes=None,
+    closed_before=None,
 ):
     if (
         type(maximum_wavs) is not int
@@ -69,9 +71,25 @@ def advance(
         or not 1 <= maximum_bytes <= MAX_BYTES
     ):
         raise ArchiveBlocked("Bounded WAV transfer invocation required")
+    if maximum_object_bytes is not None and (
+        type(maximum_object_bytes) is not int or not 1 <= maximum_object_bytes <= MAX_BYTES
+    ):
+        raise ArchiveBlocked("Bounded WAV object ceiling required")
+    if closed_before is not None:
+        from .policy import utc
+
+        closed_before = utc(closed_before)
     checkpoint()
     initialize(ledger.db)
     base, headers, flags, metadata_digest = _metadata(adapter, reference)
+    for item in base["body"]["originals"]:
+        record = Recording.from_receipt(item["recording"])
+        if maximum_object_bytes is not None and record.size > maximum_object_bytes:
+            raise ArchiveBlocked("One WAV exceeds the exact pilot byte ceiling")
+        if closed_before is not None and (
+            record.ended_at >= closed_before or record.received_at >= closed_before
+        ):
+            raise ArchiveBlocked("Exact WAV pilot requires the same closed-day source boundary")
     scope = (adapter.kind, encode(reference), metadata_digest, bindings, store.identity)
     old = ledger.db.execute(
         "SELECT candidate FROM wav_copy WHERE source=? AND reference=? AND metadata_digest=? "

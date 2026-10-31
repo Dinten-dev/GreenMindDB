@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "environment": "production",
+  "wav_jobs": [
+    {
+      "source": "gateway",
+      "reference": [
+        "00000000-0000-0000-0000-000000000004"
+      ]
+    },
+    {
+      "source": "direct",
+      "reference": [
+        "00000000-0000-0000-0000-000000000003",
+        187
+      ]
+    }
+  ],
+  "wav_limits": {
+    "max_wavs": 10,
+    "max_bytes": 5242880
+  }
+}

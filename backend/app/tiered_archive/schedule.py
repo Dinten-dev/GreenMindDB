@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -37,6 +38,131 @@ def private_json(path, maximum=1024 * 1024):
     return json.loads(raw)
 
 
+def exact_wav_jobs(plan):
+    """An exact copy pilot never opens a dataset discovery/SQL/backup path."""
+    if type(plan) is not dict or set(plan) != {"schema", "environment", "wav_jobs", "wav_limits"}:
+        raise ArchiveBlocked("Exact WAV pilot cannot mix scanning, snapshots or other operations")
+    if type(plan["schema"]) is not int or plan["schema"] != 1:
+        raise ArchiveBlocked("Exact WAV pilot schema differs")
+    if type(plan["environment"]) is not str or plan["environment"] not in {"production", "staging"}:
+        raise ArchiveBlocked("Explicit exact WAV pilot environment required")
+    jobs, limits = plan["wav_jobs"], plan["wav_limits"]
+    if type(jobs) is not list or not 1 <= len(jobs) <= 10:
+        raise ArchiveBlocked("One to ten exact WAV jobs required")
+    if (
+        type(limits) is not dict
+        or set(limits) != {"max_wavs", "max_bytes"}
+        or type(limits["max_wavs"]) is not int
+        or not 1 <= limits["max_wavs"] <= 10
+        or type(limits["max_bytes"]) is not int
+        or not 1 <= limits["max_bytes"] <= 5 * 1024**2
+    ):
+        raise ArchiveBlocked("Exact WAV pilot is bounded by ten WAVs or five MiB")
+    seen = set()
+    for job in jobs:
+        if type(job) is not dict or set(job) != {"source", "reference"}:
+            raise ArchiveBlocked("Exact WAV source and reference required")
+        source, reference = job["source"], job["reference"]
+        if (
+            type(source) is not str
+            or source not in {"gateway", "direct"}
+            or type(reference) is not list
+            or len(reference) != (1 if source == "gateway" else 2)
+            or type(reference[0]) is not str
+        ):
+            raise ArchiveBlocked("Exact WAV reference shape differs")
+        try:
+            canonical = str(uuid.UUID(reference[0]))
+        except ValueError:
+            raise ArchiveBlocked("Canonical WAV or segment UUID required") from None
+        if canonical != reference[0] or (
+            source == "direct"
+            and (type(reference[1]) is not int or not 1 <= reference[1] <= 2**31 - 1)
+        ):
+            raise ArchiveBlocked("Canonical exact WAV revision required")
+        identity = (source, tuple(reference))
+        if identity in seen:
+            raise ArchiveBlocked("Duplicate exact WAV job")
+        seen.add(identity)
+    return jobs, limits
+
+
+def tick_exact_wavs(plan, *, clock, seconds):
+    from .runtime import stage_wav
+
+    jobs, limits = exact_wav_jobs(plan)  # Before state, source keys or connections.
+    if type(seconds) not in {int, float} or not 0 < seconds <= 300:
+        raise ArchiveBlocked("Bounded exact WAV pilot lifetime required")
+    deadline = time.monotonic() + min(75, seconds)
+    closed_before = utc(clock()).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = {
+        "published": 0,
+        "verified": 0,
+        "evicted": 0,
+        "blocked": 0,
+        "deferred": 0,
+        "copied_wavs": 0,
+        "copied_wav_bytes": 0,
+    }
+    source_checkpoint()
+    root = state_root()
+    healthy = health_probe("copy")
+    try:
+
+        def checkpoint():
+            source_checkpoint()
+            if (root / "PAUSE").exists() or (root / "control/PAUSE").exists():
+                raise SafetyPause("manual_pause")
+            if not healthy():
+                raise SafetyPause(healthy.last.get("reason", "receiver_headroom"))
+
+        def can_continue():
+            checkpoint()
+            return time.monotonic() < deadline
+
+        checkpoint()
+        for index, job in enumerate(jobs):
+            if (
+                result["copied_wavs"] >= limits["max_wavs"]
+                or result["copied_wav_bytes"] >= limits["max_bytes"]
+                or not can_continue()
+            ):
+                result["deferred"] += len(jobs) - index
+                break
+            remaining_wavs = limits["max_wavs"] - result["copied_wavs"]
+            remaining_bytes = limits["max_bytes"] - result["copied_wav_bytes"]
+            # The existing revision journal resumes exact partial copies. Any
+            # exception aborts this invocation: transfers before failure may
+            # already consume budget, so never continue another job on error.
+            batch = stage_wav(
+                job["source"],
+                job["reference"],
+                maximum_wavs=remaining_wavs,
+                maximum_bytes=remaining_bytes,
+                maximum_object_bytes=limits["max_bytes"],
+                closed_before=closed_before,
+                can_continue=can_continue,
+            )
+            count, size = batch["copied_wavs"], batch["copied_bytes"]
+            if (
+                type(count) is not int
+                or not 0 <= count <= remaining_wavs
+                or type(size) is not int
+                or not 0 <= size <= remaining_bytes
+                or (count == 0) != (size == 0)
+                or type(batch["complete"]) is not bool
+            ):
+                raise ArchiveBlocked("Exact WAV copy accounting differs")
+            result["copied_wavs"] += count
+            result["copied_wav_bytes"] += size
+            result["published"] += int(batch["complete"])
+            result["deferred"] += int(not batch["complete"])
+        result["pending_wavs"] = result["deferred"]  # Selected jobs only, no backlog scan.
+        return result
+    finally:
+        healthy.close()
+
+
 def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
     from .deletion import activation, limits
     from .policy import eligibility
@@ -58,6 +184,10 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
     plan = private_json(path)
     if plan.get("environment") != environment() or plan.get("schema") != 1:
         raise ArchiveBlocked("Schedule environment differs")
+    if "wav_jobs" in plan:
+        return tick_exact_wavs(plan, clock=clock, seconds=seconds)
+    if "wav_limits" in plan:
+        raise ArchiveBlocked("WAV pilot limits require exact WAV jobs")
     tasks = plan.get("scopes", [])
     wav_sources = plan.get("wav_sources", [])
     backups = plan.get("backups", [])

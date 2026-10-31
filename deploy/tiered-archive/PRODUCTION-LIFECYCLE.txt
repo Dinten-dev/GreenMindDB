@@ -138,3 +138,23 @@ reject failed projections: use a separately reviewed existing Direct reader
 binding for that readiness read, or explicitly review the necessary grant.
 Never omit the gate or archive that operational error field. Full private
 master-data recovery still belongs to its encrypted backup contract.
+
+Exact pilot jobs
+Use exact-wav-pilot.schema.json and the clearly synthetic example. The pilot
+schedule contains only schema, environment, wav_jobs and wav_limits; do not mix
+scans, SQL, backup, snapshot or deletion tasks. Limits are global across jobs:
+at most10WAVs or5MiB, whichever is reached first. Gateway references are one
+canonical WAV UUID; Direct references add the exact revision. The worker never
+discovers a dataset for this mode. Individual oversized WAVs are rejected before
+body transfer. Partial immutable revisions resume through the existing copy
+journal; errors abort the current budget rather than continuing another job
+with uncertain accounting. Only settled closed UTC days are eligible.
+
+The pure production-copy-profile planner prepares private server-local mappings
+and an exact original-overlay CAS/rollback plan. It does not install or start
+anything. Read production-copy-profile.README.txt before using it. Maintain the
+existing enabled state, briefly quiesce only the existing copy timer, wait for
+the current copier's actual end, run the same service manually, then restore the
+original overlay and timer state. Keep new archives and evidence. Verify the
+existing admission interpreter's real import/lock compatibility before switching
+PYTHONPATH: a path change alone does not install or replace its dependencies.

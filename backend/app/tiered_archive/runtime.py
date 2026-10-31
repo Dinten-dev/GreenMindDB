@@ -354,7 +354,16 @@ def publish_wav(source, reference, *, maximum_bytes=None, maximum_wavs=None):
             return receipt
 
 
-def stage_wav(source, reference, *, maximum_bytes, maximum_wavs, can_continue=lambda: True):
+def stage_wav(
+    source,
+    reference,
+    *,
+    maximum_bytes,
+    maximum_wavs,
+    can_continue=lambda: True,
+    maximum_object_bytes=None,
+    closed_before=None,
+):
     from .wav_copy import advance
 
     with worker() as (ledger, store, checkpoint):
@@ -369,6 +378,8 @@ def stage_wav(source, reference, *, maximum_bytes, maximum_wavs, can_continue=la
             maximum_bytes=maximum_bytes,
             maximum_wavs=maximum_wavs,
             can_continue=can_continue,
+            maximum_object_bytes=maximum_object_bytes,
+            closed_before=closed_before,
         )
         envelope = result.pop("envelope", None)
         if result["complete"] and envelope is not None:
