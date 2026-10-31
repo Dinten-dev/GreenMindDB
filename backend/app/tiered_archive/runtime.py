@@ -58,6 +58,10 @@ def bindings_sha256(store):
         {
             "environment": environment(),
             "destination": store.identity,
+            "source_work_leases": {
+                "enabled": os.getenv("WAV_SOURCE_WORK_LEASES_ENABLED") == "true",
+                "coverage_sha256": os.getenv("TIERED_ARCHIVE_WORK_LEASE_COVERAGE_SHA256", ""),
+            },
             "sources": {
                 source: source_settings(source, environment())["identity"]
                 for source in ("gateway", "direct")
@@ -191,7 +195,12 @@ def engine(source, *, writing=False):
         # Bounded jobs create several short-lived adapters. Do not leave idle
         # connections behind after each closed session/scoped export.
         poolclass=NullPool,
-        connect_args={"options": "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=4096"},
+        connect_args={
+            "options": (
+                "-c statement_timeout=8000 -c lock_timeout=150 -c work_mem=4096"
+                + (" -c idle_in_transaction_session_timeout=0" if writing else "")
+            )
+        },
     )
 
 
@@ -401,7 +410,8 @@ def verify(identity, snapshot_id):
 def evict(identity):
     from . import parquet
     from .deletion import evict as delete_exact
-    from .source import Source
+    from .deletion import wav_only
+    from .policy import utc
 
     if os.getenv("TIERED_ARCHIVE_DELETE_ENABLED", "false") != "true":
         raise ArchiveBlocked("Tiered source deletion disabled")
@@ -410,36 +420,65 @@ def evict(identity):
         if not receipt or receipt.get("destination") != store.identity:
             raise ArchiveBlocked("Unknown deletion bundle")
         candidate = candidate_from_json(receipt["source"])
+        wav_only(candidate)
         from datetime import timedelta
 
         from .backup import require_current
 
-        now = datetime.now(UTC)
-        require_current(
-            ledger.scope(
-                environment(),
-                candidate.source,
-                "00000000-0000-0000-0000-000000000000",
-                "database_backup",
-                now - timedelta(hours=24),
-                now,
-            ),
-            source=candidate.source,
-            environment=environment(),
-            destination=store.identity,
-            now=now,
-        )
-        adapter = (
-            wav_source(candidate.source, checkpoint, writing=True)
-            if candidate.kind == "wav"
-            else Source(
-                engine(candidate.source, writing=True),
-                candidate.source,
-                environment(),
-                checkpoint=checkpoint,
-                payload_reader=direct_payload_reader if candidate.source == "direct" else None,
+        def proof_guard(current_receipt, at):
+            database_backup = require_current(
+                ledger.scope(
+                    environment(),
+                    candidate.source,
+                    "00000000-0000-0000-0000-000000000000",
+                    "database_backup",
+                    at - timedelta(hours=24),
+                    at,
+                ),
+                source=candidate.source,
+                environment=environment(),
+                destination=store.identity,
+                now=at,
             )
-        )
+            import httpx
+
+            from app.raw_archive.snapshot_api import SnapshotAPI, private_token
+
+            snapshots = [current_receipt["snapshot"], database_backup["snapshot"]]
+            with httpx.Client(
+                headers={
+                    "Authorization": "Bearer "
+                    + private_token(Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE"]))
+                },
+                timeout=httpx.Timeout(8, connect=3),
+                trust_env=False,
+            ) as client:
+                provider = SnapshotAPI(
+                    client,
+                    int(os.environ["TIERED_ARCHIVE_BOX_ID"]),
+                    os.environ["RAW_ARCHIVE_SFTP_USER"],
+                    os.environ["RAW_ARCHIVE_SFTP_HOST"],
+                )
+                for snapshot in snapshots:
+                    live = provider.read(snapshot["provider_id"])
+                    if (
+                        live.get("id") != snapshot["provider_id"]
+                        or live.get("storage_box") != snapshot["box_id"]
+                        or live.get("name") != snapshot["name"]
+                        or utc(live.get("created")) != utc(snapshot["created_at"])
+                    ):
+                        raise ArchiveBlocked(
+                            "Required WAV or database snapshot was removed or changed"
+                        )
+            require_current(
+                [database_backup],
+                source=candidate.source,
+                environment=environment(),
+                destination=store.identity,
+                now=datetime.now(UTC),
+            )
+
+        adapter = wav_source(candidate.source, checkpoint, writing=True)
         with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
             path = Path(folder) / "source.parquet"
             reference = receipt["files"][0]
@@ -455,6 +494,7 @@ def evict(identity):
                 bindings_sha256=bindings_sha256(store),
                 checkpoint=checkpoint,
                 clock=lambda: datetime.now(UTC),
+                proof_guard=proof_guard,
             )
 
 

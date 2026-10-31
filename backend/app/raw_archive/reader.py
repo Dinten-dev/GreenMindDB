@@ -121,6 +121,24 @@ def restore_object(*, kind, bucket, key):
 
 
 def get_object(client, *, Bucket, Key, kind):
+    from .worklease import LeasedBody, enabled, shared_wav_lease
+
+    if not enabled():
+        return _get_object(client, Bucket=Bucket, Key=Key, kind=kind)
+    resources = ExitStack()
+    try:
+        # StreamingResponse can resume a sync generator in another context.
+        # A Body lease must therefore not retain a ContextVar reset token.
+        resources.enter_context(shared_wav_lease(kind, Bucket, Key, track_nested=False))
+        response = dict(_get_object(client, Bucket=Bucket, Key=Key, kind=kind))
+        response["Body"] = LeasedBody(response["Body"], resources)
+        return response
+    except BaseException:
+        resources.close()
+        raise
+
+
+def _get_object(client, *, Bucket, Key, kind):
     try:
         return client.get_object(Bucket=Bucket, Key=Key)
     except ClientError as error:

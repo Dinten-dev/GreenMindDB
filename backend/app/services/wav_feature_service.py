@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.timeseries import SensorReading
 from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
+from app.raw_archive.worklease import shared_wav_lease
 from app.services import wav_service
 
 logger = logging.getLogger(__name__)
@@ -394,9 +395,9 @@ def _snapshot_feature_version(db: Session, feature: WavFeature) -> None:
         "extractor_version": feature.extractor_version,
         "calibration_version": feature.calibration_version,
         "parameter_hash": feature.parameter_hash,
+        "source_sha256": feature.source_sha256,
+        "feature_checksum": feature.feature_checksum,
     }
-    if db.query(WavFeatureVersion.id).filter_by(**identity).first():
-        return
     payload = _persisted_feature_payload(feature)
     if _feature_checksum(payload) != feature.feature_checksum:
         legacy_names = {
@@ -412,11 +413,11 @@ def _snapshot_feature_version(db: Session, feature: WavFeature) -> None:
         payload = {key: value for key, value in payload.items() if key not in legacy_names}
     if _feature_checksum(payload) != feature.feature_checksum:
         raise RuntimeError("Cannot version an unverified feature payload")
+    if db.query(WavFeatureVersion.id).filter_by(**identity).first():
+        return
     db.add(
         WavFeatureVersion(
             **identity,
-            source_sha256=feature.source_sha256,
-            feature_checksum=feature.feature_checksum,
             feature_payload=payload,
             verified_at=feature.verified_at,
         )
@@ -475,6 +476,12 @@ def _upload_path(path: Path, key: str, content_type: str) -> tuple[str, int]:
 
 def extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
     """Extract features and verify all configured archives before retention."""
+    # Cover the whole calculation/verification, not merely its initial download.
+    with shared_wav_lease("gateway", "greenmind-raw", wav.s3_key):
+        return _extract_and_verify_wav_features(db, wav)
+
+
+def _extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
     now = datetime.now(UTC)
     with tempfile.TemporaryDirectory(prefix="greenmind-wav-") as temporary_directory:
         directory = Path(temporary_directory)

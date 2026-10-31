@@ -15,7 +15,7 @@ import pytest
 
 from app.raw_archive.policy import ArchiveBlocked, RemoteMissing, checksum
 from app.tiered_archive import codec, parquet
-from app.tiered_archive.deletion import evict
+from app.tiered_archive.deletion import WAV_DELETE_POLICY_SHA256, evict
 from app.tiered_archive.ledger import Ledger
 from app.tiered_archive.pipeline import publish, verify_snapshot
 from app.tiered_archive.policy import POLICY_SHA256, Candidate, eligibility
@@ -116,7 +116,29 @@ def bundle(tmp_path):
 
 def verified(bundle, at):
     candidate, path, metadata, ledger, box, _ = bundle
-    publish(candidate, [(path, metadata)], box, ledger, checkpoint=lambda: None, now=at)
+    files = [(path, metadata)]
+    if candidate.kind == "wav":
+        import wave
+
+        original = path.parent / "synthetic-deletion-source.wav"
+        with wave.open(str(original), "wb") as body:
+            body.setnchannels(1)
+            body.setsampwidth(2)
+            body.setframerate(100)
+            body.writeframes(b"\x00\x00" * 20)
+        files.append(
+            (
+                original,
+                {
+                    "format": "wav",
+                    "sha256": checksum(original),
+                    "bytes": original.stat().st_size,
+                    "key": "staging/test-guard.wav",
+                    "wav_header": {"frames": 20, "rate": 100, "channels": 1, "width": 2},
+                },
+            )
+        )
+    publish(candidate, files, box, ledger, checkpoint=lambda: None, now=at)
     return verify_snapshot(candidate, box, ledger, Provider(at), 3, checkpoint=lambda: None, now=at)
 
 
@@ -264,6 +286,8 @@ def test_incomplete_or_active_data_remains_local(bundle, field, value):
 def permit(tmp_path, candidate, now):
     data = {
         "policy": POLICY_SHA256,
+        "wav_deletion_policy": WAV_DELETE_POLICY_SHA256,
+        "work_lease_coverage_sha256": "c" * 64,
         "environment": "staging",
         "mode": "pilot",
         "kinds": [candidate.kind],
@@ -274,6 +298,8 @@ def permit(tmp_path, candidate, now):
         "bindings_sha256": "b" * 64,
         "acceptance": {
             "policy": POLICY_SHA256,
+            "wav_deletion_policy": WAV_DELETE_POLICY_SHA256,
+            "work_lease_coverage_sha256": "c" * 64,
             "environment": "staging",
             "runtime_sha256": "a" * 64,
             "bindings_sha256": "b" * 64,
@@ -324,6 +350,7 @@ class Adapter:
 
 
 def test_crash_after_external_delete_recovers_without_second_delete(bundle, tmp_path):
+    bundle = (replace(bundle[0], kind="wav"), *bundle[1:])
     now = AT + timedelta(days=100)
     verified(bundle, AT + timedelta(days=2))
     candidate, _, _, ledger, box, _ = bundle
@@ -348,6 +375,7 @@ def test_crash_after_external_delete_recovers_without_second_delete(bundle, tmp_
 
 
 def test_changed_source_blocks_before_intent(bundle, tmp_path):
+    bundle = (replace(bundle[0], kind="wav"), *bundle[1:])
     now = AT + timedelta(days=100)
     verified(bundle, AT + timedelta(days=2))
     candidate, _, _, ledger, box, _ = bundle
@@ -539,6 +567,7 @@ def test_catalogue_can_be_restored_without_source_or_local_ledger(bundle, tmp_pa
 
 
 def test_snapshot_expiry_during_deletion_checkpoint_blocks(bundle, tmp_path):
+    bundle = (replace(bundle[0], kind="wav"), *bundle[1:])
     verified(bundle, AT + timedelta(days=2))
     candidate, _, _, ledger, box, _ = bundle
     now = AT + timedelta(days=100)
@@ -858,6 +887,7 @@ def test_year_view_projects_moments_beyond_raw_point_limit(bundle, tmp_path, mon
 
 
 def test_changed_deployment_binding_cannot_delete(bundle, tmp_path):
+    bundle = (replace(bundle[0], kind="wav"), *bundle[1:])
     now = AT + timedelta(days=100)
     verified(bundle, AT + timedelta(days=2))
     candidate, _, _, ledger, box, _ = bundle
@@ -1048,6 +1078,7 @@ def test_master_backup_proof_must_match_source_destination_and_be_current():
             "provider_id": 3,
             "box_id": 4,
             "created_at": (now - timedelta(minutes=90)).isoformat(),
+            "checked_at": (now - timedelta(hours=1)).isoformat(),
         },
     }
     kwargs = dict(source="gateway", environment="staging", destination="box-a", now=now)
@@ -1059,6 +1090,13 @@ def test_master_backup_proof_must_match_source_destination_and_be_current():
         {"files": [{"master_proof_version": 2}]},
         {"files": [{"master_proof_version": True}]},
         {"destination": "box-b"},
+        {
+            "snapshot": {
+                key: value for key, value in receipt["snapshot"].items() if key != "checked_at"
+            }
+        },
+        {"snapshot": dict(receipt["snapshot"], checked_at=(now + timedelta(hours=1)).isoformat())},
+        {"verified_at": (now + timedelta(hours=1)).isoformat()},
         {"policy": "0" * 64},
         {"source": dict(receipt["source"], source="direct")},
         {"source": dict(receipt["source"], end=(now - timedelta(hours=25)).isoformat())},
@@ -1364,3 +1402,33 @@ def test_http_chart_and_csv_share_hot_cold_values(bundle, tmp_path, monkeypatch,
     finally:
         api.app.dependency_overrides.clear()
         api.app.dependency_overrides.update(overrides)
+
+
+def test_SQL_archive_copy_restore_survives_but_WAV_release_never_deletes_SQL(bundle, tmp_path):
+    now = AT + timedelta(days=100)
+    verified(bundle, AT + timedelta(days=2))
+    candidate, source, _, ledger, box, rows = bundle
+    verify_snapshot(candidate, box, ledger, Provider(now), 4, checkpoint=lambda: None, now=now)
+    before = checksum(source)
+    path, sha = permit(tmp_path, candidate, now)
+    adapter = Adapter(candidate)
+    with pytest.raises(ArchiveBlocked, match="Only source WAV"):
+        evict(
+            candidate,
+            adapter,
+            ledger,
+            authorization_path=path,
+            authorization_sha256=sha,
+            runtime_sha256="a" * 64,
+            bindings_sha256="b" * 64,
+            checkpoint=lambda: None,
+            clock=lambda: now,
+        )
+    assert adapter.calls == 0 and adapter.exists and checksum(source) == before
+    assert ledger.get(candidate.identity)["state"] == "verified"
+    output = tmp_path / "SQL-archive-restore-still-supported"
+    restored = restore(candidate.identity, output, ledger, box, checkpoint=lambda: None)
+    assert restored["source_accesses"] == 0
+    assert [
+        codec.decode(line) for line in (output / "0000.lossless.jsonl").read_bytes().splitlines()
+    ] == rows

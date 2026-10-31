@@ -92,6 +92,19 @@ class Ledger:
         self.publish_read_view()
         return data
 
+    def audit_attempt(self, candidate, state, details, now):
+        """Retain failed checks without changing the last valid archive receipt."""
+        if self.read_only:
+            raise ArchiveBlocked("Read API cannot modify archive proofs")
+        if state != "wav_delete_blocked":
+            raise ArchiveBlocked("Unsupported archive audit event")
+        body = json.dumps(details, sort_keys=True, allow_nan=False)
+        with self.db:
+            self.db.execute(
+                "INSERT INTO event(at,candidate,state,body) VALUES(?,?,?,?)",
+                (now.isoformat(), candidate.identity, state, body),
+            )
+
     def publish_read_view(self):
         path = self.root / ("read-view-" + uuid.uuid4().hex + ".sqlite3")
         try:

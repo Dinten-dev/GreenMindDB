@@ -158,6 +158,8 @@ def require_current(receipts, *, source, environment, destination, now):
             captured <= created <= checked <= now
             and now - captured <= timedelta(hours=24)
             and now - created <= timedelta(hours=24)
+            and utc(snapshot.get("checked_at", "1970-01-01T00:00:00+00:00")) == checked
+            and now - checked <= timedelta(hours=24)
         ):
             return receipt
     raise ArchiveBlocked("Current snapshot-verified schema and master-data backup required")

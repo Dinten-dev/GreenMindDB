@@ -105,6 +105,7 @@ def eligibility(candidate, receipt, now):
         or not created <= checked
         or now - checked > timedelta(hours=24)
         or now - created > timedelta(hours=24)
+        or utc(snapshot.get("checked_at", "1970-01-01T00:00:00+00:00")) != checked
     ):
         raise ArchiveBlocked("Archive or snapshot proof is stale or future-dated")
     if not snapshot.get("provider_id") or not snapshot.get("box_id"):

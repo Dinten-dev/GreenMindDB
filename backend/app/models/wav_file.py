@@ -177,7 +177,7 @@ class WavFeature(Base):
 
 
 class WavFeatureVersion(Base):
-    """Immutable verified feature snapshot for one extractor configuration."""
+    """Immutable verified feature result, including its exact source and context."""
 
     __tablename__ = "wav_feature_version"
 
@@ -205,6 +205,8 @@ class WavFeatureVersion(Base):
             "extractor_version",
             "calibration_version",
             "parameter_hash",
+            "source_sha256",
+            "feature_checksum",
             name="uq_wav_feature_version_identity",
         ),
     )

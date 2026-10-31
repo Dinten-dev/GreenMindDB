@@ -37,6 +37,8 @@ class WavSource:
             checkpoint,
         )
         self.expected, self.db = None, None
+        self.deletion_guard = None
+        self.deletion_intent_active = False
 
     def metadata(self, reference, *, maximum_bytes=None, maximum_wavs=None):
         records = self.catalog.resolve(reference)
@@ -70,6 +72,17 @@ class WavSource:
                     {"id": wav.sensor_id},
                 ).one()
                 organization, sensor = str(row[0]), str(wav.sensor_id)
+                assignment = db.execute(
+                    text("""SELECT s.gateway_id,g.zone_id FROM sensor s
+                    JOIN gateway g ON g.id=s.gateway_id WHERE s.id=:id"""),
+                    {"id": wav.sensor_id},
+                ).one()
+                metadata["assignment"] = {
+                    "sensor_id": sensor,
+                    "gateway_id": str(assignment[0]),
+                    "zone_id": str(assignment[1]),
+                    "organization_id": organization,
+                }
                 complete = wav.timing_status == "complete"
                 headers = {
                     wav.s3_key: {
@@ -84,7 +97,7 @@ class WavSource:
                     {"id": wav.id},
                 ).scalar()
             else:
-                from app.direct.models import Device, Revision, Segment
+                from app.direct.models import Device, Enrollment, Revision, Segment
                 from app.direct.models import Session as CaptureSession
 
                 segment = db.get(Segment, reference[0])
@@ -97,6 +110,15 @@ class WavSource:
                     "session": row_dict(session),
                 }
                 organization, sensor = str(device.organization_id), segment.device_id
+                enrollment = db.query(Enrollment).filter_by(device_id=device.id).one_or_none()
+                metadata["assignment"] = {
+                    "device_id": device.id,
+                    "organization_id": organization,
+                    "zone_id": device.zone_id,
+                    "legacy_sensor_id": device.legacy_sensor_id,
+                    "mode": device.mode,
+                    "hardware_id": enrollment.hardware_id if enrollment else None,
+                }
                 complete = (
                     segment.sealed
                     and segment.revision == segment.published_revision
@@ -197,18 +219,65 @@ class WavSource:
     def exclusive(self, candidate):
         if not self.expected:
             raise ArchiveBlocked("Exact restored WAV metadata required")
+        if (
+            candidate.environment == "production"
+            and os.getenv("WAV_SOURCE_WORK_LEASES_ENABLED") != "true"
+        ):
+            raise ArchiveBlocked("Production WAV source-owned work leases are not enabled")
         with self.sessions.begin() as db:
             self.db = db
             try:
                 db.execute(text("SET LOCAL lock_timeout='150ms'"))
                 db.execute(text("SET LOCAL statement_timeout='3s'"))
                 reference = self.expected[0]["body"]["reference"]
+                if (
+                    candidate.environment == "production"
+                    or os.getenv("WAV_SOURCE_WORK_LEASES_ENABLED") == "true"
+                ):
+                    from app.raw_archive.worklease import object_lock_key
+
+                    keys = sorted(
+                        {
+                            object_lock_key(
+                                self.kind, item["recording"]["bucket"], item["recording"]["key"]
+                            )
+                            for item in self.expected[0]["body"]["originals"]
+                        }
+                    )
+                    if not keys:
+                        raise ArchiveBlocked("Exact source WAV work-lease scope is empty")
+                    for key in keys:
+                        if (
+                            db.execute(
+                                text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": key}
+                            ).scalar_one()
+                            is not True
+                        ):
+                            raise ArchiveBlocked("WAV is in active reader, export or feature use")
                 if self.kind == "gateway":
                     from app.models.wav_file import WavFile
 
-                    db.query(WavFile).filter_by(id=uuid.UUID(reference[0])).with_for_update(
-                        nowait=True
-                    ).one()
+                    wav = (
+                        db.query(WavFile)
+                        .filter_by(id=uuid.UUID(reference[0]))
+                        .with_for_update(nowait=True)
+                        .one()
+                    )
+                    from app.models.master import Gateway, Sensor, Zone
+
+                    sensor = (
+                        db.query(Sensor)
+                        .filter_by(id=wav.sensor_id)
+                        .with_for_update(nowait=True)
+                        .one()
+                    )
+                    gateway = (
+                        db.query(Gateway)
+                        .filter_by(id=sensor.gateway_id)
+                        .with_for_update(nowait=True)
+                        .one()
+                    )
+                    db.query(Zone).filter_by(id=gateway.zone_id).with_for_update(nowait=True).one()
                     from app.models.wav_file import WavFeature, WavFeatureVersion
 
                     db.query(WavFeature).filter_by(
@@ -218,9 +287,27 @@ class WavSource:
                         wav_file_id=uuid.UUID(reference[0])
                     ).with_for_update(nowait=True).all()
                 else:
-                    from app.direct.models import Segment
+                    from app.direct.models import Device, Enrollment, Revision, Segment
+                    from app.direct.models import Session as CaptureSession
 
-                    db.query(Segment).filter_by(id=reference[0]).with_for_update(nowait=True).one()
+                    segment = (
+                        db.query(Segment)
+                        .filter_by(id=reference[0])
+                        .with_for_update(nowait=True)
+                        .one()
+                    )
+                    db.query(Revision).filter_by(
+                        segment_id=reference[0], revision=reference[1]
+                    ).with_for_update(nowait=True).one()
+                    db.query(Device).filter_by(id=segment.device_id).with_for_update(
+                        nowait=True
+                    ).one()
+                    db.query(CaptureSession).filter_by(
+                        device_id=segment.device_id, id=segment.session_id
+                    ).with_for_update(nowait=True).one()
+                    db.query(Enrollment).filter_by(device_id=segment.device_id).with_for_update(
+                        nowait=True
+                    ).all()
                 yield
             finally:
                 self.db = None
@@ -257,24 +344,62 @@ class WavSource:
             ).scalar_one()
         if str(organization) != candidate.organization:
             raise ArchiveBlocked("WAV ownership changed")
+        # Re-read every archived feature version and object attribute under the
+        # same parent/revision locks; a newer feature must get a new archive proof.
+        envelope, _, flags = self.metadata(body["reference"])
+        for fresh, archived in zip(envelope["body"]["originals"], body["originals"], strict=True):
+            record = Recording.from_receipt(archived["recording"])
+            absent = self.objects.deletion_target(record, archived["snapshot"]) is None
+            if absent and not self.deletion_intent_active:
+                raise ArchiveBlocked("WAV vanished without a durable deletion intent")
+            # deletion_target independently validates exact VersionId and all
+            # attributes for remaining objects; already deleted runs are resumable.
+            fresh["snapshot"] = archived["snapshot"]
+
+        def metadata_fingerprint(value):
+            from .codec import encode
+
+            value = dict(value, body=dict(value["body"]))
+            metadata = dict(value["body"]["metadata"])
+            if "feature_versions" in metadata:
+                metadata["feature_versions"] = sorted(metadata["feature_versions"], key=encode)
+            value["body"]["metadata"] = metadata
+            return digest(value)
+
+        if metadata_fingerprint(envelope) != metadata_fingerprint(self.expected[0]):
+            raise ArchiveBlocked("Archived WAV metadata, feature versions or source object changed")
+        if (
+            self.candidate(envelope, {"content_sha256": candidate.content_sha256}, flags)
+            != candidate
+        ):
+            raise ArchiveBlocked("WAV processing, timing or current revision changed")
         return candidate
 
     def delete(self, candidate):
         body = self.expected[0]["body"]
         for item in body["originals"]:
             self.checkpoint()
+            if not callable(self.deletion_guard):
+                raise ArchiveBlocked("Fresh common WAV deletion guard required")
+            self.deletion_guard()
             record = Recording.from_receipt(item["recording"])
             self.objects.evict(record, item["snapshot"])
+
+    def complete_eviction(self, candidate):
+        """Commit only the retained catalog marker, including crash recovery."""
+        body = self.expected[0]["body"]
         if self.kind == "gateway":
             from app.models.wav_file import WavFile
 
             wav = self.db.get(WavFile, uuid.UUID(body["reference"][0]))
-            wav.raw_deleted_at = datetime.now(UTC)
+            if wav.raw_deleted_at is None:
+                wav.raw_deleted_at = datetime.now(UTC)
         else:
             from app.direct.models import Revision
 
             revision = self.db.get(Revision, tuple(body["reference"]))
-            revision.raw_deleted_at = datetime.now(UTC).timestamp()
+            if revision.raw_deleted_at is None:
+                revision.raw_deleted_at = datetime.now(UTC).timestamp()
 
     def publish_legacy_receipts(self, envelope, transport, now):
         # Existing authenticated WAV routes continue resolving the original S3

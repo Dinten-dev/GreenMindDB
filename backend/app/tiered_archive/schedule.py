@@ -365,6 +365,8 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
                     result["blocked"] += 1
                     continue
             if os.getenv("TIERED_ARCHIVE_DELETE_ENABLED", "false") == "true":
+                if receipt["source"].get("kind") != "wav":
+                    continue
                 if receipt["source"].get("active"):
                     continue
                 try:

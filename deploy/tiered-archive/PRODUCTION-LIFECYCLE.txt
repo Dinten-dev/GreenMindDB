@@ -1,0 +1,116 @@
+Production lifecycle integration — 2026-10-31
+
+Release status
+This integration is a local candidate. It does not activate a production worker,
+change existing profiles, or authorize deletion. Keep all originals and current
+production receivers available. Reuse the existing copy, private reader, broker,
+Direct relay, Storage Box and backup arrangements; do not deploy a second archive
+architecture alongside them.
+
+Changes and compatibility
+- WavFeatureVersion identity now includes source_sha256 and feature_checksum.
+  Recomputing changed quality context with the same extractor no longer silently
+  discards a distinct verified result. Existing result rows remain unchanged.
+- Migration0025 requires0024. Check the actual deployed Alembic head and schema
+  before applying it; do not implicitly migrate authentication or unrelated tables.
+  The old uniqueness cannot represent multiple results: automatic downgrade is
+  intentionally blocked. A code rollback alone must not discard feature history.
+- The existing archive-format policy hash remains unchanged for historical reads.
+  Deletion uses an additional versioned WAV-only policy. Earlier activations and
+  historical cleanup exceptions cannot authorize this release.
+- Existing SQL/Parquet copy, historical reads and restore remain supported.
+  This release's deletion entry point rejects SQL, features, logs and payloads.
+  Approve Direct payload offload, WAV eviction and SQL retention independently.
+
+Work-lease contract
+Enable WAV_SOURCE_WORK_LEASES_ENABLED only after all actual readers, downloads,
+ZIP exports, feature processors and Direct artifact consumers use the integrated
+hooks. The same authoritative upstream PostgreSQL database must serve readers
+and the deletion writer. A mirror with the same database name does not qualify.
+Existing read credentials suffice for advisory locks; do not add database write
+rights to readers. Lease pools have2persistent plus6overflow connections per
+source/process. Measure total connection capacity across deployed roles.
+
+Shared leases last until the WAV body is closed or processing ends. Dedicated
+lease transactions disable idle expiry while work is active. The source writer
+uses the exclusive counterpart and disables idle expiry only for its bounded
+writing engine. Statement and lock timeouts remain8seconds and150milliseconds.
+Untracked presigned S3 downloads are blocked while the contract is active; route
+such clients through the authenticated WAV download before enabling the contract.
+
+A flag is insufficient evidence. Independently record the actual Main/Archive
+roles, immutable image and mounted-code hashes, source bindings and tested lease
+coverage. Bind that document's SHA-256 as
+TIERED_ARCHIVE_WORK_LEASE_COVERAGE_SHA256 and in the accepted WAV activation.
+The candidate deliberately blocks production deletion without matching coverage.
+Cross-database Direct/Master zone ownership changes require explicit coordination;
+locking a Direct row does not prove an atomic Master-database lock.
+
+WAV deletion requirements
+Keep TIERED_ARCHIVE_DELETE_ENABLED, RAW_ARCHIVE_DELETE_ENABLED, RETENTION_ENABLED,
+DIRECT_RETENTION_ENABLED and VISUAL_PRUNE_ENABLED false during introduction.
+TIERED_ARCHIVE_SQL_RETENTION_ACCEPTED remains false. Do not toggle old retention
+switches to activate the new governor.
+
+A future exact WAV permit must bind environment, complete running backend,
+source/destination bindings, WAV deletion policy and live work-lease coverage.
+It also requires full restore, dashboard parity, tenant isolation, rollback,
+backlog reconciliation and a completed post-deployment24-hour observation with
+at least280samples, maximum600-second gap and real Gateway/Direct progress.
+
+Each candidate requires completed processing, features, projections and
+reconstruction dependencies; it must be inactive, settled and not quarantined.
+Seven days start at the first complete provider-snapshot readback. Reverification
+does not restart the reserve. Late-arrival horizons can extend it. Readback and
+provider-snapshot evidence remain current within24hours; this release also
+preserves the previous24-hour snapshot-creation-age guard.
+
+Before intent and each individual WAV side effect, recheck health, permit expiry,
+exact revision/attributes/features/ownership, source leases, provider presence
+and matching source/destination database-snapshot backup no older than24hours.
+The first pilot stops at10WAVs OR5MiB, whichever is reached first. Permanent
+Storage-Box originals and existing snapshots are never deletion targets here.
+
+Recovery and monitoring
+Intent is durably journalled before exact object-version deletion. Preserve
+required database/catalog metadata and complete raw_deleted_at only after exact
+absence checks. An interrupted 'deleting' record resumes the same operation;
+never retry as a different unbound deletion or delete a replacement version.
+Blocked attempts remain in the audit journal. Resource or health failures pause
+work without emergency deletion. Software rollback does not restore removed WAVs;
+use the independently tested archive restore into new isolated targets.
+
+Measure archive lag, processing queues, blocked candidates, free storage,
+verification failures, retries and throughput against actual incoming bytes.
+Keep existing service/cgroup reserves. A started timer or live process is not
+proof of useful progress or a completed backup. Bound disk cache, temporary
+artifacts and backup spooling; alert before reserves are exhausted.
+
+Retention boundaries
+Features/dashboard:at least90days locally. Logs:at least30days locally.
+SQL retention requires its own acceptance and must preserve aggregate coverage,
+late/replay deduplication and historical read parity. PostgreSQL row removal
+usually enables space reuse; it does not promise immediate filesystem shrinking.
+
+Observation
+The existing raw_archive.observation supports a private SHA-bound production
+receiver scope through RAW_ARCHIVE_OBSERVATION_SCOPE_FILE and
+RAW_ARCHIVE_OBSERVATION_SCOPE_SHA256. Schema:
+greenmind.production-receiver-observation.v1; environment:production;
+machine_sha256:SHA256 of/etc/machine-id; receivers:distinct gateway,direct,
+legacy_gateway and optional additional local roles. Each binds id,
+configuration_sha256 and mounted_program_sha256. Include exact current Docker
+configuration and all relevant mounted.py/.sql files, including app-root mounts.
+Symlinks and unbounded trees fail closed. Existing ingress, source progress,
+health, gap and resource checks remain required. This is a receiver observation,
+not a substitute for archive throughput, snapshot/restore or full-chain proofs.
+
+Required introduction
+1. Review actual deployment/schema/source/role differences from this candidate.
+2. Complete isolated native migration, reader, archive and failure tests.
+3. Run a bounded production copy-only pilot while normal reception continues.
+4. Verify current full snapshot readback, database/catalog backups and restore.
+5. Verify historical chart/CSV/WAV/features without local original files.
+6. Complete a fresh full24-hour production observation and throughput assessment.
+7. Review exact WAV pilot identities and recovery; then separately activate.
+8. Keep SQL pruning and unrelated deletion disabled until their own acceptance.

@@ -22,6 +22,7 @@ from app.services.retention_service import (
 from app.services.wav_feature_service import (
     EXTRACTOR_VERSION,
     _next_candidate,
+    _snapshot_feature_version,
     calculate_sequence_continuity,
     calculate_signal_features,
     extract_and_verify_wav_features,
@@ -224,6 +225,75 @@ def test_recalculation_preserves_immutable_feature_versions(db: Session, monkeyp
     versions = db.query(WavFeatureVersion).order_by(WavFeatureVersion.extractor_version).all()
     assert [version.extractor_version for version in versions] == ["wav-v2.0.0", "wav-v2.1.0"]
     assert versions[0].feature_payload["extractor_version"] == "wav-v2.0.0"
+
+
+def test_late_quality_preserves_distinct_results_with_same_extractor_and_source(
+    db: Session, monkeypatch
+):
+    now = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    payload = _wav_bytes(np.arange(380, dtype=np.int16))
+    record = _wav_record(now, payload)
+    db.add(record)
+    db.commit()
+
+    def download_object(_key, destination):
+        destination.write(payload)
+        destination.seek(0)
+
+    monkeypatch.setattr(
+        "app.services.wav_feature_service.wav_service.download_object", download_object
+    )
+    monkeypatch.setattr(settings, "wav_anomaly_archive_enabled", False)
+    monkeypatch.setattr(settings, "wav_flac_archive_enabled", False)
+    first = extract_and_verify_wav_features(db, record)
+    first_checksum = first.feature_checksum
+    first_source = first.source_sha256
+    db.add(
+        SensorReading(
+            timestamp=record.started_at,
+            sensor_id=record.sensor_id,
+            kind="bio_signal",
+            value=1,
+            unit="mV",
+            quality_lead_off_count=1,
+        )
+    )
+    db.commit()
+    second = extract_and_verify_wav_features(db, record)
+    assert second.feature_checksum != first_checksum
+    assert second.source_sha256 == first_source
+    versions = db.query(WavFeatureVersion).all()
+    assert len(versions) == 2
+    assert {version.extractor_version for version in versions} == {EXTRACTOR_VERSION}
+    assert {version.source_sha256 for version in versions} == {first_source}
+    assert sorted(
+        version.feature_payload["source_quality_counts"]["lead_off"] for version in versions
+    ) == [0, 1]
+    extract_and_verify_wav_features(db, record)
+    assert db.query(WavFeatureVersion).count() == 2
+
+
+def test_existing_snapshot_does_not_hide_corrupted_current_feature(db: Session, monkeypatch):
+    now = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    payload = _wav_bytes(np.arange(380, dtype=np.int16))
+    record = _wav_record(now, payload)
+    db.add(record)
+    db.commit()
+
+    def download_object(_key, destination):
+        destination.write(payload)
+        destination.seek(0)
+
+    monkeypatch.setattr(
+        "app.services.wav_feature_service.wav_service.download_object", download_object
+    )
+    monkeypatch.setattr(settings, "wav_anomaly_archive_enabled", False)
+    monkeypatch.setattr(settings, "wav_flac_archive_enabled", False)
+    feature = extract_and_verify_wav_features(db, record)
+    assert db.query(WavFeatureVersion).count() == 1
+    feature.mean += 1
+    with pytest.raises(RuntimeError, match="Cannot version an unverified"):
+        _snapshot_feature_version(db, feature)
 
 
 def test_calibration_change_requires_recalculation_before_retention(

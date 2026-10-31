@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import stat
 import subprocess
 import time
 from datetime import UTC, datetime, timedelta
@@ -20,13 +22,190 @@ RECEIVERS = (
 PROXIES = ("greenmind-prod", "greenmind-staging")
 
 
+def scoped_receivers():
+    """Bind a current production deployment without weakening the old default.
+
+    The operator supplies an exact private, hash-pinned local inventory. Never
+    discover a different receiver automatically after a restart or replacement.
+    """
+    name = os.getenv("RAW_ARCHIVE_OBSERVATION_SCOPE_FILE")
+    pin = os.getenv("RAW_ARCHIVE_OBSERVATION_SCOPE_SHA256")
+    if not name and not pin:
+        return None
+    if not name or not re.fullmatch(r"[a-f0-9]{64}", pin or ""):
+        raise ArchiveBlocked("Explicit observation scope and SHA-256 required")
+    path = Path(name)
+    if not path.is_absolute():
+        raise ArchiveBlocked("Absolute observation scope required")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid not in {0, os.getuid()}
+            or info.st_nlink != 1
+            or info.st_mode & 0o077
+            or info.st_size > 65536
+        ):
+            raise ArchiveBlocked("Private observation scope required")
+        raw = stream.read(65537)
+    if len(raw) > 65536 or hashlib.sha256(raw).hexdigest() != pin:
+        raise ArchiveBlocked("Observation scope changed")
+    scope = json.loads(raw)
+    if (
+        scope.get("schema") != "greenmind.production-receiver-observation.v1"
+        or scope.get("environment") != "production"
+        or scope.get("machine_sha256")
+        != hashlib.sha256(Path("/etc/machine-id").read_bytes()).hexdigest()
+    ):
+        raise ArchiveBlocked("Observation scope belongs to another deployment")
+    roles = scope.get("receivers")
+    required = {"gateway", "direct", "legacy_gateway"}
+    if (
+        not isinstance(roles, dict)
+        or not required <= set(roles)
+        or len(roles) > 16
+        or any(not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", role) for role in roles)
+    ):
+        raise ArchiveBlocked("Complete receiver inventory required")
+    ids = []
+    for target in roles.values():
+        if (
+            not isinstance(target, dict)
+            or set(target) != {"id", "configuration_sha256", "mounted_program_sha256"}
+            or any(
+                not isinstance(target[k], str) or not re.fullmatch(r"[a-f0-9]{64}", target[k])
+                for k in ("id", "configuration_sha256")
+            )
+        ):
+            raise ArchiveBlocked("Immutable receiver identities required")
+        programs = target["mounted_program_sha256"]
+        if (
+            not isinstance(programs, dict)
+            or len(programs) > 4096
+            or any(
+                not isinstance(k, str)
+                or not k.startswith("/app/app/")
+                or len(k) > 512
+                or ".." in Path(k).parts
+                or not k.endswith((".py", ".sql"))
+                or not isinstance(v, str)
+                or not re.fullmatch(r"[a-f0-9]{64}", v)
+                for k, v in programs.items()
+            )
+        ):
+            raise ArchiveBlocked("Explicit mounted program fingerprints required")
+        ids.append(target["id"])
+    if len(ids) != len(set(ids)):
+        raise ArchiveBlocked("Distinct receiver roles required")
+    return scope
+
+
+def scoped_container(target):
+    """Read Docker metadata only; credentials are hashed in RAM, never emitted."""
+    if not isinstance(target.get("id"), str) or not re.fullmatch(r"[a-f0-9]{64}", target["id"]):
+        raise ArchiveBlocked("Exact receiver container ID required")
+    call = subprocess.run(  # noqa: S603 - exact hexadecimal container ID, no shell
+        ["/usr/bin/docker", "inspect", "--type=container", target["id"]],
+        capture_output=True,
+        timeout=5,
+    )
+    if call.returncode or call.stderr or len(call.stdout) > 1024**2:
+        raise ArchiveBlocked("Bound receiver inspection failed")
+    values = json.loads(call.stdout)
+    if not isinstance(values, list) or len(values) != 1:
+        raise ArchiveBlocked("Bound receiver inspection shape changed")
+    value = values[0]
+    configuration = {key: value[key] for key in ("Image", "Config", "HostConfig")}
+    configuration["Mounts"] = sorted(value["Mounts"], key=lambda item: item["Destination"])
+    pin = hashlib.sha256(json.dumps(configuration, sort_keys=True).encode()).hexdigest()
+    state = value["State"]
+    if (
+        value["Id"] != target["id"]
+        or pin != target["configuration_sha256"]
+        or state.get("Running") is not True
+        or state.get("Restarting")
+        or state.get("OOMKilled")
+        or not isinstance(state.get("Pid"), int)
+        or state["Pid"] <= 1
+    ):
+        raise ArchiveBlocked("Bound receiver changed or stopped")
+    # A bind mount can change bytes without changing Docker inspect. Bind every
+    # mounted program file as well; never read data volumes or credential files.
+    code = {}
+    total_bytes = 0
+    visited = 0
+    for mount in value["Mounts"]:
+        destination = Path(mount.get("Destination", ""))
+        app_root = Path("/app/app")
+        if mount.get("Type") != "bind":
+            continue
+        source = Path(mount["Source"])
+        if destination in app_root.parents:
+            source = source / app_root.relative_to(destination)
+            destination = app_root
+        elif destination != app_root and app_root not in destination.parents:
+            continue
+        if source.is_symlink():
+            raise ArchiveBlocked("Mounted programs must not be symlinks")
+        files = [source] if source.is_file() else source.rglob("*")
+        for program in files:
+            visited += 1
+            if visited > 8192:
+                raise ArchiveBlocked("Mounted program traversal exceeds bound")
+            if program.is_symlink():
+                raise ArchiveBlocked("Mounted programs must not be symlinks")
+            if program.suffix not in {".py", ".sql"}:
+                continue
+            if source.is_file():
+                key = str(destination)
+            else:
+                key = str(Path(destination) / program.relative_to(source))
+            if len(code) >= 4096 or key in code:
+                raise ArchiveBlocked("Mounted program inventory exceeds bound")
+            fd = os.open(program, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                total_bytes += info.st_size
+                if (
+                    not stat.S_ISREG(info.st_mode)
+                    or info.st_size > 2 * 1024**2
+                    or total_bytes > 16 * 1024**2
+                ):
+                    raise ArchiveBlocked("Bound receiver program is not bounded")
+                raw = stream.read(2 * 1024**2 + 1)
+                if len(raw) != info.st_size:
+                    raise ArchiveBlocked("Mounted program changed during inspection")
+                code[key] = hashlib.sha256(raw).hexdigest()
+    if code != target["mounted_program_sha256"]:
+        raise ArchiveBlocked("Bound receiver program bytes changed")
+    return {
+        "id": target["id"],
+        "configuration_sha256": pin,
+        "image": value["Image"],
+        "started": state["StartedAt"],
+        "restarts": value["RestartCount"],
+        "mounted_program_sha256": code,
+    }
+
+
 def protected():
     result = {}
-    from .source_probe import gateway_ports
+    scope = scoped_receivers()
+    if scope is not None:
+        result["production_scope_sha256"] = os.environ["RAW_ARCHIVE_OBSERVATION_SCOPE_SHA256"]
+        result["receivers"] = {
+            role: scoped_container(target) for role, target in scope["receivers"].items()
+        }
+        # Keep the same ingress and accepted-reader checks as the old mode.
+        names = ()
+    else:
+        names = RECEIVERS
+    if scope is None:
+        from .source_probe import gateway_ports
 
-    names = RECEIVERS
-    if 8152 in gateway_ports():
-        names = (RECEIVERS[0], "gm-peter-receiver-20261010", *RECEIVERS[1:])
+        if 8152 in gateway_ports():
+            names = (RECEIVERS[0], "gm-peter-receiver-20261010", *RECEIVERS[1:])
     for name in names:
         state = json.loads(
             subprocess.check_output(  # noqa: S603 - fixed inspection-only command

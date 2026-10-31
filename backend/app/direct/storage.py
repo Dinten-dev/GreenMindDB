@@ -10,6 +10,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.raw_archive import reader as archive_reader
+from app.raw_archive.worklease import shared_wav_lease
 
 KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
 
@@ -78,6 +79,10 @@ class ArtifactStore:
         return key, digest
 
     def get(self, key):
+        with shared_wav_lease("direct", self.settings.s3_bucket, key):
+            return self._get(key)
+
+    def _get(self, key):
         # Ordinary readers retain the existing archive-aware S3 path. Source
         # verification must use get_local, which never calls this fallback.
         if self.client and self.settings.archive_broker_socket is None:
@@ -101,6 +106,10 @@ class ArtifactStore:
             return self.get_archive(key)
 
     def get_archive(self, key):
+        with shared_wav_lease("direct", self.settings.s3_bucket, key):
+            return self._get_archive(key)
+
+    def _get_archive(self, key):
         from app.direct.archive_reader import read_archive
 
         self._path(key)
@@ -114,6 +123,10 @@ class ArtifactStore:
         return available_archive(self.settings, keys)
 
     def get_local(self, key):
+        with shared_wav_lease("direct", self.settings.s3_bucket, key):
+            return self._get_local(key)
+
+    def _get_local(self, key):
         path = self._path(key)
         if self.client:
             return self._read_response(

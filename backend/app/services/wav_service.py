@@ -14,6 +14,8 @@ from botocore.exceptions import ClientError
 
 from app.config import settings
 from app.raw_archive import reader as archive_reader
+from app.raw_archive.worklease import enabled as work_leases_enabled
+from app.raw_archive.worklease import shared_wav_lease
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +139,10 @@ def build_wav_s3_key(sensor_mac: str, started_at: datetime, content_sha256: str)
 
 def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str:
     """Generate a presigned download URL for a WAV file."""
+    if work_leases_enabled():
+        from app.raw_archive.policy import ArchiveBlocked
+
+        raise ArchiveBlocked("Use the authenticated leased WAV download, not an untracked S3 URL")
     client = _get_s3_client()
     url = client.generate_presigned_url(
         "get_object",
@@ -160,6 +166,11 @@ def stream_wav_bytes(s3_key: str) -> Generator[bytes, None, None]:
 
 def download_object(s3_key: str, destination: BinaryIO) -> None:
     """Download one raw or derived object into a seekable file."""
+    with shared_wav_lease("gateway", _WAV_BUCKET, s3_key):
+        _download_object(s3_key, destination)
+
+
+def _download_object(s3_key: str, destination: BinaryIO) -> None:
     client = _get_s3_client()
     destination.seek(0)
     destination.truncate(0)

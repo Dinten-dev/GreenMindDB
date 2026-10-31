@@ -230,6 +230,7 @@ def verify_snapshot(candidate, store, ledger, provider, snapshot_id, *, checkpoi
                 "box_id": snapshot["storage_box"],
                 "name": snapshot["name"],
                 "created_at": created.isoformat(),
+                "checked_at": finished.isoformat(),
             },
         ),
         finished,
