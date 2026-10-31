@@ -1,7 +1,11 @@
-"""Retain every verified feature result, including late quality revisions.
+"""Acknowledge the separately prepared online feature identity capability.
 
 Revision ID: 0025
 Revises: 0024
+
+On production head0023 use the explicit feature-only online operation, which
+keeps0023 and authentication unchanged. Never upgrade to0025 to obtain that
+feature capability: it would request the separate0024 authentication migration.
 """
 
 from alembic import op
@@ -13,20 +17,19 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("SET LOCAL lock_timeout='1s'")
-    op.drop_constraint("uq_wav_feature_version_identity", "wav_feature_version", type_="unique")
-    op.create_unique_constraint(
-        "uq_wav_feature_version_identity",
-        "wav_feature_version",
-        [
-            "wav_file_id",
-            "extractor_version",
-            "calibration_version",
-            "parameter_hash",
-            "source_sha256",
-            "feature_checksum",
-        ],
-    )
+    from app.raw_archive.feature_identity_upgrade import completed
+
+    connection = op.get_bind()
+
+    class Catalog:
+        @property
+        def backend_pid(self):
+            return connection.connection.driver_connection.get_backend_pid()
+
+        def __call__(self, statement, parameters=()):
+            return list(connection.exec_driver_sql(statement, parameters).mappings())
+
+    completed(Catalog())  # Metadata only; no table/index build, auth DDL or stamp.
 
 
 def downgrade():
