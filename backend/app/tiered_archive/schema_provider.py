@@ -496,7 +496,7 @@ def inspect_dump(path, scope, role, master_names, env, *, checkpoint):
     return validate_toc(target.read_bytes(), scope, role, master_names)
 
 
-def capture(database_url, source, output, key, scope, *, checkpoint):
+def capture(database_url, source, output, key, scope, *, checkpoint, schema_capture=None):
     """Root-only new Gateway5/Direct4 capture using the existing dump/encryption pipeline."""
     from datetime import timedelta
 
@@ -518,7 +518,13 @@ def capture(database_url, source, output, key, scope, *, checkpoint):
         "Private root provider capture directory required",
     )
     originals, proof, at = backup.dump(
-        database_url, source, output, checkpoint=checkpoint, with_proof=True, provider_scope=scope
+        database_url,
+        source,
+        output,
+        checkpoint=checkpoint,
+        with_proof=True,
+        provider_scope=scope,
+        **({"schema_capture": schema_capture} if schema_capture is not None else {}),
     )
     files = []
     for index, path in enumerate(originals, 1):

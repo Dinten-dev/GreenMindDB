@@ -187,7 +187,7 @@ def make_source(tmp_path):
     return engine, legacy
 
 
-def new_bundle(tmp_path, monkeypatch, *, production=False):
+def new_bundle(tmp_path, monkeypatch, *, production=False, schema_capture=None):
     original, legacy = make_source(tmp_path)
     root = tmp_path / "new-provider"
     root.mkdir(mode=0o700)
@@ -205,6 +205,10 @@ def new_bundle(tmp_path, monkeypatch, *, production=False):
 
     def fake_dump(*args, **kwargs):
         assert kwargs["provider_scope"] == value and kwargs["with_proof"] is True
+        if schema_capture is None:
+            assert "schema_capture" not in kwargs
+        else:
+            assert kwargs["schema_capture"] is schema_capture
         paths = [root / "schema.dump", root / "masters.dump", root / "provider.dump"]
         for p in paths:
             p.write_bytes(b"synthetic authenticated archive")
@@ -234,6 +238,7 @@ def new_bundle(tmp_path, monkeypatch, *, production=False):
         key,
         value,
         checkpoint=lambda: None,
+        schema_capture=schema_capture,
     )
     manifest = {
         "candidate": candidate_json(candidate),
@@ -242,6 +247,19 @@ def new_bundle(tmp_path, monkeypatch, *, production=False):
     }
     (root / "manifest.json").write_text(json.dumps(manifest))
     return original, root, checksum(root / "manifest.json"), key, proof, schema_toc, masters_toc
+
+
+def test_public_capture_forwards_only_explicit_schema_hook_into_existing_dump(
+    tmp_path, monkeypatch
+):
+    hook = object()  # Only tests dispatch: backup.dump owns actual hook admission.
+    original, root, _, _, _, _, _ = new_bundle(
+        tmp_path, monkeypatch, production=True, schema_capture=hook
+    )
+    try:
+        assert len(list(root.glob("000*.bin"))) == 4
+    finally:
+        original.dispose()
 
 
 def test_capture_direct4_authenticated_header_and_no_silent_direct3_reinterpretation(
