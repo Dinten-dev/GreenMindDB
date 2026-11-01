@@ -19,6 +19,10 @@ from .policy import ArchiveBlocked
 _active = ContextVar("greenmind_wav_work_leases", default=frozenset())
 
 
+class WavWorkLeaseBusy(ArchiveBlocked):
+    """A live source writer owns the WAV; retry without blaming the recording."""
+
+
 def enabled():
     return os.environ.get("WAV_SOURCE_WORK_LEASES_ENABLED", "false").lower() == "true"
 
@@ -88,7 +92,7 @@ def shared_wav_lease(kind, bucket, key, *, track_nested=True):
             text("SELECT pg_try_advisory_xact_lock_shared(:key)"), {"key": lock}
         ).scalar_one()
         if acquired is not True:
-            raise ArchiveBlocked("WAV source is busy; retry after active maintenance")
+            raise WavWorkLeaseBusy("WAV source is busy; retry after active maintenance")
         if track_nested:
             token = _active.set(_active.get() | {identity})
         try:

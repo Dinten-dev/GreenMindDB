@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.timeseries import SensorReading
 from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
-from app.raw_archive.worklease import shared_wav_lease
+from app.raw_archive.worklease import WavWorkLeaseBusy, shared_wav_lease
 from app.services import wav_service
 from app.services.feature_identity_gate import FeatureIdentityWait, require_feature_identity
 
@@ -682,10 +682,11 @@ def process_pending_wav_features(db: Session) -> dict[str, int]:
         try:
             extract_and_verify_wav_features(db, wav)
             result["verified"] += 1
-        except FeatureIdentityWait:
+        except (FeatureIdentityWait, WavWorkLeaseBusy):
             db.rollback()
             # A schema regression between the claim commit and the next check
-            # is a pause, not a failed recording. Undo only our unchanged claim.
+            # or source lease contention is a pause, not a failed recording.
+            # Undo only our unchanged claim.
             claimed = db.query(WavFile).filter(WavFile.id == wav_id).with_for_update().first()
             if (
                 claimed is not None

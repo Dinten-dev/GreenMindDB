@@ -84,12 +84,12 @@ def test_exact_signed_key_and_shared_body_lifetime_across_stream_contexts(lease)
     response["Body"].close()
     assert lease.active == 0 and response["Body"].body.closed
     lease.writer = True
-    with pytest.raises(ArchiveBlocked, match="busy"):
+    with pytest.raises(worklease.WavWorkLeaseBusy, match="busy"):
         reader.get_object(source, Bucket="greenmind-raw", Key="one.wav", kind="gateway")
     assert source.calls == 1 and lease.active == 0
 
 
-def test_nested_feature_job_holds_one_lease_until_result_or_failure(lease, monkeypatch):
+def test_nested_feature_job_holds_one_lease_until_result_or_failure(db, lease, monkeypatch):
     record = SimpleNamespace(s3_key="one.wav")
     marker = object()
 
@@ -100,7 +100,7 @@ def test_nested_feature_job_holds_one_lease_until_result_or_failure(lease, monke
         return marker
 
     monkeypatch.setattr(wav_feature_service, "_extract_and_verify_wav_features", calculate)
-    assert wav_feature_service.extract_and_verify_wav_features(None, record) is marker
+    assert wav_feature_service.extract_and_verify_wav_features(db, record) is marker
     assert lease.active == 0
 
     def failed(_db, _wav):
@@ -109,8 +109,69 @@ def test_nested_feature_job_holds_one_lease_until_result_or_failure(lease, monke
 
     monkeypatch.setattr(wav_feature_service, "_extract_and_verify_wav_features", failed)
     with pytest.raises(RuntimeError, match="synthetic-feature"):
-        wav_feature_service.extract_and_verify_wav_features(None, record)
+        wav_feature_service.extract_and_verify_wav_features(db, record)
     assert lease.active == 0
+
+
+def test_feature_worker_source_contention_restores_claim_without_attempt_or_failure(
+    db, lease, monkeypatch
+):
+    from tests.test_feature_identity_gate import _record
+
+    record = _record(db)
+    before = (
+        record.feature_status,
+        record.feature_started_at,
+        record.feature_attempts,
+        record.feature_error,
+    )
+    lease.writer = True
+    monkeypatch.setattr(wav_feature_service, "_next_candidate", lambda *_: record)
+    monkeypatch.setattr(
+        wav_service, "download_object", lambda *_: pytest.fail("download while source busy")
+    )
+    assert wav_feature_service.process_pending_wav_features(db) == {
+        "verified": 0,
+        "failed": 0,
+        "paused": 1,
+    }
+    db.refresh(record)
+    assert (
+        record.feature_status,
+        record.feature_started_at,
+        record.feature_attempts,
+        record.feature_error,
+    ) == before
+    assert lease.connections == 1 and lease.active == 0
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Exact source WAV identity required for work lease",
+        "WAV integrity verification failed",
+        "WAV work leases require the authoritative PostgreSQL source",
+    ],
+)
+def test_feature_worker_other_archive_blocks_still_fail_and_consume_attempt(
+    db, monkeypatch, reason
+):
+    from tests.test_feature_identity_gate import _record
+
+    record = _record(db)
+    before = record.feature_attempts
+    monkeypatch.setattr(wav_feature_service, "_next_candidate", lambda *_: record)
+    monkeypatch.setattr(wav_feature_service.settings, "wav_feature_batch_size", 1)
+
+    def blocked(*_):
+        raise ArchiveBlocked(reason)
+
+    monkeypatch.setattr(wav_feature_service, "extract_and_verify_wav_features", blocked)
+    assert wav_feature_service.process_pending_wav_features(db) == {"verified": 0, "failed": 1}
+    db.refresh(record)
+    assert record.feature_status == "failed"
+    assert record.feature_attempts == before + 1
+    assert record.feature_error.startswith("ArchiveBlocked:")
 
 
 def test_direct_local_read_is_leased_and_untracked_urls_are_blocked(lease, monkeypatch, tmp_path):
