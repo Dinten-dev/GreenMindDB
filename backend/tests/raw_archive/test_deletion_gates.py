@@ -362,3 +362,19 @@ def test_old_full_catalog_approval_is_rejected(guarded):
     with pytest.raises(ArchiveBlocked, match="schema"):
         execute(guarded, guarded[-1](lambda data: data.update(schema=1)))
     assert not guarded[2].deleted
+
+
+@pytest.mark.parametrize(
+    "scope", ["observed-wav-context-copy-v1", "historical-direct-revision-copy-v1"]
+)
+def test_copy_context_receipts_block_both_deletion_gates_before_any_IO(scope):
+    from app.raw_archive.deletion import verify_deletion_evidence, verify_preparation_evidence
+    from app.raw_archive.wav_context import receipt_context, require_deletable_receipt
+
+    receipt = {"source_identity": receipt_context(scope)}
+    assert receipt["source_identity"]["deletion_authorized"] is False
+    for gate in (verify_deletion_evidence, verify_preparation_evidence):
+        with pytest.raises(ArchiveBlocked, match="COPY-only"):
+            gate(None, None, receipt, None, NOW)
+    require_deletable_receipt({})
+    require_deletable_receipt({"source_identity": "legacy-source-identity"})

@@ -181,6 +181,12 @@ def test_older_complete_revision_is_actually_copied_and_quarantined(historical, 
             )
             state, receipt = raw.load(recording)
             assert state == "verified" and h.store.files[receipt["remote_key"]] == h.body
+            from app.raw_archive.deletion import verify_deletion_evidence
+            from app.raw_archive.wav_context import RECEIPT_FORMAT
+
+            assert receipt["source_identity"]["format"] == RECEIPT_FORMAT
+            with pytest.raises(ArchiveBlocked, match="COPY-only"):
+                verify_deletion_evidence(None, recording, receipt, None, datetime.now(UTC))
             assert receipt["recording"]["key"] == "original.wav"
         finally:
             raw.close()
@@ -189,9 +195,17 @@ def test_older_complete_revision_is_actually_copied_and_quarantined(historical, 
         ledger.close()
 
 
-def test_latest_copy_retains_exact_existing_metadata_and_flags(historical):
+def test_latest_strict_read_retained_but_copy_context_is_explicitly_unknown(historical):
+    from app.raw_archive.wav_context import COPY_SCOPE, UNKNOWN, copy_flags
+
     h = historical
-    assert h.adapter.metadata([h.reference[0], 2]) == h.current.metadata([h.reference[0], 2])
+    copied, _, flags = h.adapter.metadata([h.reference[0], 2])
+    strict, _, strict_flags = h.current.metadata([h.reference[0], 2])
+    assert copied["body"]["copy_scope"] == COPY_SCOPE and flags == copy_flags()
+    assert copied["body"]["metadata"]["capture_assignment"] == UNKNOWN
+    assert all(strict_flags.values()) and "copy_scope" not in strict["body"]
+    for field in ("segment", "revision", "session"):
+        assert copied["body"]["metadata"][field] == strict["body"]["metadata"][field]
 
 
 def test_historical_metadata_read_race_blocks_before_any_source_body(historical, monkeypatch):

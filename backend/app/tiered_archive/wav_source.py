@@ -222,6 +222,15 @@ class WavSource:
                 "originals": [{"recording": record_json(record)} for record in records],
             },
         }
+        if self.copy_published_history:
+            from app.raw_archive.wav_context import COPY_SCOPE, copy_flags, observe
+
+            # These live joins prove present access routing, not assignment at
+            # acquisition time. This branch is used by both real COPY producers;
+            # strict deletion sources and old archive formats remain unchanged.
+            envelope["body"]["copy_scope"] = COPY_SCOPE
+            envelope["body"]["metadata"] = observe(metadata, self.kind)
+            return envelope, headers, copy_flags()
         return (
             envelope,
             headers,
@@ -513,6 +522,11 @@ class WavSource:
         try:
             for item in envelope["body"]["originals"]:
                 record = Recording.from_receipt(item["recording"])
+                context = {}
+                if envelope["body"].get("copy_scope"):
+                    from app.raw_archive.wav_context import receipt_context
+
+                    context["source_identity"] = receipt_context(envelope["body"]["copy_scope"])
                 ledger.save(
                     record,
                     "verified",
@@ -523,6 +537,7 @@ class WavSource:
                         "destination": transport.identity,
                         "first_verified_at": now.isoformat(),
                         "verified_at": now.isoformat(),
+                        **context,
                     },
                 )
             group = os.environ.get("TIERED_ARCHIVE_READ_GID")

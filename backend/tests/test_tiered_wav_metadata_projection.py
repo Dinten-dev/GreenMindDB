@@ -95,8 +95,10 @@ def gateway_adapter(db, setup_test_data, monkeypatch):
         return statement, parameters
 
     event.listen(engine, "before_cursor_execute", restricted, retval=True)
+
     def sessions():
         return nullcontext(db)
+
     adapter = WavSource(
         sessions, GatewayCatalog(sessions), None, "gateway", "staging", None, lambda: None
     )
@@ -310,3 +312,52 @@ def test_missing_projection_error_permission_is_not_bypassed(direct_adapter):
             adapter.metadata(reference)
     finally:
         event.remove(engine, "before_cursor_execute", denied)
+
+
+def test_real_gateway_copy_producer_marks_current_assignment_only_observed(
+    gateway_adapter, tmp_path
+):
+    from app.raw_archive.wav_context import COPY_SCOPE, UNKNOWN, copy_flags
+
+    adapter, reference, _, _, _ = gateway_adapter
+    strict, _, _ = adapter.metadata(reference)
+    adapter.copy_published_history = True
+    copied, headers, flags = adapter.metadata(reference)
+    assert copied["body"]["copy_scope"] == COPY_SCOPE
+    assert flags == copy_flags()
+    assert copied["body"]["metadata"]["capture_assignment"] == UNKNOWN
+    assert copied["body"]["metadata"]["observed_assignment"] == {
+        **strict["body"]["metadata"]["assignment"],
+        "semantics": "observed_at_archive",
+    }
+    for key in ("wav", "feature", "feature_versions"):
+        assert encode(copied["body"]["metadata"][key]) == encode(strict["body"]["metadata"][key])
+    assert PRIVATE.encode() not in parquet_roundtrip(copied, tmp_path / "observed-gateway.parquet")
+    assert next(iter(headers.values()))["frames"] == 380
+    with pytest.raises(ArchiveBlocked, match="COPY-only"):
+        adapter._require_deletion_scope()
+
+
+def test_real_current_published_direct_copy_producer_is_observed_not_historical(
+    direct_adapter, tmp_path
+):
+    from app.raw_archive.direct_copy_catalog import PublishedDirectCopyCatalog
+    from app.raw_archive.wav_context import COPY_SCOPE, UNKNOWN, copy_flags
+
+    adapter, reference, sessions, _ = direct_adapter
+    strict, _, _ = adapter.metadata(reference)
+    adapter.catalog = PublishedDirectCopyCatalog(sessions, "greenmind-direct-staging-test")
+    assert adapter.catalog.historical_metadata(reference) is None
+    adapter.copy_published_history = True
+    copied, _, flags = adapter.metadata(reference)
+    assert copied["body"]["copy_scope"] == COPY_SCOPE and flags == copy_flags()
+    assert copied["body"]["metadata"]["capture_assignment"] == UNKNOWN
+    assert copied["body"]["metadata"]["observed_assignment"] == {
+        **strict["body"]["metadata"]["assignment"],
+        "semantics": "observed_at_archive",
+    }
+    for key in ("segment", "revision", "session"):
+        assert encode(copied["body"]["metadata"][key]) == encode(strict["body"]["metadata"][key])
+    assert PRIVATE.encode() not in parquet_roundtrip(copied, tmp_path / "observed-direct.parquet")
+    with pytest.raises(ArchiveBlocked, match="COPY-only"):
+        adapter._require_deletion_scope()

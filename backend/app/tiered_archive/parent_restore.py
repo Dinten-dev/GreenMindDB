@@ -101,9 +101,19 @@ def load_parent(
         verify_file(artifact, part, checkpoint)
         records.append(record)
     metadata = body["metadata"]
+    from app.raw_archive.direct_history import COPY_SCOPE as HISTORICAL_DIRECT
+    from app.raw_archive.wav_context import COPY_SCOPE as OBSERVED_CONTEXT
+    from app.raw_archive.wav_context import require_observed
+
+    observed = body.get("copy_scope") == OBSERVED_CONTEXT
+    if "copy_scope" in body and body["copy_scope"] not in {HISTORICAL_DIRECT, OBSERVED_CONTEXT}:
+        raise ArchiveBlocked("Unknown scientific WAV COPY contract")
+    if observed:
+        require_observed(metadata, source, candidate)
     if source == "gateway":
         if (
-            set(metadata) != {"wav", "feature", "feature_versions", "assignment"}
+            (not observed and set(metadata) != {"wav", "feature", "feature_versions", "assignment"})
+            or ("copy_scope" in body and not observed)
             or len(records) != 1
         ):
             raise ArchiveBlocked("Incomplete Gateway scientific metadata")
@@ -127,16 +137,18 @@ def load_parent(
             )
         ):
             raise ArchiveBlocked("Gateway scientific parent or feature source mismatch")
-        assignment = metadata["assignment"]
+        assignment = metadata["observed_assignment"] if observed else metadata["assignment"]
         if (
-            set(assignment) != {"sensor_id", "gateway_id", "zone_id", "organization_id"}
+            set(assignment)
+            != {"sensor_id", "gateway_id", "zone_id", "organization_id"}
+            | ({"semantics"} if observed else set())
             or str(row["sensor_id"]) != assignment["sensor_id"]
             or str(row["gateway_id"]) != assignment["gateway_id"]
             or assignment["organization_id"] != organization
         ):
             raise ArchiveBlocked("Gateway captured assignment mismatch")
-        return candidate, row, metadata, None
-    historical = "copy_scope" in body
+        return candidate, row, metadata, metadata.get("capture_assignment")
+    historical = body.get("copy_scope") == HISTORICAL_DIRECT
     if historical:
         from app.raw_archive.direct_history import COPY_SCOPE
 
@@ -163,9 +175,10 @@ def load_parent(
         if assignment.get("semantics") != "observed_at_archive":
             raise ArchiveBlocked("Historical assignment observation required")
     else:
-        if set(metadata) != {"segment", "revision", "session", "assignment"}:
+        if not observed and set(metadata) != {"segment", "revision", "session", "assignment"}:
             raise ArchiveBlocked("Incomplete Direct scientific metadata")
-        row, assignment = metadata["segment"], metadata["assignment"]
+        row = metadata["segment"]
+        assignment = metadata["observed_assignment"] if observed else metadata["assignment"]
     if set(assignment) != {
         "device_id",
         "organization_id",
@@ -173,7 +186,7 @@ def load_parent(
         "legacy_sensor_id",
         "mode",
         "hardware_id",
-    } | ({"semantics"} if historical else set()):
+    } | ({"semantics"} if historical or observed else set()):
         raise ArchiveBlocked("Unexpected Direct assignment fields")
     validate_row(source, "direct_segment", row)
     revision, session = metadata["revision"], metadata["session"]
@@ -318,7 +331,7 @@ def verify_masters(db, tables, source, row, metadata, organization):
         return value
 
     if source == "gateway":
-        assignment = metadata["assignment"]
+        assignment = metadata.get("assignment", metadata.get("observed_assignment"))
         sensor = one("sensor", id=row["sensor_id"])
         gateway = one("gateway", id=row["gateway_id"])
         zone = one("zone", id=gateway["zone_id"])

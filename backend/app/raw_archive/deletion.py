@@ -82,6 +82,9 @@ def approval(config, now):
 
 
 def verify_deletion_evidence(config, recording, receipt, destination, now, *, clock=None):
+    from .wav_context import require_deletable_receipt
+
+    require_deletable_receipt(receipt)
     proof_at = _verify_evidence(config, recording, receipt, destination, now, approval(config, now))
     # Four remote readbacks may outlive the consent or snapshot validity window.
     # Check the live deadline after their last byte, before any deletion.
@@ -103,6 +106,9 @@ def verify_current_authorization(config, recording, current, proof_at, *, consen
 
 def verify_preparation_evidence(config, recording, receipt, destination, now, *, clock=None):
     """Same immutable proofs without consent; does not call any source adapter."""
+    from .wav_context import require_deletable_receipt
+
+    require_deletable_receipt(receipt)
     proof_at = _verify_evidence(config, recording, receipt, destination, now, proposal(config, now))
     verify_current_authorization(
         config, recording, clock() if clock else now, proof_at, consent=False

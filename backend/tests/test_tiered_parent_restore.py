@@ -44,7 +44,7 @@ def scientific(kind, table, **values):
     return dict.fromkeys(COLUMNS[kind][table]) | values
 
 
-def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False):
+def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False, observed=False):
     folder = tmp_path / "bundle"
     folder.mkdir()
     wav = folder / "0001.wav"
@@ -183,6 +183,10 @@ def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False):
                 quarantined=True,
                 reason="source_has_no_immutable_capture_assignment_history",
             )
+    if observed:
+        from app.raw_archive.wav_context import observe
+
+        metadata = observe(metadata, source)
     mutate(metadata)
     record = Recording(
         source,
@@ -204,6 +208,10 @@ def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False):
         from app.raw_archive.direct_history import COPY_SCOPE
 
         body["copy_scope"] = COPY_SCOPE
+    if observed:
+        from app.raw_archive.wav_context import COPY_SCOPE
+
+        body["copy_scope"] = COPY_SCOPE
     envelope = dict(
         identity=digest(reference), organization=ORG, sensor=SENSOR, time_us=epoch_us(AT), body=body
     )
@@ -219,7 +227,17 @@ def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False):
         1,
         "wav",
         AT + timedelta(seconds=2),
-        quarantined=historical,
+        **(
+            dict(
+                complete=False,
+                dependencies_complete=False,
+                projections_verified=False,
+                features_verified=True,
+                quarantined=True,
+            )
+            if observed
+            else dict(quarantined=historical)
+        ),
     )
     files = [
         primary,
@@ -593,3 +611,71 @@ def test_modified_artifact_after_insert_rolls_back_parent(tmp_path, monkeypatch)
         restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
     with engine.connect() as db:
         assert db.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() == 0
+
+
+@pytest.mark.parametrize("source", ["gateway", "direct"])
+def test_observed_context_parent_restores_real_fk_without_promoting_unknown(
+    tmp_path, monkeypatch, source
+):
+    from app.raw_archive.wav_context import UNKNOWN
+
+    folder, sha, pins, metadata = bundle(tmp_path, source, observed=True)
+    engine, table = target(tmp_path, monkeypatch, source, metadata)
+    sql_folder, sql_sha = sql_child_bundle(tmp_path, source, metadata)
+    with pytest.raises(IntegrityError):
+        restore_database(sql_folder, URL, sql_sha, checkpoint=lambda: None)
+    result = restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
+    assert result["quarantined"] is True and result["capture_assignment"] == UNKNOWN
+    assert result["source_accesses"] == 0
+    assert "assignment" not in metadata
+    assert metadata["observed_assignment"]["semantics"] == "observed_at_archive"
+    assert restore_database(sql_folder, URL, sql_sha, checkpoint=lambda: None)["restored_rows"] == 1
+    with engine.connect() as db:
+        assert db.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() == 1
+
+
+@pytest.mark.parametrize("source", ["gateway", "direct"])
+@pytest.mark.parametrize("change", ["known", "unquarantined", "capture_semantics", "extra_field"])
+def test_observed_context_tampering_blocks_before_connection(tmp_path, monkeypatch, source, change):
+    from app.tiered_archive.parent_restore import load_parent
+
+    def mutate(metadata):
+        if change == "known":
+            metadata["capture_assignment"]["status"] = "known"
+        elif change == "unquarantined":
+            metadata["capture_assignment"]["quarantined"] = False
+        elif change == "capture_semantics":
+            metadata["observed_assignment"]["semantics"] = "at_capture"
+        else:
+            metadata["observed_assignment"]["secret"] = "must_not_enter_archive"
+
+    folder, sha, pins, _ = bundle(tmp_path, source, mutate=mutate, observed=True)
+    with pytest.raises(ArchiveBlocked, match="COPY-only quarantined"):
+        load_parent(folder, sha, **pins, checkpoint=lambda: None)
+
+
+@pytest.mark.parametrize("source", ["gateway", "direct"])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("quarantined", False),
+        ("complete", True),
+        ("dependencies_complete", True),
+        ("projections_verified", True),
+        ("features_verified", False),
+    ],
+)
+def test_observed_candidate_cannot_promote_copy_to_complete(tmp_path, source, field, value):
+    from app.tiered_archive.parent_restore import load_parent
+    from app.tiered_archive.runtime import candidate_from_json
+
+    folder, _, pins, _ = bundle(tmp_path, source, observed=True)
+    path = folder / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["candidate"][field] = value
+    candidate = candidate_from_json(manifest["candidate"])
+    manifest["identity"] = candidate.identity
+    pins["candidate_id"] = candidate.identity
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ArchiveBlocked, match="COPY-only quarantined"):
+        load_parent(folder, checksum(path), **pins, checkpoint=lambda: None)
