@@ -144,7 +144,8 @@ def _control_pin(db):
 
 
 def _install_function(db):
-    db.exec_driver_sql("""CREATE FUNCTION public.greenmind_restore_track_v1()
+    db.execute(
+        text("""CREATE FUNCTION public.greenmind_restore_track_v1()
     RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $fence$
     DECLARE mode text; is_master boolean; logical_name text; parent_oid oid;
     BEGIN
@@ -181,6 +182,7 @@ def _install_function(db):
       END IF;
       RETURN NULL;
     END $fence$""")
+    )
 
 
 def _quote(name):
@@ -234,16 +236,18 @@ def _install_triggers(db, name, logical=None, schema="public", *, new_chunk=Fals
                 not new_chunk or trigger == TRUNCATE_TRIGGER,
                 "New restore child lacks inherited row fence",
             )
-            db.exec_driver_sql(
-                f'CREATE TRIGGER "{trigger}" AFTER {event.split(" FOR EACH ")[0]} ON {qualified} '
-                f"FOR EACH {event.split(' FOR EACH ')[1]} EXECUTE FUNCTION public.{FUNCTION}('{logical}')"
+            db.execute(
+                text(
+                    f'CREATE TRIGGER "{trigger}" AFTER {event.split(" FOR EACH ")[0]} ON {qualified} '
+                    f"FOR EACH {event.split(' FOR EACH ')[1]} EXECUTE FUNCTION public.{FUNCTION}('{logical}')"
+                )
             )
         else:
             _require(
                 _valid_trigger(existing, logical, kind, allow_origin=True),
                 "Existing restore trigger differs",
             )
-        db.exec_driver_sql(f'ALTER TABLE {qualified} ENABLE ALWAYS TRIGGER "{trigger}"')
+        db.execute(text(f'ALTER TABLE {qualified} ENABLE ALWAYS TRIGGER "{trigger}"'))
 
 
 def _descendants(db, name):

@@ -2,7 +2,9 @@
 
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, select, text
+from sqlalchemy.dialects.postgresql import psycopg2
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import TextClause
 
 from app.raw_archive.policy import ArchiveBlocked
 from app.tiered_archive import restore_fence as fence
@@ -296,7 +298,7 @@ def test_changed_or_unaccepted_child_identity_blocks_regular_check(target, monke
 
 def test_pg_trigger_source_binds_logical_name_origin_and_truncate_without_row_payload():
     statements = []
-    db = type("DB", (), {"exec_driver_sql": lambda _self, sql: statements.append(sql)})()
+    db = type("DB", (), {"execute": lambda _self, sql: statements.append(str(sql))})()
     fence._install_function(db)
     body = statements[0]
     assert "logical_name := TG_ARGV[0]" in body
@@ -304,3 +306,27 @@ def test_pg_trigger_source_binds_logical_name_origin_and_truncate_without_row_pa
     assert "TG_OP='TRUNCATE'" in body
     assert "session_replication_role" in body
     assert "NEW." not in body and "OLD." not in body
+
+
+def test_actual_pg_ddl_dialect_rendering_escapes_literal_percent_for_psycopg2():
+    statements = []
+
+    class DriverBoundary:
+        def execute(self, statement):
+            assert isinstance(statement, TextClause)
+            compiled = statement.compile(dialect=psycopg2.dialect())
+            assert compiled.params == {}  # PL/pgSQL := is not an application bind.
+            wire = str(compiled)
+            statements.append((str(statement), wire, wire % compiled.params))
+
+    fence._install_function(DriverBoundary())
+    original, wire, driver_rendered = statements[0]
+    assert "format('public.%I'" in original
+    assert "format('public.%%I'" in wire
+    assert driver_rendered == original
+    with pytest.raises((TypeError, ValueError)):
+        original % {}  # The removed raw-driver path bypassed dialect escaping.
+    notice = text("DO $$ BEGIN RAISE NOTICE 'progress %',1; END $$")
+    compiled = notice.compile(dialect=psycopg2.dialect())
+    assert "progress %%" in str(compiled)
+    assert str(compiled) % compiled.params == str(notice)
