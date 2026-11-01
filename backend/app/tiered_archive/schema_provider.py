@@ -20,6 +20,7 @@ from .codec import digest
 FORMAT = "schema-master-provider-v1"
 AUTH_FORMAT = "greenmind.schema-master-provider-auth.v1"
 SCOPE_FORMAT = "greenmind.pg15-timescale2172-source-authority.v1"
+PRODUCTION_SCOPE_FORMAT = "greenmind.pg15-timescale2172-production-authority.v1"
 MAX_TOC_BYTES = 512 * 1024
 MAX_TOC_ENTRIES = 4096
 NAME = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
@@ -71,8 +72,13 @@ def read_scope(path, expected_sha256):
 
 
 def validate_scope(scope):
-    from .native_backup import SOURCE_DATABASES
+    from .native_backup import (
+        PRODUCTION_SOURCE_BINDINGS,
+        PRODUCTION_SOURCE_DATABASES,
+        SOURCE_DATABASES,
+    )
 
+    production = isinstance(scope, dict) and scope.get("format") == PRODUCTION_SCOPE_FORMAT
     need(
         isinstance(scope, dict)
         and set(scope)
@@ -92,19 +98,32 @@ def validate_scope(scope):
             "provider_toc_sha256",
             "master_sequences",
             "sequence_names",
-        },
+        }
+        | ({"source_binding"} if production else set()),
         "Exact independently pinned provider scope required",
     )
     need(
-        scope["format"] == SCOPE_FORMAT
-        and scope["environment"] == "staging"
+        scope["format"] == (PRODUCTION_SCOPE_FORMAT if production else SCOPE_FORMAT)
+        and scope["environment"] == ("production" if production else "staging")
         and scope["source"] in SOURCE_DATABASES
-        and scope["database"] == SOURCE_DATABASES[scope["source"]]
+        and scope["database"]
+        == (PRODUCTION_SOURCE_DATABASES if production else SOURCE_DATABASES)[scope["source"]]
         and scope["postgres_major"] == 15
         and scope["extension"] == "timescaledb"
         and scope["extension_version"] == "2.17.2",
         "Unsupported schema restore provider",
     )
+    if production:
+        binding = scope["source_binding"]
+        need(
+            isinstance(binding, dict)
+            and binding == PRODUCTION_SOURCE_BINDINGS[scope["source"]]
+            and all(
+                type(binding[name]) is int
+                for name in ("port", "database_oid", "role_oid", "session_oid")
+            ),
+            "Exact reviewed production source binding required",
+        )
     need(
         all(
             isinstance(scope[k], str) and SHA.fullmatch(scope[k])
@@ -210,6 +229,25 @@ def capture_provider(db, scope, *, checkpoint):
         and digest(identity) == scope["source_identity_sha256"],
         "Provider source identity differs",
     )
+    if scope["environment"] == "production":
+        binding = scope["source_binding"]
+        need(
+            identity["oid"] == binding["database_oid"]
+            and identity["actor"] == binding["role_oid"]
+            and identity["session"] == binding["session_oid"],
+            "Production provider database or principal differs",
+        )
+        need(
+            db.execute(text("SHOW transaction_read_only")).scalar_one() == "on"
+            and db.execute(
+                text("""SELECT rolcanlogin AND NOT (rolsuper OR rolcreatedb OR rolcreaterole
+                  OR rolreplication OR rolbypassrls) FROM pg_catalog.pg_roles
+                  WHERE oid=:role AND rolname=:name"""),
+                {"role": binding["role_oid"], "name": binding["role"]},
+            ).scalar_one()
+            is True,
+            "Unprivileged read-only production provider principal required",
+        )
     version = db.execute(text("SELECT current_setting('server_version_num')::int")).scalar_one()
     need(150000 <= version < 160000, "PG15 provider contract required")
     extensions = dict(
@@ -468,7 +506,7 @@ def capture(database_url, source, output, key, scope, *, checkpoint):
 
     need(os.geteuid() == 0, "Root provider capture required")
     validate_scope(scope)
-    source_url(database_url, source, "staging")
+    source_url(database_url, source, scope["environment"], provider_scope=scope)
     need(scope["source"] == source, "Exact source provider authority required")
     output = Path(output)
     need(
@@ -498,7 +536,7 @@ def capture(database_url, source, output, key, scope, *, checkpoint):
         "schema": AUTH_FORMAT,
         "format": FORMAT,
         "source": source,
-        "environment": "staging",
+        "environment": scope["environment"],
         "version": proof_version(source),
         "captured_at": at,
         "master_proof": proof,
@@ -540,7 +578,7 @@ def capture(database_url, source, output, key, scope, *, checkpoint):
         **descriptor(proof, source, [r for _, r in files]),
     )
     candidate = Candidate(
-        "staging",
+        scope["environment"],
         source,
         "database_backup",
         SYSTEM_ORG,

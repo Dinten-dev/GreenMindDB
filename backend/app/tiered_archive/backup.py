@@ -553,7 +553,9 @@ def dump(
         schema_provider.validate_scope(provider_scope)
         if provider_scope["source"] != source:
             raise ArchiveBlocked("Exact provider source required")
-        source_url(database_url, source, "staging")
+        source_url(
+            database_url, source, provider_scope["environment"], provider_scope=provider_scope
+        )
     version = 4 if source == "gateway" else MASTER_PROOF_VERSION
     scope = fresh_schema_scope(database_url, checkpoint=checkpoint) if version == 4 else None
     tables = master_tables(source, proof_version=version, schema_scope=scope)

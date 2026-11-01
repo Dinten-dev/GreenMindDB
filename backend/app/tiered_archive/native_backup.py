@@ -27,6 +27,20 @@ FORMAT = "postgres-full-v1"
 MAX = backup.MAX_BYTES
 SYSTEM_ORG = "00000000-0000-0000-0000-000000000000"
 SOURCE_DATABASES = {"gateway": "plantdb_staging", "direct": "greenmind_direct_staging"}
+# Only the separate root-authorized provider format can use these existing
+# production readers. postgres-full-v1 remains restricted to Staging.
+PRODUCTION_SOURCE_DATABASES = {"gateway": "plantdb", "direct": "greenmind_direct_production"}
+PRODUCTION_SOURCE_BINDINGS = {
+    source: {
+        "host": "127.0.0.1",
+        "port": 5432,
+        "database_oid": oid,
+        "role": "greenmind_archive_reader_33fe395",
+        "role_oid": 499352,
+        "session_oid": 499352,
+    }
+    for source, oid in (("gateway", 16384), ("direct", 301614))
+}
 # Authenticated postgres-full-v1 archives retain their original minimum scope.
 # New captures/seals must additionally cover every current authority table.
 NATIVE_V1_MINIMUM_TABLES = {
@@ -245,9 +259,31 @@ def validate_proof(proof, source, *, current_scope=False):
             raise ArchiveBlocked("Malformed native sequence proof")
 
 
-def source_url(database_url, source, environment):
-    """This bounded acceptance format cannot silently target production."""
+def source_url(database_url, source, environment, *, provider_scope=None):
+    """Full-v1 stays Staging-only; production needs an explicit provider authority."""
     url = make_url(database_url)
+    if provider_scope is not None:
+        from .schema_provider import validate_scope
+
+        validate_scope(provider_scope)
+        if provider_scope["source"] != source or provider_scope["environment"] != environment:
+            raise ArchiveBlocked("Provider source URL and authority differ")
+        if environment == "production":
+            binding = provider_scope["source_binding"]
+            if (
+                url.drivername not in {"postgresql", "postgresql+psycopg2"}
+                or (url.host, url.port, url.database, url.username)
+                != (
+                    binding["host"],
+                    binding["port"],
+                    provider_scope["database"],
+                    binding["role"],
+                )
+                or not url.password
+                or url.query
+            ):
+                raise ArchiveBlocked("Exact existing production provider reader required")
+            return url
     if (
         environment != "staging"
         or source not in SOURCE_DATABASES

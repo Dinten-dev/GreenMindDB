@@ -428,8 +428,9 @@ def _restore_provider(
         raise ArchiveBlocked("Existing controlled supervisor post-restore handshake required")
     proof = body.get("master_proof")
     schema_provider.validate_proof(proof, candidate.source)
+    scope = proof["provider"]["scope"]
     if (
-        candidate.environment != "staging"
+        candidate.environment != scope["environment"]
         or len(parts) != 5
         or parts[0].get("backup_format") != schema_provider.FORMAT
         or any(
@@ -472,7 +473,7 @@ def _restore_provider(
             "schema": schema_provider.AUTH_FORMAT,
             "format": schema_provider.FORMAT,
             "source": candidate.source,
-            "environment": "staging",
+            "environment": scope["environment"],
             "version": schema_provider.proof_version(candidate.source),
             "captured_at": candidate.end,
             "master_proof": proof,
@@ -480,7 +481,6 @@ def _restore_provider(
         }
         if decode((work / "auth.json").read_bytes()) != expected:
             raise ArchiveBlocked("Authenticated provider/source/master/dump binding differs")
-        scope = proof["provider"]["scope"]
         masters = schema_provider.validate_proof(proof, candidate.source)
         provider_entries = schema_provider.inspect_dump(
             work / "provider.dump", scope, "provider", masters, env, checkpoint=checkpoint

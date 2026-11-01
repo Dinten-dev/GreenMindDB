@@ -45,8 +45,10 @@ def toc_text(database, entries):
     ).encode()
 
 
-def scope(source="direct"):
-    database = native_backup.SOURCE_DATABASES[source]
+def scope(source="direct", *, production=False):
+    database = (
+        native_backup.PRODUCTION_SOURCE_DATABASES if production else native_backup.SOURCE_DATABASES
+    )[source]
     schema_entries = ["2; 0 42 TABLE DATA _timescaledb_catalog hypertable owner"]
     masters_entries = [
         f"{10 + i}; 0 {50 + i} TABLE DATA public {name} owner"
@@ -81,6 +83,12 @@ def scope(source="direct"):
         "master_sequences": [],
         "sequence_names": ["public.fixture_seq"],
     }
+    if production:
+        value.update(
+            format=provider.PRODUCTION_SCOPE_FORMAT,
+            environment="production",
+            source_binding=copy.deepcopy(native_backup.PRODUCTION_SOURCE_BINDINGS[source]),
+        )
     return value, toc_text(database, schema_entries), toc_text(database, masters_entries)
 
 
@@ -179,11 +187,11 @@ def make_source(tmp_path):
     return engine, legacy
 
 
-def new_bundle(tmp_path, monkeypatch):
+def new_bundle(tmp_path, monkeypatch, *, production=False):
     original, legacy = make_source(tmp_path)
     root = tmp_path / "new-provider"
     root.mkdir(mode=0o700)
-    value, schema_toc, masters_toc = scope()
+    value, schema_toc, masters_toc = scope(production=production)
     proof = {
         **legacy,
         "version": 4,
@@ -216,7 +224,11 @@ def new_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(type(root), "stat", fixture_stat)
     key = secrets.token_bytes(32)
     candidate, files = provider.capture(
-        "postgresql://greenmind_archive_staging_ro:synthetic@127.0.0.1:5433/greenmind_direct_staging",
+        (
+            "postgresql://greenmind_archive_reader_33fe395:synthetic@127.0.0.1:5432/greenmind_direct_production"
+            if production
+            else "postgresql://greenmind_archive_staging_ro:synthetic@127.0.0.1:5433/greenmind_direct_staging"
+        ),
         "direct",
         root,
         key,
@@ -263,11 +275,14 @@ def test_capture_direct4_authenticated_header_and_no_silent_direct3_reinterpreta
         original.dispose()
 
 
+@pytest.mark.parametrize("production", [False, True])
 @pytest.mark.parametrize("post_change", [None, "master", "jobs", "unfinished"])
 def test_direct4_full_capture_auth_data_order_typed_readback_and_handshake(
-    tmp_path, monkeypatch, post_change
+    tmp_path, monkeypatch, post_change, production
 ):
-    original, root, sha, key, proof, schema_toc, masters_toc = new_bundle(tmp_path, monkeypatch)
+    original, root, sha, key, proof, schema_toc, masters_toc = new_bundle(
+        tmp_path, monkeypatch, production=production
+    )
     target = create_engine("sqlite:///" + str(tmp_path / "target.sqlite"))
     active = {"restoring": "on", "jobs": 0, "post_called": 0}
     commands = []
@@ -500,13 +515,14 @@ def test_target_sql_guard_is_atomic_and_never_waives_private_or_empty_database(m
         )
 
 
+@pytest.mark.parametrize("production", [False, True])
 def test_provider_producer_both_dumps_share_one_snapshot_and_keep_extconfig_data(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, production
 ):
     from pathlib import Path
 
     original, legacy = make_source(tmp_path)
-    value, schema_toc, masters_toc = scope()
+    value, schema_toc, masters_toc = scope(production=production)
     calls = []
     metadata_checks = []
     event.listen(
@@ -546,6 +562,12 @@ def test_provider_producer_both_dumps_share_one_snapshot_and_keep_extconfig_data
             calls.append(command)
             assert "PGSERVICE" not in kwargs["env"]
             assert "default_transaction_read_only=on" in kwargs["env"]["PGOPTIONS"]
+            assert kwargs["env"]["PGHOST"] == "127.0.0.1"
+            assert kwargs["env"]["PGPORT"] == ("5432" if production else "5433")
+            assert kwargs["env"]["PGDATABASE"] == value["database"]
+            assert kwargs["env"]["PGUSER"] == (
+                "greenmind_archive_reader_33fe395" if production else "greenmind_archive_staging_ro"
+            )
             if "--list" in command:
                 output = Path(next(c.split("=", 1)[1] for c in command if c.startswith("--file=")))
                 if command[-1].endswith("schema.dump"):
@@ -573,7 +595,11 @@ def test_provider_producer_both_dumps_share_one_snapshot_and_keep_extconfig_data
     output.mkdir(mode=0o700)
     try:
         files, new_proof, captured = backup.dump(
-            "postgresql://greenmind_archive_staging_ro:synthetic@127.0.0.1:5433/greenmind_direct_staging",
+            (
+                "postgresql://greenmind_archive_reader_33fe395:synthetic@127.0.0.1:5432/greenmind_direct_production"
+                if production
+                else "postgresql://greenmind_archive_staging_ro:synthetic@127.0.0.1:5433/greenmind_direct_staging"
+            ),
             "direct",
             output,
             checkpoint=lambda: None,
