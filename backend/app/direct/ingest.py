@@ -7,6 +7,8 @@ import time
 from sqlalchemy import update
 
 from app.direct.auth import authenticate
+from app.direct.capture_assignment import FIELD, split
+from app.direct.capture_assignment import create as capture_assignment
 from app.direct.database import transaction
 from app.direct.models import Budget, Chunk, Piece, Segment, Session
 from app.direct.protocol import SEGMENT_US, DirectError
@@ -60,12 +62,25 @@ def accept_chunk(engine, settings, token, meta, payload, *, now=None):
                 session = Session(
                     device_id=device.id,
                     id=identity[1],
-                    config=meta.session_config(),
+                    config=meta.session_config()
+                    | (
+                        {FIELD: capture_assignment(device, identity[1], now)}
+                        if settings.capture_assignment_enabled
+                        else {}
+                    ),
                     mode=device.mode,
                 )
                 db.add(session)
-            elif session.config != meta.session_config() or session.mode != device.mode:
-                raise DirectError(409, "session_configuration_conflict")
+            else:
+                config, assignment = split(session.config)
+                if config != meta.session_config() or session.mode != device.mode:
+                    raise DirectError(409, "session_configuration_conflict")
+                if assignment is not None and (
+                    assignment["organization_id"] != device.organization_id
+                    or assignment["zone_id"] != device.zone_id
+                    or assignment["mode"] != device.mode
+                ):
+                    raise DirectError(409, "session_capture_assignment_conflict")
             previous = (
                 chunks.filter(Chunk.sequence < meta.sequence)
                 .order_by(Chunk.sequence.desc())

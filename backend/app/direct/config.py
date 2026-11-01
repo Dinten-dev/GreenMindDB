@@ -15,6 +15,7 @@ class DirectSettings(BaseSettings):
 
     environment: Literal["development", "staging", "production"] = "development"
     ingest_enabled: bool = False
+    capture_assignment_enabled: bool = False
     dashboard_api_url: str = ""
     dashboard_origin: str = ""
     database_url: SecretStr = SecretStr("")

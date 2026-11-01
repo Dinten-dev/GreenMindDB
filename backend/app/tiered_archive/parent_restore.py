@@ -7,6 +7,7 @@ no device, sensor, enrollment or historical assignment is synthesized.
 
 import json
 
+from app.direct.capture_assignment import split as split_direct_config
 from app.raw_archive.policy import ArchiveBlocked, Recording, checksum
 from app.raw_archive.wav_catalog import COLUMNS, validate_row
 
@@ -104,8 +105,10 @@ def load_parent(
     from app.raw_archive.direct_history import COPY_SCOPE as HISTORICAL_DIRECT
     from app.raw_archive.wav_context import COPY_SCOPE as OBSERVED_CONTEXT
     from app.raw_archive.wav_context import (
+        DIRECT_CAPTURE_SCOPE_V3,
         DIRECT_COPY_SCOPE_V2,
         GATEWAY_COPY_SCOPE_V2,
+        require_captured_direct,
         require_observed,
     )
 
@@ -115,6 +118,7 @@ def load_parent(
         DIRECT_COPY_SCOPE_V2,
     }
     if "copy_scope" in body and body["copy_scope"] not in {
+        DIRECT_CAPTURE_SCOPE_V3,
         HISTORICAL_DIRECT,
         OBSERVED_CONTEXT,
         GATEWAY_COPY_SCOPE_V2,
@@ -123,6 +127,11 @@ def load_parent(
         raise ArchiveBlocked("Unknown scientific WAV COPY contract")
     if observed:
         require_observed(metadata, source, candidate, copy_scope=body["copy_scope"])
+    captured = body.get("copy_scope") == DIRECT_CAPTURE_SCOPE_V3
+    if captured:
+        if source != "direct":
+            raise ArchiveBlocked("Direct server capture cannot authorize another source")
+        require_captured_direct(metadata, candidate)
     if source == "gateway":
         if (
             (not observed and set(metadata) != {"wav", "feature", "feature_versions", "assignment"})
@@ -188,10 +197,16 @@ def load_parent(
         if assignment.get("semantics") != "observed_at_archive":
             raise ArchiveBlocked("Historical assignment observation required")
     else:
-        if not observed and set(metadata) != {"segment", "revision", "session", "assignment"}:
+        if (
+            not observed
+            and not captured
+            and set(metadata) != {"segment", "revision", "session", "assignment"}
+        ):
             raise ArchiveBlocked("Incomplete Direct scientific metadata")
         row = metadata["segment"]
-        assignment = metadata["observed_assignment"] if observed else metadata["assignment"]
+        assignment = (
+            metadata["observed_assignment"] if observed or captured else metadata["assignment"]
+        )
     if set(assignment) != {
         "device_id",
         "organization_id",
@@ -199,7 +214,7 @@ def load_parent(
         "legacy_sensor_id",
         "mode",
         "hardware_id",
-    } | ({"semantics"} if historical or observed else set()):
+    } | ({"semantics"} if historical or observed or captured else set()):
         raise ArchiveBlocked("Unexpected Direct assignment fields")
     validate_row(source, "direct_segment", row)
     revision, session = metadata["revision"], metadata["session"]
@@ -223,10 +238,15 @@ def load_parent(
         or row["revision"] < reference[1]
         or session["device_id"] != row["device_id"]
         or session["id"] != row["session_id"]
-        or session["config"] != manifest["config"]
+        or split_direct_config(session["config"])[0] != manifest["config"]
         or session["mode"] != manifest["source_mode"]
         or assignment["device_id"] != row["device_id"]
-        or assignment["organization_id"] != organization
+        or (
+            metadata["capture_assignment"]["organization_id"]
+            if captured
+            else assignment["organization_id"]
+        )
+        != organization
         or envelope["sensor"] != row["device_id"]
         or any(record.feature_digest != revision["manifest_sha256"] for record in records)
         or sorted((record.key, record.sha256) for record in records)
@@ -404,6 +424,18 @@ def verify_masters(db, tables, source, row, metadata, organization):
         assignment = metadata.get("assignment", metadata.get("observed_assignment"))
         device = one("direct_device", id=row["device_id"])
         session = one("direct_session", device_id=row["device_id"], id=row["session_id"])
+        from app.direct.capture_assignment import manifest_assignment
+
+        capture = manifest_assignment(metadata["revision"]["manifest"])
+        if capture is not None:
+            if (
+                capture != split_direct_config(session["config"])[1]
+                or capture != split_direct_config(metadata["session"]["config"])[1]
+                or capture["organization_id"] != organization
+            ):
+                raise ArchiveBlocked("Restored Direct capture assignment or tenant mismatch")
+        elif assignment["organization_id"] != organization:
+            raise ArchiveBlocked("Restored Direct master tenant or assignment mismatch")
         if any(
             str(device[key]) != str(assignment[key])
             for key in ("organization_id", "zone_id", "legacy_sensor_id", "mode")

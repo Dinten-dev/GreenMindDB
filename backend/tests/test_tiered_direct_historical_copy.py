@@ -196,12 +196,12 @@ def test_older_complete_revision_is_actually_copied_and_quarantined(historical, 
 
 
 def test_latest_strict_read_retained_but_copy_context_is_explicitly_unknown(historical):
-    from app.raw_archive.wav_context import COPY_SCOPE, UNKNOWN, copy_flags
+    from app.raw_archive.wav_context import DIRECT_COPY_SCOPE_V2, UNKNOWN, copy_flags
 
     h = historical
     copied, _, flags = h.adapter.metadata([h.reference[0], 2])
     strict, _, strict_flags = h.current.metadata([h.reference[0], 2])
-    assert copied["body"]["copy_scope"] == COPY_SCOPE and flags == copy_flags()
+    assert copied["body"]["copy_scope"] == DIRECT_COPY_SCOPE_V2 and flags == copy_flags()
     assert copied["body"]["metadata"]["capture_assignment"] == UNKNOWN
     assert all(strict_flags.values()) and "copy_scope" not in strict["body"]
     for field in ("segment", "revision", "session"):

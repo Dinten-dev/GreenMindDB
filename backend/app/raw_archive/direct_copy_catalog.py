@@ -47,7 +47,7 @@ class PublishedDirectCopyCatalog(DirectCatalog):
             enrollment = one(
                 db, Enrollment, "direct", Enrollment.device_id == device.id, optional=True
             )
-            return {
+            result = {
                 "observed_segment": scientific_row(segment, "direct", "direct_segment"),
                 "revision": scientific_row(revision, "direct", "direct_revision"),
                 "session": {
@@ -71,6 +71,29 @@ class PublishedDirectCopyCatalog(DirectCatalog):
                     "hardware_id": enrollment.hardware_id if enrollment else None,
                 },
             }
+
+            from app.direct.capture_assignment import manifest_assignment, split
+            from app.direct.models import Session
+
+            capture = manifest_assignment(manifest)
+            if capture is not None:
+                session = one(
+                    db,
+                    Session,
+                    "direct",
+                    Session.device_id == segment.device_id,
+                    Session.id == segment.session_id,
+                )
+                config, actual_capture = split(session.config)
+                if (
+                    actual_capture != capture
+                    or config != manifest["config"]
+                    or session.mode != capture["mode"]
+                ):
+                    raise ArchiveBlocked("Historical server capture assignment differs")
+                result["session"] = scientific_row(session, "direct", "direct_session")
+                result["capture_assignment"] = capture
+            return result
 
     def inspect(self, segment_id, revision_number):
         metadata = self.historical_metadata([segment_id, revision_number])

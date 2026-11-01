@@ -44,7 +44,18 @@ class ArtifactStore:
             raise ValueError("Artifact escapes Direct storage")
         return path
 
-    def put(self, device_id, session_id, payload, *, identity):
+    def put(self, device_id, session_id, payload, *, identity, capture_assignment=None):
+        metadata = {}
+        if capture_assignment is not None:
+            from app.direct.capture_assignment import validate
+
+            capture = validate(capture_assignment, device_id, session_id)
+            metadata = {
+                "capture-assignment-sha256": capture["sha256"],
+                "capture-organization-id": capture["organization_id"],
+                "capture-version": "1",
+            }
+            identity += "\0capture:" + capture["sha256"]
         digest = hashlib.sha256(payload).hexdigest()
         object_id = hashlib.sha256(identity.encode() + b"\0" + payload).hexdigest()
         key = f"direct/{device_id}/{session_id}/{object_id}.wav"
@@ -55,7 +66,7 @@ class ArtifactStore:
                 Key=key,
                 Body=payload,
                 ContentType="audio/wav",
-                Metadata={"sha256": digest},
+                Metadata={"sha256": digest, **metadata},
             )
         else:
             path.parent.mkdir(parents=True, exist_ok=True)

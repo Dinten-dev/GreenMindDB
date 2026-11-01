@@ -79,18 +79,40 @@ class WavSource:
                 ):
                     raise ArchiveBlocked("Historical source changed between metadata reads")
                 config = manifest["config"]
+                from app.direct.capture_assignment import manifest_assignment
+                from app.raw_archive.wav_context import DIRECT_CAPTURE_SCOPE_V3, captured_direct
+
+                capture = manifest_assignment(manifest)
+                organization = historical["observed_assignment"]["organization_id"]
+                metadata = historical
+                scope = COPY_SCOPE
+                if capture is not None:
+                    metadata = captured_direct(
+                        {
+                            "segment": historical["observed_segment"],
+                            "revision": historical["revision"],
+                            "session": historical["session"],
+                            "assignment": {
+                                k: v
+                                for k, v in historical["observed_assignment"].items()
+                                if k != "semantics"
+                            },
+                            "direct_visual_segment": None,
+                        }
+                    )
+                    organization, scope = capture["organization_id"], DIRECT_CAPTURE_SCOPE_V3
                 return (
                     {
                         "identity": digest(reference),
                         # Preserve existing current-organization access routing;
                         # the body explicitly distinguishes it from capture truth.
-                        "organization": historical["observed_assignment"]["organization_id"],
+                        "organization": organization,
                         "sensor": manifest["device_id"],
                         "time_us": epoch_us(min(record.started_at for record in records)),
                         "body": {
                             "reference": reference,
-                            "copy_scope": COPY_SCOPE,
-                            "metadata": historical,
+                            "copy_scope": scope,
+                            "metadata": metadata,
                             "originals": [{"recording": record_json(r)} for r in records],
                         },
                     },
@@ -108,7 +130,7 @@ class WavSource:
                         features_verified=True,
                         projections_verified=False,
                         dependencies_complete=False,
-                        quarantined=True,
+                        quarantined=capture is None,
                     ),
                 )
         with self.sessions() as db:
@@ -198,6 +220,10 @@ class WavSource:
                     "revision": scientific_row(revision, "direct", "direct_revision"),
                     "session": scientific_row(session, "direct", "direct_session"),
                 }
+                from app.direct.capture_assignment import manifest_assignment, split
+
+                if split(session.config)[1] != manifest_assignment(revision.manifest):
+                    raise ArchiveBlocked("Verified server capture Session/Revision mismatch")
                 organization, sensor = str(device.organization_id), segment.device_id
                 enrollment = one(
                     db, Enrollment, "direct", Enrollment.device_id == device.id, optional=True
@@ -267,11 +293,23 @@ class WavSource:
         }
         if self.copy_published_history:
             from app.raw_archive.wav_context import (
+                DIRECT_CAPTURE_SCOPE_V3,
                 DIRECT_COPY_SCOPE_V2,
                 GATEWAY_COPY_SCOPE_V2,
+                captured_direct,
                 copy_flags,
                 observe,
             )
+
+            if self.kind == "direct":
+                from app.direct.capture_assignment import split
+
+                _, capture = split(metadata["session"]["config"])
+                if capture is not None:
+                    envelope["body"]["copy_scope"] = DIRECT_CAPTURE_SCOPE_V3
+                    envelope["body"]["metadata"] = captured_direct(metadata)
+                    envelope["organization"] = capture["organization_id"]
+                    return envelope, headers, dict(copy_flags(), quarantined=False)
 
             # These live joins prove present access routing, not assignment at
             # acquisition time. This branch is used by both real COPY producers;

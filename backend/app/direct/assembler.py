@@ -29,8 +29,10 @@ def build_manifest(db, segment, store):
 
 
 def _snapshot(db, segment):
+    from app.direct.capture_assignment import split
+
     session = db.get(Session, (segment.device_id, segment.session_id))
-    config = session.config
+    config, capture = split(session.config)
     rows = (
         db.query(Piece, Chunk)
         .join(Chunk, Piece.chunk_id == Chunk.id)
@@ -41,10 +43,10 @@ def _snapshot(db, segment):
     references = {
         chunk.id: db.get(PayloadReference, chunk.id) for _, chunk in rows if chunk.payload is None
     }
-    return dict(config), session.mode, rows, references
+    return dict(config), session.mode, rows, references, capture
 
 
-def _build_snapshot_manifest(segment, config, mode, rows, references, store):
+def _build_snapshot_manifest(segment, config, mode, rows, references, capture, store):
     frame_bytes = config["channels"] * config["sample_bits"] // 8
     runs = []
     gaps = []
@@ -69,6 +71,7 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, store):
             segment.session_id,
             output.getvalue(),
             identity=f"{segment.bucket}:{run_start}",
+            **({"capture_assignment": capture} if capture is not None else {}),
         )
         runs.append(
             {
@@ -103,7 +106,7 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, store):
     finish_run()
     if cursor < segment.end_frame:
         gaps.append([cursor, segment.end_frame])
-    return {
+    manifest = {
         "protocol_version": 1,
         "device_id": segment.device_id,
         "session_id": segment.session_id,
@@ -119,6 +122,9 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, store):
         "missing_frame_ranges": gaps,
         "runs": runs,
     }
+    if capture is not None:
+        manifest.update(metadata_version=2, capture_assignment=capture)
+    return manifest
 
 
 def assemble_one(engine, settings, store, *, now=None):

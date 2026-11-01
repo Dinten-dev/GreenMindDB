@@ -15,6 +15,10 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.direct.capture_assignment import FIELD as CAPTURE_FIELD
+from app.direct.capture_assignment import FIELDS as CAPTURE_FIELDS
+from app.direct.capture_assignment import FORMAT as CAPTURE_FORMAT
+
 from .policy import ArchiveBlocked, Recording, checksum
 from .recovery import encode_value, private_directory
 
@@ -114,6 +118,20 @@ ALLOWLIST_SHA256 = hashlib.sha256(
         }
     )
 ).hexdigest()
+LEGACY_ALLOWLIST_SHA256 = ALLOWLIST_SHA256
+
+ALLOWLIST_SHA256 = hashlib.sha256(
+    raw_json(
+        {
+            "base_allowlist_sha256": LEGACY_ALLOWLIST_SHA256,
+            "server_session_field": CAPTURE_FIELD,
+            "capture_format": CAPTURE_FORMAT,
+            "capture_fields": sorted(CAPTURE_FIELDS),
+            "manifest_metadata_version": 2,
+            "manifest_capture_fields": ["metadata_version", "capture_assignment"],
+        }
+    )
+).hexdigest()
 
 
 def exact_keys(value, permitted, label, *, complete=False):
@@ -190,11 +208,22 @@ def validate_row(kind, table, row):
     if table == "wav_feature_version":
         validate_feature(row["feature_payload"], FEATURE_FIELDS)
     if table == "direct_session":
-        exact_keys(row["config"], SESSION_FIELDS, "Direct session", complete=True)
-        validate_session(row["config"])
+        from app.direct.capture_assignment import split
+
+        config, _ = split(row["config"])
+        exact_keys(config, SESSION_FIELDS, "Direct session", complete=True)
+        validate_session(config)
     if table == "direct_revision":
         manifest = row["manifest"]
-        exact_keys(manifest, MANIFEST_FIELDS, "Direct manifest", complete=True)
+        from app.direct.capture_assignment import manifest_assignment
+
+        capture = manifest_assignment(manifest)
+        exact_keys(
+            manifest,
+            MANIFEST_FIELDS | ({"metadata_version", "capture_assignment"} if capture else set()),
+            "Direct manifest",
+            complete=True,
+        )
         exact_keys(manifest["config"], SESSION_FIELDS, "Direct config", complete=True)
         validate_session(manifest["config"])
         for run in manifest["runs"]:
@@ -341,7 +370,7 @@ def manifest_check(manifest):
     if (
         manifest.get("schema") != 2
         or manifest.get("format") != FORMAT
-        or manifest.get("allowlist_sha256") != ALLOWLIST_SHA256
+        or manifest.get("allowlist_sha256") not in {ALLOWLIST_SHA256, LEGACY_ALLOWLIST_SHA256}
         or set(manifest.get("tables", {})) != {"gateway", "direct"}
     ):
         raise ArchiveBlocked("Explicit WAV-only metadata manifest required")
@@ -408,6 +437,15 @@ def restore_parts(manifest, files, destination, checkpoint=lambda: None):
                     else:
                         exact_keys(value, {"table", "row"}, "metadata row", complete=True)
                         table = value["table"]
+                        if manifest["allowlist_sha256"] == LEGACY_ALLOWLIST_SHA256 and (
+                            table == "direct_session"
+                            and CAPTURE_FIELD in value["row"].get("config", {})
+                            or table == "direct_revision"
+                            and "capture_assignment" in value["row"].get("manifest", {})
+                        ):
+                            raise ArchiveBlocked(
+                                "Server capture requires the versioned metadata allowlist"
+                            )
                         validate_row(kind, table, value["row"])
                         counts[kind][table] += 1
                         db.execute(

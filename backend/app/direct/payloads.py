@@ -174,7 +174,9 @@ def read_payload_snapshot(chunk, reference, config, reader):
 
 
 def prepare_reference(db, chunk):
-    config = dict(db.get(CaptureSession, (chunk.device_id, chunk.session_id)).config)
+    from app.direct.capture_assignment import manifest_assignment, split
+
+    config, capture = split(db.get(CaptureSession, (chunk.device_id, chunk.session_id)).config)
     rows = (
         db.query(Piece, Segment, Revision)
         .join(Segment, Segment.id == Piece.segment_id)
@@ -200,6 +202,7 @@ def prepare_reference(db, chunk):
             != (chunk.device_id, chunk.session_id, config)
             or manifest["revision"] != revision.revision
             or segment.revision != segment.published_revision
+            or manifest_assignment(manifest) != capture
         ):
             return None
         first = chunk.first_frame + piece.payload_offset

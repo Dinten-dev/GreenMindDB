@@ -5,6 +5,7 @@ from .policy import ArchiveBlocked
 COPY_SCOPE = "observed-wav-context-copy-v1"
 GATEWAY_COPY_SCOPE_V2 = "observed-gateway-wav-context-copy-v2"
 DIRECT_COPY_SCOPE_V2 = "observed-direct-wav-context-copy-v2"
+DIRECT_CAPTURE_SCOPE_V3 = "captured-direct-wav-context-copy-v3"
 DIRECT_VISUAL_FIELDS = frozenset(
     {"segment_id", "source_revision", "seconds", "source", "updated_at", "error", "retry_at"}
 )
@@ -152,6 +153,52 @@ def copy_flags():
     )
 
 
+def captured_direct(metadata):
+    """Classify only the server-captured Session/Revision pair, never live joins."""
+    from app.direct.capture_assignment import manifest_assignment, split
+
+    config, capture = split(metadata["session"]["config"])
+    manifest = metadata["revision"]["manifest"]
+    if capture is None or manifest_assignment(manifest) != capture or config != manifest["config"]:
+        raise ArchiveBlocked("Verified server capture assignment required")
+    if (capture["device_id"], capture["session_id"], capture["mode"]) != (
+        metadata["segment"]["device_id"],
+        metadata["segment"]["session_id"],
+        metadata["session"]["mode"],
+    ):
+        raise ArchiveBlocked("Server capture assignment source differs")
+    direct_visual_parent(metadata)
+    return {
+        **{key: metadata[key] for key in FIELDS["direct"] | {"direct_visual_segment"}},
+        "capture_assignment": capture,
+        "observed_assignment": {**metadata["assignment"], "semantics": "observed_at_archive"},
+    }
+
+
+def require_captured_direct(metadata, candidate):
+    """Restore and reads retain the distinct COPY-only, non-deletable contract."""
+    if (
+        not isinstance(metadata, dict)
+        or set(metadata)
+        != FIELDS["direct"] | {"direct_visual_segment", "capture_assignment", "observed_assignment"}
+        or set(metadata["observed_assignment"]) != ASSIGNMENT["direct"] | {"semantics"}
+        or metadata["observed_assignment"]["semantics"] != "observed_at_archive"
+        or candidate.quarantined is not False
+        or candidate.complete is not False
+        or candidate.dependencies_complete is not False
+        or candidate.projections_verified is not False
+        or candidate.features_verified is not True
+    ):
+        raise ArchiveBlocked("Captured Direct COPY-only contract differs")
+    original = {k: metadata[k] for k in FIELDS["direct"] | {"direct_visual_segment"}}
+    original["assignment"] = {k: metadata["observed_assignment"][k] for k in ASSIGNMENT["direct"]}
+    if (
+        captured_direct(original) != metadata
+        or candidate.organization != metadata["capture_assignment"]["organization_id"]
+    ):
+        raise ArchiveBlocked("Captured Direct tenant proof differs")
+
+
 def receipt_context(copy_scope):
     """The existing read-broker receipt also retains the deletion prohibition."""
     from .direct_history import COPY_SCOPE as HISTORICAL_DIRECT
@@ -160,6 +207,7 @@ def receipt_context(copy_scope):
         COPY_SCOPE,
         GATEWAY_COPY_SCOPE_V2,
         DIRECT_COPY_SCOPE_V2,
+        DIRECT_CAPTURE_SCOPE_V3,
         HISTORICAL_DIRECT,
     }:
         raise ArchiveBlocked("Unknown scientific WAV COPY contract")
