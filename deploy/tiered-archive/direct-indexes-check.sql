@@ -30,7 +30,7 @@ BEGIN
       ('direct_revision', 'tiered_direct_revision_scan', 'verified_at', 'double precision',
        ARRAY['to_timestamp(verified_at)', 'segment_id', 'revision']::text[]),
       ('direct_visual_point', 'tiered_direct_visual_point_scan', 'bucket', 'bigint',
-       ARRAY['to_timestamp((bucket)::double precision)', 'segment_id', 'channel', 'bucket']::text[])
+       ARRAY['to_timestamp(bucket::double precision)', 'segment_id', 'channel', 'bucket']::text[])
     ) AS definitions(table_name, index_name, time_column, time_type, keys)
   LOOP
     table_oid := to_regclass(format('public.%I', expected.table_name));

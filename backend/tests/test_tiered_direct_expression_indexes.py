@@ -62,3 +62,11 @@ def test_guard_rejects_same_name_numeric_partial_invalid_and_wrong_order():
     assert "RAISE EXCEPTION" in sql
     statements = "\n".join(line for line in sql.splitlines() if not line.startswith("--"))
     assert not re.search(r"\b(DROP|REINDEX|ALTER)\b", statements)
+
+
+def test_visual_key_matches_actual_postgresql15_deparse():
+    # Native PG15.10 pg_get_indexdef(index_oid, 1, true), not full DDL rendering.
+    actual_key = "to_timestamp(bucket::double precision)"
+    sql = (DEPLOY / "direct-indexes-check.sql").read_text()
+    assert f"ARRAY['{actual_key}', 'segment_id', 'channel', 'bucket']" in sql
+    assert "to_timestamp((bucket)::double precision)" not in sql
