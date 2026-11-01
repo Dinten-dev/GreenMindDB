@@ -622,6 +622,8 @@ def _next_candidate(db: Session, now: datetime) -> WavFile | None:
                     WavFeature.extractor_version == EXTRACTOR_VERSION,
                     WavFeature.parameter_hash == PARAMETER_HASH,
                     WavFeature.calibration_version == WavFile.calibration_version,
+                    WavFeature.source_sha256 == WavFile.content_sha256,
+                    WavFeature.verified_at.isnot(None),
                 )
             ),
         ),
@@ -703,6 +705,15 @@ def process_pending_wav_features(db: Session) -> dict[str, int]:
                 claimed.feature_status, claimed.feature_started_at, claimed.feature_attempts = (
                     previous
                 )
+                # Extraction may have committed a replacement before pausing.
+                # Its unverified values must remain eligible for another pass.
+                if claimed.feature_status == "verified" and (
+                    claimed.feature is None
+                    or claimed.feature.verified_at is None
+                    or claimed.feature.source_sha256 != claimed.content_sha256
+                ):
+                    claimed.feature_status = "pending"
+                    claimed.feature_verified_at = None
                 db.commit()
             else:
                 db.rollback()

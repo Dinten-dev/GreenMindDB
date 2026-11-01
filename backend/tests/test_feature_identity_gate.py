@@ -316,6 +316,83 @@ def test_pause_cleanup_does_not_overwrite_another_claim_or_completed_status(db, 
     assert record.feature_attempts == 0
 
 
+def _verified_record(db, monkeypatch):
+    record = _record(db)
+    payload = _wav_bytes(np.arange(380, dtype=np.int16))
+    monkeypatch.setattr(
+        service.wav_service, "download_object", lambda _key, destination: destination.write(payload)
+    )
+    monkeypatch.setattr(service.settings, "wav_anomaly_archive_enabled", False)
+    monkeypatch.setattr(service.settings, "wav_flac_archive_enabled", False)
+    feature = service.extract_and_verify_wav_features(db, record)
+    assert record.feature_status == "verified" and feature.verified_at is not None
+    return record, feature
+
+
+def test_pause_after_committed_recalculation_keeps_unverified_features_retryable(db, monkeypatch):
+    record, feature = _verified_record(db, monkeypatch)
+    feature.extractor_version = "previous-extractor"
+    feature.feature_checksum = service._feature_checksum(
+        service._persisted_feature_payload(feature)
+    )
+    db.commit()
+    attempts = record.feature_attempts
+    actual_gate = service.require_feature_identity
+    calls = 0
+
+    def pause_after_first_feature_commit(session):
+        nonlocal calls
+        calls += 1
+        actual_gate(session)
+        if calls == 5:
+            raise gate.FeatureIdentityWait()
+
+    monkeypatch.setattr(service, "require_feature_identity", pause_after_first_feature_commit)
+    assert service.process_pending_wav_features(db) == {"verified": 0, "failed": 0, "paused": 1}
+    assert calls == 5
+    db.refresh(record)
+    db.refresh(feature)
+    assert feature.extractor_version == service.EXTRACTOR_VERSION
+    assert feature.parameter_hash == service.PARAMETER_HASH
+    assert feature.verified_at is None
+    assert record.feature_status == "pending"
+    assert record.feature_attempts == attempts
+    assert record.feature_verified_at is None
+    assert service._next_candidate(db, datetime.now(UTC)).id == record.id
+
+    monkeypatch.setattr(service, "require_feature_identity", actual_gate)
+    assert service.process_pending_wav_features(db)["verified"] == 1
+    db.refresh(record)
+    db.refresh(feature)
+    assert record.feature_status == "verified" and feature.verified_at is not None
+
+
+def test_legacy_verified_status_cannot_hide_unverified_current_feature(db, monkeypatch):
+    record, feature = _verified_record(db, monkeypatch)
+    feature.verified_at = None
+    db.commit()
+    assert record.feature_status == "verified"
+    assert service._next_candidate(db, datetime.now(UTC)).id == record.id
+
+
+def test_changed_registered_source_checksum_requires_new_feature_verification(db, monkeypatch):
+    record, feature = _verified_record(db, monkeypatch)
+    assert service._next_candidate(db, datetime.now(UTC)) is None
+    record.content_sha256 = "c" * 64
+    db.commit()
+    assert feature.source_sha256 != record.content_sha256
+    assert service._next_candidate(db, datetime.now(UTC)).id == record.id
+
+    def pause(*_):
+        raise gate.FeatureIdentityWait()
+
+    monkeypatch.setattr(service, "extract_and_verify_wav_features", pause)
+    assert service.process_pending_wav_features(db)["paused"] == 1
+    db.refresh(record)
+    assert record.feature_status == "pending"
+    assert record.feature_attempts == 0
+
+
 def test_standalone_worker_reports_normal_paused_heartbeat(monkeypatch):
     from app.workers import wav_features as worker
 
