@@ -257,19 +257,39 @@ def _install_triggers(db, name, logical=None, schema="public", *, new_chunk=Fals
             db.execute(text(f'ALTER TABLE {qualified} ENABLE ALWAYS TRIGGER "{trigger}"'))
 
 
+# SQL xmin exposes raw 32-bit IDs even for frozen tuples. Do not infer an
+# epoch from that raw value: after wrap an old frozen row could alias an active
+# transaction. Only the first, demonstrably unwrapped epoch is admitted here.
+# Within that epoch, normal MVCC visibility + an in-progress inserting XID
+# proves an own live/subcommitted subtransaction (other live rows are invisible).
+# Unknown statuses and every wrap boundary remain closed pending another proof.
+_OWN_INSERTION = """CASE
+      WHEN authority.top_id >= 3 AND authority.top_id < 4294967296
+       AND c.xmin::text::numeric >= authority.top_id
+      THEN (pg_catalog.pg_xact_status(c.xmin::text::pg_catalog.xid8) = 'in progress') IS TRUE
+      ELSE false END"""
+
+
 def _descendants(db, name):
     values = (
         db.execute(
-            text("""WITH RECURSIVE children(relid,depth) AS (
+            text(
+                """WITH RECURSIVE authority AS MATERIALIZED (
+      SELECT pg_catalog.pg_current_xact_id()::text::numeric AS top_id
+      ), children(relid,depth) AS (
       SELECT inhrelid,1 FROM pg_catalog.pg_inherits
         WHERE inhparent=pg_catalog.to_regclass(format('public.%I',:name))
       UNION ALL SELECT i.inhrelid,c.depth+1 FROM pg_catalog.pg_inherits i
         JOIN children c ON i.inhparent=c.relid WHERE c.depth<8)
       SELECT c.oid::bigint AS oid,c.relname AS name,n.nspname AS schema,c.relkind AS kind,
-        children.depth,c.xmin::text::bigint=mod(txid_current(),4294967296) AS own_transaction,
+        children.depth,"""
+                + _OWN_INSERTION
+                + """ AS own_transaction,
         EXISTS(SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhparent=c.oid) AS has_children
       FROM children JOIN pg_catalog.pg_class c ON c.oid=children.relid
-      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace LIMIT 257"""),
+      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+      CROSS JOIN authority LIMIT 257"""
+            ),
             {"name": name},
         )
         .mappings()
