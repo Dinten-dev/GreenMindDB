@@ -28,7 +28,7 @@ def query(spec, cursor=""):
         if isinstance(n, ast.Assign)
         and any(isinstance(t, ast.Name) and t.id == "query" for t in n.targets)
     )
-    return eval(
+    return eval(  # noqa: S307 -- trusted repository query AST; no builtins or external input
         compile(ast.Expression(value), "existing_Source.export", "eval"),
         {"__builtins__": {}},
         {
