@@ -105,6 +105,9 @@ def validate(value, tables):
     )
 
 
+# TS2.17.2 compressed storage is linked through its catalogs, not ordinary
+# pg_inherits. Require the exact standalone physical shape as well: an added
+# inheritance edge must never silently alter the pinned empty-storage universe.
 CATALOG = """WITH roots AS (
  SELECT h.id AS hypertable_id,h.compressed_hypertable_id,h.table_name AS public_table,
  p.oid::bigint AS public_oid,r.oid::bigint AS root_oid,
@@ -130,10 +133,10 @@ CATALOG = """WITH roots AS (
    AND cc.hypertable_id=b.compressed_hypertable_id
  JOIN pg_catalog.pg_namespace n ON n.nspname=cc.schema_name
  JOIN pg_catalog.pg_class c ON c.relnamespace=n.oid AND c.relname=cc.table_name
- JOIN pg_catalog.pg_inherits i ON i.inhrelid=c.oid AND i.inhparent=b.root_oid
  WHERE NOT ch.dropped AND NOT cc.dropped AND n.nspname='_timescaledb_internal'
    AND c.relkind='r' AND c.relpersistence='p'
    AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity
+   AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhrelid=c.oid)
 ) SELECT * FROM storage ORDER BY oid LIMIT :limit"""
 
 

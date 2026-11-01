@@ -24,7 +24,9 @@ Each entry contains exactly:
 
 Root entries use `oid == root_oid` and null chunk IDs. Chunk entries require both
 catalog links (original chunk to compressed chunk, compressed chunk to compressed
-hypertable) and actual `pg_inherits` linkage to that exact root. Every entry must
+hypertable). TS2.17.2 compressed chunks are standalone physical tables, so
+`pg_inherits` must contain NO parent for them; `root_oid` pins the catalog-linked
+compressed hypertable root rather than a PostgreSQL inheritance parent. Every entry must
 map to a planned PUBLIC DATA-role hypertable. Identities are sorted by OID and
 bounded to 64 roots plus 256 chunks. Storage must be permanent ordinary tables in
 `_timescaledb_internal`, with row security disabled. This schema condition is

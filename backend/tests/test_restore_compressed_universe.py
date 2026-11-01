@@ -130,7 +130,8 @@ def test_native_catalog_sql_uses_exact_links_and_provenance(monkeypatch):
     sql, params = db.queries[-1]
     assert params == {"limit": 321}
     assert "cc.id=ch.compressed_chunk_id" in sql and "z.id=h.compressed_hypertable_id" in sql
-    assert "i.inhparent=b.root_oid" in sql and "NOT c.relrowsecurity" in sql
+    assert "i.inhrelid=c.oid)" in sql and "NOT c.relrowsecurity" in sql
+    assert "JOIN pg_catalog.pg_inherits i" not in sql
     assert "NOT r.relforcerowsecurity" in sql and "NOT ch.dropped AND NOT cc.dropped" in sql
     compiled = text(compressed.CATALOG).compile(dialect=postgresql.dialect())
     assert compiled.params == {"limit": None}
