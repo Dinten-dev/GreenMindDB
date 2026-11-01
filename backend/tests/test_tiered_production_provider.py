@@ -14,6 +14,48 @@ from tests.test_tiered_schema_provider import new_bundle, scope
 URL = "postgresql://greenmind_archive_reader_33fe395:synthetic@127.0.0.1:5432/greenmind_direct_production"
 
 
+@pytest.mark.parametrize("production", [False, True])
+@pytest.mark.parametrize("source", ["gateway", "direct"])
+def test_runtime_provider_requires_matching_reviewed_scope_before_worker(monkeypatch, production, source):
+    from app.tiered_archive import runtime
+
+    value, _, _ = scope(source, production=production)
+    monkeypatch.setattr(runtime.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(runtime, "environment", lambda: value["environment"])
+    monkeypatch.setenv("TIERED_ARCHIVE_SCHEMA_PROVIDER_SCOPE_FILE", "/private/reviewed-scope")
+    monkeypatch.setenv("TIERED_ARCHIVE_SCHEMA_PROVIDER_SCOPE_SHA256", "a" * 64)
+
+    def read_scope(path, pin):
+        assert path == "/private/reviewed-scope" and pin == "a" * 64
+        return provider.validate_scope(value)
+
+    class ReviewedWorkerReached(Exception):
+        pass
+
+    def worker():
+        raise ReviewedWorkerReached
+
+    monkeypatch.setattr(provider, "read_scope", read_scope)
+    monkeypatch.setattr(runtime, "worker", worker)
+    with pytest.raises(ReviewedWorkerReached):
+        runtime.backup(source, backup_format=provider.FORMAT)
+    other_source = "gateway" if source == "direct" else "direct"
+    with pytest.raises(ArchiveBlocked, match="another environment or source"):
+        runtime.backup(other_source, backup_format=provider.FORMAT)
+    monkeypatch.setattr(runtime, "environment", lambda: "staging" if production else "production")
+    with pytest.raises(ArchiveBlocked, match="another environment or source"):
+        runtime.backup(source, backup_format=provider.FORMAT)
+
+
+def test_runtime_unreviewed_full_backup_still_cannot_run_in_production(monkeypatch):
+    from app.tiered_archive import runtime
+
+    monkeypatch.setattr(runtime, "environment", lambda: "production")
+    monkeypatch.setattr(runtime, "worker", lambda: pytest.fail("Unreviewed full backup started"))
+    with pytest.raises(ArchiveBlocked, match="restricted to Staging"):
+        runtime.backup("direct", backup_format="postgres-full-v1")
+
+
 @pytest.mark.parametrize("source", ["gateway", "direct"])
 def test_explicit_production_contract_uses_existing_fixed_reader_only(source):
     value, _, _ = scope(source, production=True)

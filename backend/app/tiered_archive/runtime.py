@@ -587,12 +587,14 @@ def backup(source, *, backup_format="schema-master-v2"):
     if backup_format not in {"schema-master-v2", "postgres-full-v1", schema_provider.FORMAT}:
         raise ArchiveBlocked("Unknown database backup format")
     if backup_format == schema_provider.FORMAT:
-        if os.geteuid() != 0 or environment() != "staging":
-            raise ArchiveBlocked("Provider schema/master capture is root-only Staging")
+        if os.geteuid() != 0:
+            raise ArchiveBlocked("Provider schema/master capture is root-only")
         provider_scope = schema_provider.read_scope(
             os.environ["TIERED_ARCHIVE_SCHEMA_PROVIDER_SCOPE_FILE"],
             os.environ["TIERED_ARCHIVE_SCHEMA_PROVIDER_SCOPE_SHA256"],
         )
+        if provider_scope["environment"] != environment() or provider_scope["source"] != source:
+            raise ArchiveBlocked("Provider authority belongs to another environment or source")
     if backup_format == "postgres-full-v1" and environment() != "staging":
         raise ArchiveBlocked("Native full backup is currently restricted to Staging")
 

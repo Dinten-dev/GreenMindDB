@@ -707,7 +707,7 @@ def test_provider_descriptor_is_versioned_source_specific_and_auth_file_bound(
         original.dispose()
 
 
-def test_provider_runtime_is_inert_for_unprivileged_or_production_before_worker(monkeypatch):
+def test_provider_runtime_is_inert_for_unprivileged_before_worker(monkeypatch):
     from app.tiered_archive import runtime
 
     monkeypatch.setattr(runtime.os, "geteuid", lambda: 999)
@@ -716,10 +716,6 @@ def test_provider_runtime_is_inert_for_unprivileged_or_production_before_worker(
     )
     with pytest.raises(ArchiveBlocked, match="root-only"):
         runtime.backup("direct", backup_format=provider.FORMAT)
-    monkeypatch.setattr(runtime.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(runtime, "environment", lambda: "production")
-    with pytest.raises(ArchiveBlocked, match="root-only"):
-        runtime.backup("gateway", backup_format=provider.FORMAT)
 
 
 def test_pg15_extension_sequence_set_uses_nil_catalog_oid_without_losing_source_identity():
