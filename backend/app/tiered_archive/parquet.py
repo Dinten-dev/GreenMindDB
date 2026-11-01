@@ -138,7 +138,9 @@ def read(path, manifest, *, checkpoint=lambda: None):
     previous = None
     has_stats = all("stat_" + key in source.schema_arrow.names for key in STAT_TYPES)
     columns = ENVELOPE + (["stat_" + key for key in STAT_TYPES] if has_stats else [])
-    for batch in source.iter_batches(batch_size=128, columns=columns):
+    # Verification runs inside the bounded copy/restore worker; do not add a
+    # parallel decoder pool beside its other native libraries and SSH client.
+    for batch in source.iter_batches(batch_size=128, columns=columns, use_threads=False):
         checkpoint()
         for row in batch.to_pylist():
             decoded += len(row["body"])
