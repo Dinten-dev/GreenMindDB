@@ -296,7 +296,9 @@ class StorageBox:
                 self.metrics.counts["standalone_sftp_sessions"] += 1
             return self.command
         if self._master is None:
-            self._socket_dir = tempfile.TemporaryDirectory(prefix="ssh-", dir=self._session_root)
+            # AF_UNIX paths must stay short even when the archive state root is long.
+            # mkdtemp owns a private 0700 directory; close() removes only this directory.
+            self._socket_dir = tempfile.TemporaryDirectory(prefix="gm-ssh-", dir="/tmp")
             self._socket = str(Path(self._socket_dir.name) / "ctl")
             if len(os.fsencode(self._socket)) > 100:
                 raise ArchiveBlocked("Archive SSH socket path too long")
