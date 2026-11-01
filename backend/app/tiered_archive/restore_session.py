@@ -712,6 +712,17 @@ def apply_restore_batch(
                     if not replay:
                         # Plain INSERT only. Any duplicate or differing PK aborts
                         # the whole batch; no upsert or ON CONFLICT is permitted.
+                        if spec.table == "direct_visual_point":
+                            visual_parent = masters["direct_visual_segment"]
+                            require(
+                                db.execute(
+                                    select(visual_parent.c.segment_id).where(
+                                        visual_parent.c.segment_id == body["row"]["segment_id"]
+                                    )
+                                ).first()
+                                is not None,
+                                "Archived Direct visual parent required before SQL child restoration",
+                            )
                         db.execute(target.insert().values(**body["row"]))
                         added += 1
                         for name, rows in direct_children(body).items() if children else ():

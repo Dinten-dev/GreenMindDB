@@ -210,6 +210,33 @@ class WavSource:
                     "mode": device.mode,
                     "hardware_id": enrollment.hardware_id if enrollment else None,
                 }
+                if self.copy_published_history:
+                    from app.raw_archive.wav_context import DIRECT_VISUAL_FIELDS
+
+                    visual = (
+                        db.execute(
+                            text(
+                                "SELECT "
+                                + ",".join(sorted(DIRECT_VISUAL_FIELDS))
+                                + " FROM direct_visual_segment WHERE segment_id=:id AND (error IS NULL OR octet_length(error)<=4096)"
+                            ),
+                            {"id": segment.id},
+                        )
+                        .mappings()
+                        .one_or_none()
+                    )
+                    if (
+                        visual is None
+                        and db.execute(
+                            text("SELECT 1 FROM direct_visual_segment WHERE segment_id=:id"),
+                            {"id": segment.id},
+                        ).first()
+                        is not None
+                    ):
+                        raise ArchiveBlocked(
+                            "Observed Direct visual parent exceeds bounded metadata scope"
+                        )
+                    metadata["direct_visual_segment"] = dict(visual) if visual is not None else None
                 complete = (
                     segment.sealed
                     and segment.revision == segment.published_revision
@@ -240,7 +267,7 @@ class WavSource:
         }
         if self.copy_published_history:
             from app.raw_archive.wav_context import (
-                COPY_SCOPE,
+                DIRECT_COPY_SCOPE_V2,
                 GATEWAY_COPY_SCOPE_V2,
                 copy_flags,
                 observe,
@@ -249,7 +276,7 @@ class WavSource:
             # These live joins prove present access routing, not assignment at
             # acquisition time. This branch is used by both real COPY producers;
             # strict deletion sources and old archive formats remain unchanged.
-            copy_scope = GATEWAY_COPY_SCOPE_V2 if self.kind == "gateway" else COPY_SCOPE
+            copy_scope = GATEWAY_COPY_SCOPE_V2 if self.kind == "gateway" else DIRECT_COPY_SCOPE_V2
             envelope["body"]["copy_scope"] = copy_scope
             envelope["body"]["metadata"] = observe(metadata, self.kind, copy_scope=copy_scope)
             return envelope, headers, copy_flags()

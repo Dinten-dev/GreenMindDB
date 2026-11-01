@@ -103,13 +103,22 @@ def load_parent(
     metadata = body["metadata"]
     from app.raw_archive.direct_history import COPY_SCOPE as HISTORICAL_DIRECT
     from app.raw_archive.wav_context import COPY_SCOPE as OBSERVED_CONTEXT
-    from app.raw_archive.wav_context import GATEWAY_COPY_SCOPE_V2, require_observed
+    from app.raw_archive.wav_context import (
+        DIRECT_COPY_SCOPE_V2,
+        GATEWAY_COPY_SCOPE_V2,
+        require_observed,
+    )
 
-    observed = body.get("copy_scope") in {OBSERVED_CONTEXT, GATEWAY_COPY_SCOPE_V2}
+    observed = body.get("copy_scope") in {
+        OBSERVED_CONTEXT,
+        GATEWAY_COPY_SCOPE_V2,
+        DIRECT_COPY_SCOPE_V2,
+    }
     if "copy_scope" in body and body["copy_scope"] not in {
         HISTORICAL_DIRECT,
         OBSERVED_CONTEXT,
         GATEWAY_COPY_SCOPE_V2,
+        DIRECT_COPY_SCOPE_V2,
     }:
         raise ArchiveBlocked("Unknown scientific WAV COPY contract")
     if observed:
@@ -273,9 +282,11 @@ def restore_wav_parent(
                 else ("direct_device", "direct_session", "direct_enrollment")
             )
             masters = {name: Table(name, schema, autoload_with=db) for name in names}
-            visual_row = metadata.get("visual_wav") if source == "gateway" else None
+            visual_name = "visual_wav" if source == "gateway" else "direct_visual_segment"
+            visual_key = "wav_id" if source == "gateway" else "segment_id"
+            visual_row = metadata.get(visual_name)
             visual = (
-                Table("visual_wav", schema, autoload_with=db) if visual_row is not None else None
+                Table(visual_name, schema, autoload_with=db) if visual_row is not None else None
             )
             for target in (table, *masters.values(), *((visual,) if visual is not None else ())):
                 db.execute(text(f'LOCK TABLE "{target.name}" IN SHARE ROW EXCLUSIVE MODE'))
@@ -297,19 +308,29 @@ def restore_wav_parent(
                 insert_row.update(retry_at=0, error=None)
             db.execute(table.insert().values(**insert_row))
             if visual is not None:
-                if set(COLUMNS["gateway"]["visual_wav"]) - set(visual.c.keys()):
+                required = (
+                    set(visual_row) if source == "direct" else set(COLUMNS["gateway"]["visual_wav"])
+                )
+                if required - set(visual.c.keys()):
                     raise ArchiveBlocked("Observed visual parent schema is incomplete")
                 if (
                     db.execute(
-                        select(visual.c.wav_id).where(visual.c.wav_id == visual_row["wav_id"])
+                        select(visual.c[visual_key]).where(
+                            visual.c[visual_key] == visual_row[visual_key]
+                        )
                     ).first()
                     is not None
                 ):
                     raise ArchiveBlocked("Restore never overwrites an existing visual parent")
-                # Operational error text was deliberately excluded from archive.
-                db.execute(visual.insert().values(**visual_row, error=None))
+                # Gateway's old contract excluded error text. Direct V2 instead
+                # preserves the explicitly bounded, observed parent state.
+                db.execute(
+                    visual.insert().values(
+                        **(dict(visual_row, error=None) if source == "gateway" else visual_row)
+                    )
+                )
                 actual_visual = (
-                    db.execute(select(visual).where(visual.c.wav_id == visual_row["wav_id"]))
+                    db.execute(select(visual).where(visual.c[visual_key] == visual_row[visual_key]))
                     .mappings()
                     .one()
                 )
@@ -341,7 +362,9 @@ def restore_wav_parent(
             "capture_assignment": unknown_assignment,
             "quarantined": bool(candidate.quarantined),
             "visual_parent_restored": visual_row is not None,
-            "visual_wave_children_supported": visual_row is not None,
+            "visual_wave_children_supported": source == "gateway" and visual_row is not None,
+            "direct_visual_point_children_supported": source == "direct" and visual_row is not None,
+            "direct_visual_original_state_preserved": source == "direct" and visual_row is not None,
             "visual_parent_error_reconstructed": False,
         }
     finally:

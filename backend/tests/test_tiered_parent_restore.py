@@ -25,7 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from app.raw_archive.policy import ArchiveBlocked, Recording, checksum
 from app.raw_archive.wav_catalog import COLUMNS, FEATURE_FIELDS, raw_json
 from app.tiered_archive import parquet
-from app.tiered_archive.codec import digest, epoch_us
+from app.tiered_archive.codec import digest, encode, epoch_us
 from app.tiered_archive.parent_restore import restore_wav_parent
 from app.tiered_archive.pipeline import candidate_json
 from app.tiered_archive.policy import Candidate
@@ -51,6 +51,7 @@ def bundle(
     historical=False,
     observed=False,
     visual_parent=False,
+    direct_visual_parent=False,
 ):
     folder = tmp_path / "bundle"
     folder.mkdir()
@@ -191,7 +192,12 @@ def bundle(
                 reason="source_has_no_immutable_capture_assignment_history",
             )
     if observed:
-        from app.raw_archive.wav_context import COPY_SCOPE, GATEWAY_COPY_SCOPE_V2, observe
+        from app.raw_archive.wav_context import (
+            COPY_SCOPE,
+            DIRECT_COPY_SCOPE_V2,
+            GATEWAY_COPY_SCOPE_V2,
+            observe,
+        )
 
         scope = GATEWAY_COPY_SCOPE_V2 if visual_parent else COPY_SCOPE
         if visual_parent:
@@ -204,6 +210,21 @@ def bundle(
                     updated_at=AT.isoformat(),
                 )
                 if visual_parent == "present"
+                else None
+            )
+        if direct_visual_parent:
+            scope = DIRECT_COPY_SCOPE_V2
+            metadata["direct_visual_segment"] = (
+                dict(
+                    segment_id=PARENT,
+                    source_revision=1,
+                    seconds=600,
+                    source="wav",
+                    updated_at=AT.isoformat(),
+                    error="OperationalError",
+                    retry_at=1790000000.25,
+                )
+                if direct_visual_parent == "present"
                 else None
             )
         metadata = observe(metadata, source, copy_scope=scope)
@@ -331,6 +352,28 @@ def target(tmp_path, monkeypatch, source, metadata):
             "visual_wave",
             schema,
             Column("wav_id", String, ForeignKey("visual_wav.wav_id"), primary_key=True),
+        )
+    if source == "direct" and "direct_visual_segment" in metadata:
+        Table(
+            "direct_visual_segment",
+            schema,
+            Column("segment_id", String, ForeignKey("direct_segment.id"), primary_key=True),
+            Column("source_revision", Integer, nullable=False),
+            Column("seconds", Integer, nullable=False),
+            Column("source", String, nullable=False),
+            Column("updated_at", String, nullable=False),
+            Column("error", String),
+            Column("retry_at", Float, nullable=False),
+        )
+        Table(
+            "direct_visual_point",
+            schema,
+            Column(
+                "segment_id",
+                String,
+                ForeignKey("direct_visual_segment.segment_id"),
+                primary_key=True,
+            ),
         )
     if source == "direct":
         Table(
@@ -823,3 +866,85 @@ def test_restore_session_target_options_do_not_allow_source_urls(monkeypatch):
     with pytest.raises(ArchiveBlocked, match="dedicated local"):
         restore_session.connection("postgresql://reader@127.0.0.1:5433/plantdb_staging")
     assert len(calls) == 1
+
+
+def test_direct_v2_restores_real_visual_parent_before_child_fk(tmp_path, monkeypatch):
+    folder, sha, pins, metadata = bundle(
+        tmp_path, "direct", observed=True, direct_visual_parent="present"
+    )
+    engine, schema = target(tmp_path, monkeypatch, "direct", metadata)
+    result = restore_wav_parent(
+        folder,
+        "postgresql://user:synthetic@127.0.0.1/test_restore_direct",
+        sha,
+        checkpoint=lambda: None,
+        **pins,
+    )
+    assert (
+        result["direct_visual_point_children_supported"]
+        and result["direct_visual_original_state_preserved"]
+    )
+    assert result["quarantined"] and not result["visual_wave_children_supported"]
+    with engine.begin() as db:
+        actual = dict(db.execute(text("SELECT * FROM direct_visual_segment")).mappings().one())
+        assert encode(actual) == encode(metadata["direct_visual_segment"])
+        db.execute(text("INSERT INTO direct_visual_point(segment_id) VALUES(:id)"), {"id": PARENT})
+    assert actual["error"] == "OperationalError" and actual["retry_at"] == 1790000000.25
+
+
+def test_direct_v2_absent_parent_does_not_fabricate_projection_state(tmp_path, monkeypatch):
+    folder, sha, pins, metadata = bundle(
+        tmp_path, "direct", observed=True, direct_visual_parent="absent"
+    )
+    engine, schema = target(tmp_path, monkeypatch, "direct", metadata)
+    result = restore_wav_parent(
+        folder,
+        "postgresql://user:synthetic@127.0.0.1/test_restore_direct",
+        sha,
+        checkpoint=lambda: None,
+        **pins,
+    )
+    assert not result["direct_visual_point_children_supported"]
+    with engine.connect() as db:
+        assert db.execute(text("SELECT 1 FROM direct_visual_segment")).first() is None
+
+
+@pytest.mark.parametrize(
+    "change", ["foreign", "revision", "seconds", "retry", "error", "timestamp", "extra"]
+)
+def test_direct_v2_invalid_parent_blocks_before_target(tmp_path, monkeypatch, change):
+    def mutate(metadata):
+        row = metadata["direct_visual_segment"]
+        if change == "foreign":
+            row["segment_id"] = "foreign"
+        elif change == "revision":
+            row["source_revision"] = 2
+        elif change == "seconds":
+            row["seconds"] = 10
+        elif change == "retry":
+            row["retry_at"] = -1
+        elif change == "error":
+            row["error"] = "x" * 4097
+        elif change == "timestamp":
+            row["updated_at"] = "invalid"
+        else:
+            row["key_hash"] = "must-not-enter-archive"
+
+    folder, sha, pins, _ = bundle(
+        tmp_path, "direct", mutate, observed=True, direct_visual_parent="present"
+    )
+    import sqlalchemy
+
+    monkeypatch.setattr(
+        sqlalchemy,
+        "create_engine",
+        lambda *a, **k: pytest.fail("Invalid metadata connected target"),
+    )
+    with pytest.raises(ArchiveBlocked):
+        restore_wav_parent(
+            folder,
+            "postgresql://user:synthetic@127.0.0.1/test_restore_direct",
+            sha,
+            checkpoint=lambda: None,
+            **pins,
+        )

@@ -525,6 +525,44 @@ def test_direct_children_across_batches_real_fk_and_replay(target, tmp_path):
         assert db.execute(text("SELECT count(*) FROM direct_segment")).scalar_one() == 1
 
 
+@pytest.mark.parametrize("parent_present", [False, True])
+def test_direct_visual_child_requires_archived_parent_before_batch(
+    target, tmp_path, parent_present
+):
+    direct_target(target)
+    with target.begin() as db:
+        db.execute(
+            text(
+                "CREATE TABLE direct_visual_segment(segment_id TEXT PRIMARY KEY REFERENCES direct_segment(id))"
+            )
+        )
+        db.execute(
+            text(
+                "CREATE TABLE direct_visual_point(segment_id TEXT REFERENCES direct_visual_segment(segment_id),device_id TEXT REFERENCES direct_device(id),channel INTEGER,bucket REAL,PRIMARY KEY(segment_id,channel,bucket))"
+            )
+        )
+        if parent_present:
+            db.execute(text("INSERT INTO direct_visual_segment VALUES('segment')"))
+    row = dict(segment_id="segment", device_id=SENSOR, channel=0, bucket=epoch_us(AT) / 1e6)
+    head, sha, descriptors = plan(
+        tmp_path, [[[row]]], source="direct", dataset="direct_visual_point"
+    )
+    session = begin(head, sha)
+    if parent_present:
+        result = apply(head, sha, session, descriptors[0])
+        assert result["chain_loaded"] and result["committed_rows"] == 1
+        assert apply(head, sha, session, descriptors[0])["replayed"]
+    else:
+        with pytest.raises(ArchiveBlocked, match="Archived Direct visual parent required"):
+            apply(head, sha, session, descriptors[0])
+        with target.connect() as db:
+            assert db.execute(text("SELECT count(*) FROM direct_visual_point")).scalar_one() == 0
+            assert db.execute(text("SELECT rows FROM greenmind_restore_session")).scalar_one() == 0
+            assert (
+                db.execute(text("SELECT count(*) FROM greenmind_restore_batch")).scalar_one() == 0
+            )
+
+
 def test_direct_child_conflict_rolls_back_current_batch_only(target, tmp_path):
     direct_target(target)
     invalid = direct_body("two")

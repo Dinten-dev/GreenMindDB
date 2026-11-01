@@ -255,11 +255,16 @@ def direct_adapter():
         )
         db.execute(
             text(
-                "CREATE TABLE direct_visual_segment(segment_id TEXT PRIMARY KEY,source_revision INTEGER,error TEXT)"
+                "CREATE TABLE direct_visual_segment(segment_id TEXT PRIMARY KEY,source_revision INTEGER,seconds INTEGER,source TEXT,updated_at TEXT,error TEXT,retry_at REAL)"
             )
         )
         db.execute(text("CREATE TABLE direct_visual_point(segment_id TEXT)"))
-        db.execute(text("INSERT INTO direct_visual_segment VALUES(:id,1,NULL)"), {"id": segment})
+        db.execute(
+            text(
+                "INSERT INTO direct_visual_segment VALUES(:id,1,600,'wav','2026-10-01T00:00:02+00:00',NULL,0)"
+            ),
+            {"id": segment},
+        )
         db.execute(text("INSERT INTO direct_visual_point VALUES(:id)"), {"id": segment})
         db.commit()
 
@@ -358,7 +363,7 @@ def test_real_current_published_direct_copy_producer_is_observed_not_historical(
     direct_adapter, tmp_path
 ):
     from app.raw_archive.direct_copy_catalog import PublishedDirectCopyCatalog
-    from app.raw_archive.wav_context import COPY_SCOPE, UNKNOWN, copy_flags
+    from app.raw_archive.wav_context import DIRECT_COPY_SCOPE_V2, UNKNOWN, copy_flags
 
     adapter, reference, sessions, _ = direct_adapter
     strict, _, _ = adapter.metadata(reference)
@@ -366,7 +371,7 @@ def test_real_current_published_direct_copy_producer_is_observed_not_historical(
     assert adapter.catalog.historical_metadata(reference) is None
     adapter.copy_published_history = True
     copied, _, flags = adapter.metadata(reference)
-    assert copied["body"]["copy_scope"] == COPY_SCOPE and flags == copy_flags()
+    assert copied["body"]["copy_scope"] == DIRECT_COPY_SCOPE_V2 and flags == copy_flags()
     assert copied["body"]["metadata"]["capture_assignment"] == UNKNOWN
     assert copied["body"]["metadata"]["observed_assignment"] == {
         **strict["body"]["metadata"]["assignment"],
@@ -415,14 +420,49 @@ def test_gateway_v2_source_change_during_real_copy_is_blocked(gateway_adapter, t
         adapter.export(reference, tmp_path)
 
 
-def test_gateway_v2_receipt_never_authorizes_delete():
+@pytest.mark.parametrize("kind", ["gateway", "direct"])
+def test_observed_v2_receipt_never_authorizes_delete(kind):
     from app.raw_archive.wav_context import (
+        DIRECT_COPY_SCOPE_V2,
         GATEWAY_COPY_SCOPE_V2,
         receipt_context,
         require_deletable_receipt,
     )
 
-    context = receipt_context(GATEWAY_COPY_SCOPE_V2)
+    context = receipt_context(GATEWAY_COPY_SCOPE_V2 if kind == "gateway" else DIRECT_COPY_SCOPE_V2)
     assert context["deletion_authorized"] is False
     with pytest.raises(ArchiveBlocked, match="COPY-only"):
         require_deletable_receipt({"source_identity": context})
+
+
+def test_direct_v2_preserves_real_projection_state_and_byte_exact_parquet(direct_adapter, tmp_path):
+    from app.raw_archive.direct_copy_catalog import PublishedDirectCopyCatalog
+
+    adapter, reference, sessions, engine = direct_adapter
+    with engine.begin() as db:
+        db.execute(
+            text("UPDATE direct_visual_segment SET retry_at=1790000000.25 WHERE segment_id=:id"),
+            {"id": reference[0]},
+        )
+    adapter.catalog = PublishedDirectCopyCatalog(sessions, "greenmind-direct-staging-test")
+    adapter.copy_published_history = True
+    envelope, _, _ = adapter.metadata(reference)
+    parent = envelope["body"]["metadata"]["direct_visual_segment"]
+    assert parent["segment_id"] == reference[0] and parent["source_revision"] == 1
+    assert parent["error"] is None and parent["retry_at"] == 1790000000.25
+    part = parquet.write(tmp_path / "parent.parquet", [envelope])
+    restored = list(parquet.read(tmp_path / "parent.parquet", part))[0]
+    assert encode(restored) == encode(envelope)
+    assert PRIVATE.encode() not in encode(restored)
+
+
+def test_direct_v2_absent_projection_remains_explicitly_absent(direct_adapter):
+    from app.raw_archive.direct_copy_catalog import PublishedDirectCopyCatalog
+
+    adapter, reference, sessions, engine = direct_adapter
+    with engine.begin() as db:
+        db.execute(text("DELETE FROM direct_visual_segment"))
+    adapter.catalog = PublishedDirectCopyCatalog(sessions, "greenmind-direct-staging-test")
+    adapter.copy_published_history = True
+    with pytest.raises(ArchiveBlocked, match="projection missing or stale"):
+        adapter.metadata(reference)
