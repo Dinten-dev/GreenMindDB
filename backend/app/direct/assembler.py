@@ -52,11 +52,12 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
     gaps = []
     run_start = None
     run_payload = bytearray()
+    run_chunks = []
     cursor = segment.first_frame
     reader = WavReader(store.get)
 
     def finish_run():
-        nonlocal run_payload, run_start
+        nonlocal run_payload, run_start, run_chunks
         if run_start is None:
             return
         pcm = bytes(run_payload)
@@ -66,26 +67,39 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
             wav.setsampwidth(config["sample_bits"] // 8)
             wav.setframerate(config["sample_rate"])
             wav.writeframes(pcm)
+        started_at_us = config["session_start_us"] + run_start * 1_000_000 // config["sample_rate"]
+        naming = {}
+        if config["protocol_version"] == 2:
+            naming = {
+                "naming": {
+                    "started_at_us": started_at_us,
+                    "boot_counter": config["boot_counter"],
+                    "sequence": run_chunks[0]["sequence"],
+                    "first_frame": run_start,
+                }
+            }
         key, sha = store.put(
             segment.device_id,
             segment.session_id,
             output.getvalue(),
             identity=f"{segment.bucket}:{run_start}",
             **({"capture_assignment": capture} if capture is not None else {}),
+            **naming,
         )
         runs.append(
             {
                 "first_frame": run_start,
                 "frame_count": len(pcm) // frame_bytes,
-                "started_at_us": config["session_start_us"]
-                + run_start * 1_000_000 // config["sample_rate"],
+                "started_at_us": started_at_us,
                 "key": key,
                 "sha256": sha,
                 "features": channel_features(pcm, config),
+                **({"chunks": run_chunks} if config["protocol_version"] == 2 else {}),
             }
         )
         run_start = None
         run_payload = bytearray()
+        run_chunks = []
 
     for piece, chunk in rows:
         start = chunk.first_frame + piece.payload_offset
@@ -102,12 +116,22 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
         if len(data) != piece.frame_count * frame_bytes:
             raise ValueError("Truncated persisted chunk")
         run_payload.extend(data)
+        if config["protocol_version"] == 2:
+            run_chunks.append(
+                {
+                    "sequence": chunk.sequence,
+                    "first_frame": chunk.first_frame,
+                    "payload_offset": piece.payload_offset,
+                    "frame_count": piece.frame_count,
+                    "payload_sha256": chunk.payload_sha256,
+                }
+            )
         cursor = start + piece.frame_count
     finish_run()
     if cursor < segment.end_frame:
         gaps.append([cursor, segment.end_frame])
     manifest = {
-        "protocol_version": 1,
+        "protocol_version": config["protocol_version"],
         "device_id": segment.device_id,
         "session_id": segment.session_id,
         "bucket_start_us": segment.bucket * SEGMENT_US,
@@ -147,7 +171,7 @@ def assemble_one(engine, settings, store, *, now=None):
                         Segment.updated_at <= now - settings.idle_seconds,
                     ),
                 )
-                .order_by(Segment.updated_at)
+                .order_by(Segment.error.is_not(None), Segment.updated_at)
                 .with_for_update(skip_locked=True)
                 .first()
             )

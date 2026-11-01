@@ -90,3 +90,34 @@ class ChunkMetadata(BaseModel):
             stop = min(upper, end)
             yield bucket, lower, upper, cursor - self.first_frame, stop - cursor
             cursor = stop
+
+
+class TimingV2(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["ntp"]
+    sync_epoch_us: int = Field(ge=1_700_000_000_000_000, le=4_102_444_800_000_000, strict=True)
+    time_reference: Literal["nominal_sample_clock"]
+    uncertainty_us: int | None = Field(ge=0, strict=True)
+
+
+class ChunkMetadataV2(ChunkMetadata):
+    protocol_version: Literal[2]
+    boot_counter: int = Field(ge=1, le=2**63 - 1, strict=True)
+    counter_generation: UUID
+    timing: TimingV2
+
+    @model_validator(mode="after")
+    def validate_sync_time(self):
+        if self.timing.sync_epoch_us > self.session_start_us:
+            raise ValueError("NTP synchronization must precede session start")
+        return self
+
+
+def parse_metadata(value):
+    if not isinstance(value, dict):
+        raise ValueError("Metadata must be an object")
+    version = value.get("protocol_version")
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError("Unsupported Direct protocol")
+    return (ChunkMetadata if version == 1 else ChunkMetadataV2).model_validate(value)

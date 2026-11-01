@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 import tempfile
+from datetime import UTC, datetime
 
 import boto3
 from botocore.config import Config
@@ -12,7 +13,16 @@ from botocore.exceptions import ClientError
 from app.raw_archive import reader as archive_reader
 from app.raw_archive.worklease import shared_wav_lease
 
-KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
+KEY_RE = re.compile(
+    r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/(?:"
+    r"[0-9a-f]{64}|[0-9]{8}T[0-9]{9}Z_e[0-9]+_b[0-9]+_q[0-9]+_f[0-9]+_[0-9a-f]{64})\.wav$"
+)
+
+
+def utc_stamp(started_at_us):
+    epoch_ms = started_at_us // 1000
+    seconds, ms = divmod(epoch_ms, 1000)
+    return datetime.fromtimestamp(seconds, UTC).strftime("%Y%m%dT%H%M%S") + f"{ms:03d}Z", epoch_ms
 
 
 class ArtifactStore:
@@ -44,7 +54,9 @@ class ArtifactStore:
             raise ValueError("Artifact escapes Direct storage")
         return path
 
-    def put(self, device_id, session_id, payload, *, identity, capture_assignment=None):
+    def put(
+        self, device_id, session_id, payload, *, identity, capture_assignment=None, naming=None
+    ):
         metadata = {}
         if capture_assignment is not None:
             from app.direct.capture_assignment import validate
@@ -58,7 +70,14 @@ class ArtifactStore:
             identity += "\0capture:" + capture["sha256"]
         digest = hashlib.sha256(payload).hexdigest()
         object_id = hashlib.sha256(identity.encode() + b"\0" + payload).hexdigest()
-        key = f"direct/{device_id}/{session_id}/{object_id}.wav"
+        filename = object_id
+        if self.settings.timestamp_object_keys_enabled and naming is not None:
+            stamp, epoch_ms = utc_stamp(naming["started_at_us"])
+            filename = (
+                f"{stamp}_e{epoch_ms}_b{naming['boot_counter']}"
+                f"_q{naming['sequence']}_f{naming['first_frame']}_{object_id}"
+            )
+        key = f"direct/{device_id}/{session_id}/{filename}.wav"
         path = self._path(key)
         if self.client:
             self.client.put_object(

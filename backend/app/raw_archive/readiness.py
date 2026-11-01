@@ -99,13 +99,13 @@ def validate_release(data, recording, now):
 
 
 def validate_metadata_restore(catalog, proof):
-    from .wav_catalog import ALLOWLIST_SHA256, FORMAT, manifest_check
+    from .wav_catalog import FORMAT, manifest_check
 
     manifest_check(catalog)
     if (
         proof.get("schema") != 2
         or proof.get("format") != FORMAT
-        or proof.get("allowlist_sha256") != ALLOWLIST_SHA256
+        or proof.get("allowlist_sha256") != catalog["allowlist_sha256"]
         or proof.get("tables") != catalog["tables"]
     ):
         raise ArchiveBlocked("WAV-only metadata restoration proof is required")

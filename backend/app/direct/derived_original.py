@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.direct.capture_assignment import manifest_assignment, split
 from app.direct.models import Piece, Revision, Segment
 from app.direct.payloads import prepare_reference, reconstruct
-from app.direct.protocol import ChunkMetadata
+from app.direct.protocol import parse_metadata
 from app.raw_archive.policy import ArchiveBlocked
 from app.tiered_archive.codec import digest
 
@@ -92,12 +92,14 @@ def reconstruct_detached(db, row, context, reader):
         raise ArchiveBlocked("Published source piece closure is incomplete")
     # Source protocol digest and exact bucket boundaries bind all pieces to the
     # original accepted chunk, including a crossing into a neighbouring WAV.
-    metadata = ChunkMetadata(
-        **source_config,
-        sequence=row["sequence"],
-        first_frame=row["first_frame"],
-        frame_count=row["frame_count"],
-        payload_sha256=row["payload_sha256"],
+    metadata = parse_metadata(
+        source_config
+        | {
+            "sequence": row["sequence"],
+            "first_frame": row["first_frame"],
+            "frame_count": row["frame_count"],
+            "payload_sha256": row["payload_sha256"],
+        }
     )
     if metadata.digest() != row["digest"]:
         raise ArchiveBlocked("Original chunk protocol digest changed")

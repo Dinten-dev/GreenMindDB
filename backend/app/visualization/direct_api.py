@@ -24,6 +24,22 @@ from app.zone_access import is_platform_admin, require_zone_access
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
 
 
+def wav_download_name(manifest, revision, run_index):
+    from app.direct.storage import utc_stamp
+
+    run = manifest["runs"][run_index]
+    stamp, epoch_ms = utc_stamp(run["started_at_us"])
+    config = manifest["config"]
+    boot = config.get("boot_counter", "unknown")
+    chunks = run.get("chunks", [])
+    sequence = chunks[0]["sequence"] if chunks else "unknown"
+    session = str(uuid.UUID(manifest["session_id"]))
+    return (
+        f"direct_{stamp}_e{epoch_ms}_b{boot}_s{session}_q{sequence}"
+        f"_f{run['first_frame']}_r{revision}_i{run_index}.wav"
+    )
+
+
 def connection():
     resources = direct.resources()
     if not resources:
@@ -269,7 +285,7 @@ def install(app):
             payload,
             media_type="audio/wav",
             headers={
-                "Content-Disposition": f'attachment; filename="direct-{segment_id}-{run_index}.wav"'
+                "Content-Disposition": f'attachment; filename="{wav_download_name(row, revision, run_index)}"'
             },
         )
 

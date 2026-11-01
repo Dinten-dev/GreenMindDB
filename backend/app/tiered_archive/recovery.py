@@ -204,16 +204,18 @@ def archived_direct_original(body):
     ):
         raise ArchiveBlocked("Archived Direct original bytes differ from source identity")
     from app.direct.capture_assignment import split
-    from app.direct.protocol import ChunkMetadata
+    from app.direct.protocol import parse_metadata
 
     try:
         config, _ = split(context["session_config"])
-        metadata = ChunkMetadata(
-            **config,
-            sequence=row["sequence"],
-            first_frame=row["first_frame"],
-            frame_count=row["frame_count"],
-            payload_sha256=row["payload_sha256"],
+        metadata = parse_metadata(
+            config
+            | {
+                "sequence": row["sequence"],
+                "first_frame": row["first_frame"],
+                "frame_count": row["frame_count"],
+                "payload_sha256": row["payload_sha256"],
+            }
         )
         if (
             metadata.digest() != row["digest"]

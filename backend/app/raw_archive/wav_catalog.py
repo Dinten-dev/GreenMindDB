@@ -9,6 +9,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import time
 from dataclasses import asdict
@@ -118,6 +119,7 @@ ALLOWLIST_SHA256 = hashlib.sha256(
         }
     )
 ).hexdigest()
+
 LEGACY_ALLOWLIST_SHA256 = ALLOWLIST_SHA256
 
 ALLOWLIST_SHA256 = hashlib.sha256(
@@ -129,6 +131,28 @@ ALLOWLIST_SHA256 = hashlib.sha256(
             "capture_fields": sorted(CAPTURE_FIELDS),
             "manifest_metadata_version": 2,
             "manifest_capture_fields": ["metadata_version", "capture_assignment"],
+        }
+    )
+).hexdigest()
+
+CAPTURE_ALLOWLIST_SHA256 = ALLOWLIST_SHA256
+SESSION_FIELDS_V2 = SESSION_FIELDS | {"boot_counter", "counter_generation", "timing"}
+RUN_FIELDS_V2 = RUN_FIELDS | {"chunks"}
+CHUNK_PROVENANCE_FIELDS = {
+    "sequence",
+    "first_frame",
+    "payload_offset",
+    "frame_count",
+    "payload_sha256",
+}
+ALLOWLIST_SHA256 = hashlib.sha256(
+    raw_json(
+        {
+            "base_allowlist_sha256": CAPTURE_ALLOWLIST_SHA256,
+            "direct_protocol": 2,
+            "session": sorted(SESSION_FIELDS_V2),
+            "run": sorted(RUN_FIELDS_V2),
+            "chunk": sorted(CHUNK_PROVENANCE_FIELDS),
         }
     )
 ).hexdigest()
@@ -211,7 +235,12 @@ def validate_row(kind, table, row):
         from app.direct.capture_assignment import split
 
         config, _ = split(row["config"])
-        exact_keys(config, SESSION_FIELDS, "Direct session", complete=True)
+        exact_keys(
+            config,
+            SESSION_FIELDS_V2 if config.get("protocol_version") == 2 else SESSION_FIELDS,
+            "Direct session",
+            complete=True,
+        )
         validate_session(config)
     if table == "direct_revision":
         manifest = row["manifest"]
@@ -224,10 +253,44 @@ def validate_row(kind, table, row):
             "Direct manifest",
             complete=True,
         )
-        exact_keys(manifest["config"], SESSION_FIELDS, "Direct config", complete=True)
+        v2 = manifest.get("protocol_version") == 2
+        exact_keys(
+            manifest["config"],
+            SESSION_FIELDS_V2 if v2 else SESSION_FIELDS,
+            "Direct config",
+            complete=True,
+        )
+        if (v2 or manifest["config"].get("protocol_version") == 2) and manifest.get(
+            "protocol_version"
+        ) != manifest["config"].get("protocol_version"):
+            raise ArchiveBlocked("Direct manifest protocol differs from its session")
         validate_session(manifest["config"])
         for run in manifest["runs"]:
-            exact_keys(run, RUN_FIELDS, "Direct WAV run", complete=True)
+            exact_keys(run, RUN_FIELDS_V2 if v2 else RUN_FIELDS, "Direct WAV run", complete=True)
+            if v2:
+                chunks = run["chunks"]
+                if not isinstance(chunks, list) or not chunks:
+                    raise ArchiveBlocked("Direct run has no chunk provenance")
+                cursor = run["first_frame"]
+                for chunk in chunks:
+                    exact_keys(
+                        chunk, CHUNK_PROVENANCE_FIELDS, "Direct chunk provenance", complete=True
+                    )
+                    if (
+                        any(
+                            type(chunk[name]) is not int or chunk[name] < 0
+                            for name in ("sequence", "first_frame", "payload_offset")
+                        )
+                        or type(chunk["frame_count"]) is not int
+                        or chunk["frame_count"] < 1
+                        or chunk["first_frame"] + chunk["payload_offset"] != cursor
+                        or not isinstance(chunk["payload_sha256"], str)
+                        or re.fullmatch(r"[0-9a-f]{64}", chunk["payload_sha256"]) is None
+                    ):
+                        raise ArchiveBlocked("Invalid Direct chunk provenance")
+                    cursor += chunk["frame_count"]
+                if cursor != run["first_frame"] + run["frame_count"]:
+                    raise ArchiveBlocked("Direct chunk provenance does not cover run")
             for feature in run["features"]:
                 validate_feature(
                     feature,
@@ -243,10 +306,10 @@ def validate_row(kind, table, row):
 
 
 def validate_session(config):
-    from app.direct.protocol import ChunkMetadata
+    from app.direct.protocol import parse_metadata
 
     # Use the existing protocol's explicit bounds and scientific label grammar.
-    ChunkMetadata.model_validate(
+    parse_metadata(
         config | {"sequence": 0, "first_frame": 0, "frame_count": 1, "payload_sha256": "0" * 64}
     )
 
@@ -370,7 +433,8 @@ def manifest_check(manifest):
     if (
         manifest.get("schema") != 2
         or manifest.get("format") != FORMAT
-        or manifest.get("allowlist_sha256") not in {ALLOWLIST_SHA256, LEGACY_ALLOWLIST_SHA256}
+        or manifest.get("allowlist_sha256")
+        not in {ALLOWLIST_SHA256, CAPTURE_ALLOWLIST_SHA256, LEGACY_ALLOWLIST_SHA256}
         or set(manifest.get("tables", {})) != {"gateway", "direct"}
     ):
         raise ArchiveBlocked("Explicit WAV-only metadata manifest required")
@@ -446,6 +510,15 @@ def restore_parts(manifest, files, destination, checkpoint=lambda: None):
                             raise ArchiveBlocked(
                                 "Server capture requires the versioned metadata allowlist"
                             )
+                        if manifest["allowlist_sha256"] != ALLOWLIST_SHA256 and (
+                            table == "direct_session"
+                            and value["row"].get("config", {}).get("protocol_version") == 2
+                            or table == "direct_revision"
+                            and value["row"].get("manifest", {}).get("protocol_version") == 2
+                        ):
+                            raise ArchiveBlocked(
+                                "Direct protocol v2 requires the versioned metadata allowlist"
+                            )
                         validate_row(kind, table, value["row"])
                         counts[kind][table] += 1
                         db.execute(
@@ -495,7 +568,7 @@ def restore_bundle(
     return {
         "schema": 2,
         "format": FORMAT,
-        "allowlist_sha256": ALLOWLIST_SHA256,
+        "allowlist_sha256": manifest["allowlist_sha256"],
         "environment": namespace,
         "destination": destination.identity,
         "created_at": datetime.now(UTC).isoformat(),

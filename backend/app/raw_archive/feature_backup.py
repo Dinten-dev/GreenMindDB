@@ -85,12 +85,33 @@ FEATURE_V2_ALLOWLIST_SHA256 = hashlib.sha256(
         }
     )
 ).hexdigest()
+PRE_DIRECT_V2_FEATURE_ALLOWLIST_SHA256 = hashlib.sha256(
+    catalog.raw_json(
+        {
+            "base": catalog.CAPTURE_ALLOWLIST_SHA256,
+            "tables": TABLES_V2,
+            "columns": FEATURE_V2_COLUMNS,
+            "nested": FEATURE_V2_NESTED,
+            "format": FORMAT_V2,
+        }
+    )
+).hexdigest()
 
 
 DIRECT_REVISION_ALLOWLIST_SHA256 = hashlib.sha256(
     catalog.raw_json(
         {
             "base": FEATURE_V2_ALLOWLIST_SHA256,
+            "format": FORMAT_DIRECT_REVISION,
+            "tables": TABLES_DIRECT_REVISION,
+            "scope": ["segment_id", "revision", "manifest_sha256"],
+        }
+    )
+).hexdigest()
+PRE_DIRECT_V2_REVISION_ALLOWLIST_SHA256 = hashlib.sha256(
+    catalog.raw_json(
+        {
+            "base": PRE_DIRECT_V2_FEATURE_ALLOWLIST_SHA256,
             "format": FORMAT_DIRECT_REVISION,
             "tables": TABLES_DIRECT_REVISION,
             "scope": ["segment_id", "revision", "manifest_sha256"],
@@ -104,19 +125,25 @@ def _tables_for(manifest):
         manifest.get("format") == FORMAT
         and manifest.get("schema") == 1
         and manifest.get("allowlist_sha256")
-        in {catalog.ALLOWLIST_SHA256, catalog.LEGACY_ALLOWLIST_SHA256}
+        in {
+            catalog.ALLOWLIST_SHA256,
+            catalog.CAPTURE_ALLOWLIST_SHA256,
+            catalog.LEGACY_ALLOWLIST_SHA256,
+        }
     ):
         return TABLES
     if (
         manifest.get("format") == FORMAT_V2
         and manifest.get("schema") == 2
-        and manifest.get("allowlist_sha256") == FEATURE_V2_ALLOWLIST_SHA256
+        and manifest.get("allowlist_sha256")
+        in {FEATURE_V2_ALLOWLIST_SHA256, PRE_DIRECT_V2_FEATURE_ALLOWLIST_SHA256}
     ):
         return TABLES_V2
     if (
         manifest.get("format") == FORMAT_DIRECT_REVISION
         and manifest.get("schema") == 3
-        and manifest.get("allowlist_sha256") == DIRECT_REVISION_ALLOWLIST_SHA256
+        and manifest.get("allowlist_sha256")
+        in {DIRECT_REVISION_ALLOWLIST_SHA256, PRE_DIRECT_V2_REVISION_ALLOWLIST_SHA256}
     ):
         return TABLES_DIRECT_REVISION
     raise ArchiveBlocked("Unknown feature backup version or allowlist")
@@ -426,6 +453,19 @@ def restore(manifest, files, destination, checkpoint=lambda: None):
                     kind, table = entry["kind"], value["table"]
                     if table not in tables[kind]:
                         raise ArchiveBlocked("Unapproved feature table")
+                    if (
+                        table == "direct_revision"
+                        and value["row"].get("manifest", {}).get("protocol_version") == 2
+                        and manifest["allowlist_sha256"]
+                        not in {
+                            catalog.ALLOWLIST_SHA256,
+                            FEATURE_V2_ALLOWLIST_SHA256,
+                            DIRECT_REVISION_ALLOWLIST_SHA256,
+                        }
+                    ):
+                        raise ArchiveBlocked(
+                            "Direct protocol v2 requires the versioned metadata allowlist"
+                        )
                     if manifest["format"] in {FORMAT_V2, FORMAT_DIRECT_REVISION}:
                         validate_v2_row(kind, table, value["row"])
                     else:

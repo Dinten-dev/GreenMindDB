@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import logging
 import time
 
@@ -17,7 +18,7 @@ from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
 from app.direct.ingest import accept_chunk
 from app.direct.models import Budget, Chunk, Heartbeat, Revision, Segment
-from app.direct.protocol import ChunkMetadata, DirectError
+from app.direct.protocol import DirectError, parse_metadata
 from app.direct.storage import ArtifactStore
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ def create_app(settings=None, engine=None, store=None):
         if len(metadata.encode()) > 2048:
             raise DirectError(413, "metadata_limit")
         try:
-            meta = ChunkMetadata.model_validate_json(metadata)
+            meta = parse_metadata(json.loads(metadata))
         except (ValidationError, ValueError) as exc:
             raise DirectError(422, "invalid_metadata") from exc
         expected = meta.frame_count * meta.frame_bytes
