@@ -9,7 +9,10 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy import event
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Query, Session
 
 from app.config import settings
 from app.models.timeseries import SensorReading
@@ -294,6 +297,99 @@ def test_existing_snapshot_does_not_hide_corrupted_current_feature(db: Session, 
     feature.mean += 1
     with pytest.raises(RuntimeError, match="Cannot version an unverified"):
         _snapshot_feature_version(db, feature)
+
+
+def test_snapshot_stale_absence_ignores_only_exact_identity_conflict(db, monkeypatch):
+    """A committed competitor after our SELECT must not abort caller work."""
+    now = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    payload = _wav_bytes(np.arange(380, dtype=np.int16))
+    record = _wav_record(now, payload)
+    db.add(record)
+    db.commit()
+
+    def download(_key, destination):
+        destination.write(payload)
+        destination.seek(0)
+
+    monkeypatch.setattr("app.services.wav_feature_service.wav_service.download_object", download)
+    monkeypatch.setattr(settings, "wav_anomaly_archive_enabled", False)
+    monkeypatch.setattr(settings, "wav_flac_archive_enabled", False)
+    feature = extract_and_verify_wav_features(db, record)
+    existing = db.query(WavFeatureVersion).one()
+    original = (existing.id, existing.feature_payload.copy(), existing.verified_at)
+    # Simulate the real PG schedule: SELECT was empty, competitor now committed.
+    monkeypatch.setattr(Query, "first", lambda _query: None)
+    statements = []
+
+    def capture(_connection, _cursor, statement, *_rest):
+        if statement.lstrip().upper().startswith("INSERT INTO WAV_FEATURE_VERSION"):
+            statements.append(statement)
+
+    event.listen(db.get_bind(), "before_cursor_execute", capture)
+    try:
+        reading = SensorReading(
+            timestamp=now, sensor_id=record.sensor_id, kind="race-test", value=1, unit="mV"
+        )
+        db.add(reading)
+        _snapshot_feature_version(db, feature)
+        db.commit()
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", capture)
+    assert db.query(WavFeatureVersion).count() == 1
+    db.refresh(existing)
+    assert (existing.id, existing.feature_payload, existing.verified_at) == original
+    assert db.get(SensorReading, (now, record.sensor_id, "race-test")) is not None
+    assert len(statements) == 1
+    expected = "ON CONFLICT (wav_file_id, extractor_version, calibration_version, parameter_hash, source_sha256, feature_checksum) DO NOTHING"
+    assert expected in statements[0]
+    assert "DO UPDATE" not in statements[0]
+
+
+def test_snapshot_postgresql_uses_exact_conflict_target_and_propagates_other_errors(
+    db, monkeypatch
+):
+    """Compile the actual production statement; no catch-all retry/rollback."""
+    from app.services import wav_feature_service as service
+
+    now = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    payload = _wav_bytes(np.arange(380, dtype=np.int16))
+    record = _wav_record(now, payload)
+    db.add(record)
+    db.commit()
+
+    def download(_key, destination):
+        destination.write(payload)
+        destination.seek(0)
+
+    monkeypatch.setattr(service.wav_service, "download_object", download)
+    monkeypatch.setattr(settings, "wav_anomaly_archive_enabled", False)
+    monkeypatch.setattr(settings, "wav_flac_archive_enabled", False)
+    feature = extract_and_verify_wav_features(db, record)
+    monkeypatch.setattr(Query, "first", lambda _query: None)
+    monkeypatch.setattr(service, "require_feature_identity", lambda _db: None)
+    original_bind = db.get_bind
+    monkeypatch.setattr(
+        db,
+        "get_bind",
+        lambda *args, **kwargs: type("Bound", (), {"dialect": postgresql.dialect()})(),
+    )
+    statements = []
+    error = IntegrityError("own synthetic constraint", {}, ValueError())
+
+    def execute(statement, *_args, **_kwargs):
+        statements.append(str(statement.compile(dialect=postgresql.dialect())))
+        raise error
+
+    monkeypatch.setattr(db, "execute", execute)
+    with pytest.raises(IntegrityError) as caught:
+        service._snapshot_feature_version(db, feature)
+    assert caught.value is error
+    assert len(statements) == 1
+    assert (
+        "ON CONFLICT (wav_file_id, extractor_version, calibration_version, parameter_hash, source_sha256, feature_checksum) DO NOTHING"
+        in statements[0]
+    )
+    monkeypatch.setattr(db, "get_bind", original_bind)
 
 
 def test_calibration_change_requires_recalculation_before_retention(

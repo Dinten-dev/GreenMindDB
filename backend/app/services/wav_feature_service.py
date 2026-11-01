@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 from sqlalchemy import and_, func, or_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -417,13 +419,19 @@ def _snapshot_feature_version(db: Session, feature: WavFeature) -> None:
         raise RuntimeError("Cannot version an unverified feature payload")
     if db.query(WavFeatureVersion.id).filter_by(**identity).first():
         return
-    db.add(
-        WavFeatureVersion(
-            **identity,
-            feature_payload=payload,
-            verified_at=feature.verified_at,
+    values = dict(identity, feature_payload=payload, verified_at=feature.verified_at)
+    dialect = db.get_bind().dialect.name
+    if dialect in ("postgresql", "sqlite"):
+        insert = pg_insert if dialect == "postgresql" else sqlite_insert
+        # Another reader can commit the same verified identity after our SELECT.
+        # Ignore only that exact six-field conflict; preserve every other error.
+        db.execute(
+            insert(WavFeatureVersion.__table__)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=list(identity))
         )
-    )
+    else:
+        db.add(WavFeatureVersion(**values))
     db.flush()
 
 
