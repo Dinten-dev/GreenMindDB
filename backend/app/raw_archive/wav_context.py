@@ -3,6 +3,7 @@
 from .policy import ArchiveBlocked
 
 COPY_SCOPE = "observed-wav-context-copy-v1"
+GATEWAY_COPY_SCOPE_V2 = "observed-gateway-wav-context-copy-v2"
 RECEIPT_FORMAT = "copy-only-wav-context-v1"
 UNKNOWN = {
     "status": "unknown",
@@ -26,29 +27,63 @@ ASSIGNMENT = {
 }
 
 
-def observe(metadata, kind):
+def visual_parent(metadata):
+    """Only an actual allowlisted row can establish the visual-wave FK parent."""
+    from uuid import UUID
+
+    from .wav_catalog import validate_row
+
+    row = metadata["visual_wav"]
+    if row is None:
+        return
+    validate_row("gateway", "visual_wav", row)
+    try:
+        same_id = UUID(str(row["wav_id"])) == UUID(str(metadata["wav"]["id"]))
+    except (ValueError, AttributeError, TypeError):
+        raise ArchiveBlocked("Observed visual WAV parent identity is invalid") from None
+    if not same_id or row["source_sha256"] != metadata["wav"]["content_sha256"]:
+        raise ArchiveBlocked("Observed visual WAV parent source identity differs")
+
+
+def observe(metadata, kind, *, copy_scope=COPY_SCOPE):
     """Preserve every scientific value; label only today's routing as observed."""
     if (
         kind not in FIELDS
         or not isinstance(metadata, dict)
-        or set(metadata) != FIELDS[kind] | {"assignment"}
+        or copy_scope not in {COPY_SCOPE, GATEWAY_COPY_SCOPE_V2}
+        or (copy_scope == GATEWAY_COPY_SCOPE_V2 and kind != "gateway")
+        or set(metadata)
+        != FIELDS[kind]
+        | {"assignment"}
+        | ({"visual_wav"} if copy_scope == GATEWAY_COPY_SCOPE_V2 else set())
         or not isinstance(metadata["assignment"], dict)
         or set(metadata["assignment"]) != ASSIGNMENT[kind]
     ):
         raise ArchiveBlocked("Exact scientific observation metadata required")
+    if copy_scope == GATEWAY_COPY_SCOPE_V2:
+        visual_parent(metadata)
     return {
-        **{key: metadata[key] for key in FIELDS[kind]},
+        **{
+            key: metadata[key]
+            for key in FIELDS[kind]
+            | ({"visual_wav"} if copy_scope == GATEWAY_COPY_SCOPE_V2 else set())
+        },
         "capture_assignment": dict(UNKNOWN),
         "observed_assignment": {**metadata["assignment"], "semantics": "observed_at_archive"},
     }
 
 
-def require_observed(metadata, kind, candidate):
+def require_observed(metadata, kind, candidate, *, copy_scope=COPY_SCOPE):
     """A pinned archive may restore observations, never promote unknown context."""
     if (
         kind not in FIELDS
         or not isinstance(metadata, dict)
-        or set(metadata) != FIELDS[kind] | {"capture_assignment", "observed_assignment"}
+        or copy_scope not in {COPY_SCOPE, GATEWAY_COPY_SCOPE_V2}
+        or (copy_scope == GATEWAY_COPY_SCOPE_V2 and kind != "gateway")
+        or set(metadata)
+        != FIELDS[kind]
+        | {"capture_assignment", "observed_assignment"}
+        | ({"visual_wav"} if copy_scope == GATEWAY_COPY_SCOPE_V2 else set())
         or metadata["capture_assignment"] != UNKNOWN
         or metadata["capture_assignment"].get("quarantined") is not True
         or not isinstance(metadata["observed_assignment"], dict)
@@ -61,6 +96,8 @@ def require_observed(metadata, kind, candidate):
         or candidate.features_verified is not True
     ):
         raise ArchiveBlocked("Unknown WAV capture context must remain COPY-only quarantined")
+    if copy_scope == GATEWAY_COPY_SCOPE_V2:
+        visual_parent(metadata)
 
 
 def copy_flags():
@@ -77,7 +114,7 @@ def receipt_context(copy_scope):
     """The existing read-broker receipt also retains the deletion prohibition."""
     from .direct_history import COPY_SCOPE as HISTORICAL_DIRECT
 
-    if copy_scope not in {COPY_SCOPE, HISTORICAL_DIRECT}:
+    if copy_scope not in {COPY_SCOPE, GATEWAY_COPY_SCOPE_V2, HISTORICAL_DIRECT}:
         raise ArchiveBlocked("Unknown scientific WAV COPY contract")
     return {
         "format": RECEIPT_FORMAT,

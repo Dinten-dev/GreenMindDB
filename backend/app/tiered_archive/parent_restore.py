@@ -103,13 +103,17 @@ def load_parent(
     metadata = body["metadata"]
     from app.raw_archive.direct_history import COPY_SCOPE as HISTORICAL_DIRECT
     from app.raw_archive.wav_context import COPY_SCOPE as OBSERVED_CONTEXT
-    from app.raw_archive.wav_context import require_observed
+    from app.raw_archive.wav_context import GATEWAY_COPY_SCOPE_V2, require_observed
 
-    observed = body.get("copy_scope") == OBSERVED_CONTEXT
-    if "copy_scope" in body and body["copy_scope"] not in {HISTORICAL_DIRECT, OBSERVED_CONTEXT}:
+    observed = body.get("copy_scope") in {OBSERVED_CONTEXT, GATEWAY_COPY_SCOPE_V2}
+    if "copy_scope" in body and body["copy_scope"] not in {
+        HISTORICAL_DIRECT,
+        OBSERVED_CONTEXT,
+        GATEWAY_COPY_SCOPE_V2,
+    }:
         raise ArchiveBlocked("Unknown scientific WAV COPY contract")
     if observed:
-        require_observed(metadata, source, candidate)
+        require_observed(metadata, source, candidate, copy_scope=body["copy_scope"])
     if source == "gateway":
         if (
             (not observed and set(metadata) != {"wav", "feature", "feature_versions", "assignment"})
@@ -264,7 +268,11 @@ def restore_wav_parent(
                 else ("direct_device", "direct_session", "direct_enrollment")
             )
             masters = {name: Table(name, schema, autoload_with=db) for name in names}
-            for target in (table, *masters.values()):
+            visual_row = metadata.get("visual_wav") if source == "gateway" else None
+            visual = (
+                Table("visual_wav", schema, autoload_with=db) if visual_row is not None else None
+            )
+            for target in (table, *masters.values(), *((visual,) if visual is not None else ())):
                 db.execute(text(f'LOCK TABLE "{target.name}" IN SHARE ROW EXCLUSIVE MODE'))
             verify_masters(db, masters, source, row, metadata, organization)
             if set(COLUMNS[source][table_name]) - set(table.c.keys()):
@@ -283,6 +291,25 @@ def restore_wav_parent(
                 # source state. Private retry/error metadata was never archived.
                 insert_row.update(retry_at=0, error=None)
             db.execute(table.insert().values(**insert_row))
+            if visual is not None:
+                if set(COLUMNS["gateway"]["visual_wav"]) - set(visual.c.keys()):
+                    raise ArchiveBlocked("Observed visual parent schema is incomplete")
+                if (
+                    db.execute(
+                        select(visual.c.wav_id).where(visual.c.wav_id == visual_row["wav_id"])
+                    ).first()
+                    is not None
+                ):
+                    raise ArchiveBlocked("Restore never overwrites an existing visual parent")
+                # Operational error text was deliberately excluded from archive.
+                db.execute(visual.insert().values(**visual_row, error=None))
+                actual_visual = (
+                    db.execute(select(visual).where(visual.c.wav_id == visual_row["wav_id"]))
+                    .mappings()
+                    .one()
+                )
+                if encode({key: actual_visual[key] for key in visual_row}) != encode(visual_row):
+                    raise ArchiveBlocked("Stored visual parent differs from observed source")
             stored = db.execute(select(table).where(and_(table.c.id == row["id"]))).mappings().one()
             if encode({key: stored[key] for key in row}) != encode(row):
                 raise ArchiveBlocked("Stored scientific parent differs from archive")
@@ -308,6 +335,9 @@ def restore_wav_parent(
             "typed_values_verified": True,
             "capture_assignment": unknown_assignment,
             "quarantined": bool(candidate.quarantined),
+            "visual_parent_restored": visual_row is not None,
+            "visual_wave_children_supported": visual_row is not None,
+            "visual_parent_error_reconstructed": False,
         }
     finally:
         engine.dispose()

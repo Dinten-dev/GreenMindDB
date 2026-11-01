@@ -157,6 +157,22 @@ class WavSource:
                     text("SELECT status='verified' FROM visual_wav WHERE wav_id=:id"),
                     {"id": wav.id},
                 ).scalar()
+                if self.copy_published_history:
+                    from app.raw_archive.wav_catalog import COLUMNS
+
+                    visual = (
+                        db.execute(
+                            text(
+                                "SELECT "
+                                + ",".join(COLUMNS["gateway"]["visual_wav"])
+                                + " FROM visual_wav WHERE wav_id=:id"
+                            ),
+                            {"id": wav.id},
+                        )
+                        .mappings()
+                        .one_or_none()
+                    )
+                    metadata["visual_wav"] = dict(visual) if visual is not None else None
             else:
                 from app.direct.models import Device, Enrollment, Revision, Segment
                 from app.direct.models import Session as CaptureSession
@@ -223,13 +239,19 @@ class WavSource:
             },
         }
         if self.copy_published_history:
-            from app.raw_archive.wav_context import COPY_SCOPE, copy_flags, observe
+            from app.raw_archive.wav_context import (
+                COPY_SCOPE,
+                GATEWAY_COPY_SCOPE_V2,
+                copy_flags,
+                observe,
+            )
 
             # These live joins prove present access routing, not assignment at
             # acquisition time. This branch is used by both real COPY producers;
             # strict deletion sources and old archive formats remain unchanged.
-            envelope["body"]["copy_scope"] = COPY_SCOPE
-            envelope["body"]["metadata"] = observe(metadata, self.kind)
+            copy_scope = GATEWAY_COPY_SCOPE_V2 if self.kind == "gateway" else COPY_SCOPE
+            envelope["body"]["copy_scope"] = copy_scope
+            envelope["body"]["metadata"] = observe(metadata, self.kind, copy_scope=copy_scope)
             return envelope, headers, copy_flags()
         return (
             envelope,

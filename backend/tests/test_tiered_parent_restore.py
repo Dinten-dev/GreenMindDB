@@ -44,7 +44,14 @@ def scientific(kind, table, **values):
     return dict.fromkeys(COLUMNS[kind][table]) | values
 
 
-def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False, observed=False):
+def bundle(
+    tmp_path,
+    source,
+    mutate=lambda metadata: None,
+    historical=False,
+    observed=False,
+    visual_parent=False,
+):
     folder = tmp_path / "bundle"
     folder.mkdir()
     wav = folder / "0001.wav"
@@ -184,9 +191,22 @@ def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False, obs
                 reason="source_has_no_immutable_capture_assignment_history",
             )
     if observed:
-        from app.raw_archive.wav_context import observe
+        from app.raw_archive.wav_context import COPY_SCOPE, GATEWAY_COPY_SCOPE_V2, observe
 
-        metadata = observe(metadata, source)
+        scope = GATEWAY_COPY_SCOPE_V2 if visual_parent else COPY_SCOPE
+        if visual_parent:
+            metadata["visual_wav"] = (
+                dict(
+                    wav_id=PARENT,
+                    source_sha256=sha,
+                    seconds=60,
+                    status="pending",
+                    updated_at=AT.isoformat(),
+                )
+                if visual_parent == "present"
+                else None
+            )
+        metadata = observe(metadata, source, copy_scope=scope)
     mutate(metadata)
     record = Recording(
         source,
@@ -209,9 +229,7 @@ def bundle(tmp_path, source, mutate=lambda metadata: None, historical=False, obs
 
         body["copy_scope"] = COPY_SCOPE
     if observed:
-        from app.raw_archive.wav_context import COPY_SCOPE
-
-        body["copy_scope"] = COPY_SCOPE
+        body["copy_scope"] = scope
     envelope = dict(
         identity=digest(reference), organization=ORG, sensor=SENSOR, time_us=epoch_us(AT), body=body
     )
@@ -298,6 +316,22 @@ def target(tmp_path, monkeypatch, source, metadata):
     if source == "direct":
         columns += [Column("retry_at", Float, nullable=False), Column("error", String)]
     Table(parent_name, schema, *columns)
+    if source == "gateway" and "visual_wav" in metadata:
+        Table(
+            "visual_wav",
+            schema,
+            Column("wav_id", String, ForeignKey("wav_file.id"), primary_key=True),
+            Column("source_sha256", String),
+            Column("seconds", Integer),
+            Column("status", String),
+            Column("updated_at", String),
+            Column("error", String),
+        )
+        Table(
+            "visual_wave",
+            schema,
+            Column("wav_id", String, ForeignKey("visual_wav.wav_id"), primary_key=True),
+        )
     if source == "direct":
         Table(
             "direct_device",
@@ -632,6 +666,76 @@ def test_observed_context_parent_restores_real_fk_without_promoting_unknown(
     assert restore_database(sql_folder, URL, sql_sha, checkpoint=lambda: None)["restored_rows"] == 1
     with engine.connect() as db:
         assert db.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() == 1
+
+
+def test_gateway_v2_restores_actual_visual_parent_and_real_wave_fk(tmp_path, monkeypatch):
+    folder, sha, pins, metadata = bundle(
+        tmp_path, "gateway", observed=True, visual_parent="present"
+    )
+    engine, _ = target(tmp_path, monkeypatch, "gateway", metadata)
+    with pytest.raises(IntegrityError), engine.begin() as db:
+        db.execute(text("INSERT INTO visual_wave VALUES(:id)"), {"id": PARENT})
+    result = restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
+    assert result["visual_parent_restored"] and result["visual_wave_children_supported"]
+    assert result["visual_parent_error_reconstructed"] is False and result["quarantined"]
+    with engine.begin() as db:
+        stored = dict(db.execute(text("SELECT * FROM visual_wav")).mappings().one())
+        assert stored == metadata["visual_wav"] | {"error": None}
+        assert stored["status"] == "pending"
+        db.execute(text("INSERT INTO visual_wave VALUES(:id)"), {"id": PARENT})
+    with pytest.raises(ArchiveBlocked, match="overwrites"):
+        restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
+
+
+def test_gateway_v2_missing_visual_parent_stays_wav_only(tmp_path, monkeypatch):
+    folder, sha, pins, metadata = bundle(tmp_path, "gateway", observed=True, visual_parent="absent")
+    engine, _ = target(tmp_path, monkeypatch, "gateway", metadata)
+    result = restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
+    assert not result["visual_parent_restored"] and not result["visual_wave_children_supported"]
+    with pytest.raises(IntegrityError), engine.begin() as db:
+        db.execute(text("INSERT INTO visual_wave VALUES(:id)"), {"id": PARENT})
+    with engine.connect() as db:
+        assert db.execute(text("SELECT count(*) FROM wav_file")).scalar_one() == 1
+        assert db.execute(text("SELECT count(*) FROM visual_wav")).scalar_one() == 0
+
+
+def test_gateway_v2_visual_trigger_mutation_rolls_back_both_parents(tmp_path, monkeypatch):
+    folder, sha, pins, metadata = bundle(
+        tmp_path, "gateway", observed=True, visual_parent="present"
+    )
+    engine, _ = target(tmp_path, monkeypatch, "gateway", metadata)
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "CREATE TRIGGER visual_mutation AFTER INSERT ON visual_wav BEGIN UPDATE visual_wav SET status='verified'; END"
+            )
+        )
+    with pytest.raises(ArchiveBlocked, match="visual parent differs"):
+        restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
+    with engine.connect() as db:
+        assert db.execute(text("SELECT count(*) FROM wav_file")).scalar_one() == 0
+        assert db.execute(text("SELECT count(*) FROM visual_wav")).scalar_one() == 0
+
+
+@pytest.mark.parametrize("change", ["wav_id", "sha", "error"])
+def test_gateway_v2_tampered_visual_parent_blocks_before_target(tmp_path, monkeypatch, change):
+    def mutate(metadata):
+        row = metadata["visual_wav"]
+        if change == "wav_id":
+            row["wav_id"] = SENSOR
+        elif change == "sha":
+            row["source_sha256"] = "0" * 64
+        else:
+            row["error"] = "private operation text"
+
+    folder, sha, pins, _ = bundle(
+        tmp_path, "gateway", mutate, observed=True, visual_parent="present"
+    )
+    monkeypatch.setattr(
+        "sqlalchemy.create_engine", lambda *a, **kw: pytest.fail("must not open target")
+    )
+    with pytest.raises(ArchiveBlocked):
+        restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
 
 
 @pytest.mark.parametrize("source", ["gateway", "direct"])

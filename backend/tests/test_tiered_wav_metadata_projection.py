@@ -81,8 +81,17 @@ def gateway_adapter(db, setup_test_data, monkeypatch):
     record.feature_error = PRIVATE
     feature.anomaly_s3_key = PRIVATE
     feature.flac_s3_key = PRIVATE + "-flac"
-    db.execute(text("CREATE TABLE visual_wav(wav_id TEXT PRIMARY KEY,status TEXT)"))
-    db.execute(text("INSERT INTO visual_wav VALUES(:id,'verified')"), {"id": record.id.hex})
+    db.execute(
+        text(
+            "CREATE TABLE visual_wav(wav_id TEXT PRIMARY KEY,source_sha256 TEXT,seconds INTEGER,status TEXT,updated_at TEXT,error TEXT)"
+        )
+    )
+    db.execute(
+        text(
+            "INSERT INTO visual_wav VALUES(:id,:sha,60,'verified','2026-09-07T00:00:00+00:00',:error)"
+        ),
+        {"id": record.id.hex, "sha": record.content_sha256, "error": PRIVATE},
+    )
     db.commit()
     identity = str(record.id)
     feature_id = feature.id
@@ -317,13 +326,13 @@ def test_missing_projection_error_permission_is_not_bypassed(direct_adapter):
 def test_real_gateway_copy_producer_marks_current_assignment_only_observed(
     gateway_adapter, tmp_path
 ):
-    from app.raw_archive.wav_context import COPY_SCOPE, UNKNOWN, copy_flags
+    from app.raw_archive.wav_context import GATEWAY_COPY_SCOPE_V2, UNKNOWN, copy_flags
 
     adapter, reference, _, _, _ = gateway_adapter
     strict, _, _ = adapter.metadata(reference)
     adapter.copy_published_history = True
     copied, headers, flags = adapter.metadata(reference)
-    assert copied["body"]["copy_scope"] == COPY_SCOPE
+    assert copied["body"]["copy_scope"] == GATEWAY_COPY_SCOPE_V2
     assert flags == copy_flags()
     assert copied["body"]["metadata"]["capture_assignment"] == UNKNOWN
     assert copied["body"]["metadata"]["observed_assignment"] == {
@@ -332,6 +341,13 @@ def test_real_gateway_copy_producer_marks_current_assignment_only_observed(
     }
     for key in ("wav", "feature", "feature_versions"):
         assert encode(copied["body"]["metadata"][key]) == encode(strict["body"]["metadata"][key])
+    assert set(copied["body"]["metadata"]["visual_wav"]) == {
+        "wav_id",
+        "source_sha256",
+        "seconds",
+        "status",
+        "updated_at",
+    }
     assert PRIVATE.encode() not in parquet_roundtrip(copied, tmp_path / "observed-gateway.parquet")
     assert next(iter(headers.values()))["frames"] == 380
     with pytest.raises(ArchiveBlocked, match="COPY-only"):
@@ -361,3 +377,52 @@ def test_real_current_published_direct_copy_producer_is_observed_not_historical(
     assert PRIVATE.encode() not in parquet_roundtrip(copied, tmp_path / "observed-direct.parquet")
     with pytest.raises(ArchiveBlocked, match="COPY-only"):
         adapter._require_deletion_scope()
+
+
+def test_gateway_v2_does_not_invent_absent_visual_parent(gateway_adapter):
+    adapter, reference, _, _, db = gateway_adapter
+    db.execute(text("DELETE FROM visual_wav"))
+    db.commit()
+    adapter.copy_published_history = True
+    copied, _, _ = adapter.metadata(reference)
+    assert copied["body"]["metadata"]["visual_wav"] is None
+
+
+def test_gateway_v2_visual_source_must_match_current_wav(gateway_adapter):
+    adapter, reference, _, _, db = gateway_adapter
+    db.execute(text("UPDATE visual_wav SET source_sha256=:sha"), {"sha": "0" * 64})
+    db.commit()
+    adapter.copy_published_history = True
+    with pytest.raises(ArchiveBlocked, match="visual WAV parent source identity"):
+        adapter.metadata(reference)
+
+
+def test_gateway_v2_source_change_during_real_copy_is_blocked(gateway_adapter, tmp_path):
+    adapter, reference, _, _, db = gateway_adapter
+
+    class Objects:
+        def snapshot(self, record):
+            return {"ETag": "same-original"}
+
+        def download(self, record, snapshot, path):
+            path.write_bytes(_wav_bytes(np.arange(380, dtype=np.int16)))
+            db.execute(text("UPDATE visual_wav SET status='pending'"))
+            db.commit()
+
+    adapter.copy_published_history = True
+    adapter.objects = Objects()
+    with pytest.raises(ArchiveBlocked, match="scientific source changed"):
+        adapter.export(reference, tmp_path)
+
+
+def test_gateway_v2_receipt_never_authorizes_delete():
+    from app.raw_archive.wav_context import (
+        GATEWAY_COPY_SCOPE_V2,
+        receipt_context,
+        require_deletable_receipt,
+    )
+
+    context = receipt_context(GATEWAY_COPY_SCOPE_V2)
+    assert context["deletion_authorized"] is False
+    with pytest.raises(ArchiveBlocked, match="COPY-only"):
+        require_deletable_receipt({"source_identity": context})
