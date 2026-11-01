@@ -535,6 +535,7 @@ def dump(
     executable=None,
     with_proof=False,
     provider_scope=None,
+    schema_capture=None,
 ):
     """One exported snapshot spans schema and allowlisted master rows."""
     from sqlalchemy import create_engine, text
@@ -556,6 +557,18 @@ def dump(
         source_url(
             database_url, source, provider_scope["environment"], provider_scope=provider_scope
         )
+    if schema_capture is not None:
+        from .source_schema import SourceSchemaCapture
+
+        if (
+            type(schema_capture) is not SourceSchemaCapture
+            or provider_scope is None
+            or os.geteuid() != 0
+            or not with_proof
+            or executable is not None
+        ):
+            raise ArchiveBlocked("Exact Root provider schema capture hook required")
+        schema_capture.require_scope(provider_scope)
     version = 4 if source == "gateway" else MASTER_PROOF_VERSION
     scope = fresh_schema_scope(database_url, checkpoint=checkpoint) if version == 4 else None
     tables = master_tables(source, proof_version=version, schema_scope=scope)
@@ -634,6 +647,16 @@ def dump(
                 ),
             ]:
                 target = output / (label + ".dump")
+                if label == "schema" and schema_capture is not None:
+                    schema_capture.capture(
+                        db=db,
+                        source=source,
+                        snapshot=snapshot,
+                        target=target,
+                        checkpoint=checkpoint,
+                    )
+                    outputs.append(target)
+                    continue
                 command = [
                     *([executable] if executable else client_command("pg_dump")),
                     "--no-password",
