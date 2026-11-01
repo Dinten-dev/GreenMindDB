@@ -41,9 +41,14 @@ def validate(plan):
     value = plan["universe"]
     if (
         not isinstance(value, dict)
-        or set(value) != {"version", "tables"}
+        or set(value)
+        != (
+            {"version", "tables"}
+            if value.get("version") == 1
+            else {"version", "tables", "empty_compressed_storage"}
+        )
         or type(value["version"]) is not int
-        or value["version"] != 1
+        or value["version"] not in {1, 2}
         or not isinstance(value["tables"], dict)
         or not 1 <= len(value["tables"]) <= MAX_TABLES
         or any(
@@ -58,6 +63,11 @@ def validate(plan):
         or value["tables"].get(DATASETS[plan["dataset"]].table) != "data"
     ):
         raise ArchiveBlocked("Exact independently pinned application universe required")
+
+    if value["version"] == 2:
+        from .restore_compressed import validate as validate_compressed
+
+        validate_compressed(value["empty_compressed_storage"], value["tables"])
 
 
 def chunk_exemption(db):
@@ -90,7 +100,7 @@ def chunk_exemption(db):
         AND h.schema_name='public' AND pn.nspname=h.schema_name AND parent.relname=h.table_name) """
 
 
-def relation_inventory(db):
+def relation_inventory(db, empty_compressed_oids=()):
     if db.dialect.name != "postgresql":
         raise ArchiveBlocked("Native restore-universe catalog requires PostgreSQL")
     # A schema name is never proof of extension ownership. Retain unrelated
@@ -104,9 +114,17 @@ def relation_inventory(db):
           WHERE d.classid='pg_catalog.pg_class'::regclass AND d.objid=c.oid AND d.deptype='e'
             AND d.refclassid='pg_catalog.pg_extension'::regclass)"""
         + chunk_exemption(db)
+        + (
+            " AND c.oid::bigint <> ALL(CAST(:empty_oids AS bigint[]))"
+            if empty_compressed_oids
+            else ""
+        )
         + " ORDER BY n.nspname,c.relname LIMIT :limit"
     )
-    rows = db.execute(query, {"limit": MAX_TABLES + len(OWN_TABLES) + 1}).mappings().all()
+    params = {"limit": MAX_TABLES + len(OWN_TABLES) + 1}
+    if empty_compressed_oids:
+        params["empty_oids"] = list(empty_compressed_oids)
+    rows = db.execute(query, params).mappings().all()
     if len(rows) > MAX_TABLES + len(OWN_TABLES):
         raise ArchiveBlocked("Restore relation inventory exceeds metadata budget")
     return {
@@ -136,7 +154,11 @@ def domain(plan):
 def bind(db, plan):
     validate(plan)
     expected = {("public", name) for name in plan["universe"]["tables"]}
-    if relation_inventory(db) != expected:
+    from .restore_compressed import check as check_compressed
+
+    empty_oids = check_compressed(db, plan)
+    actual = relation_inventory(db, empty_oids) if empty_oids else relation_inventory(db)
+    if actual != expected:
         raise ArchiveBlocked("Unknown or missing application relation in restore universe")
     table = Table(
         "greenmind_restore_universe",

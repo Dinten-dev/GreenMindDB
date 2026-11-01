@@ -399,6 +399,9 @@ def begin_restore_session(database_url, plan, plan_sha256, *, checkpoint):
                         audit_rows=0,
                     )
                 )
+            from .restore_compressed import check as check_compressed
+
+            check_compressed(db, plan)
             checkpoint()
         return {
             "session_id": session_id,
@@ -464,6 +467,9 @@ def advance_restore_baseline(
             anchor = baseline.anchor(db, masters, snapshot)
             if anchor != "0" * 64:
                 db.execute(sessions.update().values(masters_sha256=anchor))
+            from .restore_compressed import check as check_compressed
+
+            check_compressed(db, plan)
             checkpoint()
         return dict(result, ready=anchor != "0" * 64, source_accesses=0)
     finally:
@@ -849,6 +855,9 @@ def apply_restore_batch(
                 baseline.anchor(db, masters, latest) == session["masters_sha256"],
                 "Restored master baseline changed",
             )
+            from .restore_compressed import check as check_compressed
+
+            check_compressed(db, plan)
             checkpoint()
             result = (
                 db.execute(select(sessions).where(sessions.c.id == session_id)).mappings().one()
@@ -946,6 +955,9 @@ def begin_restore_audit(database_url, plan, plan_sha256, session_id, *, checkpoi
                 )
             else:
                 require(session["audit_epoch"] == snapshot["epoch"], "Audit epoch changed")
+            from .restore_compressed import check as check_compressed
+
+            check_compressed(db, plan)
             checkpoint()
         return {
             "session_id": session_id,
@@ -1152,6 +1164,9 @@ def audit_restore_batch(
                 "Frozen audit input pins changed",
             )
             fence.check_audit(db, session["audit_epoch"])
+            from .restore_compressed import check as check_compressed
+
+            check_compressed(db, plan)
             checkpoint()
             result = (
                 db.execute(select(sessions).where(sessions.c.id == session_id)).mappings().one()
