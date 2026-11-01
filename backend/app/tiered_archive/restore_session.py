@@ -260,7 +260,12 @@ def schema_fingerprint(tables):
 def connection(database_url):
     from sqlalchemy import create_engine
 
-    return create_engine(restore_url(database_url), pool_size=1, max_overflow=0)
+    return create_engine(
+        restore_url(database_url),
+        pool_size=1,
+        max_overflow=0,
+        connect_args={"connect_timeout": 3, "options": "-c default_transaction_read_only=off"},
+    )
 
 
 def admission(db):

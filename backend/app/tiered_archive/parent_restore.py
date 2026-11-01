@@ -254,7 +254,12 @@ def restore_wav_parent(
         checkpoint=checkpoint,
     )
     table_name = "wav_file" if source == "gateway" else "direct_segment"
-    engine = create_engine(url, pool_size=1, max_overflow=0)
+    engine = create_engine(
+        url,
+        pool_size=1,
+        max_overflow=0,
+        connect_args={"connect_timeout": 3, "options": "-c default_transaction_read_only=off"},
+    )
     try:
         with engine.begin() as db:
             db.execute(text("SET LOCAL lock_timeout='150ms'"))

@@ -783,3 +783,43 @@ def test_observed_candidate_cannot_promote_copy_to_complete(tmp_path, source, fi
     path.write_text(json.dumps(manifest))
     with pytest.raises(ArchiveBlocked, match="COPY-only quarantined"):
         load_parent(folder, checksum(path), **pins, checkpoint=lambda: None)
+
+
+def test_parent_target_explicitly_overrides_existing_readonly_role_default(tmp_path, monkeypatch):
+    folder, sha, pins, _ = bundle(tmp_path, "gateway", observed=True, visual_parent="present")
+    seen = {}
+
+    class TargetConnectionNotOpened(Exception):
+        pass
+
+    def create(url, **kwargs):
+        seen.update(kwargs)
+        raise TargetConnectionNotOpened
+
+    monkeypatch.setattr("sqlalchemy.create_engine", create)
+    with pytest.raises(TargetConnectionNotOpened):
+        restore_wav_parent(folder, URL, sha, **pins, checkpoint=lambda: None)
+    assert seen["connect_args"] == {
+        "connect_timeout": 3,
+        "options": "-c default_transaction_read_only=off",
+    }
+
+
+def test_restore_session_target_options_do_not_allow_source_urls(monkeypatch):
+    from app.tiered_archive import restore_session
+
+    calls = []
+
+    def create(url, **kwargs):
+        calls.append((url, kwargs))
+        return "isolated-target-engine"
+
+    monkeypatch.setattr("sqlalchemy.create_engine", create)
+    assert restore_session.connection(URL) == "isolated-target-engine"
+    assert calls[0][1]["connect_args"] == {
+        "connect_timeout": 3,
+        "options": "-c default_transaction_read_only=off",
+    }
+    with pytest.raises(ArchiveBlocked, match="dedicated local"):
+        restore_session.connection("postgresql://reader@127.0.0.1:5433/plantdb_staging")
+    assert len(calls) == 1
