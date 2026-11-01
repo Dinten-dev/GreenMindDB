@@ -22,6 +22,7 @@ from app.models.timeseries import SensorReading
 from app.models.wav_file import WavFeature, WavFeatureVersion, WavFile
 from app.raw_archive.worklease import shared_wav_lease
 from app.services import wav_service
+from app.services.feature_identity_gate import FeatureIdentityWait, require_feature_identity
 
 logger = logging.getLogger(__name__)
 
@@ -388,6 +389,7 @@ def _persisted_feature_payload(feature: WavFeature) -> dict:
 
 def _snapshot_feature_version(db: Session, feature: WavFeature) -> None:
     """Persist a verified feature identity exactly once."""
+    require_feature_identity(db)
     if not feature.verified_at:
         return
     identity = {
@@ -476,12 +478,14 @@ def _upload_path(path: Path, key: str, content_type: str) -> tuple[str, int]:
 
 def extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
     """Extract features and verify all configured archives before retention."""
+    require_feature_identity(db)
     # Cover the whole calculation/verification, not merely its initial download.
     with shared_wav_lease("gateway", "greenmind-raw", wav.s3_key):
         return _extract_and_verify_wav_features(db, wav)
 
 
 def _extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
+    require_feature_identity(db)
     now = datetime.now(UTC)
     with tempfile.TemporaryDirectory(prefix="greenmind-wav-") as temporary_directory:
         directory = Path(temporary_directory)
@@ -553,6 +557,7 @@ def _extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
         db.add(feature)
         wav.content_sha256 = source_sha256
         db.commit()
+        require_feature_identity(db)
 
         mac_clean = wav.sensor_mac.replace(":", "").upper()
         date_path = wav.started_at.strftime("%Y%m%d")
@@ -575,6 +580,7 @@ def _extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
             feature.anomaly_verified_at = now
             feature.anomaly_expires_at = now + timedelta(days=settings.retention_anomaly_days)
             db.commit()
+            require_feature_identity(db)
 
         if settings.wav_flac_archive_enabled:
             flac_path = directory / "source.flac"
@@ -587,6 +593,7 @@ def _extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
             feature.flac_verified_at = now
             feature.flac_expires_at = now + timedelta(days=settings.retention_flac_days)
             db.commit()
+            require_feature_identity(db)
 
         db.refresh(feature)
         if _feature_checksum(_persisted_feature_payload(feature)) != feature.feature_checksum:
@@ -656,10 +663,17 @@ def process_pending_wav_features(db: Session) -> dict[str, int]:
     """Process a bounded retryable batch, committing each verified file."""
     result = {"verified": 0, "failed": 0}
     for _ in range(settings.wav_feature_batch_size):
+        try:
+            require_feature_identity(db)
+        except FeatureIdentityWait:
+            db.rollback()
+            result["paused"] = 1
+            break
         now = datetime.now(UTC)
         wav = _next_candidate(db, now)
         if wav is None:
             break
+        previous = (wav.feature_status, wav.feature_started_at, wav.feature_attempts)
         wav.feature_status = "processing"
         wav.feature_started_at = now
         wav.feature_attempts += 1
@@ -668,6 +682,31 @@ def process_pending_wav_features(db: Session) -> dict[str, int]:
         try:
             extract_and_verify_wav_features(db, wav)
             result["verified"] += 1
+        except FeatureIdentityWait:
+            db.rollback()
+            # A schema regression between the claim commit and the next check
+            # is a pause, not a failed recording. Undo only our unchanged claim.
+            claimed = db.query(WavFile).filter(WavFile.id == wav_id).with_for_update().first()
+            if (
+                claimed is not None
+                and claimed.feature_status == "processing"
+                and claimed.feature_attempts == previous[2] + 1
+                and claimed.feature_started_at is not None
+                and (
+                    claimed.feature_started_at.replace(tzinfo=UTC)
+                    if claimed.feature_started_at.tzinfo is None
+                    else claimed.feature_started_at.astimezone(UTC)
+                )
+                == now
+            ):
+                claimed.feature_status, claimed.feature_started_at, claimed.feature_attempts = (
+                    previous
+                )
+                db.commit()
+            else:
+                db.rollback()
+            result["paused"] = 1
+            break
         except Exception as exc:
             db.rollback()
             failed = db.query(WavFile).filter(WavFile.id == wav_id).first()

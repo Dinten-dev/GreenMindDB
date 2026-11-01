@@ -23,7 +23,9 @@ def main() -> None:
                 update_heartbeat(db, "wav_features", "disabled", {})
             else:
                 result = process_pending_wav_features(db)
-                update_heartbeat(db, "wav_features", "healthy", result)
+                update_heartbeat(
+                    db, "wav_features", "paused" if result.get("paused") else "healthy", result
+                )
                 if result["verified"] or result["failed"]:
                     delay = settings.wav_feature_active_interval_seconds
         except Exception as exc:
