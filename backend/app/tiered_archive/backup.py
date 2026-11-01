@@ -147,7 +147,13 @@ def require_current(receipts, *, source, environment, destination, now, schema_s
             continue
         files = receipt.get("files", [])
         version = files[0].get("master_proof_version") if files else None
-        if (
+        from . import schema_provider
+
+        provider_format = bool(files and files[0].get("backup_format") == schema_provider.FORMAT)
+        if provider_format:
+            if not schema_provider.current_descriptor(files, source):
+                continue
+        elif (
             not files
             or type(version) is not int
             or (
@@ -169,7 +175,7 @@ def require_current(receipts, *, source, environment, destination, now, schema_s
             )
         ):
             continue
-        if version == 4:
+        if (version == 4 and not provider_format) or (provider_format and source == "gateway"):
             live = schema_scope() if callable(schema_scope) else schema_scope
             if live is None or live != files[0]["master_schema_scope"]:
                 continue
@@ -198,10 +204,14 @@ def validate_master_proof(proof, source):
     if (
         not isinstance(proof, dict)
         or type(proof.get("version")) is not int
-        or proof["version"] not in (2, 3, 4)
+        or proof["version"] not in (2, 3, 4, 5)
     ):
         raise ArchiveBlocked("Backup lacks typed master-data proof; retain legacy dumps")
     version = proof["version"]
+    if (source == "gateway" and version == 5) or (source == "direct" and version == 4):
+        from .schema_provider import validate_proof
+
+        return validate_proof(proof, source)
     if version == 4 and set(proof) != {"version", "tables", "schema_scope"}:
         raise ArchiveBlocked("Explicit V4 master-data proof required")
     names = master_tables(source, proof_version=version, schema_scope=proof.get("schema_scope"))
@@ -516,26 +526,49 @@ def fresh_schema_scope(database_url, *, checkpoint):
         engine.dispose()
 
 
-def dump(database_url, source, output, *, checkpoint, executable=None, with_proof=False):
+def dump(
+    database_url,
+    source,
+    output,
+    *,
+    checkpoint,
+    executable=None,
+    with_proof=False,
+    provider_scope=None,
+):
     """One exported snapshot spans schema and allowlisted master rows."""
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
 
     # V2/V3 remain unchanged file-restorable contracts. New Gateway captures
     # use an explicit V4 scope; Direct has no Alembic/auth-table contract.
+    if provider_scope is not None:
+        from . import schema_provider
+        from .native_backup import source_url
+
+        if os.geteuid() != 0 or not with_proof or executable is not None:
+            raise ArchiveBlocked(
+                "Root typed provider capture with pinned PostgreSQL clients required"
+            )
+        schema_provider.validate_scope(provider_scope)
+        if provider_scope["source"] != source:
+            raise ArchiveBlocked("Exact provider source required")
+        source_url(database_url, source, "staging")
     version = 4 if source == "gateway" else MASTER_PROOF_VERSION
     scope = fresh_schema_scope(database_url, checkpoint=checkpoint) if version == 4 else None
     tables = master_tables(source, proof_version=version, schema_scope=scope)
     url = make_url(database_url)
     env = {
-        **os.environ,
+        **({} if provider_scope is not None else os.environ),
+        **({"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"} if provider_scope is not None else {}),
         "PGHOST": url.host or "localhost",
         "PGPORT": str(url.port or 5432),
         "PGDATABASE": url.database,
         "PGUSER": url.username,
         "PGPASSWORD": url.password or "",
         "PGCONNECT_TIMEOUT": "3",
-        "PGOPTIONS": "-c statement_timeout=8000 -c lock_timeout=150",
+        "PGOPTIONS": "-c statement_timeout=8000 -c lock_timeout=150"
+        + (" -c default_transaction_read_only=on" if provider_scope is not None else ""),
     }
     engine = create_engine(database_url, pool_size=1, max_overflow=0)
     try:
@@ -552,6 +585,18 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
 
                 if capture_scope(db, checkpoint=checkpoint) != scope:
                     raise ArchiveBlocked("Master schema scope changed before dump")
+            if provider_scope is not None:
+                from . import native_backup
+                from .policy import utc
+
+                schema_provider.capture_provider(db, provider_scope, checkpoint=checkpoint)
+                captured_at = utc(db.execute(text("SELECT transaction_timestamp()")).scalar_one())
+                provider_state = {
+                    "scope": provider_scope,
+                    "structure": native_backup.structure_proof(db, checkpoint=checkpoint),
+                    "jobs_sha256": native_backup.jobs_proof(db),
+                    "sequences": native_backup.sequence_proof(db, checkpoint=checkpoint),
+                }
             snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
             outputs = []
             for label, args in [
@@ -562,6 +607,28 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
                         "--data-only",
                         *[flag for table in tables for flag in ("--table", "public." + table)],
                     ],
+                ),
+                *(
+                    [
+                        (
+                            "provider",
+                            [
+                                "--data-only",
+                                "--no-blobs",
+                                "--strict-names",
+                                *[
+                                    flag
+                                    for relation in provider_scope["config_relations"]
+                                    for flag in (
+                                        "--table",
+                                        '"' + relation["schema"] + '"."' + relation["name"] + '"',
+                                    )
+                                ],
+                            ],
+                        )
+                    ]
+                    if provider_scope is not None
+                    else []
                 ),
             ]:
                 target = output / (label + ".dump")
@@ -606,6 +673,26 @@ def dump(database_url, source, output, *, checkpoint, executable=None, with_proo
             )
             if version == 4 and fresh_schema_scope(database_url, checkpoint=checkpoint) != scope:
                 raise ArchiveBlocked("Master schema scope changed between captures")
+            if provider_scope is not None:
+                for role, path in zip(("schema", "masters", "provider"), outputs, strict=True):
+                    schema_provider.inspect_dump(
+                        path, provider_scope, role, tables, env, checkpoint=checkpoint
+                    )
+                schema_provider.capture_provider(db, provider_scope, checkpoint=checkpoint)
+                if (
+                    native_backup.sequence_proof(db, checkpoint=checkpoint)
+                    != provider_state["sequences"]
+                ):
+                    raise ArchiveBlocked(
+                        "Source sequence changed during consistent provider capture"
+                    )
+                proof = {
+                    **proof,
+                    "version": schema_provider.proof_version(source),
+                    "provider": provider_state,
+                }
+                schema_provider.validate_proof(proof, source)
+                return outputs, proof, captured_at
             if with_proof:
                 return outputs, proof
             return outputs

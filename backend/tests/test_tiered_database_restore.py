@@ -253,7 +253,11 @@ def test_versioned_restore_rechecks_real_sql_values_in_exact_scope(
         from pathlib import Path
 
         clients.append(command)
-        if output is not None:
+        if "--list" in command:
+            output.write_bytes(
+                b"; synthetic plain-PG schema TOC\n1; 1259 42 TABLE public fixture owner\n"
+            )
+        elif output is not None:
             # Decode only the decrypted archive input, never the source connection.
             output.write_bytes(Path(command[-1]).read_bytes())
         else:
@@ -298,7 +302,8 @@ def test_versioned_restore_rechecks_real_sql_values_in_exact_scope(
                     )
                     == original
                 )
-        assert len(clients) == 4
+        assert len(clients) == 5
+        assert sum("--list" in command for command in clients) == 1
         assert not list(folder.glob("restore-private-*"))
     finally:
         target.dispose()

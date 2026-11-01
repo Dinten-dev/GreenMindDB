@@ -33,7 +33,9 @@ def main():
     backup = sub.add_parser("backup")
     backup.add_argument("--source", choices=("gateway", "direct"), required=True)
     backup.add_argument(
-        "--format", choices=("schema-master-v2", "postgres-full-v1"), default="schema-master-v2"
+        "--format",
+        choices=("schema-master-v2", "postgres-full-v1", "schema-master-provider-v1"),
+        default="schema-master-v2",
     )
     sql = sub.add_parser("archive-sql")
     sql.add_argument("--dataset", required=True)

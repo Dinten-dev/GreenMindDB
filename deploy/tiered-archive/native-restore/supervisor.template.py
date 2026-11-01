@@ -261,6 +261,8 @@ try:
             + '" OWNER greenmind_archive_staging_ro TEMPLATE template0 CONNECTION LIMIT 3;'
         )
         created.append(name)
+        # Only the new marked restore target; source database ACLs remain unchanged.
+        sql('REVOKE CONNECT,TEMPORARY ON DATABASE "' + name + '" FROM PUBLIC;')
         sql('COMMENT ON DATABASE "' + name + "\" IS '" + marker + "';")
         oid = sql("SELECT oid::text FROM pg_database WHERE datname='" + name + "';")
         identities[name] = oid

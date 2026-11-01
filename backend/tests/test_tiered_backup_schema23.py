@@ -218,7 +218,11 @@ def test_v4_restore_compares_actual_catalog_head_and_values(
     event.listen(target, "before_cursor_execute", control, retval=True)
 
     def run_client(command, env, *, checkpoint, output=None):
-        if output is not None:
+        if "--list" in command:
+            output.write_bytes(
+                b"; synthetic plain-PG schema TOC\n1; 1259 42 TABLE public fixture owner\n"
+            )
+        elif output is not None:
             output.write_bytes(Path(command[-1]).read_bytes())
         else:
             script = next(Path(v) for v in command if v.endswith("/masters.sql"))

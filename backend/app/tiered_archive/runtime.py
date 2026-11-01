@@ -578,14 +578,21 @@ def current_backup_schema_scope(source, checkpoint):
 
 
 def backup(source, *, backup_format="schema-master-v2"):
-    from . import parquet
+    from . import parquet, schema_provider
     from .backup import decrypt, dump, encrypt, key_from_file
     from .codec import digest
     from .pipeline import publish
     from .policy import Candidate
 
-    if backup_format not in {"schema-master-v2", "postgres-full-v1"}:
+    if backup_format not in {"schema-master-v2", "postgres-full-v1", schema_provider.FORMAT}:
         raise ArchiveBlocked("Unknown database backup format")
+    if backup_format == schema_provider.FORMAT:
+        if os.geteuid() != 0 or environment() != "staging":
+            raise ArchiveBlocked("Provider schema/master capture is root-only Staging")
+        provider_scope = schema_provider.read_scope(
+            os.environ["TIERED_ARCHIVE_SCHEMA_PROVIDER_SCOPE_FILE"],
+            os.environ["TIERED_ARCHIVE_SCHEMA_PROVIDER_SCOPE_SHA256"],
+        )
     if backup_format == "postgres-full-v1" and environment() != "staging":
         raise ArchiveBlocked("Native full backup is currently restricted to Staging")
 
@@ -624,6 +631,17 @@ def backup(source, *, backup_format="schema-master-v2"):
                     key,
                     environment=environment(),
                     checkpoint=checkpoint,
+                )
+                return publish(candidate, files, store, ledger, checkpoint=checkpoint)
+            if backup_format == schema_provider.FORMAT:
+                from app.raw_archive.policy import checksum
+
+                if checksum(Path(os.environ["TIERED_ARCHIVE_BACKUP_KEY_FILE"])) != os.environ.get(
+                    "TIERED_ARCHIVE_BACKUP_KEY_SHA256"
+                ):
+                    raise ArchiveBlocked("Provider backup key differs from recovery binding")
+                candidate, files = schema_provider.capture(
+                    database_url, source, folder, key, provider_scope, checkpoint=checkpoint
                 )
                 return publish(candidate, files, store, ledger, checkpoint=checkpoint)
             originals, proof = dump(

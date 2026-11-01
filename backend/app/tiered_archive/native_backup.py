@@ -130,6 +130,19 @@ def content_proof(db, *, checkpoint):
             "bytes": sink.bytes,
         }
 
+    shapes = structure_proof(db, checkpoint=checkpoint, budget=budget)
+    return {
+        "public_tables": tables,
+        "structure": shapes,
+        "proof_bytes": budget[0],
+        "sequences": sequence_proof(db, checkpoint=checkpoint),
+    }
+
+
+def structure_proof(db, *, checkpoint, budget=None):
+    """Same native structural fingerprints without scanning public payload rows."""
+    budget = [0] if budget is None else budget
+
     def hash_query(query):
         sink = Sink(budget, checkpoint)
         with db.connection.driver_connection.cursor() as cursor:
@@ -147,13 +160,7 @@ def content_proof(db, *, checkpoint):
         "dimensions": "SELECT hypertable_schema,hypertable_name,column_name,column_type::text,dimension_type,time_interval,integer_interval,num_partitions FROM timescaledb_information.dimensions ORDER BY hypertable_schema,hypertable_name,dimension_number",
         "compression_settings": "SELECT hypertable_schema,hypertable_name,attname,segmentby_column_index,orderby_column_index,orderby_asc,orderby_nullsfirst FROM timescaledb_information.compression_settings ORDER BY hypertable_schema,hypertable_name,attname",
     }
-    shapes = {name: hash_query(query) for name, query in definitions.items()}
-    return {
-        "public_tables": tables,
-        "structure": shapes,
-        "proof_bytes": budget[0],
-        "sequences": sequence_proof(db, checkpoint=checkpoint),
-    }
+    return {name: hash_query(query) for name, query in definitions.items()}
 
 
 def jobs_proof(db):
@@ -505,3 +512,88 @@ def authenticated_bundle(folder, manifest_sha256, key, *, checkpoint):
             raise ArchiveBlocked("Authenticated native metadata binding differs")
         validate_proof(metadata["proof"], candidate.source)
         yield temporary / "full.dump", metadata
+
+
+def supervisor_post_restore(state, marker, *, checkpoint, evidence=None):
+    """Reuse the existing supervisor request/done handshake; never run admin SQL."""
+    import os
+
+    state = Path(state)
+    if (
+        not state.is_absolute()
+        or state.resolve() != state
+        or not state.is_dir()
+        or state.stat().st_mode & 0o077
+        or not isinstance(marker, str)
+        or not 1 <= len(marker.encode()) <= 256
+        or "\x00" in marker
+    ):
+        raise ArchiveBlocked("Private existing supervisor state required")
+    if evidence is not None:
+        allowed = {
+            "format",
+            "source",
+            "manifest_sha256",
+            "source_jobs_sha256",
+            "restored_jobs_sha256",
+            "master_proof_sha256",
+            "structure_sha256",
+            "sequences_sha256",
+            "target_sha256",
+        }
+        if (
+            os.geteuid() != 0
+            or not isinstance(evidence, dict)
+            or set(evidence) != allowed
+            or evidence["format"] != "greenmind.provider-restore-pre-quarantine.v1"
+            or evidence["source"] not in {"gateway", "direct"}
+            or any(
+                not isinstance(evidence[k], str) or not re.fullmatch("[a-f0-9]{64}", evidence[k])
+                for k in allowed - {"format", "source"}
+            )
+            or evidence["source_jobs_sha256"] != evidence["restored_jobs_sha256"]
+        ):
+            raise ArchiveBlocked("Exact provider pre-quarantine evidence required")
+        journal = state / "provider-before-post-restore.json"
+        descriptor = os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        directory = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    request = state / "post-restore-request"
+    descriptor = os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(marker.encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+    began = time.monotonic()
+    done = state / "post-restore-done"
+    while not done.is_file():
+        checkpoint()
+        if time.monotonic() - began > 120:
+            raise ArchiveBlocked("Controlled post-restore acknowledgement timeout")
+        time.sleep(0.1)
+    import stat
+
+    descriptor = os.open(done, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        raw = stream.read(257)
+        after = os.fstat(stream.fileno())
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != 0
+        or stat.S_IMODE(info.st_mode) != 0o444
+        or info.st_nlink != 1
+        or info.st_size > 256
+        or (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+        or raw != marker.encode()
+    ):
+        raise ArchiveBlocked("Controlled post-restore acknowledgement differs")
+    checkpoint()
