@@ -6,8 +6,10 @@ until a native Source audit schema/grants restore verifier is implemented.
 
 import hashlib
 import json
+import os
 import re
-from datetime import timedelta
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import text
@@ -111,9 +113,118 @@ def verify_committed_rows(db, permit):
     return actual
 
 
-def require_native_restore_evidence():
-    """No fabricated readiness while full schema/grant restore is unavailable."""
-    raise ArchiveBlocked("V3 native Source audit schema/grants restore provenance unavailable")
+def require_native_restore_evidence(guard=None, candidate=None, *, checkpoint=None):
+    """Re-read actual V3 backup and inspect a separate marked PostgreSQL restore."""
+    if guard is None or candidate is None or not callable(checkpoint):
+        raise ArchiveBlocked("V3 native Source audit schema/grants restore provenance unavailable")
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+
+    from app.raw_archive.read_only_box import CatalogReadOnlyBox, configured_catalog_read_only_box
+
+    from . import backup, registry_v5, runtime, sql_audit_v3_backup
+    from .recovery import restore_url
+    from .scientific_registry_import import _provider_proof, _transport
+    from .sql_deletion_guard import ProductionGuardV3, _private_json, _snapshot_reference
+    from .sql_runtime import _private_file
+    from .storage import Store
+
+    need(type(guard) is ProductionGuardV3 and guard.candidate == candidate and os.geteuid() == 0,
+         "Real root V3 restore guard required")
+    config = guard.config
+    need(type(config.get("audit_v3_restore_evidence_path")) is str
+         and Path(config["audit_v3_restore_evidence_path"]).is_absolute()
+         and type(config.get("audit_v3_restore_evidence_sha256")) is str
+         and sql_audit_v3.HEX64.fullmatch(config["audit_v3_restore_evidence_sha256"]),
+         "V3 native Source audit schema/grants restore provenance unavailable")
+    evidence = _private_json(config["audit_v3_restore_evidence_path"], config["audit_v3_restore_evidence_sha256"])
+    fields = {"format", "backup_candidate", "backup_manifest_sha256", "key_file", "key_sha256",
+              "target_profile_file", "target_profile_sha256", "target", "target_writer_role",
+              "provider_proof_file", "provider_proof_sha256", "provider_terminal_file", "provider_terminal_sha256"}
+    need(type(evidence) is dict and set(evidence) == fields and evidence["format"] == "greenmind.sql-audit-v3-native-restore-input.v1"
+         and evidence["backup_candidate"] == config["audit_v3_backup_candidate"]
+         and evidence["backup_manifest_sha256"] == config["audit_v3_backup_manifest_sha256"],
+         "Pinned V3 native restore inputs required")
+    for field in ("key_sha256", "target_profile_sha256", "provider_proof_sha256", "provider_terminal_sha256"):
+        need(type(evidence[field]) is str and sql_audit_v3.HEX64.fullmatch(evidence[field]), "Exact V3 restore input SHA required")
+    raw_key = _private_file(evidence["key_file"], evidence["key_sha256"], 32)
+    key = backup.key_from_file(Path(evidence["key_file"]))
+    need(raw_key == key, "V3 restore key generation changed")
+    target_url = restore_url(_private_file(evidence["target_profile_file"], evidence["target_profile_sha256"], 8192).decode().strip())
+    target = evidence["target"]
+    need(target_url.database != config["source_identity"]["database"], "Isolated V3 restore database required")
+    receipt = guard.ledger.get(evidence["backup_candidate"])
+    now = datetime.now(UTC)
+    need(type(receipt) is dict and receipt.get("state") == "verified" and receipt.get("destination") == guard.store.identity
+         and receipt.get("manifest", {}).get("sha256") == evidence["backup_manifest_sha256"]
+         and now - timedelta(hours=24) <= utc(receipt.get("verified_at")) <= now,
+         "Current verified V3 Gateway backup required")
+    backup_candidate = runtime.candidate_from_json(receipt["source"])
+    need(backup_candidate.identity == evidence["backup_candidate"] and backup_candidate.environment == candidate.environment,
+         "V3 Gateway backup identity differs")
+    table = guard.ledger.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sql_audit_v3_backup'").fetchone()
+    need(table is not None, "V3 independent backup provenance unavailable")
+    registry_v5.schema(guard.ledger.db, "sql_audit_v3_backup")
+    refs = receipt["files"]
+    need(len(refs) == 6, "Full V3 backup inventory required")
+    row = guard.ledger.db.execute("SELECT epoch,candidate,gateway_manifest_sha256,audit_sha256,plaintext_sha256 FROM sql_audit_v3_backup WHERE epoch=?", (config["audit_v3_epoch"],)).fetchone()
+    need(row is not None and tuple(row) == (config["audit_v3_epoch"], backup_candidate.identity, evidence["backup_manifest_sha256"], refs[5]["sha256"], refs[5]["plaintext_sha256"]),
+         "V3 independent backup journal differs")
+    readonly = configured_catalog_read_only_box()
+    need(type(readonly) is CatalogReadOnlyBox, "Independent V3 read-only verifier required")
+    try:
+        verifier = Store(readonly)
+        _transport(Store(guard.store.transport), verifier)
+        _provider_proof(evidence["provider_proof_file"], evidence["provider_proof_sha256"], evidence["provider_terminal_file"], evidence["provider_terminal_sha256"])
+        # Snapshot paths use the existing separately authorized operator reader;
+        # immutable audit objects below still use the independent RO account.
+        guard._snapshot_lock(receipt["snapshot"])
+        _snapshot_reference(guard.store, guard.provider, guard.ledger, receipt, checkpoint)
+        readback, payload = sql_audit_v3_backup.verify_gateway_bundle(backup_candidate, guard.ledger, verifier, key, checkpoint=checkpoint, _include_payload=True)
+        need(not readback["unknown"] and payload["data"]["generation"][0]["epoch"] == config["audit_v3_epoch"]
+             and payload["data"]["generation"][0]["genesis_sha"] == config["audit_v3_genesis_sha256"]
+             and payload["schema_sha256"] == config["audit_schema_sha256"], "V3 audit generation or schema differs")
+        source = config["source_identity"]
+        need(all(payload["source_identity"].get(k) == source.get(k) and source.get(k) is not None
+                 for k in ("database", "database_oid", "server_address", "server_port", "postmaster_start")),
+             "V3 backup physical Source identity differs")
+        engine = create_engine(target_url, poolclass=NullPool, connect_args={"connect_timeout": 3})
+        try:
+            with engine.connect() as db:
+                physical = db.execute(text("SELECT inet_server_addr()::text, pg_postmaster_start_time()::text")).one()
+                need(tuple(physical) != (source["server_address"], source["postmaster_start"]), "V3 restore cannot share Source PostgreSQL")
+        finally:
+            engine.dispose()
+        result = sql_audit_v3_backup.verify_native_rows(target_url.render_as_string(hide_password=False), target, payload,
+                                                        checkpoint=checkpoint, target_writer_role=evidence["target_writer_role"])
+        need(result.get("native_rows_match") is True and result.get("target_schema_grants_match") is True,
+             "Full native V3 audit restore differs")
+        checkpoint()
+        guard._snapshot_lock(receipt["snapshot"])
+        need(guard.ledger.get(backup_candidate.identity) == receipt, "V3 backup receipt changed")
+        return {"candidate": backup_candidate.identity, "gateway_manifest_sha256": evidence["backup_manifest_sha256"],
+                "snapshot_sha256": payload["snapshot_sha256"], "native_schema_grants_rows_verified": True}
+    finally:
+        readonly.close()
+
+
+def make_source_permit(candidate, permit, authorization_sha256, source_dba_identity, writer_identity, session, *, producer_sha256, seconds):
+    """Bind an already-validated V3 approval to this live lease, never grant DML."""
+    audit = permit["audit"]
+    need(type(session) is str and sql_audit_v3.HEX32.fullmatch(session), "Live lease session required")
+    need(type(source_dba_identity) is dict and source_dba_identity and type(producer_sha256) is str and sql_audit_v3.HEX64.fullmatch(producer_sha256), "Pinned Source producer and DBA identity required")
+    need(type(seconds) is int and 3 <= seconds <= 35, "Bounded Source permit lifetime required")
+    identity = writer_identity
+    need(type(identity) is dict and type(identity.get("role")) is str and sql_audit_v3.NAME.fullmatch(identity["role"]) and type(identity.get("role_oid")) is int and identity["role_oid"] > 0, "Pinned Source writer identity required")
+    now = datetime.now(UTC)
+    return {"format": "greenmind.sql-audit-v3-source-permit.v1", "lease_session": session,
+            "producer_sha256": producer_sha256, "source_identity": source_dba_identity,
+            "schema_sha256": audit["schema_sha256"], "writer_role": identity["role"], "writer_oid": identity["role_oid"],
+            "epoch": audit["epoch"], "slot": audit["slot"], "candidate_sha": candidate.identity,
+            "tenant_sha": hashlib.sha256(candidate.organization.encode()).hexdigest(),
+            "pk_sha": audit["pk_sha256"], "permit_sha": authorization_sha256,
+            "body": approval_body(permit, authorization_sha256), "expected": audit["source_row_sha256"],
+            "start_at": (now - timedelta(seconds=1)).isoformat(), "expires_at": (now + timedelta(seconds=seconds)).isoformat()}
 
 
 def verify_history(db, ledger, epoch, *, active_permit=None, authorization_sha256=None):
@@ -196,6 +307,111 @@ def _budget(ledger, candidate, permit, authorization_sha256):
         need(not existing or existing == [expected], "V3 pilot budget already consumed")
         if not existing:
             ledger.db.execute("INSERT INTO sql_deletion_pilot VALUES (?,?,?)", expected)
+
+
+def stage_source_approval(candidate, adapter, ledger, *, authorization_path, authorization_sha256,
+                          runtime_sha256, bindings_sha256, proof_guard, checkpoint, clock,
+                          binding_path, binding_sha256, dba_identity_path, dba_identity_sha256,
+                          producer_sha256, challenge_file, frame_file):
+    """Issue a one-shot Source approval challenge after the complete live V3 guard.
+
+    No DML is authorized. Any uncertain exchange leaves a durable intent and
+    cannot be retried without independent Source/ledger reconciliation.
+    """
+    import base64
+
+    from app.raw_archive import remote_lease
+    from app.raw_archive.scientific_scope_control import current_source_session
+
+    from .policy import eligibility
+    from .restore_inputs import frozen
+    from .sql_deletion_guard import ProductionGuardV3
+    from .sql_runtime import _await_source_frame
+
+    need(os.geteuid() == 0 and os.getenv("TIERED_ARCHIVE_SQL_V3_SOURCE_APPROVAL_ENABLED") == "true"
+         and type(proof_guard) is ProductionGuardV3 and type(adapter) is Source and callable(checkpoint),
+         "Explicit root V3 source approval controller required")
+    bound_job_lock()
+    require_bound_source_lease()
+    sql_deletion._scope(candidate, adapter, checkpoint)
+    now = utc(clock())
+    permit = activation(authorization_path, authorization_sha256, candidate, now)
+    need(permit["runtime_sha256"] == runtime_sha256 and permit["bindings_sha256"] == bindings_sha256
+         and permit["audit"]["schema_sha256"] == proof_guard.config["audit_schema_sha256"]
+         and permit["audit"]["epoch"] == proof_guard.config["audit_v3_epoch"]
+         and permit["audit"]["genesis_sha256"] == proof_guard.config["audit_v3_genesis_sha256"],
+         "V3 approval proof scope differs")
+    spec = sql_deletion.DATASETS[candidate.dataset]
+    pk = [{key: item["body"]["row"][key] for key in spec.keys} for item in adapter.expected]
+    need(codec.digest(pk) == permit["audit"]["pk_sha256"], "V3 approval primary-key scope differs")
+    receipt = ledger.get(candidate.identity)
+    need(type(receipt) is dict, "V3 verified candidate receipt required")
+    eligibility(candidate, receipt, now)
+    proof_guard.prepare(candidate, receipt, now, permit)
+    need(activation(authorization_path, authorization_sha256, candidate, utc(clock())) == permit,
+         "V3 authorization expired after preflight")
+    for path, digest in ((binding_path, binding_sha256), (dba_identity_path, dba_identity_sha256)):
+        need(type(digest) is str and sql_audit_v3.HEX64.fullmatch(digest), "Pinned Source input required")
+        info = Path(path).lstat()
+        need(info.st_uid == 0 and info.st_mode & 0o777 == 0o400 and info.st_nlink == 1, "Root immutable Source input required")
+    before_binding, before_dba = frozen(Path(binding_path)), frozen(Path(dba_identity_path))
+    binding = _private_read(Path(binding_path), 16384)
+    dba_raw = _private_read(Path(dba_identity_path), 16384)
+    need(hashlib.sha256(binding).hexdigest() == binding_sha256 and hashlib.sha256(dba_raw).hexdigest() == dba_identity_sha256
+         and frozen(Path(binding_path)) == before_binding and frozen(Path(dba_identity_path)) == before_dba,
+         "Source input changed")
+    try:
+        dba_identity = json.loads(dba_raw)
+        need(type(json.loads(binding)) is dict, "Invalid Source binding")
+    except (ValueError, UnicodeError) as exc:
+        raise ArchiveBlocked("Invalid Source input") from exc
+    need(hashlib.sha256(Path(sql_audit_v3.__file__).read_bytes()).hexdigest() == producer_sha256,
+         "Pinned Source producer differs")
+    session = current_source_session()
+    authority = remote_lease._BOUND_SOURCE_LEASE.get()
+    remote = getattr(authority[0], "__self__", None) if authority else None
+    need(type(remote) is remote_lease.RemoteLease and remote.session == session, "Actual Source lease required")
+    seconds = min(35, int(remote.deadline - time.monotonic()) - 10)
+    source_permit = make_source_permit(candidate, permit, authorization_sha256, dba_identity,
+                                       proof_guard.config["source_identity"], session,
+                                       producer_sha256=producer_sha256, seconds=seconds)
+    raw_permit = json.dumps(source_permit, sort_keys=True, separators=(",", ":")).encode()
+    permit_sha = hashlib.sha256(raw_permit).hexdigest()
+    request = {"format": "greenmind.sql-v3-source-transport.v1", "permit_base64": base64.b64encode(raw_permit).decode(),
+               "permit_sha256": permit_sha, "binding_base64": base64.b64encode(binding).decode(),
+               "binding_sha256": binding_sha256, "lease_session": session}
+    _budget(ledger, candidate, permit, authorization_sha256)
+    intent = ledger.root / ("sql-v3-source-approval-" + permit["pilot_id"] + ".intent")
+    try:
+        fd = os.open(intent, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+    except FileExistsError as exc:
+        raise ArchiveBlocked("V3 Source approval outcome requires reconciliation") from exc
+    with os.fdopen(fd, "wb") as stream:
+        os.fchmod(stream.fileno(), 0o400)
+        stream.write(json.dumps({"format": "greenmind.sql-v3-source-approval-intent.v1", "candidate": candidate.identity,
+                                 "pilot_id": permit["pilot_id"], "authorization_sha256": authorization_sha256,
+                                 "permit_sha256": permit_sha, "binding_sha256": binding_sha256}, sort_keys=True, separators=(",", ":")).encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+    fd = os.open(ledger.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    frame_sha = _await_source_frame(challenge_file, frame_file, "sql-v3-approval", request, checkpoint, seconds=seconds)
+    raw = _private_read(Path(frame_file), 16384)
+    need(hashlib.sha256(raw).hexdigest() == frame_sha, "V3 Source frame changed")
+    try:
+        frame = json.loads(raw)
+    except (ValueError, UnicodeError) as exc:
+        raise ArchiveBlocked("Invalid V3 Source frame") from exc
+    need(frame == {"format": "greenmind.sql-v3-source-result.v1", "lease_session": session,
+                   "permit_sha256": permit_sha, "slot": permit["audit"]["slot"], "epoch": permit["audit"]["epoch"],
+                   "status": "source_approval_recorded", "production_acceptance": False}, "V3 Source approval frame differs")
+    checkpoint()
+    need(current_source_session() == session, "Source lease changed after approval")
+    return {"status": "source_approval_recorded", "permit_sha256": permit_sha, "frame_sha256": frame_sha,
+            "candidate": candidate.identity, "production_acceptance": False, "deletion_authorized": False}
 
 
 def evict(candidate, adapter, ledger, *, authorization_path, authorization_sha256, runtime_sha256, bindings_sha256, checkpoint, clock, proof_guard):

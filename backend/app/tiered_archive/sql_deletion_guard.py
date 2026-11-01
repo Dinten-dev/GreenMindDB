@@ -526,14 +526,17 @@ def inspect_restore_evidence(restore_engine, config, candidate, receipt, *, chec
 
 
 def _codepin():
-    from app.raw_archive import coordination
+    from app.raw_archive import coordination, read_only_box
 
     from . import (
         backup_scope,
+        database_restore,
         ledger,
+        recovery,
         registry_backup,
         registry_v5,
         schema_provider,
+        scientific_registry_import,
         source,
         sql_audit_v3,
         sql_audit_v3_backup,
@@ -633,19 +636,23 @@ def _codepin():
                 "RegistryEvidence.__init__",
             ),
         ),
-        (sql_deletion_v3, ("activation", "approval_body", "native_approval", "verify_committed_rows", "verify_history", "require_native_restore_evidence", "_guard", "_budget", "evict")),
+        (sql_deletion_v3, ("activation", "approval_body", "native_approval", "verify_committed_rows", "verify_history", "require_native_restore_evidence", "make_source_permit", "stage_source_approval", "_guard", "_budget", "evict")),
         (sql_audit_v3, ("schema_sha256", "inspect_writer", "validate_operation_body", "check_lease_expiry", "provision")),
         (sql_audit_v3_source, ("_Docker.connect", "_observe_container", "provision_source")),
         (sql_audit_v3_backup, ("encode", "decode", "capture_structure", "validate", "AuditSnapshotCapture.__init__", "AuditSnapshotCapture.capture", "verify_remote", "verify_gateway_bundle", "record_gateway_readback", "verify_native_rows")),
         (registry_backup, ("restore",)),
         (registry_v5, ("schema", "validate", "canonical")),
         (runtime, ("runtime_sha256", "bindings_sha256")),
-        (backup, ("require_current", "dump")),
+        (backup, ("require_current", "dump", "decrypt", "key_from_file")),
         (backup_scope, ("capture_scope",)),
         (schema_provider, ("current_descriptor", "capture")),
         (ledger, ("Ledger.get", "Ledger.save", "Ledger.scope", "_private_read")),
         (codec, ("encode", "digest", "pack")),
         (coordination, ("bound_job_lock",)),
+        (read_only_box, ("ReadOnlyBox.__init__", "ReadOnlyBox.download_tiered", "configured_read_only_box", "configured_catalog_read_only_box")),
+        (scientific_registry_import, ("_transport", "_provider_proof", "_private_proof")),
+        (database_restore, ("_provider_target_guard", "_provider_target_identity")),
+        (recovery, ("restore_url",)),
         (
             snapshot_api,
             (
@@ -936,7 +943,7 @@ class ProductionGuardV3(ProductionGuard):
     def prepare(self, candidate, receipt, now, permit):
         from .sql_deletion_v3 import require_native_restore_evidence
 
-        require_native_restore_evidence()
+        require_native_restore_evidence(self, candidate, checkpoint=getattr(self, "checkpoint", None))
         return super().prepare(candidate, receipt, now, permit)
 
 def build_guard(
@@ -1013,7 +1020,7 @@ def build_guard(
         "box_id",
     }
     if _audit_v3:
-        keys |= {"audit_v3_epoch", "audit_v3_genesis_sha256", "audit_v3_backup_candidate", "audit_v3_backup_manifest_sha256", "audit_v3_restore_evidence_sha256"}
+        keys |= {"audit_v3_epoch", "audit_v3_genesis_sha256", "audit_v3_backup_candidate", "audit_v3_backup_manifest_sha256", "audit_v3_restore_evidence_path", "audit_v3_restore_evidence_sha256"}
         need(type(config.get("audit_v3_epoch")) is str and re.fullmatch(r"[a-f0-9]{32}", config["audit_v3_epoch"])
              and all(_sha(config.get(k)) for k in ("audit_v3_genesis_sha256", "audit_v3_backup_candidate", "audit_v3_backup_manifest_sha256", "audit_v3_restore_evidence_sha256")),
              "Exact V3 audit backup and restore pins required")

@@ -97,13 +97,20 @@ def main():
     audit_v3_plan.add_argument("--epoch", required=True)
     audit_v3_plan.add_argument("--genesis-sha256", required=True)
     sub.add_parser("sql-scope-prepare-registry")
-    for operation in ("sql-evict", "sql-evict-v3", "sql-scope-bootstrap", "sql-scope-reconcile"):
+    for operation in ("sql-evict", "sql-evict-v3", "sql-source-approval-v3", "sql-scope-bootstrap", "sql-scope-reconcile"):
         sql_evict = sub.add_parser(operation)
         sql_evict.add_argument("--identity", required=True)
         for field in ("restore-profile", "proof", "authorization", "snapshot-token"):
             sql_evict.add_argument("--" + field + "-file", type=Path, required=True)
             sql_evict.add_argument("--" + field + "-sha256", required=True)
-        if operation not in {"sql-evict", "sql-evict-v3"}:
+        if operation == "sql-source-approval-v3":
+            for field in ("binding", "dba-identity"):
+                sql_evict.add_argument("--" + field + "-file", type=Path, required=True)
+                sql_evict.add_argument("--" + field + "-sha256", required=True)
+            sql_evict.add_argument("--producer-sha256", required=True)
+            sql_evict.add_argument("--challenge-file", type=Path, required=True)
+            sql_evict.add_argument("--frame-file", type=Path, required=True)
+        elif operation not in {"sql-evict", "sql-evict-v3"}:
             sql_evict.add_argument("--registry-file", type=Path, required=True)
             sql_evict.add_argument("--registry-sha256", required=True)
     science_reconcile = sub.add_parser("science-scope-reconcile")
@@ -279,7 +286,7 @@ def main():
                 return prepare_sql_registry()
 
         result = with_source_catalogue_lease(run_sql_registry)
-    elif args.operation in {"sql-evict", "sql-evict-v3", "sql-scope-bootstrap", "sql-scope-reconcile"}:
+    elif args.operation in {"sql-evict", "sql-evict-v3", "sql-source-approval-v3", "sql-scope-bootstrap", "sql-scope-reconcile"}:
         from .execution import bounded_job
         from .sql_runtime import evict as sql_evict_explicit
 
@@ -288,6 +295,11 @@ def main():
                 extra = {}
                 if args.operation == "sql-evict-v3":
                     extra = {"operation": "evict-v3"}
+                elif args.operation == "sql-source-approval-v3":
+                    extra = {"operation": "source-approval-v3", "binding_path": args.binding_file,
+                             "binding_sha256": args.binding_sha256, "dba_identity_path": args.dba_identity_file,
+                             "dba_identity_sha256": args.dba_identity_sha256, "producer_sha256": args.producer_sha256,
+                             "challenge_file": args.challenge_file, "frame_file": args.frame_file}
                 elif args.operation != "sql-evict":
                     extra = {
                         "operation": args.operation.removeprefix("sql-"),

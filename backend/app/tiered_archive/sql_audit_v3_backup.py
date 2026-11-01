@@ -233,7 +233,7 @@ def verify_remote(verifier, reference, key, directory, *, checkpoint):
         plaintext.unlink(missing_ok=True)
 
 
-def verify_gateway_bundle(candidate, ledger, verifier, key, *, checkpoint):
+def verify_gateway_bundle(candidate, ledger, verifier, key, *, checkpoint, _include_payload=False):
     """Independently read the actual Gateway receipt and authenticate its V3 audit.
 
     This establishes readback only. It does not establish native restore, an
@@ -304,7 +304,8 @@ def verify_gateway_bundle(candidate, ledger, verifier, key, *, checkpoint):
         payload = validate(decode(audit_file.read_bytes()))
         generation = payload["data"]["generation"][0]
         need(payload["schema_sha256"] == audit_ref["schema_sha256"] and payload["snapshot_sha256"] == audit_ref["snapshot_sha256"] and generation["epoch"] == audit_ref["epoch"] and generation["genesis_sha"] == audit_ref["genesis_sha256"], "V3 Gateway audit binding differs")
-        return {"format": "greenmind.sql-audit-v3-independent-readback.v1", "candidate": candidate.identity, "gateway_manifest_sha256": manifest_ref["sha256"], "audit_plaintext_sha256": bare_refs[4]["plaintext_sha256"], "unknown": bool(payload["data"]["unknown"]), "restore_verified": False}
+        evidence = {"format": "greenmind.sql-audit-v3-independent-readback.v1", "candidate": candidate.identity, "gateway_manifest_sha256": manifest_ref["sha256"], "audit_plaintext_sha256": bare_refs[4]["plaintext_sha256"], "unknown": bool(payload["data"]["unknown"]), "restore_verified": False}
+        return (evidence, payload) if _include_payload else evidence
 
 
 def record_gateway_readback(candidate, ledger, verifier, key, *, checkpoint):

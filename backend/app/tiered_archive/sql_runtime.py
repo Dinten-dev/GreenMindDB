@@ -87,6 +87,13 @@ def evict(
     operation="evict",
     registry_file=None,
     registry_sha256=None,
+    binding_path=None,
+    binding_sha256=None,
+    dba_identity_path=None,
+    dba_identity_sha256=None,
+    producer_sha256=None,
+    challenge_file=None,
+    frame_file=None,
 ):
     """Requires caller-held archive/source lease and independently approved pins."""
     from app.raw_archive.remote_lease import require_bound_source_lease
@@ -94,10 +101,10 @@ def evict(
     from . import sql_deletion, sql_deletion_guard, sql_deletion_scope, sql_deletion_v3
 
     _need(
-        operation in {"evict", "evict-v3", "scope-bootstrap", "scope-reconcile"}, "Exact SQL operation required"
+        operation in {"evict", "evict-v3", "source-approval-v3", "scope-bootstrap", "scope-reconcile"}, "Exact SQL operation required"
     )
     enabled = (
-        "TIERED_ARCHIVE_SQL_V3_CLI_ENABLED" if operation == "evict-v3"
+        "TIERED_ARCHIVE_SQL_V3_CLI_ENABLED" if operation in {"evict-v3", "source-approval-v3"}
         else "TIERED_ARCHIVE_SQL_CLI_ENABLED" if operation == "evict"
         else "TIERED_ARCHIVE_SQL_SCOPE_ENABLED"
     )
@@ -174,7 +181,7 @@ def evict(
                         os.environ["RAW_ARCHIVE_SFTP_USER"],
                         os.environ["RAW_ARCHIVE_SFTP_HOST"],
                     )
-                    guard_factory = (sql_deletion_guard.build_guard_v3 if operation == "evict-v3" else sql_deletion_guard.build_guard)
+                    guard_factory = (sql_deletion_guard.build_guard_v3 if operation in {"evict-v3", "source-approval-v3"} else sql_deletion_guard.build_guard)
                     proof = guard_factory(
                         candidate,
                         adapter,
@@ -189,11 +196,16 @@ def evict(
                     action = {
                         "evict": sql_deletion.evict,
                         "evict-v3": sql_deletion_v3.evict,
+                        "source-approval-v3": sql_deletion_v3.stage_source_approval,
                         "scope-bootstrap": sql_deletion_scope.bootstrap,
                         "scope-reconcile": sql_deletion_scope.reconcile,
                     }[operation]
                     extra = {}
-                    if operation not in {"evict", "evict-v3"}:
+                    if operation == "source-approval-v3":
+                        extra = {"binding_path": binding_path, "binding_sha256": binding_sha256,
+                                 "dba_identity_path": dba_identity_path, "dba_identity_sha256": dba_identity_sha256,
+                                 "producer_sha256": producer_sha256, "challenge_file": challenge_file, "frame_file": frame_file}
+                    elif operation not in {"evict", "evict-v3"}:
                         import json
 
                         from app.raw_archive.read_only_box import configured_catalog_read_only_box
@@ -236,7 +248,7 @@ def evict(
                     return {
                         "status": result["state"] if operation in {"evict", "evict-v3"} else result["status"],
                         "identity": candidate.identity,
-                        **({"epoch": result["epoch"]} if operation not in {"evict", "evict-v3"} else {}),
+                        **({"epoch": result["epoch"]} if operation in {"scope-bootstrap", "scope-reconcile"} else {}),
                     }
         finally:
             source_engine.dispose()

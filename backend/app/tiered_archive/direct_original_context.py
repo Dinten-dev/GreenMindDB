@@ -201,13 +201,20 @@ def _verify_sealed(path, ref, directory, key, *, checkpoint):
         target = Path(temporary) / "plain"
         backup.decrypt(path, target, key, ref["plaintext_sha256"], checkpoint=checkpoint)
 
-def stage(work_parent, key, *, checkpoint):
+def stage(work_parent, key, *, checkpoint, progress=None):
     """Freeze five captured JSONLs and three fresh Source GETs as AES parts.
 
     Creates a new root-private handoff, never publishes or changes Source. A
     partial directory is not reused; only a completed stage.json is resumable.
     """
     need(type(key) is bytes and len(key) in (16, 24, 32), "Archive AES key required")
+    need(progress is None or callable(progress), "Valid Direct progress observer required")
+    jsonl_sealed = wav_gets = wav_sealed = 0
+
+    def report(phase):
+        if progress is not None:
+            progress(phase, jsonl_sealed, wav_gets, wav_sealed)
+
     started = time.monotonic()
     original_checkpoint = checkpoint
 
@@ -217,7 +224,9 @@ def stage(work_parent, key, *, checkpoint):
         require_bound_source_lease()
 
     parent = private_dir(work_parent)
+    report("capture_admission")
     _runtime_guard(parent, checkpoint)
+    report("capture_validate")
     source = inspect_capture(checkpoint=checkpoint)
     target = parent / ("direct-original-" + os.urandom(16).hex())
     target.mkdir(mode=0o700, exist_ok=False)
@@ -227,8 +236,10 @@ def stage(work_parent, key, *, checkpoint):
     finally:
         os.close(parent_fd)
     objects = []
+    report("stage_directory_created")
     try:
         for number, (name, (size, sha)) in enumerate(CAPTURE_FILES.items(), 1):
+            report("seal_jsonl")
             _runtime_guard(parent, checkpoint)
             original = source["folder"] / name
             sealed = target / f"{number:04d}.bin"
@@ -237,20 +248,28 @@ def stage(work_parent, key, *, checkpoint):
             _verify_sealed(sealed, ref, target, key, checkpoint=checkpoint)
             _read_exact(original, size, sha, checkpoint=checkpoint)
             objects.append({"role": name, **ref})
+            jsonl_sealed = number
+            report("seal_jsonl")
         client, bucket = _source_client()
         try:
             for position, (source_key, pin) in enumerate(sorted(source["pins"].items()), 1):
+                report("source_wav_get")
                 _runtime_guard(parent, checkpoint)
                 with tempfile.TemporaryDirectory(prefix="direct-original-get-", dir=target) as temporary:
                     raw = Path(temporary) / "source.wav"
                     _fetch_wav(client, bucket, source_key, pin, raw, checkpoint=checkpoint)
+                    wav_gets = position
+                    report("source_wav_seal")
                     ref = backup.encrypt(raw, target / f"{position + 5:04d}.bin", key, checkpoint=checkpoint)
                 need(ref["plaintext_sha256"] == pin["sha256"], "Sealed Direct WAV differs")
                 _verify_sealed(target / f"{position + 5:04d}.bin", ref, target, key, checkpoint=checkpoint)
                 objects.append({"role": "original-wav-" + str(position), "source_key_sha256": hashlib.sha256(source_key.encode()).hexdigest(), "source_bytes": pin["bytes"], **ref})
+                wav_sealed = position
+                report("source_wav_seal")
         finally:
             client.close()
         _runtime_guard(parent, checkpoint)
+        report("write_index")
         start = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=source["start_us"])
         end = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=source["end_us"])
         body = {"source": "direct", "source_rows_sha256": SOURCE_ROWS_SHA, "revision_manifest_sha256": REVISION_SHA, "dependency_revisions_sha256": DEPENDENCY_SHA, "chunks": SOURCE_CHUNKS, "original_payload_bytes": SOURCE_ORIGINAL_BYTES, "detached_reference_candidates": True, "accepted_source_reference": False, "objects": objects}
@@ -261,6 +280,7 @@ def stage(work_parent, key, *, checkpoint):
         candidate.validate()
         result = {"candidate": pipeline.candidate_json(candidate), "files": [index_ref, *[{k: v for k, v in obj.items() if k not in {"role", "source_key_sha256", "source_bytes"}} for obj in objects]]}
         raw = json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
+        report("write_stage_handoff")
         fd = os.open(target / "stage.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "wb") as output:
             os.fchmod(output.fileno(), 0o600)
@@ -272,6 +292,7 @@ def stage(work_parent, key, *, checkpoint):
             os.fsync(fd)
         finally:
             os.close(fd)
+        report("stage_complete")
         return {"stage": str(target), "candidate": candidate.identity, "quarantined": True, "source_GETs": 3, "published": False}
     except BaseException:
         # The private incomplete directory is deliberately not reused or removed.

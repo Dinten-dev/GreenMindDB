@@ -86,7 +86,10 @@ def synthetic(tmp_path, monkeypatch):
 def test_complete_encrypted_quarantined_bundle_with_three_gets_and_resume(synthetic, tmp_path, monkeypatch):
     _root, parent, client, wavs = synthetic
     key = bytes(range(32))
-    staged = direct.stage(parent, key, checkpoint=lambda: None)
+    progress = []
+    staged = direct.stage(parent, key, checkpoint=lambda: None, progress=lambda *item: progress.append(item))
+    assert progress[-1] == ("stage_complete", 5, 3, 3)
+    assert all(len(item) == 4 and type(item[0]) is str and all(type(n) is int for n in item[1:]) for item in progress)
     assert staged["quarantined"] is True and staged["published"] is False and client.gets == 3 and client.closed
     directory = Path(staged["stage"])
     assert sorted(p.name for p in directory.iterdir()) == ["0000.parquet", *[f"{i:04d}.bin" for i in range(1, 9)], "stage.json"]
@@ -127,8 +130,10 @@ def test_source_get_changed_during_read_holds_without_publication(synthetic, tmp
         return value
 
     monkeypatch.setattr(client, "head_object", changed)
+    progress = []
     with pytest.raises(ArchiveBlocked, match="changed"):
-        direct.stage(parent, bytes(range(32)), checkpoint=lambda: None)
+        direct.stage(parent, bytes(range(32)), checkpoint=lambda: None, progress=lambda *item: progress.append(item))
+    assert progress[-1] == ("source_wav_get", 5, 0, 0)
     assert client.gets == 1
     stages = list(parent.iterdir())
     assert len(stages) == 1 and not (stages[0] / "stage.json").exists()
