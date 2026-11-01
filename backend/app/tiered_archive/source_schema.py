@@ -175,7 +175,13 @@ class SourceSchemaCapture:
             "application_data_authorized": False,
         }
         checkpoint()
+        request_sha256 = digest(request)
+        scope_sha256 = request["scope_sha256"]
         folder, receipt_sha = self.private_response(request, checkpoint=checkpoint)
+        need(
+            digest(request) == request_sha256 and digest(self.scope) == scope_sha256,
+            "Source schema request or authority changed during private transport",
+        )
         need(
             isinstance(receipt_sha, str) and SHA.fullmatch(receipt_sha),
             "Pinned private response required",
@@ -187,7 +193,7 @@ class SourceSchemaCapture:
             and set(receipt)
             == {"format", "request_sha256", "owned_wait_exit", "source_unchanged", "schema"}
             and receipt["format"] == "greenmind.private-source-schema-response.v1"
-            and receipt["request_sha256"] == digest(request)
+            and receipt["request_sha256"] == request_sha256
             and type(receipt["owned_wait_exit"]) is int
             and receipt["owned_wait_exit"] == 0
             and receipt["source_unchanged"] is True,
@@ -260,4 +266,4 @@ class SourceSchemaCapture:
         )
         raw = private_read(toc_path, schema_provider.MAX_TOC_BYTES)
         schema_provider.validate_toc(raw, self.scope, "schema", ())
-        return {"request_sha256": digest(request), "schema_sha256": h.hexdigest(), "bytes": total}
+        return {"request_sha256": request_sha256, "schema_sha256": h.hexdigest(), "bytes": total}

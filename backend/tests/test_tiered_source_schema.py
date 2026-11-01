@@ -361,3 +361,21 @@ def test_source_physical_authority_fence_blocks_before_transport(capture, monkey
         run(capture)
     assert not capture.target.exists()
     assert not (capture.folder / "response.json").exists()
+
+
+@pytest.mark.parametrize("mutation", ["request", "authority"])
+def test_callback_cannot_rebind_original_snapshot_or_authority(capture, mutation):
+    original = capture.adapter.private_response
+
+    def changed(request, *, checkpoint):
+        if mutation == "request":
+            request["snapshot"] = "00000004-0000001C-2"
+            request["pg_dump_args"][6] = "--snapshot=00000004-0000001C-2"
+        else:
+            capture.adapter.scope["source_identity_sha256"] = "d" * 64
+        return original(request, checkpoint=checkpoint)
+
+    capture.adapter.private_response = changed
+    with pytest.raises(ArchiveBlocked, match="request or authority changed"):
+        run(capture)
+    assert not capture.target.exists()
