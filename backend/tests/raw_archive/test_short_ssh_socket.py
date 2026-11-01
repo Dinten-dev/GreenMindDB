@@ -77,7 +77,8 @@ def test_real_long_state_path_reuses_private_short_socket_and_only_cleans_own_di
         assert box._transport_command() == first
         assert box._master is master
         box.run("df greenmind-raw\n", output=tmp_path / "download", max_bytes=64)
-        assert calls[-1].command[1:4] == ["-m", "app.raw_archive.sftp_limit", "64"]
+        assert calls[-1].command[1:3] == ["-I", "-B"]
+        assert calls[-1].command[3:5] == [str(Path(storage.__file__).resolve().with_name("sftp_limit.py")), "64"]
         assert "-oControlPath=" + str(socket) in calls[-1].command
         assert "-oProxyCommand=false" in calls[-1].command
         assert len([child for child in calls if child.is_master]) == 1

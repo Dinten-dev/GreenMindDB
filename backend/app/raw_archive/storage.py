@@ -374,7 +374,10 @@ class StorageBox:
     ) -> str:
         command = self._transport_command()
         if output is not None:
-            command = [sys.executable, "-m", "app.raw_archive.sftp_limit", str(max_bytes), *command]
+            # This helper imports only stdlib. Bind it to this runtime, including
+            # callers started outside the backend or with isolated Python paths.
+            helper = Path(__file__).resolve().with_name("sftp_limit.py")
+            command = [sys.executable, "-I", "-B", str(helper), str(max_bytes), *command]
         # Fixed executable/argv; paths are validated above, no shell is involved.
         with subprocess.Popen(  # noqa: S603
             command,
@@ -448,6 +451,9 @@ class StorageBox:
             raise ArchiveBlocked("Remote object exceeds allowed size")
 
     def download_snapshot(self, snapshot, key, path, max_bytes):
+        from .snapshot_api import require_managed_snapshot_access
+
+        require_managed_snapshot_access(snapshot)
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot):
             raise ArchiveBlocked("Unsafe snapshot name")
         remote = f"/home/.zfs/snapshot/{snapshot}/" + self.path(key)
@@ -459,6 +465,10 @@ class StorageBox:
         return self.root + "/" + key
 
     def download_recovery(self, key, path, max_bytes, *, snapshot=None):
+        if snapshot is not None:
+            from .snapshot_api import require_managed_snapshot_access
+
+            require_managed_snapshot_access(snapshot)
         remote = self.recovery_path(key)
         if snapshot is not None:
             if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot):
@@ -467,6 +477,11 @@ class StorageBox:
         self._download_path(remote, path, min(max_bytes, 1024**2))
 
     def _download_path(self, remote, path, max_bytes):
+        if remote.startswith("/home/.zfs/snapshot/"):
+            from .snapshot_api import require_managed_snapshot_access
+
+            snapshot = remote.removeprefix("/home/.zfs/snapshot/").split("/", 1)[0]
+            require_managed_snapshot_access(snapshot)
         if path.exists() or not 0 < max_bytes <= 64 * 1024**2:
             raise ArchiveBlocked("Download needs an unused path and a bounded size")
         self.run(
@@ -515,6 +530,10 @@ class StorageBox:
         return self.root + "/" + key
 
     def download_catalog(self, key, path, max_bytes, *, snapshot=None):
+        if snapshot is not None:
+            from .snapshot_api import require_managed_snapshot_access
+
+            require_managed_snapshot_access(snapshot)
         remote = self.catalog_path(key)
         if snapshot is not None:
             if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot):

@@ -40,6 +40,9 @@ class Provider:
         assert operation in {"create", "delete"}
         return action_id or (10000 + snapshot_id)
 
+    def require_idle_actions(self):
+        pass
+
     def create_managed(self, intent, journal_reference):
         self.posts += 1
         self.rows.append(
@@ -257,7 +260,16 @@ def test_pinned_raw_journal_blocks_deleting_and_unknown_restore_scope(tmp_path, 
     path = tmp_path / "archive.sqlite3"
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE archive (id TEXT, state TEXT, receipt TEXT)")
-        db.execute("INSERT INTO archive VALUES ('a','verified','{}')")
+        db.execute(
+            "INSERT INTO archive VALUES (?,?,?)",
+            (
+                "a",
+                "verified",
+                json.dumps(
+                    {"recording": {}, "snapshot": {}, "remote_key": "old", "destination": "box"}
+                ),
+            ),
+        )
     info = path.stat()
     config = tmp_path / "dependencies.json"
     config.write_text(
@@ -277,9 +289,25 @@ def test_pinned_raw_journal_blocks_deleting_and_unknown_restore_scope(tmp_path, 
     )
     with pytest.raises(ArchiveBlocked, match="restore and pilot"):
         check_external_dependencies({"id": 1, "name": "s"}, [])
+    sidecar = path.with_name(path.name + "-wal")
+    sidecar.symlink_to(config)
+    with pytest.raises(ArchiveBlocked, match="sidecar is untrusted"):
+        check_external_dependencies({"id": 1, "name": "s"}, [])
+    sidecar.unlink()
     with sqlite3.connect(path) as db:
         db.execute("UPDATE archive SET state='deleting'")
-    with pytest.raises(ArchiveBlocked, match="deletion intent"):
+    with pytest.raises(ArchiveBlocked, match="deletion snapshot binding"):
+        check_external_dependencies({"id": 1, "name": "s"}, [])
+    receipt = {
+        "recording": {},
+        "snapshot": {},
+        "remote_key": "old",
+        "destination": "box",
+        "provider_snapshot": {"provider_id": 99, "name": "old-manual"},
+    }
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE archive SET receipt=?", (json.dumps(receipt),))
+    with pytest.raises(ArchiveBlocked, match="restore and pilot"):
         check_external_dependencies({"id": 1, "name": "s"}, [])
 
 

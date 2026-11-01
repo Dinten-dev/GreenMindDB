@@ -229,7 +229,7 @@ def stream_gateway_table(db, table, fields, descriptors, sink, checkpoint):
         cursor.close()
 
 
-def copy_gateway_blocks(db, cursor, table, fields, sink, body, checkpoint):
+def copy_gateway_blocks(db, cursor, table, fields, sink, body, checkpoint, *, pause_seconds=0.05):
     """Native sequential heap ranges within one unchanged SQL snapshot.
 
     CTID is used only as a physical scan boundary, never as recording identity.
@@ -237,6 +237,8 @@ def copy_gateway_blocks(db, cursor, table, fields, sink, body, checkpoint):
     from the empty allowed-column query fences table rewrites without blocking
     ingestion. MVCC retains visible tuples until this transaction ends.
     """
+    if type(pause_seconds) not in (int, float) or not 0.05 <= pause_seconds <= 1:
+        raise ArchiveBlocked("Bounded cooperative capture pause required")
     relation = '"public"."' + table + '"'
     selected = ",".join('"' + name + '"' for name in fields)
     db.execute(text("SELECT " + selected + " FROM " + relation + " WHERE false"))
@@ -274,7 +276,7 @@ def copy_gateway_blocks(db, cursor, table, fields, sink, body, checkpoint):
         if hasattr(os, "posix_fadvise"):
             os.posix_fadvise(body.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
         # Yield source I/O between native ranges; keep the 110s lease unchanged.
-        time.sleep(0.05)
+        time.sleep(pause_seconds)
     sink.write(struct.pack("!h", -1))
     return count
 

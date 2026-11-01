@@ -4,14 +4,79 @@ import fcntl
 import json
 import os
 import stat
+import sys
+import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from .health import SafetyPause
 from .policy import ArchiveBlocked
 
 KINDS = {"copy", "export", "catalog"}
+_BOUND_JOB_LOCK = ContextVar("raw_archive_bound_job_lock", default=None)
+
+
+def bound_job_lock():
+    """Return the existing live exclusive lease; never acquire a second lock."""
+    authority = _BOUND_JOB_LOCK.get()
+    if authority is None:
+        raise ArchiveBlocked("Bound archive jobs lock required")
+    descriptor, path, process_id, thread_id, _kind = authority
+    if process_id != os.getpid() or thread_id != threading.get_ident():
+        raise ArchiveBlocked("Archive jobs lock belongs to another execution")
+    try:
+        held = os.fstat(descriptor)
+        current = path.stat(follow_symlinks=False)
+    except OSError:
+        raise ArchiveBlocked("Bound archive jobs lock unavailable") from None
+    if not stat.S_ISREG(current.st_mode) or (held.st_dev, held.st_ino) != (
+        current.st_dev,
+        current.st_ino,
+    ):
+        raise ArchiveBlocked("Bound archive jobs lock identity changed")
+    if sys.platform.startswith("linux"):
+        try:
+            entries = Path("/proc/locks").read_text().splitlines()
+            device = (os.major(held.st_dev), os.minor(held.st_dev), held.st_ino)
+            owned = False
+            for entry in entries:
+                columns = entry.split()
+                if len(columns) < 8 or columns[1:4] != ["FLOCK", "ADVISORY", "WRITE"]:
+                    continue
+                address = columns[5].split(":")
+                if len(address) == 3 and (
+                    int(columns[4]) == process_id
+                    and (int(address[0], 16), int(address[1], 16), int(address[2])) == device
+                    and columns[6:8] == ["0", "EOF"]
+                ):
+                    owned = True
+                    break
+        except (OSError, ValueError, OverflowError):
+            raise ArchiveBlocked("Archive jobs lock ownership unavailable") from None
+        if not owned:
+            raise ArchiveBlocked("Archive jobs lock is no longer held by this process")
+    return path, held
+
+
+@contextmanager
+def reuse_or_lease(kind):
+    """Borrow this execution's live jobs lock or acquire it exactly once."""
+    if kind not in KINDS:
+        raise ArchiveBlocked("Unknown archive job kind")
+    authority = _BOUND_JOB_LOCK.get()
+    if authority is None:
+        with lease(kind):
+            yield
+        return
+    held_path, _ = bound_job_lock()
+    current_dir = directory()
+    if current_dir is None or held_path != current_dir / "jobs.lock" or authority[4] != kind:
+        raise ArchiveBlocked("Existing archive jobs lock scope differs")
+    if kind == "copy" and yield_requested():
+        raise SafetyPause("archive_job_yield")
+    yield
 
 
 def directory():
@@ -93,6 +158,12 @@ def lease(kind):
             request(path, kind, 0)
             if kind == "copy" and yield_requested():
                 raise SafetyPause("archive_job_yield")
-            yield
+            token = _BOUND_JOB_LOCK.set(
+                (body.fileno(), path / "jobs.lock", os.getpid(), threading.get_ident(), kind)
+            )
+            try:
+                yield
+            finally:
+                _BOUND_JOB_LOCK.reset(token)
         finally:
             fcntl.flock(body, fcntl.LOCK_UN)

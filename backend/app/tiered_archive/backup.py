@@ -536,6 +536,7 @@ def dump(
     with_proof=False,
     provider_scope=None,
     schema_capture=None,
+    audit_capture=None,
 ):
     """One exported snapshot spans schema and allowlisted master rows."""
     from sqlalchemy import create_engine, text
@@ -569,6 +570,17 @@ def dump(
         ):
             raise ArchiveBlocked("Exact Root provider schema capture hook required")
         schema_capture.require_scope(provider_scope)
+    if audit_capture is not None:
+        from .sql_audit_v3_backup import AuditSnapshotCapture
+
+        if (
+            type(audit_capture) is not AuditSnapshotCapture
+            or source != "gateway"
+            or provider_scope is None
+            or not with_proof
+            or audit_capture.output != Path(output)
+        ):
+            raise ArchiveBlocked("Exact provider-bound V3 audit capture required")
     version = 4 if source == "gateway" else MASTER_PROOF_VERSION
     scope = fresh_schema_scope(database_url, checkpoint=checkpoint) if version == 4 else None
     tables = master_tables(source, proof_version=version, schema_scope=scope)
@@ -613,6 +625,8 @@ def dump(
                     "sequences": native_backup.sequence_proof(db, checkpoint=checkpoint),
                 }
             snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
+            if audit_capture is not None:
+                audit_capture.capture(db, snapshot, checkpoint=checkpoint)
             outputs = []
             for label, args in [
                 ("schema", ["--schema-only"]),
@@ -717,6 +731,10 @@ def dump(
                     "provider": provider_state,
                 }
                 schema_provider.validate_proof(proof, source)
+                if audit_capture is not None:
+                    if audit_capture.reference is None:
+                        raise ArchiveBlocked("V3 audit capture unavailable")
+                    return outputs, proof, captured_at, audit_capture.reference
                 return outputs, proof, captured_at
             if with_proof:
                 return outputs, proof

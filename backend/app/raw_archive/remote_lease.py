@@ -52,6 +52,15 @@ def source_copy_only():
     return authority is not None and authority[1]
 
 
+def require_bound_source_lease():
+    """Require the actual source-side catalogue authority, not a configuration flag."""
+    if _BOUND_SOURCE_LEASE.get() is None:
+        raise ArchiveBlocked("Live source catalogue lease required")
+    if _BOUND_SOURCE_LEASE.get()[1]:
+        raise ArchiveBlocked("Copy-only source lease cannot authorize snapshot lifecycle")
+    source_checkpoint()
+
+
 SOURCE_PAUSES = {
     "source_memory",
     "source_load",

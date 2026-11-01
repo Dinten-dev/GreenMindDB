@@ -197,3 +197,19 @@ def test_ambiguous_creation_action_never_confirms():
     provider = FakeAPI(None, 12, "u676312", "u676312.your-storagebox.de")
     with pytest.raises(ArchiveBlocked, match="uniquely reconciled"):
         provider.require_action(None, 42, "create")
+
+
+def test_running_or_unpaginated_provider_actions_block_rotation():
+    class FakeAPI(SnapshotAPI):
+        def validate_box(self):
+            return {}
+
+        def request(self, method, suffix, payload=None):
+            return {"actions": [{"status": "running"}], "meta": {"pagination": {"next_page": None}}}
+
+    provider = FakeAPI(None, 12, "u676312", "u676312.your-storagebox.de")
+    with pytest.raises(ArchiveBlocked, match="action is running"):
+        provider.require_idle_actions()
+    provider.request = lambda *_args: {"actions": []}
+    with pytest.raises(ArchiveBlocked, match="Complete provider action inventory"):
+        provider.require_idle_actions()

@@ -39,6 +39,10 @@ class Store:
         return self.transport.identity
 
     def download(self, key, path, size, *, snapshot=None):
+        if snapshot is not None:
+            from app.raw_archive.snapshot_api import require_managed_snapshot_access
+
+            require_managed_snapshot_access(snapshot)
         if "/tiered/" not in key:
             if snapshot is None:
                 return self.transport.download(key, path, size)

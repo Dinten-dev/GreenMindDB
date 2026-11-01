@@ -2,9 +2,13 @@
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
 import re
+import stat
+import sys
+import types
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +16,477 @@ from .policy import ArchiveBlocked, checksum
 from .recovery import private_directory
 
 API = "https://api.hetzner.com/v1"
+_COMPILED_CODE_CACHE = {}
+_RUNTIME_AUDIT_CACHE = {}
+
+
+def check_loaded_function_code(module, path, source, functions):
+    """Compare actual loaded function code objects with the pinned source."""
+    cache_key = (str(path), hashlib.sha256(source).hexdigest(), sys.flags.optimize)
+    known = _COMPILED_CODE_CACHE.get(cache_key)
+    if known is None:
+        compiled = compile(
+            source, str(path), "exec", dont_inherit=True, optimize=sys.flags.optimize
+        )
+        pending = [compiled]
+        known = {}
+        while pending:
+            code = pending.pop()
+            known[(code.co_qualname, code.co_firstlineno)] = code
+            pending.extend(value for value in code.co_consts if isinstance(value, types.CodeType))
+        if len(_COMPILED_CODE_CACHE) >= 32:
+            raise ArchiveBlocked("Loaded code cache exceeds its budget")
+        _COMPILED_CODE_CACHE[cache_key] = known
+    result = {}
+    for qualified in functions:
+        value = module
+        for part in qualified.split("."):
+            value = getattr(value, part, None)
+        actual = getattr(value, "__code__", None)
+        if (
+            not isinstance(actual, types.CodeType)
+            or known.get((actual.co_qualname, actual.co_firstlineno)) != actual
+        ):
+            raise ArchiveBlocked("Loaded snapshot consumer bytecode differs")
+        result[qualified] = actual
+    return result
+
+
+def capture_managed_import_proof(receipt):
+    """Attest live entrypoint/code identities, after an independently pinned pre-import audit."""
+    from app.tiered_archive.ledger import _private_read
+
+    entries = {
+        "raw-pilot": ("app.raw_archive.pilot", "run_pilot"),
+        "raw-restore": ("app.raw_archive.recovery", "restore_bundle"),
+        "wav-catalog": ("app.raw_archive.wav_catalog", "restore_bundle"),
+        "snapshot-readback": ("app.raw_archive.snapshot_api", "readback"),
+    }
+    entry = receipt.get("consumer_entrypoint")
+    if entry not in entries or os.geteuid() != 0:
+        raise ArchiveBlocked("Reviewed root snapshot consumer entrypoint required")
+    scope_path = os.environ.get("RAW_ARCHIVE_MANAGED_CODE_SCOPE_FILE", "")
+    scope_sha = os.environ.get("RAW_ARCHIVE_MANAGED_CODE_SCOPE_SHA256", "")
+    startup_path = os.environ.get("RAW_ARCHIVE_MANAGED_STARTUP_PROOF_FILE", "")
+    startup_sha = os.environ.get("RAW_ARCHIVE_MANAGED_STARTUP_PROOF_SHA256", "")
+    output_path = Path(os.environ.get("RAW_ARCHIVE_MANAGED_IMPORT_PROOF_FILE", ""))
+    if (
+        not re.fullmatch(r"[a-f0-9]{64}", scope_sha)
+        or not re.fullmatch(r"[a-f0-9]{64}", startup_sha)
+        or not output_path.is_absolute()
+        or output_path.is_symlink()
+    ):
+        raise ArchiveBlocked("Pinned startup audit and import proof paths required")
+    scope_raw = _private_read(scope_path, 1024 * 1024)
+    startup_raw = _private_read(startup_path, 1024 * 1024)
+    if (
+        hashlib.sha256(scope_raw).hexdigest() != scope_sha
+        or hashlib.sha256(startup_raw).hexdigest() != startup_sha
+    ):
+        raise ArchiveBlocked("Startup audit or code scope differs")
+    for pinned in (Path(scope_path), Path(startup_path)):
+        info = pinned.stat(follow_symlinks=False)
+        if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o400 or info.st_nlink != 1:
+            raise ArchiveBlocked("Private root startup evidence required")
+    try:
+        scope, startup = json.loads(scope_raw), json.loads(startup_raw)
+    except ValueError:
+        raise ArchiveBlocked("Startup audit evidence is invalid") from None
+    scope_keys = {
+        "schema",
+        "scope_epoch",
+        "runtime_root",
+        "manifest_sha256",
+        "runtime_sha256",
+        "launcher_path",
+        "launcher_sha256",
+        "modules",
+    }
+    startup_keys = {
+        "format",
+        "scope_epoch",
+        "owner",
+        "runtime_root",
+        "manifest_sha256",
+        "runtime_sha256",
+        "launcher_path",
+        "launcher_sha256",
+    }
+    if (
+        type(scope) is not dict
+        or set(scope) != scope_keys
+        or scope["schema"] != 1
+        or type(startup) is not dict
+        or set(startup) != startup_keys
+        or startup["format"] != "greenmind.managed-snapshot.preimport-audit.v1"
+        or any(
+            startup[key] != scope[key]
+            for key in (
+                "scope_epoch",
+                "runtime_root",
+                "manifest_sha256",
+                "runtime_sha256",
+                "launcher_path",
+                "launcher_sha256",
+            )
+        )
+        or startup["owner"] != receipt["owner"]
+        or scope["scope_epoch"] != receipt["scope_epoch"]
+        or any(
+            type(scope[key]) is not str or not re.fullmatch(r"[a-f0-9]{64}", scope[key])
+            for key in ("manifest_sha256", "runtime_sha256", "launcher_sha256")
+        )
+    ):
+        raise ArchiveBlocked("Pre-import runtime audit binding differs")
+    root = Path(scope["runtime_root"])
+    if not root.is_absolute() or root.is_symlink() or root.resolve(strict=False) != root:
+        raise ArchiveBlocked("Immutable runtime root required")
+    manifest_path = root / "manifest.json"
+    if manifest_path.is_symlink() or manifest_path.stat().st_size > 262144:
+        raise ArchiveBlocked("Bounded runtime manifest required")
+    manifest_raw = manifest_path.read_bytes()
+    if hashlib.sha256(manifest_raw).hexdigest() != scope["manifest_sha256"]:
+        raise ArchiveBlocked("Immutable runtime manifest differs")
+    manifest = json.loads(manifest_raw)
+    files = manifest.get("files") if type(manifest) is dict else None
+    if (
+        type(files) is not dict
+        or len(files) > 100000
+        or manifest.get("runtime_sha256") != scope["runtime_sha256"]
+        or type(manifest.get("commit")) is not str
+        or not re.fullmatch(r"[a-f0-9]{40}", manifest["commit"])
+    ):
+        raise ArchiveBlocked("Bounded immutable runtime manifest required")
+    launcher = Path(scope["launcher_path"])
+    launcher_raw = _private_read(launcher, 1024 * 1024)
+    launcher_info = launcher.stat(follow_symlinks=False)
+    if (
+        not launcher.is_absolute()
+        or launcher.is_symlink()
+        or launcher_info.st_uid != 0
+        or stat.S_IMODE(launcher_info.st_mode) != 0o400
+        or launcher_info.st_nlink != 1
+        or hashlib.sha256(launcher_raw).hexdigest() != scope["launcher_sha256"]
+    ):
+        raise ArchiveBlocked("Pre-import launcher is not root-pinned")
+
+    def generation(info):
+        return (
+            info.st_dev,
+            info.st_ino,
+            info.st_mode,
+            info.st_uid,
+            info.st_nlink,
+            info.st_size,
+            info.st_mtime_ns,
+            info.st_ctime_ns,
+        )
+
+    cache_key = (scope_sha, startup_sha, receipt["owner"]["pid_generation"])
+    pinned = _RUNTIME_AUDIT_CACHE.get(cache_key)
+    if pinned is None:
+        actual = set()
+        pinned = []
+        for count, path in enumerate(itertools.chain((root,), root.rglob("*")), 1):
+            if count > 200000:
+                raise ArchiveBlocked("Runtime inventory exceeds its budget")
+            info = path.lstat()
+            before = generation(info)
+            if stat.S_ISDIR(info.st_mode):
+                if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o555:
+                    raise ArchiveBlocked("Runtime directory is not sealed")
+            elif stat.S_ISREG(info.st_mode):
+                if (
+                    info.st_uid != 0
+                    or stat.S_IMODE(info.st_mode) != 0o444
+                    or info.st_nlink != 1
+                    or path.suffix == ".pyc"
+                ):
+                    raise ArchiveBlocked("Runtime file is not sealed")
+                relative = path.relative_to(root).as_posix()
+                actual.add(relative)
+                if relative != "manifest.json":
+                    if relative not in files:
+                        raise ArchiveBlocked("Runtime contains changed or unlisted content")
+                    digest = hashlib.sha256()
+                    with path.open("rb") as body:
+                        while chunk := body.read(64 * 1024):
+                            digest.update(chunk)
+                    if digest.hexdigest() != files[relative]:
+                        raise ArchiveBlocked("Runtime contains changed or unlisted content")
+            else:
+                raise ArchiveBlocked("Runtime contains an untrusted filesystem object")
+            if generation(path.lstat()) != before:
+                raise ArchiveBlocked("Runtime file generation changed during audit")
+            pinned.append((path, before))
+        if actual != set(files) | {"manifest.json"}:
+            raise ArchiveBlocked("Immutable runtime file inventory differs")
+        from app.tiered_archive.runtime import runtime_sha256
+
+        if runtime_sha256() != scope["runtime_sha256"]:
+            raise ArchiveBlocked("Immutable runtime digest differs")
+        if any(generation(path.lstat()) != before for path, before in pinned):
+            raise ArchiveBlocked("Runtime file generation changed during audit")
+        if len(_RUNTIME_AUDIT_CACHE) >= 4:
+            raise ArchiveBlocked("Runtime audit cache exceeds its budget")
+        _RUNTIME_AUDIT_CACHE[cache_key] = pinned
+    elif any(generation(path.lstat()) != before for path, before in pinned):
+        raise ArchiveBlocked("Runtime file generation changed after startup audit")
+    modules = scope["modules"]
+    if type(modules) is not list or not 1 <= len(modules) <= 16:
+        raise ArchiveBlocked("Pinned loaded-module roster required")
+    wanted = {
+        "app.raw_archive.snapshot_api": [
+            "require_managed_snapshot_access",
+            "pilot_process_owner",
+            "capture_managed_import_proof",
+            "check_loaded_function_code",
+            "require_pilot_pin_receipt",
+        ],
+        "app.raw_archive.storage": [
+            "StorageBox._download_path",
+            "StorageBox.download_snapshot",
+            "StorageBox.download_recovery",
+            "StorageBox.download_catalog",
+        ],
+    }
+    module_name, function_name = entries[entry]
+    wanted.setdefault(module_name, []).append(function_name)
+    roster = {}
+    for item in modules:
+        if (
+            type(item) is not dict
+            or set(item) != {"name", "path", "sha256"}
+            or item["name"] in roster
+            or type(item["name"]) is not str
+            or type(item["path"]) is not str
+            or type(item["sha256"]) is not str
+            or not re.fullmatch(r"[a-f0-9]{64}", item["sha256"])
+        ):
+            raise ArchiveBlocked("Invalid pinned loaded-module roster")
+        roster[item["name"]] = item
+    if set(roster) != set(wanted):
+        raise ArchiveBlocked("Actual loaded-module roster differs")
+    evidence = []
+    entry_code = None
+    for name, functions in sorted(wanted.items()):
+        module = sys.modules.get(name)
+        main = sys.modules.get("__main__")
+        if main is not None and getattr(getattr(main, "__spec__", None), "name", None) == name:
+            module = main
+        if module is None or type(getattr(module, "__file__", None)) is not str:
+            raise ArchiveBlocked("Snapshot consumer module is not actually loaded")
+        path = Path(module.__file__).resolve()
+        item = roster[name]
+        if str(path) != item["path"] or not path.is_relative_to(root) or path.suffix != ".py":
+            raise ArchiveBlocked("Loaded snapshot consumer path differs")
+        body = path.read_bytes()
+        if hashlib.sha256(body).hexdigest() != item["sha256"]:
+            raise ArchiveBlocked("Loaded snapshot consumer code differs")
+        code = check_loaded_function_code(module, path, body, functions)
+        if name == module_name:
+            entry_code = code[function_name]
+        evidence.append({"name": name, "path": str(path), "sha256": item["sha256"]})
+    frame = sys._getframe()
+    while frame is not None and frame.f_code != entry_code:
+        frame = frame.f_back
+    if frame is None:
+        raise ArchiveBlocked("Pinned snapshot entrypoint is not on the active call stack")
+    proof = {
+        "format": "greenmind.managed-snapshot.live-imports.v1",
+        "scope_epoch": receipt["scope_epoch"],
+        "pin_id": receipt["pin_id"],
+        "operation_sha256": receipt["operation_sha256"],
+        "owner": receipt["owner"],
+        "entrypoint": entry,
+        "code_scope_sha256": scope_sha,
+        "startup_proof_sha256": startup_sha,
+        "modules": evidence,
+    }
+    raw = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    if output_path.resolve(strict=False) != output_path:
+        raise ArchiveBlocked("Canonical import proof path required")
+    for directory in output_path.parents:
+        parent = directory.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+            raise ArchiveBlocked("Private import proof directory required")
+    parent = output_path.parent.stat(follow_symlinks=False)
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+        raise ArchiveBlocked("Private import proof directory required")
+    try:
+        fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+    except FileExistsError:
+        info = output_path.stat(follow_symlinks=False)
+        if (
+            _private_read(output_path, 1024 * 1024) != raw
+            or stat.S_IMODE(info.st_mode) != 0o400
+            or info.st_nlink != 1
+        ):
+            raise ArchiveBlocked("Existing import proof differs") from None
+    else:
+        with os.fdopen(fd, "wb") as body:
+            os.fchmod(body.fileno(), 0o400)
+            body.write(raw)
+            body.flush()
+            os.fsync(body.fileno())
+        directory_fd = os.open(output_path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def pilot_process_owner():
+    """Read the calling Linux process generation and systemd invocation."""
+    try:
+        pid = os.getpid()
+        raw = Path("/proc/self/stat").read_text()
+        fields = raw[raw.rindex(")") + 2 :].split()
+        start = fields[19]
+        if not start.isdecimal():
+            raise ValueError
+        invocation = os.environ["INVOCATION_ID"]
+        unit = os.environ["RAW_ARCHIVE_OPERATION_UNIT"]
+        cgroups = Path("/proc/self/cgroup").read_text().splitlines()
+        if not re.fullmatch(r"[a-zA-Z0-9_.@:-]+\.service", unit) or not any(
+            unit in line.split("/") for line in cgroups
+        ):
+            raise ValueError
+        if not re.fullmatch(r"[a-f0-9]{32}", invocation):
+            raise ValueError
+        return {
+            "host": os.uname().nodename,
+            "unit": unit,
+            "invocation": invocation,
+            "pid_generation": f"{pid}:{start}",
+        }
+    except (OSError, KeyError, ValueError, IndexError):
+        raise ArchiveBlocked("Managed pilot process generation is unavailable") from None
+
+
+def require_managed_snapshot_access(snapshot_name):
+    """Fence every configured source snapshot download before SFTP I/O."""
+    if os.getenv("RAW_ARCHIVE_MANAGED_SCOPE_REQUIRED") != "true":
+        return
+    if os.getenv("RAW_ARCHIVE_WORKER_ROLE") == "archive":
+        from .coordination import bound_job_lock
+
+        try:
+            held_path, held = bound_job_lock()
+            contract_path = Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_FILE"])
+            expected = os.environ["TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_SHA256"]
+            if not contract_path.is_absolute() or contract_path.is_symlink():
+                raise ValueError
+            fd = os.open(contract_path, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as body:
+                info = os.fstat(body.fileno())
+                raw = body.read(1024 * 1024 + 1)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid not in {0, os.getuid()}
+                or info.st_mode & 0o077
+                or len(raw) > 1024 * 1024
+                or hashlib.sha256(raw).hexdigest() != expected
+            ):
+                raise ValueError
+            binding = json.loads(raw)["coordination"]
+            if (
+                binding.get("path") == str(held_path)
+                and binding.get("device") == held.st_dev
+                and binding.get("inode") == held.st_ino
+            ):
+                return
+        except (ArchiveBlocked, OSError, KeyError, TypeError, ValueError):
+            pass
+    path = Path(os.environ.get("RAW_ARCHIVE_MANAGED_PIN_RECEIPT_FILE", ""))
+    expected = os.environ.get("RAW_ARCHIVE_MANAGED_PIN_RECEIPT_SHA256", "")
+    operation = os.environ.get("RAW_ARCHIVE_MANAGED_OPERATION_SHA256", "")
+    epoch = os.environ.get("RAW_ARCHIVE_MANAGED_SCOPE_EPOCH", "")
+    if (
+        not path.is_absolute()
+        or path.is_symlink()
+        or not re.fullmatch(r"[a-f0-9]{64}", expected)
+        or not re.fullmatch(r"[a-f0-9]{64}", operation)
+        or not re.fullmatch(r"[a-f0-9]{32}", epoch)
+    ):
+        raise ArchiveBlocked("Managed snapshot access pin required")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as body:
+            info = os.fstat(body.fileno())
+            raw = body.read(1024 * 1024 + 1)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid not in {0, os.getuid()}
+            or info.st_mode & 0o077
+            or len(raw) > 1024 * 1024
+            or hashlib.sha256(raw).hexdigest() != expected
+        ):
+            raise ValueError
+        receipt = json.loads(raw)
+    except (OSError, ValueError):
+        raise ArchiveBlocked("Managed snapshot access receipt unavailable") from None
+    if (
+        type(receipt) is not dict
+        or receipt.get("schema") != 1
+        or receipt.get("state") != "active"
+        or receipt.get("snapshot_name") != snapshot_name
+        or receipt.get("scope_epoch") != epoch
+        or receipt.get("operation_sha256") != operation
+        or receipt.get("owner") != pilot_process_owner()
+        or not re.fullmatch(r"[a-f0-9]{32}", str(receipt.get("pin_id", "")))
+        or not re.fullmatch(r"[a-f0-9]{32}", str(receipt.get("snapshot_intent", "")))
+    ):
+        raise ArchiveBlocked("Managed snapshot access receipt differs")
+    capture_managed_import_proof(receipt)
+
+
+def require_pilot_pin_receipt(data, manifest_sha256):
+    """Bind a source pilot to the archive-root receipt before any snapshot I/O."""
+    path = Path(os.environ.get("RAW_ARCHIVE_MANAGED_PIN_RECEIPT_FILE", ""))
+    expected = os.environ.get("RAW_ARCHIVE_MANAGED_PIN_RECEIPT_SHA256", "")
+    epoch = os.environ.get("RAW_ARCHIVE_MANAGED_SCOPE_EPOCH", "")
+    if (
+        not path.is_absolute()
+        or path.is_symlink()
+        or not re.fullmatch(r"[a-f0-9]{64}", expected)
+        or not re.fullmatch(r"[a-f0-9]{32}", epoch)
+    ):
+        raise ArchiveBlocked("Pinned managed pilot receipt and scope required")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as body:
+            info = os.fstat(body.fileno())
+            raw = body.read(1024 * 1024 + 1)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid not in {0, os.getuid()}
+            or info.st_mode & 0o077
+            or len(raw) > 1024 * 1024
+            or hashlib.sha256(raw).hexdigest() != expected
+        ):
+            raise ArchiveBlocked("Managed pilot receipt differs")
+        receipt = json.loads(raw)
+    except (OSError, ValueError):
+        raise ArchiveBlocked("Managed pilot receipt unavailable") from None
+    snapshot = data.get("snapshot", {}) if type(data) is dict else {}
+    if (
+        type(receipt) is not dict
+        or receipt.get("schema") != 1
+        or receipt.get("state") != "active"
+        or receipt.get("kind") != "raw_pilot"
+        or receipt.get("consumer_entrypoint") != "raw-pilot"
+        or receipt.get("scope_epoch") != epoch
+        or receipt.get("input_sha256") != manifest_sha256
+        or receipt.get("snapshot_id") != snapshot.get("provider_id")
+        or receipt.get("snapshot_name") != snapshot.get("name")
+        or receipt.get("owner") != pilot_process_owner()
+        or not re.fullmatch(r"[a-f0-9]{32}", str(receipt.get("pin_id", "")))
+        or not re.fullmatch(r"[a-f0-9]{32}", str(receipt.get("snapshot_intent", "")))
+    ):
+        raise ArchiveBlocked("Managed pilot receipt does not bind this snapshot and manifest")
+    return receipt["pin_id"]
 
 
 def managed_catalog_labels(reference):
@@ -225,6 +700,39 @@ class SnapshotAPI:
         if len(manual) > limit or len({row["id"] for row in manual}) != len(manual):
             raise ArchiveBlocked("Provider snapshot inventory differs from capacity")
         return manual, limit
+
+    def require_idle_actions(self):
+        self.validate_box()
+        page = 1
+        for _ in range(10):
+            result = self.request(
+                "GET", f"/storage_boxes/{self.box_id}/actions?per_page=100&page={page}"
+            )
+            actions = result.get("actions")
+            pagination = result.get("meta", {}).get("pagination")
+            if (
+                type(actions) is not list
+                or len(actions) > 100
+                or type(pagination) is not dict
+                or "next_page" not in pagination
+            ):
+                raise ArchiveBlocked("Complete provider action inventory required")
+            for action in actions:
+                if type(action) is not dict or action.get("status") not in {
+                    "success",
+                    "error",
+                    "running",
+                }:
+                    raise ArchiveBlocked("Provider action state is unknown")
+                if action["status"] == "running":
+                    raise ArchiveBlocked("Provider Storage Box action is running")
+            following = pagination["next_page"]
+            if following in (None, 0):
+                return
+            if type(following) is not int or following != page + 1:
+                raise ArchiveBlocked("Provider action pagination differs")
+            page = following
+        raise ArchiveBlocked("Provider action scan exceeds its budget")
 
     def create_managed(self, marker, journal_reference):
         if not re.fullmatch(r"[a-f0-9]{32}", marker):

@@ -3,6 +3,7 @@
 import fcntl
 import hashlib
 import os
+import stat
 import tempfile
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -92,16 +93,18 @@ def reader_resources():
 
 
 @contextmanager
-def worker(*, deleting=False):
+def worker(*, deleting=False, coordination_kind="copy"):
     import time
 
-    from app.raw_archive.coordination import lease
+    from app.raw_archive.coordination import reuse_or_lease
     from app.raw_archive.health import SafetyPause
     from app.raw_archive.remote_lease import source_checkpoint
     from app.raw_archive.runner import destination_from_environment
 
     from .latency import health_probe
 
+    if coordination_kind not in {"copy", "catalog"} or (deleting and coordination_kind != "copy"):
+        raise ArchiveBlocked("Unsupported tiered worker coordination kind")
     source_checkpoint(deleting=deleting)  # Before any state or source IO.
     if os.getenv("TIERED_ARCHIVE_ENABLED", "false") != "true":
         raise ArchiveBlocked("Tiered worker disabled")
@@ -148,7 +151,7 @@ def worker(*, deleting=False):
                 if time.monotonic() - last_check[0] < 1:
                     return
                 if not health():
-                    raise SafetyPause("receiver_or_archive_resources")
+                    raise SafetyPause("receiver_or_archive_resources", getattr(health, "last", {}))
                 last_check[0] = time.monotonic()
 
             checkpoint()
@@ -158,7 +161,7 @@ def worker(*, deleting=False):
                 checkpoint()
             transport = destination_from_environment()
             with (
-                lease("copy"),
+                reuse_or_lease(coordination_kind),
                 transport.session(
                     root, enabled=os.getenv("RAW_ARCHIVE_REUSE_SSH", "false") == "true"
                 ),
@@ -627,8 +630,277 @@ def managed_snapshot():
                 os.environ["RAW_ARCHIVE_SFTP_HOST"],
             )
             return cycle(
-                ledger, store, provider, checkpoint, dependency_guard=check_external_dependencies
+                ledger,
+                store,
+                provider,
+                checkpoint,
+                dependency_guard=lambda victim, survivors: check_external_dependencies(
+                    victim, survivors, ledger=ledger, provider=provider
+                ),
+                enforce_scope=True,
             )
+
+
+def managed_snapshot_scope(*, activate):
+    """Activate or reconcile a reviewed epoch and persist its catalogue."""
+    import json
+
+    import httpx
+
+    from app.raw_archive.snapshot_api import SnapshotAPI, private_token
+
+    from .ledger import _private_read
+    from .managed_snapshot import reconcile_scope
+    from .registry_backup import backup
+
+    if environment() != "production" or os.geteuid() != 0:
+        raise ArchiveBlocked("Root-owned production managed scope invocation required")
+    path = os.environ.get("TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_FILE", "")
+    expected = os.environ.get("TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_SHA256", "")
+    raw = _private_read(path, 1024 * 1024)
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise ArchiveBlocked("Managed snapshot scope contract differs")
+    try:
+        contract = json.loads(raw)
+    except ValueError:
+        raise ArchiveBlocked("Managed snapshot scope contract invalid") from None
+    with worker() as (ledger, store, checkpoint):
+        with httpx.Client(
+            headers={"Authorization": "Bearer " + private_token(Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE"]))},
+            timeout=httpx.Timeout(8, connect=3), trust_env=False,
+        ) as client:
+            provider = SnapshotAPI(client, int(os.environ["TIERED_ARCHIVE_BOX_ID"]),
+                                   os.environ["RAW_ARCHIVE_SFTP_USER"], os.environ["RAW_ARCHIVE_SFTP_HOST"])
+            provider.validate_box()
+            reconcile_scope(ledger, provider, contract=contract, contract_sha256=expected, activate=activate)
+            try:
+                reference = backup(ledger, store, checkpoint=checkpoint)
+                if reference.get("status") == "empty":
+                    raise ArchiveBlocked("Managed scope catalogue backup is empty")
+            except BaseException:
+                with ledger.db:
+                    ledger.db.execute("UPDATE managed_snapshot_scope SET recovery_state='needs_reconcile' WHERE id=1")
+                raise
+    return {"status": "current", "epoch": contract["epoch"], "registry_reference": reference}
+
+
+def managed_snapshot_pin(
+    operation_path,
+    operation_sha256,
+    *,
+    frozen_path=None,
+    frozen_sha256=None,
+    termination_bundle_path=None,
+    termination_bundle_sha256=None,
+    completed_pilot=False,
+):
+    import httpx
+
+    from app.raw_archive.snapshot_api import SnapshotAPI, private_token
+
+    from .ledger import _private_read
+    from .registry_backup import backup
+
+    if environment() != "production" or os.geteuid() != 0:
+        raise ArchiveBlocked("Root-owned production snapshot pin invocation required")
+    raw = _private_read(operation_path, 1024 * 1024)
+    if hashlib.sha256(raw).hexdigest() != operation_sha256:
+        raise ArchiveBlocked("Snapshot operation journal digest differs")
+    import json
+
+    operation = json.loads(raw)
+    with worker() as (ledger, store, checkpoint):
+        if frozen_path is None and not completed_pilot:
+            with httpx.Client(
+                headers={
+                    "Authorization": "Bearer "
+                    + private_token(Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE"]))
+                },
+                timeout=httpx.Timeout(8, connect=3),
+                trust_env=False,
+            ) as client:
+                provider = SnapshotAPI(
+                    client,
+                    int(os.environ["TIERED_ARCHIVE_BOX_ID"]),
+                    os.environ["RAW_ARCHIVE_SFTP_USER"],
+                    os.environ["RAW_ARCHIVE_SFTP_HOST"],
+                )
+                pin_id = ledger.acquire_snapshot_pin(
+                    pin_id=operation["pin_id"],
+                    snapshot_id=operation["snapshot_id"],
+                    kind=operation["kind"],
+                    operation_path=operation_path,
+                    operation_sha256=operation_sha256,
+                    owner=operation["owner"],
+                    provider=provider,
+                )
+            state = "active"
+        else:
+            from types import SimpleNamespace
+
+            from .managed_snapshot import validate_local_scope_bindings, validate_owned_termination
+
+            if not termination_bundle_path or not termination_bundle_sha256:
+                raise ArchiveBlocked("Pinned owned-wait termination bundle required")
+            termination_raw = _private_read(termination_bundle_path, 1024 * 1024)
+            termination_path = Path(termination_bundle_path)
+            termination_info = termination_path.stat(follow_symlinks=False)
+            if (
+                hashlib.sha256(termination_raw).hexdigest() != termination_bundle_sha256
+                or termination_info.st_mode & 0o777 != 0o400
+                or termination_info.st_uid != 0
+                or termination_info.st_nlink != 1
+            ):
+                raise ArchiveBlocked("Owned-wait termination bundle differs")
+            for parent in termination_path.parents:
+                info = parent.stat(follow_symlinks=False)
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                    raise ArchiveBlocked("Owned-wait termination bundle parent is untrusted")
+            termination = json.loads(termination_raw)
+            fields = {
+                "schema",
+                "binding",
+                "proof_path",
+                "receipt_path",
+                "marker_path",
+                "startup_path",
+                "producer_path",
+                "producer_scope_path",
+            }
+            if (
+                type(termination) is not dict
+                or set(termination) != fields
+                or termination["schema"] != 1
+            ):
+                raise ArchiveBlocked("Owned-wait termination bundle format differs")
+            scope_row = ledger.db.execute(
+                "SELECT epoch,contract_sha256,recovery_state FROM managed_snapshot_scope WHERE id=1"
+            ).fetchone()
+            scope_path = os.environ.get("TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_FILE", "")
+            scope_sha = os.environ.get("TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_SHA256", "")
+            scope_raw = _private_read(scope_path, 1024 * 1024)
+            if (
+                not scope_row
+                or scope_row[2] != "current"
+                or scope_row[1] != scope_sha
+                or hashlib.sha256(scope_raw).hexdigest() != scope_sha
+            ):
+                raise ArchiveBlocked("Current pinned managed scope required for release")
+            scope = json.loads(scope_raw)
+            validate_local_scope_bindings(
+                scope, ledger, SimpleNamespace(box_id=int(os.environ["TIERED_ARCHIVE_BOX_ID"])),
+                terminating_pin=operation["pin_id"],
+            )
+            binding = termination["binding"]
+            source = scope.get("source_lease", {}) if type(scope) is dict else {}
+            if (
+                type(binding) is not dict
+                or type(source) is not dict
+                or binding.get("scope_epoch") != scope_row[0]
+                or binding.get("source_hostname") != source.get("host")
+                or binding.get("source_machine_sha256") != source.get("machine_sha256")
+                or binding.get("producer_sha256") != source.get("owned_producer_sha256")
+            ):
+                raise ArchiveBlocked("Owned-wait producer or source is not bound to the scope")
+
+            def replay_guard(pin, bound_operation, _manifest):
+                return validate_owned_termination(
+                    ledger=ledger,
+                    pin_id=pin,
+                    operation=bound_operation,
+                    binding=binding,
+                    proof_path=termination["proof_path"],
+                    receipt_path=termination["receipt_path"],
+                    marker_path=termination["marker_path"],
+                    startup_path=termination["startup_path"],
+                    producer_path=termination["producer_path"],
+                    producer_scope_path=termination["producer_scope_path"],
+                )
+
+            pin_id = operation["pin_id"]
+            if completed_pilot:
+                if frozen_path is not None or frozen_sha256 is not None:
+                    raise ArchiveBlocked("Pilot completion does not accept restore inputs")
+                ledger.release_completed_pilot_pin(
+                    pin_id=pin_id, operation_path=operation_path,
+                    operation_sha256=operation_sha256, owner=operation["owner"], replay_guard=replay_guard,
+                )
+            else:
+                ledger.release_frozen_snapshot_pin(
+                    pin_id=pin_id, operation_path=operation_path, operation_sha256=operation_sha256,
+                    owner=operation["owner"], frozen_manifest=frozen_path, manifest_sha256=frozen_sha256,
+                    replay_guard=replay_guard,
+                )
+            state = "released"
+        existing = (
+            ledger.db.execute(
+                "SELECT receipt,receipt_sha256 FROM managed_snapshot_pin_receipt WHERE pin_id=?",
+                (pin_id,),
+            ).fetchone()
+            if state == "active"
+            else None
+        )
+        if existing:
+            if hashlib.sha256((existing[0] + "\n").encode()).hexdigest() != existing[1]:
+                raise ArchiveBlocked("Durable pin receipt differs")
+            saved_receipt = json.loads(existing[0])
+            if (
+                saved_receipt.get("pin_id") != pin_id
+                or saved_receipt.get("operation_sha256") != operation_sha256
+                or saved_receipt.get("state") != "active"
+            ):
+                raise ArchiveBlocked("Durable pin receipt belongs to another operation")
+            reference = backup(ledger, store, checkpoint=checkpoint)
+            if reference.get("status") == "empty":
+                raise ArchiveBlocked("Pin catalogue backup is empty")
+            return {
+                "pin_receipt": saved_receipt,
+                "pin_receipt_sha256": existing[1],
+                "registry_reference": reference,
+            }
+        reference = backup(ledger, store, checkpoint=checkpoint)
+        if reference.get("status") == "empty":
+            raise ArchiveBlocked("Pin catalogue backup is empty")
+        row = ledger.db.execute(
+            "SELECT intent,snapshot FROM managed_snapshot WHERE intent=(SELECT intent FROM managed_snapshot_pin WHERE id=?)",
+            (pin_id,),
+        ).fetchone()
+        if not row:
+            raise ArchiveBlocked("Pin snapshot identity is unavailable")
+        snapshot = json.loads(row[1])
+        # A caller receives a receipt only after the existing verified catalogue upload.
+        receipt = {
+            "schema": 1,
+            "pin_id": pin_id,
+            "snapshot_id": operation["snapshot_id"],
+            "snapshot_name": snapshot["name"],
+            "snapshot_intent": row[0],
+            "kind": operation["kind"],
+            "consumer_entrypoint": operation["consumer_entrypoint"],
+            "owner": operation["owner"],
+            "input_sha256": operation["input_sha256"],
+            "scope_epoch": operation["scope_epoch"],
+            "operation_sha256": operation_sha256,
+            "state": state,
+            "catalog_reference": reference,
+        }
+        if state == "active":
+            encoded = json.dumps(receipt, sort_keys=True)
+            receipt_sha = hashlib.sha256((encoded + "\n").encode()).hexdigest()
+            with ledger.db:
+                ledger.db.execute(
+                    "INSERT INTO managed_snapshot_pin_receipt VALUES(?,?,?)",
+                    (pin_id, encoded, receipt_sha),
+                )
+            verified = backup(ledger, store, checkpoint=checkpoint)
+            if verified.get("status") == "empty":
+                raise ArchiveBlocked("Durable pin receipt catalogue backup is empty")
+            return {
+                "pin_receipt": receipt,
+                "pin_receipt_sha256": receipt_sha,
+                "registry_reference": verified,
+            }
+        return receipt
 
 
 def current_backup_schema_scope(source, checkpoint):

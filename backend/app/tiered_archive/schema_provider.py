@@ -18,6 +18,8 @@ from app.raw_archive.policy import ArchiveBlocked
 from .codec import digest
 
 FORMAT = "schema-master-provider-v1"
+AUDIT_V3_FORMAT = "schema-master-provider-sql-audit-v3"
+AUDIT_V3_AUTH_FORMAT = "greenmind.schema-master-provider-audit-auth.v3"
 AUTH_FORMAT = "greenmind.schema-master-provider-auth.v1"
 SCOPE_FORMAT = "greenmind.pg15-timescale2172-source-authority.v1"
 PRODUCTION_SCOPE_FORMAT = "greenmind.pg15-timescale2172-production-authority.v1"
@@ -496,9 +498,11 @@ def inspect_dump(path, scope, role, master_names, env, *, checkpoint):
     return validate_toc(target.read_bytes(), scope, role, master_names)
 
 
-def capture(database_url, source, output, key, scope, *, checkpoint, schema_capture=None):
+def capture(database_url, source, output, key, scope, *, checkpoint, schema_capture=None, audit_capture=None):
     """Root-only new Gateway5/Direct4 capture using the existing dump/encryption pipeline."""
     from datetime import timedelta
+
+    from app.raw_archive.policy import checksum
 
     from . import backup, parquet
     from .native_backup import SYSTEM_ORG, source_url
@@ -517,7 +521,13 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         and not output.stat().st_mode & 0o077,
         "Private root provider capture directory required",
     )
-    originals, proof, at = backup.dump(
+    if audit_capture is not None:
+        from .sql_audit_v3_backup import AuditSnapshotCapture
+
+        need(type(audit_capture) is AuditSnapshotCapture and audit_capture.output == output
+             and audit_capture.key == key and source == "gateway",
+             "Exact Gateway V3 audit capture and Archive key required")
+    dumped = backup.dump(
         database_url,
         source,
         output,
@@ -525,7 +535,13 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         with_proof=True,
         provider_scope=scope,
         **({"schema_capture": schema_capture} if schema_capture is not None else {}),
+        **({"audit_capture": audit_capture} if audit_capture is not None else {}),
     )
+    if audit_capture is None:
+        originals, proof, at = dumped
+        audit_ref = None
+    else:
+        originals, proof, at, audit_ref = dumped
     files = []
     for index, path in enumerate(originals, 1):
         target = output / f"{index:04d}.bin"
@@ -548,6 +564,10 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         "master_proof": proof,
         "dump_files": [r for _, r in files],
     }
+    if audit_ref is not None:
+        metadata["schema"] = AUDIT_V3_AUTH_FORMAT
+        metadata["format"] = AUDIT_V3_FORMAT
+        metadata["audit_v3"] = audit_ref
     from .codec import encode
 
     plain = output / "provider-auth.json"
@@ -563,13 +583,19 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         files.append((target, backup.encrypt(plain, target, key, checkpoint=checkpoint)))
     finally:
         plain.unlink(missing_ok=True)
+    if audit_ref is not None:
+        audit_file = output / "sql-audit-v3.bin"
+        need(audit_file.is_file() and checksum(audit_file) == audit_ref["file"]["sha256"], "Sealed V3 audit artifact differs")
+        files.append((audit_file, audit_ref["file"]))
     body = {
-        "backup_format": FORMAT,
+        "backup_format": AUDIT_V3_FORMAT if audit_ref is not None else FORMAT,
         "source": source,
         "at": at,
         "files": [r for _, r in files],
         "master_proof": proof,
     }
+    if audit_ref is not None:
+        body["audit_v3"] = audit_ref
     row = {
         "identity": digest(body),
         "organization": SYSTEM_ORG,
@@ -581,8 +607,13 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
     ref = dict(
         parquet.write(index, [row], checkpoint=checkpoint),
         format="parquet",
-        **descriptor(proof, source, [r for _, r in files]),
+        **descriptor(proof, source, [r for _, r in files[:4]]),
     )
+    if audit_ref is not None:
+        ref["backup_format"] = AUDIT_V3_FORMAT
+        ref["audit_v3_plaintext_sha256"] = audit_ref["file"]["plaintext_sha256"]
+        for name in ("epoch", "genesis_sha256", "schema_sha256", "snapshot_sha256"):
+            ref["audit_v3_" + name] = audit_ref[name]
     candidate = Candidate(
         scope["environment"],
         source,

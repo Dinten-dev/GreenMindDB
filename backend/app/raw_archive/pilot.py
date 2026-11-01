@@ -105,6 +105,15 @@ def run_pilot(
 
     checkpoint()
     data = approval(config, clock()) if execute else proposal(config, clock())
+    if (
+        config.namespace == "production"
+        and os.getenv("RAW_ARCHIVE_MANAGED_SCOPE_REQUIRED") == "true"
+    ):
+        from .snapshot_api import require_pilot_pin_receipt
+
+        # The root controller acquires and durably backs up the archive pin first.
+        # Any failure below deliberately leaves that pin active for reconciliation.
+        require_pilot_pin_receipt(data, config.deletion_approval_sha256)
     config.root.mkdir(mode=0o700, parents=True, exist_ok=True)
     with exclusive_worker(config):
         index = load_index(config, destination, data)
