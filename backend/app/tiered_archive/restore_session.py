@@ -22,6 +22,7 @@ from .source import DATASETS, row_identity
 MAX_PAGES = 32
 MAX_PARTS = 128
 FORMAT = "isolated-sql-restore-plan-v2"
+MODE_FORMAT = "isolated-sql-restore-plan-v3"
 MASTERS = {
     "ingest_log": ("gateway", "zone"),
     "gateway_state_report": ("gateway", "zone"),
@@ -52,26 +53,39 @@ def plan_scope(plan):
 def validate_plan(plan, expected_sha256):
     import uuid
 
+    base_fields = {
+        "format",
+        "universe",
+        "environment",
+        "source",
+        "dataset",
+        "organization",
+        "schema_master_sha256",
+        "expected_pages",
+        "expected_rows",
+        "first_batch_sha256",
+    }
     require(
         isinstance(plan, dict)
-        and set(plan)
-        == {
-            "format",
-            "universe",
-            "environment",
-            "source",
-            "dataset",
-            "organization",
-            "schema_master_sha256",
-            "expected_pages",
-            "expected_rows",
-            "first_batch_sha256",
-        },
-        "Exact restore plan head required",
+        and (
+            (plan.get("format") == FORMAT and set(plan) == base_fields)
+            or (
+                plan.get("format") == MODE_FORMAT
+                and set(plan) == base_fields | {"fence_mode", "fence_capability_sha256"}
+            )
+        ),
+        "Exact versioned restore plan head required",
     )
+    if plan["format"] == MODE_FORMAT:
+        require(
+            plan["fence_mode"] == "timescale-origin-guarded-v1"
+            and sha(plan["fence_capability_sha256"]),
+            "Explicit supported origin mode and independent capability pin required",
+        )
     require(sha(expected_sha256) and digest(plan) == expected_sha256, "Restore plan head changed")
     require(
-        plan["format"] == FORMAT and plan["environment"] in {"production", "staging"},
+        plan["format"] in {FORMAT, MODE_FORMAT}
+        and plan["environment"] in {"production", "staging"},
         "Explicit versioned restore environment required",
     )
     require(
@@ -308,6 +322,7 @@ def begin_restore_session(database_url, plan, plan_sha256, *, checkpoint):
                 .one_or_none()
             )
             _, target, children, masters = lock_and_tables(db, plan, checkpoint)
+            from .restore_universe import domain
             from .restore_universe import tables as universe_tables
 
             protected, _ = universe_tables(db, plan)
@@ -316,7 +331,7 @@ def begin_restore_session(database_url, plan, plan_sha256, *, checkpoint):
                 protected,
                 set(masters),
                 identity,
-                {key: plan[key] for key in ("environment", "source", "schema_master_sha256")},
+                domain(plan),
             )
             baseline.ensure(db, masters, snapshot, schema_fingerprint)
             anchor = baseline.anchor(db, masters, snapshot)

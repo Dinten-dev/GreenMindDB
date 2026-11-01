@@ -462,7 +462,7 @@ def test_later_page_trigger_cannot_change_earlier_page(target, tmp_path):
 def direct_target(target):
     statements = [
         "CREATE TABLE direct_device(id TEXT PRIMARY KEY,organization_id TEXT)",
-        "CREATE TABLE direct_session(device_id TEXT REFERENCES direct_device(id),id TEXT,PRIMARY KEY(device_id,id))",
+        "CREATE TABLE direct_session(device_id TEXT REFERENCES direct_device(id),id TEXT,config JSON,mode TEXT,PRIMARY KEY(device_id,id))",
         "CREATE TABLE direct_segment(id TEXT PRIMARY KEY,device_id TEXT REFERENCES direct_device(id))",
         "CREATE TABLE direct_chunk(id TEXT PRIMARY KEY,device_id TEXT REFERENCES direct_device(id),payload BLOB)",
         "CREATE TABLE direct_piece(segment_id TEXT REFERENCES direct_segment(id),chunk_id TEXT REFERENCES direct_chunk(id),payload_offset INTEGER,frame_count INTEGER,PRIMARY KEY(segment_id,chunk_id))",
@@ -472,7 +472,27 @@ def direct_target(target):
         for statement in statements:
             db.execute(text(statement))
         db.execute(text("INSERT INTO direct_device VALUES(:id,:org)"), dict(id=SENSOR, org=ORG))
-        db.execute(text("INSERT INTO direct_session VALUES(:id,'session')"), dict(id=SENSOR))
+        db.execute(
+            text("INSERT INTO direct_session VALUES(:id,:session,:config,'DIRECT')"),
+            dict(
+                id=SENSOR,
+                session="00000000-0000-0000-0000-000000000099",
+                config=json.dumps(
+                    {
+                        "protocol_version": 1,
+                        "device_id": SENSOR,
+                        "session_id": "00000000-0000-0000-0000-000000000099",
+                        "session_start_us": epoch_us(AT),
+                        "sample_rate": 380,
+                        "channels": 1,
+                        "sample_bits": 16,
+                        "channel_labels": ["leaf0"],
+                        "calibration_version": "cal-v1",
+                        "firmware_version": "fw-v1",
+                    }
+                ),
+            ),
+        )
         db.execute(text("INSERT INTO direct_segment VALUES('segment',:id)"), dict(id=SENSOR))
 
 

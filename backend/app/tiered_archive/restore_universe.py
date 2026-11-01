@@ -116,6 +116,23 @@ def relation_inventory(db):
     }
 
 
+def domain(plan):
+    result = {key: plan[key] for key in ("environment", "source", "schema_master_sha256")}
+    fields = {"fence_mode", "fence_capability_sha256"}
+    if fields.intersection(plan):
+        import re
+
+        if (
+            not fields <= plan.keys()
+            or plan["fence_mode"] != "timescale-origin-guarded-v1"
+            or not isinstance(plan["fence_capability_sha256"], str)
+            or re.fullmatch("[a-f0-9]{64}", plan["fence_capability_sha256"]) is None
+        ):
+            raise ArchiveBlocked("Explicit complete origin domain required")
+        result.update({key: plan[key] for key in fields})
+    return result
+
+
 def bind(db, plan):
     validate(plan)
     expected = {("public", name) for name in plan["universe"]["tables"]}
@@ -132,7 +149,7 @@ def bind(db, plan):
     pin = digest(
         {
             "universe": plan["universe"],
-            **{key: plan[key] for key in ("environment", "source", "schema_master_sha256")},
+            **domain(plan),
         }
     )
     if values:

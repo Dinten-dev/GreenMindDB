@@ -22,6 +22,7 @@ from sqlalchemy import (
     cast,
     func,
     literal,
+    literal_column,
     select,
     tuple_,
 )
@@ -66,8 +67,57 @@ def key_contract(keys):
     return True
 
 
+KNOWN_CONFIG_BYTES = 2048
+KNOWN_CONFIG_CONTRACT = "direct-session-plain-json-v1"
+
+
+def known_config_size(column):
+    from sqlalchemy import JSON
+
+    if (
+        column.table.name != "direct_session"
+        or column.table.schema not in {None, "public"}
+        or column.name != "config"
+        or not isinstance(column.type, JSON)
+    ):
+        return None
+    # Metadata-only tests. No JSON conversion/output is evaluated here. Size is
+    # a wire bound ONLY for actual builtin JSON stored uncompressed as text.
+    admitted = and_(
+        func.pg_catalog.pg_typeof(column)
+        == literal_column("'pg_catalog.json'::pg_catalog.regtype"),
+        cast(func.pg_catalog.current_setting("server_version_num"), Integer).between(
+            150000, 159999
+        ),
+        func.pg_catalog.pg_column_compression(column).is_(None),
+        func.pg_catalog.pg_column_size(column) <= KNOWN_CONFIG_BYTES,
+    )
+    return case((admitted, literal(KNOWN_CONFIG_BYTES)), else_=literal(MAX_FIELD_BYTES + 1))
+
+
+def validate_known_row(master, value):
+    if master.name != "direct_session":
+        return
+    from app.raw_archive.wav_catalog import validate_row
+
+    try:
+        validate_row("direct", "direct_session", value)
+        config = value["config"]
+        if (
+            config["device_id"] != value["device_id"]
+            or config["session_id"] != value["id"]
+            or value["mode"] not in {"DIRECT", "DUAL"}
+        ):
+            raise ValueError("identity")
+    except Exception:
+        raise ArchiveBlocked("Bounded Direct session scientific contract failed") from None
+
+
 def column_contract(column):
     kind = column.type
+    known = known_config_size(column)
+    if known is not None:
+        return known
     if isinstance(kind, Enum):
         maximum = max((len(value.encode("utf8")) for value in kind.enums), default=0)
         return literal(maximum) if maximum <= MAX_FIELD_BYTES else None

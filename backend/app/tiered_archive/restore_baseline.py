@@ -110,6 +110,7 @@ def advance(db, masters, snapshot, *, checkpoint, maximum_rows=500, maximum_byte
                     break
                 raise ArchiveBlocked("Master row exceeds bounded baseline budget")
             value = sizes.fetch_one(db, master, key_values, predicate)
+            sizes.validate_known_row(master, value)
             raw = encode(value)
             if decoded + len(raw) > maximum_bytes:
                 raise ArchiveBlocked("Master codec output exceeds declared baseline budget")
