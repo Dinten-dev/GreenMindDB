@@ -73,7 +73,9 @@ def anchor(db, masters, snapshot):
 
 
 def advance(db, masters, snapshot, *, checkpoint, maximum_rows=500, maximum_bytes=8 * 1024**2):
-    from sqlalchemy import select, tuple_
+    from sqlalchemy import select
+
+    from . import restore_sizes as sizes
 
     if (
         type(maximum_rows) is not int
@@ -82,6 +84,7 @@ def advance(db, masters, snapshot, *, checkpoint, maximum_rows=500, maximum_byte
         or not 1024 <= maximum_bytes <= 8 * 1024**2
     ):
         raise ArchiveBlocked("Bounded master baseline budget required")
+    sizes.check_encoding(db)
     table = journal(db)
     for name, master in sorted(masters.items()):
         state = db.execute(select(table).where(table.c.name == name)).mappings().one()
@@ -92,38 +95,30 @@ def advance(db, masters, snapshot, *, checkpoint, maximum_rows=500, maximum_byte
         keys = list(master.primary_key.columns)
         if not keys:
             raise ArchiveBlocked("Master baseline requires deterministic primary keys")
-        query = select(master).order_by(*keys).limit(maximum_rows + 1)
-        if state["cursor"] is not None:
-            cursor = decode(bytes(state["cursor"]))
-            query = query.where(tuple_(*keys) > tuple_(*cursor))
         count = decoded = 0
         chain, cursor, complete = state["proof_sha256"], state["cursor"], False
-        with db.execute(query.execution_options(yield_per=16)) as result:
-            for value in result.mappings():
-                checkpoint()
-                if any(
-                    any(
-                        word in column.name.lower()
-                        for word in ("hash", "password", "token", "email")
-                    )
-                    for column in keys
-                ):
-                    raise ArchiveBlocked(
-                        "Private master PK cursor requires separate protected restore evidence"
-                    )
-                raw = encode(dict(value))
-                if count >= maximum_rows or decoded + len(raw) > maximum_bytes:
-                    break
-                chain = hashlib.sha256(
-                    bytes.fromhex(chain) + len(raw).to_bytes(8, "big") + raw
-                ).hexdigest()
-                # Cursor contains only fixed scientific UUID/session/hardware PKs.
-                # Other private master columns are hashed, never journalled/logged.
-                cursor = encode([value[column.name] for column in keys])
-                count += 1
-                decoded += len(raw)
-            else:
+        while count < maximum_rows:
+            checkpoint()
+            previous = decode(bytes(cursor)) if cursor is not None else None
+            admitted = sizes.next_admitted(db, master, previous)
+            if admitted is None:
                 complete = True
+                break
+            key_values, estimate, predicate = admitted
+            if decoded + estimate > maximum_bytes:
+                if count:
+                    break
+                raise ArchiveBlocked("Master row exceeds bounded baseline budget")
+            value = sizes.fetch_one(db, master, key_values, predicate)
+            raw = encode(value)
+            if decoded + len(raw) > maximum_bytes:
+                raise ArchiveBlocked("Master codec output exceeds declared baseline budget")
+            chain = hashlib.sha256(
+                bytes.fromhex(chain) + len(raw).to_bytes(8, "big") + raw
+            ).hexdigest()
+            cursor = encode([value[column.name] for column in keys])
+            count += 1
+            decoded += len(raw)
         if count == 0 and not complete:
             raise ArchiveBlocked("Master row exceeds bounded baseline budget")
         db.execute(

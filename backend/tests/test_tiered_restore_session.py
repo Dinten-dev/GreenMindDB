@@ -14,6 +14,7 @@ from app.tiered_archive.codec import digest, epoch_us
 from app.tiered_archive.pipeline import candidate_json
 from app.tiered_archive.policy import Candidate
 from app.tiered_archive.source import DATASETS, row_identity
+from tests.restore_bounds_sqlite import install_bounds_adapter
 from tests.restore_fence_sqlite import install_sqlite_adapter
 from tests.test_tiered_archive import AT, ORG, SENSOR
 from tests.test_tiered_restore import URL
@@ -75,6 +76,7 @@ def target(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("sqlalchemy.create_engine", lambda *a, **kw: engine)
     monkeypatch.setattr(rs, "target_identity", install_sqlite_adapter(monkeypatch))
+    install_bounds_adapter(monkeypatch)
     yield engine
     engine.dispose()
 

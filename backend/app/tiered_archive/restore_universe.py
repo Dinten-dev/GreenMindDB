@@ -60,23 +60,52 @@ def validate(plan):
         raise ArchiveBlocked("Exact independently pinned application universe required")
 
 
+def chunk_exemption(db):
+    info = (
+        db.execute(
+            text("""SELECT e.oid,e.extversion,
+      (SELECT count(*) FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_class c ON c.oid=d.objid
+       JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+       WHERE d.classid='pg_catalog.pg_class'::regclass AND d.deptype='e'
+         AND d.refclassid='pg_catalog.pg_extension'::regclass AND d.refobjid=e.oid
+         AND n.nspname='_timescaledb_catalog' AND c.relname IN ('chunk','hypertable')) AS catalogs
+      FROM pg_catalog.pg_extension e WHERE e.extname='timescaledb'""")
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if info is None:
+        return ""
+    if info["extversion"] != "2.17.2" or info["catalogs"] != 2:
+        raise ArchiveBlocked("Timescale chunk catalog provenance/version is unproved")
+    # Only physical chunks of a PUBLIC logical hypertable are covered by the
+    # generic inheritance fence. Compressed/private-root storage is NOT silently
+    # exempted; it stays visible and blocks until explicit coverage is proved.
+    return """ AND NOT EXISTS(SELECT 1 FROM _timescaledb_catalog.chunk ch
+      JOIN _timescaledb_catalog.hypertable h ON h.id=ch.hypertable_id
+      JOIN pg_catalog.pg_inherits inh ON inh.inhrelid=c.oid
+      JOIN pg_catalog.pg_class parent ON parent.oid=inh.inhparent
+      JOIN pg_catalog.pg_namespace pn ON pn.oid=parent.relnamespace
+      WHERE ch.schema_name=n.nspname AND ch.table_name=c.relname AND NOT ch.dropped
+        AND h.schema_name='public' AND pn.nspname=h.schema_name AND parent.relname=h.table_name) """
+
+
 def relation_inventory(db):
     if db.dialect.name != "postgresql":
         raise ArchiveBlocked("Native restore-universe catalog requires PostgreSQL")
-    # Ordinary views have no stored rows. Foreign tables and materialized views
-    # remain visible here and cannot silently escape the fence's capability gate.
-    query = text("""SELECT n.nspname AS schema,c.relname AS name FROM pg_catalog.pg_class c
+    # A schema name is never proof of extension ownership. Retain unrelated
+    # internal-schema user tables in the result so the exact universe rejects them.
+    query = text(
+        """SELECT n.nspname AS schema,c.relname AS name FROM pg_catalog.pg_class c
       JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
       WHERE c.relkind IN ('r','p','m','f') AND left(n.nspname,3)<>'pg_'
         AND n.nspname<>'information_schema'
         AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_depend d
           WHERE d.classid='pg_catalog.pg_class'::regclass AND d.objid=c.oid AND d.deptype='e'
-            AND d.refclassid='pg_catalog.pg_extension'::regclass)
-        AND NOT(n.nspname IN ('_timescaledb_internal','_timescaledb_catalog','_timescaledb_config','_timescaledb_cache')
-          AND EXISTS(SELECT 1 FROM pg_catalog.pg_extension WHERE extname='timescaledb'))
-      ORDER BY n.nspname,c.relname LIMIT :limit""")
-    # Exclude only exact owned control names; a similarly prefixed user table
-    # still participates and must appear in the external universe plan.
+            AND d.refclassid='pg_catalog.pg_extension'::regclass)"""
+        + chunk_exemption(db)
+        + " ORDER BY n.nspname,c.relname LIMIT :limit"
+    )
     rows = db.execute(query, {"limit": MAX_TABLES + len(OWN_TABLES) + 1}).mappings().all()
     if len(rows) > MAX_TABLES + len(OWN_TABLES):
         raise ArchiveBlocked("Restore relation inventory exceeds metadata budget")

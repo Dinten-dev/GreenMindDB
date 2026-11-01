@@ -15,7 +15,13 @@ from app.tiered_archive import (
 from app.tiered_archive import (
     restore_session as rs,
 )
+from tests.restore_bounds_sqlite import install_bounds_adapter
 from tests.test_tiered_restore_session import log, plan
+
+
+@pytest.fixture(autouse=True)
+def synthetic_bounds(monkeypatch):
+    install_bounds_adapter(monkeypatch)
 
 
 @pytest.fixture
