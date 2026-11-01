@@ -268,7 +268,10 @@ def test_new_child_requires_same_transaction_and_inherited_row_fence(monkeypatch
     child["own_transaction"] = True
     assert fence._coverage(None, "samples", {}, prepare_new=True) == {"7": "a" * 64}
     assert effects == [
-        ((None, "_hyper_chunk", "samples", "_timescaledb_internal"), {"new_chunk": True})
+        (
+            (None, "_hyper_chunk", "samples", "_timescaledb_internal"),
+            {"new_chunk": True, "mode": fence.ALWAYS},
+        )
     ]
     effects.clear()
     assert fence._coverage(None, "samples", {"7": "a" * 64}, prepare_new=True) == {"7": "a" * 64}

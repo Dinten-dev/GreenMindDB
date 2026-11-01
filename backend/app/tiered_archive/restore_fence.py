@@ -22,6 +22,7 @@ from sqlalchemy import (
 
 from app.raw_archive.policy import ArchiveBlocked
 
+from . import restore_origin_capability as origin_capability
 from .codec import digest
 
 STATE = "greenmind_restore_fence"
@@ -29,7 +30,8 @@ REGISTRY = "greenmind_restore_fence_table"
 FUNCTION = "greenmind_restore_track_v1"
 ROW_TRIGGER = "greenmind_restore_row_v1"
 TRUNCATE_TRIGGER = "greenmind_restore_truncate_v1"
-FORMAT = "isolated-restore-mutation-fence-v1"
+FORMAT = "isolated-restore-mutation-fence-v2"
+ALWAYS = "pg-always-v1"
 _SHA = re.compile(r"[a-f0-9]{64}")
 _NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 
@@ -67,8 +69,11 @@ def _control_tables():
         metadata,
         Column("id", Integer, primary_key=True),
         Column("format", String(64), nullable=False),
+        Column("mode", String(64), nullable=False),
+        Column("capability_sha256", String(64)),
         Column("target_sha256", String(64), nullable=False),
         Column("domain_sha256", String(64), nullable=False),
+        Column("domain", JSON, nullable=False),
         Column("control_sha256", String(64), nullable=False),
         Column("registry_sha256", String(64), nullable=False),
         Column("epoch", BigInteger, nullable=False),
@@ -209,10 +214,11 @@ def _trigger(db, name, schema, trigger):
     )
 
 
-def _valid_trigger(row, logical, kind, *, allow_origin=False):
+def _valid_trigger(row, logical, kind, *, allow_origin=False, mode=ALWAYS):
+    enabled = {"O"} if mode == origin_capability.MODE else ({"A", "O"} if allow_origin else {"A"})
     return (
         row is not None
-        and row["enabled"] in ({"A", "O"} if allow_origin else {"A"})
+        and row["enabled"] in enabled
         and row["kind"] == kind
         and row["function"] is True
         and row["nargs"] == 1
@@ -221,7 +227,7 @@ def _valid_trigger(row, logical, kind, *, allow_origin=False):
     )
 
 
-def _install_triggers(db, name, logical=None, schema="public", *, new_chunk=False):
+def _install_triggers(db, name, logical=None, schema="public", *, new_chunk=False, mode=ALWAYS):
     logical = logical or name
     _require(_NAME.fullmatch(logical) is not None, "Exact restore table name required")
     qualified = _quote(schema) + "." + _quote(name)
@@ -244,10 +250,11 @@ def _install_triggers(db, name, logical=None, schema="public", *, new_chunk=Fals
             )
         else:
             _require(
-                _valid_trigger(existing, logical, kind, allow_origin=True),
+                _valid_trigger(existing, logical, kind, allow_origin=True, mode=mode),
                 "Existing restore trigger differs",
             )
-        db.execute(text(f'ALTER TABLE {qualified} ENABLE ALWAYS TRIGGER "{trigger}"'))
+        if mode == ALWAYS:
+            db.execute(text(f'ALTER TABLE {qualified} ENABLE ALWAYS TRIGGER "{trigger}"'))
 
 
 def _descendants(db, name):
@@ -277,12 +284,12 @@ def _descendants(db, name):
     return sorted(values, key=lambda item: item["oid"])
 
 
-def _coverage(db, name, known, *, install=False, prepare_new=False):
+def _coverage(db, name, known, *, install=False, prepare_new=False, mode=ALWAYS):
     result = {}
     for child in _descendants(db, name):
         key = str(child["oid"])
         if install:
-            _install_triggers(db, child["name"], name, child["schema"])
+            _install_triggers(db, child["name"], name, child["schema"], mode=mode)
         elif prepare_new and key not in known:
             _require(
                 child["own_transaction"] is True, "Unbound external restore child cannot be adopted"
@@ -290,10 +297,12 @@ def _coverage(db, name, known, *, install=False, prepare_new=False):
             # New TS chunks clone the original row trigger, initially in origin
             # mode. Promote it and install a statement fence before this same
             # batch/chunk transaction can commit; never repair an old child.
-            _install_triggers(db, child["name"], name, child["schema"], new_chunk=True)
+            _install_triggers(db, child["name"], name, child["schema"], new_chunk=True, mode=mode)
         for trigger, kind in ((ROW_TRIGGER, 29), (TRUNCATE_TRIGGER, 32)):
             _require(
-                _valid_trigger(_trigger(db, child["name"], child["schema"], trigger), name, kind),
+                _valid_trigger(
+                    _trigger(db, child["name"], child["schema"], trigger), name, kind, mode=mode
+                ),
                 "Restore physical child trigger coverage changed",
             )
         result[key] = _relation_pin(db, child["name"], child["schema"])
@@ -326,9 +335,30 @@ def _load(db, *, prepare_new=False):
     _postgres(db)
     _require(_control_presence(db) == (True, True, True), "Restore mutation fence missing")
     state_table, registry = _control_tables()
+    versions = db.execute(select(state_table.c.format).limit(2)).scalars().all()
+    _require(versions == [FORMAT], "Restore fence version is not compatible; no automatic upgrade")
     values = db.execute(select(state_table).limit(2).with_for_update()).mappings().all()
     _require(len(values) == 1 and values[0]["id"] == 1, "Exact restore fence state required")
     state = dict(values[0])
+    _require(
+        digest(state["domain"]) == state["domain_sha256"]
+        and _domain_mode(state["domain"]) == (state["mode"], state["capability_sha256"]),
+        "Restore fence mode/domain binding changed",
+    )
+    _require(
+        state["mode"] in {ALWAYS, origin_capability.MODE}, "Unknown explicit restore fence mode"
+    )
+    if state["mode"] == origin_capability.MODE:
+        _require(
+            isinstance(state["capability_sha256"], str)
+            and _SHA.fullmatch(state["capability_sha256"]),
+            "Pinned origin capability required",
+        )
+        origin_capability.verify(db, state["capability_sha256"])
+    else:
+        _require(
+            state["capability_sha256"] is None, "ALWAYS fence cannot adopt an origin capability"
+        )
     identity = _identity(db)
     _require(
         "_restore_" in identity["name"]
@@ -349,6 +379,7 @@ def _load(db, *, prepare_new=False):
             row["table_name"],
             row["coverage"],
             prepare_new=prepare_new and state["phase"] == "loading",
+            mode=state["mode"],
         )
         _require(
             all(coverage.get(k) == v for k, v in row["coverage"].items())
@@ -376,9 +407,32 @@ def _expected(state, rows):
     )
 
 
+def _domain_mode(domain):
+    keys = {"environment", "source", "schema_master_sha256"}
+    _require(
+        isinstance(domain, dict)
+        and set(domain) in (keys, keys | {"fence_mode", "fence_capability_sha256"}),
+        "Exact restore fence domain required",
+    )
+    mode = domain.get("fence_mode", ALWAYS)
+    capability = domain.get("fence_capability_sha256")
+    _require(mode in {ALWAYS, origin_capability.MODE}, "Unknown explicit restore fence mode")
+    if mode == origin_capability.MODE:
+        _require(
+            "fence_mode" in domain and isinstance(capability, str) and _SHA.fullmatch(capability),
+            "Explicit pinned origin capability required",
+        )
+    else:
+        _require(capability is None, "ALWAYS fence cannot adopt an origin capability")
+    return mode, capability
+
+
 def ensure(db, tables, master_names, target_sha256, domain):
     """Register only new, empty data tables; preserve existing master contents."""
     _postgres(db)
+    mode, capability = _domain_mode(domain)
+    if mode == origin_capability.MODE:
+        origin_capability.verify(db, capability)
     _require(
         isinstance(tables, dict)
         and 0 < len(tables) <= 64
@@ -387,7 +441,6 @@ def ensure(db, tables, master_names, target_sha256, domain):
         and isinstance(target_sha256, str)
         and _SHA.fullmatch(target_sha256)
         and isinstance(domain, dict)
-        and set(domain) == {"environment", "source", "schema_master_sha256"}
         and domain["environment"] in {"production", "staging"}
         and domain["source"] in {"gateway", "direct"}
         and isinstance(domain["schema_master_sha256"], str)
@@ -417,8 +470,11 @@ def ensure(db, tables, master_names, target_sha256, domain):
             state_table.insert().values(
                 id=1,
                 format=FORMAT,
+                mode=mode,
+                capability_sha256=capability,
                 target_sha256=target_sha256,
                 domain_sha256=digest(domain),
+                domain=domain,
                 control_sha256=_control_pin(db),
                 registry_sha256=digest([]),
                 epoch=0,
@@ -448,7 +504,7 @@ def ensure(db, tables, master_names, target_sha256, domain):
                 db.execute(select(1).select_from(table).limit(1)).first() is None,
                 "New restore data table must be empty",
             )
-        _install_triggers(db, name)
+        _install_triggers(db, name, mode=mode)
         db.execute(
             registry.insert().values(
                 table_name=name,
@@ -456,7 +512,7 @@ def ensure(db, tables, master_names, target_sha256, domain):
                 rows=0,
                 expected_rows=0,
                 relation_sha256=_relation_pin(db, name),
-                coverage=_coverage(db, name, {}, install=True),
+                coverage=_coverage(db, name, {}, install=True, mode=mode),
             )
         )
         known[name] = {"master": name in master_names}

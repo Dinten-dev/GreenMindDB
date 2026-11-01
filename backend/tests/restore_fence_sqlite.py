@@ -66,7 +66,7 @@ def install_sqlite_adapter(monkeypatch):
     def install_function(db):
         db.exec_driver_sql("CREATE VIEW " + fence.FUNCTION + " AS SELECT 'test-only-v1' AS body")
 
-    def install_triggers(db, name):
+    def install_triggers(db, name, **_options):
         for operation in ("INSERT", "UPDATE", "DELETE"):
             delta = {"INSERT": 1, "UPDATE": 0, "DELETE": -1}[operation]
             db.exec_driver_sql(f'''CREATE TRIGGER "{fence.ROW_TRIGGER}_{name}_{operation.lower()}"
