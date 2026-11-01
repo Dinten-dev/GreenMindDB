@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .health import SafetyPause
 from .policy import ArchiveBlocked
 
 
@@ -20,6 +21,7 @@ class CombinedProbe:
         source,
         minimum_memory,
         maximum_load,
+        cache_seconds=0,
         clock=time.time,
         monotonic=time.monotonic,
     ):
@@ -44,25 +46,57 @@ class CombinedProbe:
             or not 0 < maximum_load <= 2.4
         ):
             raise ArchiveBlocked("Authenticated source identity and original reserve required")
+        if (
+            type(cache_seconds) not in (int, float)
+            or not math.isfinite(cache_seconds)
+            or not 0 <= cache_seconds <= 1
+        ):
+            raise ArchiveBlocked("Source health cache must be finite and at most one second")
         self.local, self.url, self.token, self.source = local, url, token, source
         self.minimum_memory, self.maximum_load, self.clock = minimum_memory, maximum_load, clock
         self.monotonic = monotonic
+        self.cache_seconds = cache_seconds
+        self._source_cache = None
         self.last = {"ok": False, "reason": "not_checked"}
 
     def close(self):
+        self._source_cache = None
         self.local.close()
 
     def fail(self, reason):
+        self._source_cache = None
         self.last = {"ok": False, "reason": reason}
         return False
 
     def __call__(self):
-        if not self.local():
-            self.last = self.local.last
-            return False
         try:
+            # Local reserves and the caller's source-lease checks remain fresh
+            # at every checkpoint. Only a nonce-verified Source GET can coalesce.
+            if not self.local():
+                self._source_cache = None
+                self.last = self.local.last
+                return False
+            binding = (self.url, self.token, self.source, self.minimum_memory, self.maximum_load)
+            if self.cache_seconds > 0 and self._source_cache is not None:
+                accepted, source_age, cached_binding, last = self._source_cache
+                delta = self.monotonic() - accepted
+                if not math.isfinite(delta) or delta < 0:
+                    return self.fail("source_probe_invalid")
+                if (
+                    binding == cached_binding
+                    and delta < self.cache_seconds
+                    and source_age + delta <= 10
+                ):
+                    self.last = {
+                        **last,
+                        "worker_available_mib": self.local.last.get("available_mib"),
+                    }
+                    return True
+                self._source_cache = None
             nonce = secrets.token_hex(16)
             began = self.monotonic()
+            if self.cache_seconds > 0 and not math.isfinite(began):
+                return self.fail("source_probe_invalid")
             with self.local.client.stream(
                 "GET",
                 self.url,
@@ -82,11 +116,13 @@ class CombinedProbe:
                 return self.fail("source_probe_invalid")
             if value.get("schema") != 1 or value.get("source") != self.source:
                 return self.fail("source_identity")
-            if "probe_nonce" in value or "sample_age_seconds" in value:
+            nonce_bound = "probe_nonce" in value or "sample_age_seconds" in value
+            if nonce_bound:
                 if value.get("probe_nonce") != nonce:
                     return self.fail("source_probe_invalid")
                 sample_age = float(value["sample_age_seconds"])
-                elapsed = self.monotonic() - began
+                ended = self.monotonic()
+                elapsed = ended - began
                 if not math.isfinite(sample_age) or sample_age < 0 or elapsed < 0:
                     return self.fail("source_probe_invalid")
                 age = sample_age + elapsed
@@ -123,7 +159,19 @@ class CombinedProbe:
                 "source_available_mib": value["available_mib"],
                 "worker_available_mib": self.local.last.get("available_mib"),
             }
+            if self.cache_seconds > 0 and nonce_bound:
+                accepted = self.monotonic()
+                validation_elapsed = accepted - ended
+                if not math.isfinite(validation_elapsed) or validation_elapsed < 0:
+                    return self.fail("source_probe_invalid")
+                age += validation_elapsed
+                if age > 10:
+                    return self.fail("source_probe_stale")
+                self._source_cache = (accepted, age, binding, dict(self.last))
             return True
+        except SafetyPause:
+            self._source_cache = None
+            raise
         except Exception:
             return self.fail("source_probe_error")
 
@@ -139,6 +187,10 @@ def combined(local):
     path = Path(os.environ["RAW_ARCHIVE_SOURCE_PROBE_TOKEN_FILE"])
     if path.is_symlink() or path.stat().st_mode & 0o077:
         raise ArchiveBlocked("Private source-probe token required")
+    try:
+        cache_seconds = float(os.getenv("RAW_ARCHIVE_SOURCE_PROBE_CACHE_SECONDS", "0"))
+    except ValueError:
+        raise ArchiveBlocked("Invalid source health cache duration") from None
     return CombinedProbe(
         local,
         url=url,
@@ -146,4 +198,5 @@ def combined(local):
         source=os.environ["RAW_ARCHIVE_SOURCE_ID"],
         minimum_memory=int(os.getenv("RAW_ARCHIVE_SOURCE_MIN_MEMORY_MIB", "512")),
         maximum_load=float(os.getenv("RAW_ARCHIVE_SOURCE_MAX_LOAD", "2")),
+        cache_seconds=cache_seconds,
     )

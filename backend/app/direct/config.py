@@ -28,6 +28,7 @@ class DirectSettings(BaseSettings):
     late_seconds: int = Field(604_800, ge=60, le=7_776_000)
     idle_seconds: int = Field(120, ge=1, le=3600)
     poll_seconds: int = Field(5, ge=1, le=300)
+    feature_results_enabled: bool = False
     payload_offload_enabled: bool = False
     payload_release_requires_archive: bool = False
     archive_broker_socket: Path | None = None

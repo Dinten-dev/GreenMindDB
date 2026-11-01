@@ -247,3 +247,135 @@ def test_low_source_memory_opens_no_sql_or_archive(tmp_path, monkeypatch):
     with pytest.raises(SafetyPause, match="memory"):
         features.main()
     assert not (tmp_path / "backup").exists()
+
+
+def test_v2_direct_history_roundtrip_and_reject_unknown_fields(tmp_path):
+    from app.services.signal_feature_contract import canonical_sha256
+    from tests.feature_contract_fixtures import feature_data as data
+
+    inputs, payload = data()
+    row = dict(
+        id="r1",
+        segment_id=inputs["segment_id"],
+        revision=inputs["revision"],
+        manifest_sha256=inputs["manifest_sha256"],
+        input_sha256=canonical_sha256(inputs),
+        inputs=inputs,
+        payload=payload,
+        payload_sha256=canonical_sha256(payload),
+        created_at=1.0,
+        verified_at=2.0,
+    )
+    from app.services.signal_feature_contract import implementation_identity
+
+    target = {
+        "segment_id": inputs["segment_id"],
+        "revision": inputs["revision"],
+        "manifest_sha256": inputs["manifest_sha256"],
+        "implementation": implementation_identity(),
+    }
+    job = dict(
+        id="j1",
+        target_sha256=canonical_sha256(target),
+        target=target,
+        status="done",
+        claim_token=None,
+        claim_until=None,
+        retry_at=0.0,
+        attempts=1,
+        error=None,
+        created_at=1.0,
+    )
+    output = tmp_path / "v2"
+    output.mkdir()
+    parts = catalog.Parts(output, "direct", lambda: None)
+    parts.write(features.validate_v2_row("direct", "direct_feature_result", row))
+    parts.write(features.validate_v2_row("direct", "direct_feature_job", job))
+    parts.finish()
+    tables = {kind: dict.fromkeys(names, 0) for kind, names in features.TABLES_V2.items()}
+    tables["direct"]["direct_feature_result"] = tables["direct"]["direct_feature_job"] = 1
+    manifest = dict(
+        schema=2,
+        format=features.FORMAT_V2,
+        environment="production",
+        allowlist_sha256=features.FEATURE_V2_ALLOWLIST_SHA256,
+        tables=tables,
+        files=parts.files,
+    )
+    assert (
+        features.restore(
+            manifest,
+            {e["file"]: output / e["file"] for e in parts.files},
+            tmp_path / "restore.sqlite3",
+        )
+        == tables
+    )
+    with sqlite3.connect(tmp_path / "restore.sqlite3") as db:
+        restored = db.execute(
+            "SELECT inputs, payload, payload_sha256 FROM restored_direct_feature_result"
+        ).fetchone()
+        assert (
+            json.loads(restored[0]) == inputs
+            and json.loads(restored[1]) == payload
+            and restored[2] == row["payload_sha256"]
+        )
+        assert db.execute("SELECT status FROM restored_direct_feature_job").fetchone()[0] == "done"
+    from app.raw_archive.direct_feature_history import FORMAT as HISTORY_FORMAT
+
+    revision = {
+        "segment_id": inputs["segment_id"],
+        "revision": inputs["revision"],
+        "manifest_sha256": inputs["manifest_sha256"],
+        "manifest": {
+            "device_id": inputs["device_id"],
+            "session_id": inputs["session_id"],
+            "config": {"channel_labels": [inputs["channel_label"]]},
+            "runs": [
+                {
+                    "key": inputs["wav_key"],
+                    "sha256": inputs["wav_sha256"],
+                    "first_frame": inputs["first_frame"],
+                    "frame_count": inputs["frame_count"],
+                }
+            ],
+        },
+    }
+    body = dict(
+        format=HISTORY_FORMAT,
+        segment_id=inputs["segment_id"],
+        revision=inputs["revision"],
+        manifest_sha256=inputs["manifest_sha256"],
+        results=[row],
+    )
+    history = {**body, "sha256": canonical_sha256(body)}
+    assert (
+        features.compare_restored_direct_history(tmp_path / "restore.sqlite3", history, revision)
+        == history["sha256"]
+    )
+    box = Box()
+    with pytest.raises(ArchiveBlocked, match="encryption key"):
+        features.publish_and_restore(output, manifest, box)
+    proof = features.publish_and_restore(output, manifest, box, encryption_key=b"x" * 32)
+    encrypted_parts = [body for key, body in box.bodies.items() if key.endswith(".bin")]
+    assert encrypted_parts and all(body.startswith(b"GMDBBACKUP1\0") for body in encrypted_parts)
+    with pytest.raises(ArchiveBlocked, match="authentication"):
+        features.publish_and_restore(output, manifest, box, encryption_key=b"y" * 32)
+    assert proof["format"] == features.FORMAT_V2 and proof["deletion_readiness"] is False
+    with pytest.raises(ArchiveBlocked):
+        features.validate_v2_row("direct", "direct_feature_result", dict(row, extra="unexpected"))
+    with pytest.raises(ArchiveBlocked):
+        features.validate_v2_row(
+            "direct", "direct_feature_result", dict(row, payload_sha256="0" * 64)
+        )
+
+
+def test_legacy_allowlist_feature_bundle_remains_readable(tmp_path):
+    output, manifest, payload = bundle(tmp_path)
+    manifest["allowlist_sha256"] = catalog.LEGACY_ALLOWLIST_SHA256
+    files = {entry["file"]: output / entry["file"] for entry in manifest["files"]}
+    assert features.restore(manifest, files, tmp_path / "legacy.sqlite3") == manifest["tables"]
+    with sqlite3.connect(tmp_path / "legacy.sqlite3") as db:
+        assert (
+            json.loads(db.execute("SELECT body FROM records").fetchone()[0])["feature_payload"]
+            == payload
+        )

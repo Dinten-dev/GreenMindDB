@@ -208,9 +208,31 @@ def main():
                         receipt = dict(ledger.load(recording)[1])
                         receipt.setdefault("first_verified_at", receipt.get("verified_at"))
                         try:
-                            verify_preparation_evidence(
-                                config, recording, receipt, destination, now
+                            from contextlib import nullcontext
+
+                            from .worklease import exclusive_wav_lease
+
+                            fence = (
+                                exclusive_wav_lease(
+                                    "direct",
+                                    recording.bucket,
+                                    recording.key,
+                                    source_engine=catalogs["direct"].sessions.kw["bind"],
+                                )
+                                if recording.kind == "direct"
+                                else nullcontext()
                             )
+                            with fence:
+                                verify_preparation_evidence(
+                                    config,
+                                    recording,
+                                    receipt,
+                                    destination,
+                                    now,
+                                    scientific_source=getattr(
+                                        catalogs[recording.kind], "scientific_history", None
+                                    ),
+                                )
                             if (
                                 sources[recording.kind].deletion_target(
                                     recording, receipt["snapshot"]

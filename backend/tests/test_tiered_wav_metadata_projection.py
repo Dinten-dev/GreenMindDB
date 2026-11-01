@@ -466,3 +466,71 @@ def test_direct_v2_absent_projection_remains_explicitly_absent(direct_adapter):
     adapter.copy_published_history = True
     with pytest.raises(ArchiveBlocked, match="projection missing or stale"):
         adapter.metadata(reference)
+
+
+def test_gateway_versioned_signal_history_is_archived_and_unknown_is_preserved(
+    gateway_adapter, tmp_path
+):
+    from app.models.wav_file import WavFeatureVersion
+    from app.services.signal_feature_contract import canonical_sha256
+    from app.services.wav_feature_service import gateway_contract_payload
+
+    adapter, reference, record_id, _, db = gateway_adapter
+    envelope, _, _ = adapter.metadata(reference)
+    source_sha = envelope["body"]["metadata"]["wav"]["content_sha256"]
+    descriptor = dict(
+        status="declared",
+        scale=1.0,
+        offset=0.0,
+        unit="mV",
+        source="fixture",
+        channel="CH1",
+        encoding="signed",
+        validity="fixture",
+    )
+    flags = dict.fromkeys(("valid", "lead_off", "rail_high", "rail_low", "jump", "recovery"))
+    signal = gateway_contract_payload(
+        np.arange(1, 381, dtype=np.int32),
+        380,
+        descriptor=descriptor,
+        continuity={"sequence_gap_count": None, "source_dropped_samples_delta": None},
+        source_quality=flags,
+        coverage_ratio=1.0,
+        observations={
+            "coverage": True,
+            "continuity": False,
+            "source_flags": False,
+            "dropped_samples": False,
+        },
+    )
+    payload = {
+        "schema": "gateway-signal-v1",
+        "wav_file_id": str(record_id),
+        "source_sha256": source_sha,
+        "signal": signal,
+    }
+    db.add(
+        WavFeatureVersion(
+            id=uuid.uuid4(),
+            wav_file_id=record_id,
+            extractor_version="gateway-signal-v1-" + "a" * 16,
+            calibration_version="fixture",
+            parameter_hash="b" * 64,
+            source_sha256=source_sha,
+            feature_checksum=canonical_sha256(payload),
+            feature_payload=payload,
+            verified_at=datetime.now(UTC),
+        )
+    )
+    db.commit()
+    envelope, _, _ = adapter.metadata(reference)
+    assert envelope["body"]["feature_history_format"] == "gateway-signal-history-v2"
+    result = next(
+        version
+        for version in envelope["body"]["metadata"]["feature_versions"]
+        if version["feature_payload"].get("schema") == "gateway-signal-v1"
+    )
+    assert result["feature_payload"]["signal"]["quality"]["data_quality_status"] == "unknown"
+    assert b"gateway-signal-history-v2" in parquet_roundtrip(
+        envelope, tmp_path / "gateway-v2.parquet"
+    )

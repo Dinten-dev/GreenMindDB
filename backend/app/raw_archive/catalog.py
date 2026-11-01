@@ -331,6 +331,23 @@ class DirectCatalog:
                 )
             return records
 
+    def scientific_history(self, recording):
+        from app.direct.models import Revision
+
+        from .direct_feature_history import read_history
+
+        self.revalidate(recording)
+        segment_id, revision_number = recording.identity.split(":")
+        with self.sessions() as db:
+            revision = db.get(Revision, (segment_id, int(revision_number)))
+            if revision is None or revision.manifest_sha256 != recording.feature_digest:
+                raise ArchiveBlocked("Current scientific revision differs")
+            value = {
+                name: getattr(revision, name)
+                for name in ("segment_id", "revision", "manifest_sha256", "manifest")
+            }
+            return read_history(db, value), value
+
     def revalidate(self, recording):
         segment_id, revision = recording.identity.split(":")
         if recording not in self.inspect(segment_id, int(revision)):

@@ -1,6 +1,7 @@
 """Explicit PostgreSQL datasets, keyset exports and exact fenced row eviction."""
 
 import hashlib
+import json
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -163,6 +164,8 @@ RETAINED_TABLES = {
     "direct_enrollment",
     "direct_session",
     "direct_segment",
+    "direct_feature_result",  # append-only, backed up by feature format v2
+    "direct_feature_job",  # mutable operational history; never evicted here
     "direct_heartbeat",
     "direct_piece",
     "direct_chunk_payload_ref",
@@ -298,10 +301,12 @@ class Source:
         pieces = [
             dict(r)
             for r in db.execute(
-                text("SELECT * FROM direct_piece WHERE chunk_id=:id ORDER BY segment_id"),
+                text("SELECT * FROM direct_piece WHERE chunk_id=:id ORDER BY segment_id LIMIT 17"),
                 {"id": row["id"]},
             ).mappings()
         ]
+        if len(pieces) > 16:
+            raise ArchiveBlocked("Direct chunk piece coverage exceeds bounded archive scope")
         reference = (
             db.execute(
                 text("SELECT * FROM direct_chunk_payload_ref WHERE chunk_id=:id"), {"id": row["id"]}
@@ -317,10 +322,13 @@ class Source:
             .mappings()
             .one()
         )
+        session_config = session["config"]
+        if db.dialect.name == "sqlite" and isinstance(session_config, str):
+            session_config = json.loads(session_config)
         context = {
             "pieces": pieces,
             "payload_reference": dict(reference) if reference else None,
-            "session_config": session["config"],
+            "session_config": session_config,
         }
         if row["payload"] is not None:
             payload = bytes(row["payload"])

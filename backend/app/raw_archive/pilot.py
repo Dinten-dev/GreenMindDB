@@ -117,7 +117,30 @@ def run_pilot(
             record.eligible(clock(), config)
             catalogs[record.kind].revalidate(record)
             receipt = index["receipts"][record.archive_id]
-            verify_preparation_evidence(config, record, receipt, destination, clock(), clock=clock)
+            from contextlib import nullcontext
+
+            from .worklease import exclusive_wav_lease
+
+            fence = (
+                exclusive_wav_lease(
+                    "direct",
+                    record.bucket,
+                    record.key,
+                    source_engine=catalogs["direct"].sessions.kw["bind"],
+                )
+                if record.kind == "direct"
+                else nullcontext()
+            )
+            with fence:
+                verify_preparation_evidence(
+                    config,
+                    record,
+                    receipt,
+                    destination,
+                    clock(),
+                    clock=clock,
+                    scientific_source=getattr(catalogs[record.kind], "scientific_history", None),
+                )
             with tempfile.TemporaryDirectory(prefix="pilot-read-", dir=config.root) as folder:
                 path = Path(folder) / "current.wav"
                 destination.download(receipt["remote_key"], path, record.size)

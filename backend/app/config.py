@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 
     # Feature extraction is non-destructive. Retention additionally requires
     # an explicit enable and defaults to a reporting-only dry run.
+    wav_signal_contract_enabled: bool = False
     wav_feature_extraction_enabled: bool = True
     wav_feature_interval_minutes: int = Field(5, ge=1, le=1_440)
     wav_feature_active_interval_seconds: int = Field(5, ge=1, le=300)

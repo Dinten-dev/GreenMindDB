@@ -61,7 +61,14 @@ def main():
 
         if any(not name.startswith("direct_") for name in inspect(engine).get_table_names()):
             raise SystemExit("Refusing schema creation in a database containing Legacy tables")
-        Base.metadata.create_all(engine)
+        # Scientific-result tables have an independent reviewed additive SQL
+        # migration; legacy initialization must never create them implicitly.
+        legacy_tables = [
+            table
+            for table in Base.metadata.sorted_tables
+            if table.name not in {"direct_feature_result", "direct_feature_job"}
+        ]
+        Base.metadata.create_all(engine, tables=legacy_tables)
         with transaction(engine) as db:
             if db.get(Budget, 1) is None:
                 db.add(Budget(id=1, used_bytes=0))

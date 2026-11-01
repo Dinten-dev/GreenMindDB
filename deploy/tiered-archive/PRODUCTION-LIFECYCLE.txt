@@ -158,3 +158,47 @@ the current copier's actual end, run the same service manually, then restore the
 original overlay and timer state. Keep new archives and evidence. Verify the
 existing admission interpreter's real import/lock compatibility before switching
 PYTHONPATH: a path change alone does not install or replace its dependencies.
+
+Scientific history and managed snapshot candidate
+The new Direct and Gateway signal contracts preserve historical manifests and
+feature versions. Missing calibration and source-quality observations remain
+explicitly unknown. DIRECT_FEATURE_RESULTS_ENABLED and WAV_SIGNAL_CONTRACT_ENABLED
+default false. Before any production schema/writer change, independently verify
+the complete encrypted scientific backup and isolated restore; local tests do
+not meet that deployment gate. The additive direct-feature-results.sql migration
+does not run through init-schema or an implicit authentication migration.
+
+Global feature-v2 backups use the existing AES-GCM backup envelope. Revision
+proofs use a separate explicitly scoped package. A Direct WAV deletion permit
+must contain direct_scientific_proofs keyed by candidate identity, and acceptance
+must bind canonical_sha256 of that map as direct_scientific_proofs_sha256.
+TIERED_ARCHIVE_DIRECT_FEATURE_HISTORY_ENABLED defaults false; enable only after
+schema, source-reader and archive/restore compatibility acceptance. The proof
+binds the immutable provider snapshot identity, actual snapshot downloads,
+typed isolated feature restore and matching source history before and after IO.
+Refreshing a snapshot's checked_at does not alter its immutable identity.
+
+NULL Direct payloads without stored references may be reconstructed through
+the bounded canonical read-only adapter. Parquet retains original SQL NULLs,
+original pieces and session configuration, and separately verified original
+payload bytes. A derived candidate never becomes a persisted source reference.
+Complete archive-only reconstruction still requires independently archived
+neighbor parents and all dependency WAVs. Source reconstruction alone is not
+archive, snapshot, restore or deletion acceptance.
+
+RAW_ARCHIVE_SOURCE_PROBE_CACHE_SECONDS defaults zero and accepts at most one
+second. Only nonce-validated successful source samples can be reused; advancing
+monotonic age must remain within ten seconds. Every local resource and source
+lease check still runs. Failure, signal, close or binding change invalidates the
+sample. SafetyPause propagates without becoming a misleading transport failure.
+
+Production scheduled_snapshots requires both gateway and direct backups and no
+manual snapshot selector. Managed snapshots use the existing worker and a
+durable creation/readback/action journal, included in catalog recovery. Reserve
+three manual positions, keep two verified own snapshots, and complete a new
+provider-confirmed full catalog/bundle readback before rotation. Existing manual
+snapshots and permanent archive objects remain protected. Production rotation
+stays blocked until complete external restore/pilot dependency coverage and
+shared fencing are actually established; a configured raw journal alone is
+insufficient. Use a separately protected root-only write credential, retaining
+the existing read-only token. No local test result authorizes production flags.

@@ -2,12 +2,15 @@
 
 import copy
 import json
+import signal
 
 import httpx
 import pytest
 
+from app.raw_archive.health import SafetyPause
 from app.raw_archive.policy import ArchiveBlocked
-from app.raw_archive.remote_health import CombinedProbe
+from app.raw_archive.remote_health import CombinedProbe, combined
+from app.tiered_archive.execution import bounded_job
 
 
 class Local:
@@ -183,3 +186,317 @@ def test_nonce_bound_monotonic_freshness_ignores_clock_skew(age, elapsed, nonce_
         assert healthy() is expected
     finally:
         healthy.close()
+
+
+@pytest.mark.parametrize(
+    "sig,reason", [(signal.SIGALRM, "runtime_budget"), (signal.SIGTERM, "service_stop")]
+)
+def test_signal_stop_during_http_remains_a_durable_safety_pause(tmp_path, monkeypatch, sig, reason):
+    monkeypatch.setenv("TIERED_ARCHIVE_CGROUP_MONITOR", "false")
+    healthy = probe(GOOD)
+    healthy.local.client.close()
+
+    def interrupted(request):
+        signal.raise_signal(sig)
+        raise AssertionError("Safety stop must interrupt the HTTP operation")
+
+    healthy.local.client = httpx.Client(transport=httpx.MockTransport(interrupted))
+    try:
+        with pytest.raises(SafetyPause) as caught:
+            with bounded_job(tmp_path, seconds=10, kind="health-stop", emit=False):
+                healthy()
+        assert caught.value.code == reason
+        state = json.loads((tmp_path / "health-stop-last-run.json").read_text())
+        assert state["state"] == "paused"
+        assert state["reason"] == reason
+    finally:
+        healthy.close()
+
+
+class CacheClock:
+    now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+class CacheLocal(Local):
+    def __init__(self, clock):
+        self.clock = clock
+        self.calls = self.requests = 0
+        self.last = {"ok": True, "available_mib": 3000}
+        self.status = 200
+        self.age = self.latency = 0
+        self.fields = {}
+        self.error = self.local_error = None
+        self.client = httpx.Client(transport=httpx.MockTransport(self.reply))
+
+    def reply(self, request):
+        self.requests += 1
+        self.clock.now += self.latency
+        if self.error is not None:
+            raise self.error
+        return httpx.Response(
+            self.status,
+            json={
+                **GOOD,
+                "probe_nonce": request.headers["X-GreenMind-Probe-Nonce"],
+                "sample_age_seconds": self.age,
+                **self.fields,
+            },
+        )
+
+    def __call__(self):
+        self.calls += 1
+        if self.local_error is not None:
+            raise self.local_error
+        return self.last["ok"]
+
+
+def cached_probe():
+    clock = CacheClock()
+    local = CacheLocal(clock)
+    healthy = CombinedProbe(
+        local,
+        url="http://127.0.0.1:18150/source-health",
+        token="a" * 64,
+        source="production-main",
+        minimum_memory=640,
+        maximum_load=2,
+        monotonic=clock,
+        cache_seconds=1,
+    )
+    return healthy, local, clock
+
+
+def test_cache_coalesces_only_source_get_and_keeps_every_local_and_lease_check():
+    from app.raw_archive.remote_lease import bound_source_lease, source_checkpoint
+
+    healthy, local, clock = cached_probe()
+    leases = []
+
+    def checkpoint():
+        assert healthy()
+        leases.append(True)
+
+    try:
+        with bound_source_lease(checkpoint, copy_only=True):
+            for index in range(10):
+                clock.now = index / 10
+                local.last["available_mib"] = 2000 + index
+                source_checkpoint()
+                assert healthy.last["worker_available_mib"] == 2000 + index
+        assert local.calls == len(leases) == 11
+        assert local.requests == 1
+        clock.now = 1
+        assert healthy()
+        assert local.requests == 2
+    finally:
+        healthy.close()
+
+
+def test_cache_never_extends_nonce_sample_age_past_ten_seconds():
+    healthy, local, clock = cached_probe()
+    try:
+        local.age, local.latency = 9.5, 0.2
+        assert healthy()
+        clock.now = 0.6  # 9.5 + .2 request + .4 cache age exceeds ten.
+        assert healthy()
+        assert local.requests == 2
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize("now", [-1, float("nan"), float("inf")])
+def test_invalid_cache_monotonic_delta_invalidates_previous_success(now):
+    healthy, local, clock = cached_probe()
+    try:
+        assert healthy()
+        clock.now = now
+        assert not healthy()
+        assert healthy.last["reason"] == "source_probe_invalid"
+        assert healthy._source_cache is None and local.requests == 1
+        clock.now = 0.1
+        assert healthy()
+        assert local.requests == 2
+    finally:
+        healthy.close()
+
+
+def test_local_failure_invalidates_cache_before_recovery():
+    healthy, local, clock = cached_probe()
+    try:
+        assert healthy()
+        local.last = {"ok": False, "reason": "memory"}
+        clock.now = 0.1
+        assert not healthy()
+        assert healthy.last["reason"] == "memory" and healthy._source_cache is None
+        local.last = {"ok": True, "available_mib": 3000}
+        assert healthy()
+        assert local.requests == 2
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize(
+    "fields,status,error,reason",
+    [
+        ({}, 503, None, "source_probe_unavailable"),
+        ({"probe_nonce": "0" * 32}, 200, None, "source_probe_invalid"),
+        ({"source": "foreign"}, 200, None, "source_identity"),
+        ({"sample_age_seconds": 11}, 200, None, "source_probe_stale"),
+        ({"routes": {}}, 200, None, "source_receiver_health"),
+        ({"mounts": []}, 200, None, "source_space"),
+        ({"available_mib": 1}, 200, None, "source_memory"),
+        ({"load": 3}, 200, None, "source_load"),
+        ({}, 200, httpx.ReadTimeout("synthetic"), "source_probe_error"),
+    ],
+)
+def test_failed_source_recheck_cannot_reuse_or_cache_success(fields, status, error, reason):
+    healthy, local, clock = cached_probe()
+    try:
+        assert healthy()
+        clock.now = 1
+        local.fields, local.status, local.error = fields, status, error
+        assert not healthy()
+        assert healthy.last["reason"] == reason and healthy._source_cache is None
+        local.fields, local.status, local.error = {}, 200, None
+        clock.now = 1.1
+        assert healthy()
+        assert local.requests == 3
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize("where", ["local", "http"])
+def test_safety_pause_invalidates_cache_and_preserves_exception(where):
+    healthy, local, clock = cached_probe()
+    pause = SafetyPause("runtime_budget")
+    try:
+        assert healthy()
+        if where == "local":
+            local.local_error = pause
+        else:
+            clock.now, local.error = 1, pause
+        with pytest.raises(SafetyPause) as caught:
+            healthy()
+        assert caught.value is pause and healthy._source_cache is None
+        local.local_error = local.error = None
+        assert healthy()
+        assert local.requests == (2 if where == "local" else 3)
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize(
+    "sig,reason", [(signal.SIGALRM, "runtime_budget"), (signal.SIGTERM, "service_stop")]
+)
+def test_real_signal_with_populated_cache_is_not_swallowed(tmp_path, monkeypatch, sig, reason):
+    monkeypatch.setenv("TIERED_ARCHIVE_CGROUP_MONITOR", "false")
+    healthy, local, clock = cached_probe()
+    try:
+        assert healthy()
+        clock.now = 1
+
+        def interrupted(request):
+            signal.raise_signal(sig)
+            raise AssertionError("Safety stop must interrupt the operation")
+
+        local.client.close()
+        local.client = httpx.Client(transport=httpx.MockTransport(interrupted))
+        with pytest.raises(SafetyPause) as caught:
+            with bounded_job(tmp_path, seconds=10, kind="cached-stop", emit=False):
+                healthy()
+        assert caught.value.code == reason and healthy._source_cache is None
+        state = json.loads((tmp_path / "cached-stop-last-run.json").read_text())
+        assert state["state"] == "paused" and state["reason"] == reason
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("token", "b" * 64), ("source", "foreign"), ("url", "http://127.0.0.1:18151/source-health")],
+)
+def test_cache_is_bound_to_instance_and_authentication_target(field, value):
+    healthy, local, _ = cached_probe()
+    other, other_local, _ = cached_probe()
+    try:
+        assert healthy() and other()
+        assert local.requests == other_local.requests == 1
+        setattr(healthy, field, value)
+        healthy()
+        assert local.requests == 2
+    finally:
+        healthy.close()
+        other.close()
+
+
+def test_close_invalidates_source_cache():
+    healthy, _, _ = cached_probe()
+    assert healthy()
+    healthy.close()
+    assert healthy._source_cache is None
+    assert not healthy()
+
+
+def test_legacy_wall_clock_only_response_is_never_cached():
+    healthy = probe(GOOD, cache_seconds=1)
+    try:
+        assert healthy() and healthy()
+        assert healthy._source_cache is None
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize("duration", [-0.1, 1.001, float("nan"), float("inf"), True, "1"])
+def test_source_cache_duration_is_strictly_bounded(duration):
+    local = Local(GOOD)
+    try:
+        with pytest.raises(ArchiveBlocked):
+            CombinedProbe(
+                local,
+                url="http://127.0.0.1:18150/source-health",
+                token="a" * 64,
+                source="production-main",
+                minimum_memory=640,
+                maximum_load=2,
+                cache_seconds=duration,
+            )
+    finally:
+        local.close()
+
+
+@pytest.mark.parametrize("configured,expected", [(None, 0), ("0", 0), (".5", 0.5), ("1", 1)])
+def test_factory_source_cache_is_opt_in(monkeypatch, tmp_path, configured, expected):
+    token = tmp_path / "probe-token"
+    token.write_text("a" * 64)
+    token.chmod(0o600)
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_PROBE_URL", "http://127.0.0.1:18150/source-health")
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_PROBE_TOKEN_FILE", str(token))
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_ID", "production-main")
+    monkeypatch.delenv("RAW_ARCHIVE_SOURCE_PROBE_CACHE_SECONDS", raising=False)
+    if configured is not None:
+        monkeypatch.setenv("RAW_ARCHIVE_SOURCE_PROBE_CACHE_SECONDS", configured)
+    healthy = combined(Local(GOOD))
+    try:
+        assert healthy.cache_seconds == expected
+    finally:
+        healthy.close()
+
+
+@pytest.mark.parametrize("configured", ["-1", "1.01", "nan", "inf", "invalid"])
+def test_factory_rejects_invalid_cache_duration(monkeypatch, tmp_path, configured):
+    token = tmp_path / "probe-token"
+    token.write_text("a" * 64)
+    token.chmod(0o600)
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_PROBE_URL", "http://127.0.0.1:18150/source-health")
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_PROBE_TOKEN_FILE", str(token))
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_ID", "production-main")
+    monkeypatch.setenv("RAW_ARCHIVE_SOURCE_PROBE_CACHE_SECONDS", configured)
+    local = Local(GOOD)
+    try:
+        with pytest.raises(ArchiveBlocked):
+            combined(local)
+    finally:
+        local.close()

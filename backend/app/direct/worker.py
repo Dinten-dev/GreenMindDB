@@ -39,12 +39,20 @@ def main():
     engine, store = make_engine(cfg), ArtifactStore(cfg)
     next_retention = 0
     offload_cursor = OffloadCursor()
+    feature_cursor = ""
     while True:
         status = "healthy"
         archive_status = "healthy"
         processed = False
         try:
             processed = assemble_one(engine, cfg, store)
+            if cfg.feature_results_enabled:
+                from app.direct.feature_results import run_feature_batch
+
+                feature_cursor, feature_count = run_feature_batch(
+                    engine, store, cfg, after=feature_cursor or ""
+                )
+                processed = processed or bool(feature_count)
             try:
                 released = release_payloads(engine, cfg, store, cursor=offload_cursor)
             except ArchiveTemporarilyUnavailable:

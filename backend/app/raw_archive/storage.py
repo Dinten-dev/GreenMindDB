@@ -508,7 +508,7 @@ class StorageBox:
 
     def catalog_path(self, key):
         if not re.fullmatch(
-            r"(?:production|staging)/catalog-backup/[0-9a-f]{64}\.(?:json|jsonl\.gz|sqlite3\.gz)",
+            r"(?:production|staging)/catalog-backup/[0-9a-f]{64}\.(?:json|jsonl\.gz|sqlite3\.gz|bin)",
             key,
         ):
             raise ArchiveBlocked("Unsafe catalog backup key")

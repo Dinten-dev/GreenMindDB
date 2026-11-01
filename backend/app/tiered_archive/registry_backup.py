@@ -16,6 +16,15 @@ from .policy import POLICY_SHA256
 from .runtime import candidate_from_json
 
 
+def initialize_managed(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS managed_snapshot (
+        intent TEXT PRIMARY KEY, state TEXT NOT NULL, catalog TEXT NOT NULL,
+        snapshot TEXT, proof TEXT, due TEXT)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS managed_snapshot_action (
+        intent TEXT NOT NULL, operation TEXT NOT NULL, action_id INTEGER NOT NULL,
+        PRIMARY KEY(intent, operation))""")
+
+
 def backup(ledger, store, *, checkpoint):
     ledger.db.execute("CREATE TABLE IF NOT EXISTS catalog_sent(key TEXT PRIMARY KEY)")
     ledger.db.commit()
@@ -24,6 +33,7 @@ def backup(ledger, store, *, checkpoint):
     size = 0
     template = None
     copy_indexes = False
+    managed_indexes = False
     with tempfile.TemporaryDirectory(dir=ledger.root) as folder:
         folder = Path(folder)
 
@@ -126,12 +136,38 @@ def backup(ledger, store, *, checkpoint):
                 buffer.append(row)
                 size += len(row) + 1
                 copy_indexes = True
+        if ledger.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_snapshot'"
+        ).fetchone():
+            for row in ledger.db.execute(
+                "SELECT intent,state,catalog,snapshot,proof,due FROM managed_snapshot ORDER BY intent"
+            ):
+                checkpoint()
+                item = encode({"type": "managed_snapshot", "values": list(row)})
+                if size + len(item) > 1024 * 1024:
+                    flush()
+                buffer.append(item)
+                size += len(item) + 1
+                managed_indexes = True
+        if ledger.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_snapshot_action'"
+        ).fetchone():
+            for row in ledger.db.execute(
+                "SELECT intent,operation,action_id FROM managed_snapshot_action ORDER BY intent,operation"
+            ):
+                checkpoint()
+                item = encode({"type": "managed_snapshot_action", "values": list(row)})
+                if size + len(item) > 1024 * 1024:
+                    flush()
+                buffer.append(item)
+                size += len(item) + 1
+                managed_indexes = True
         flush()
         index = folder / "index.json"
         index.write_text(
             json.dumps(
                 {
-                    "schema": 2 if copy_indexes else 1,
+                    "schema": 3 if managed_indexes else 2 if copy_indexes else 1,
                     "policy": POLICY_SHA256,
                     "environment": template.environment,
                     "parts": references,
@@ -166,7 +202,7 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
             raise ArchiveBlocked("Catalogue root checksum mismatch")
         index = json.loads(path.read_text())
         if (
-            index.get("schema") not in {1, 2}
+            index.get("schema") not in {1, 2, 3}
             or index.get("policy") != POLICY_SHA256
             or index.get("environment", expected_environment) != expected_environment
             or len(index["parts"]) > 65536
@@ -177,10 +213,14 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
         ).fetchone():
             if ledger.db.execute("SELECT 1 FROM wav_copy LIMIT 1").fetchone():
                 raise ArchiveBlocked("Catalogue restore requires empty WAV transfer index")
-        if index["schema"] == 2:
+        if index["schema"] in {2, 3}:
             from .wav_copy import initialize
 
             initialize(ledger.db)
+        if index["schema"] == 3:
+            initialize_managed(ledger.db)
+            if ledger.db.execute("SELECT 1 FROM managed_snapshot LIMIT 1").fetchone():
+                raise ArchiveBlocked("Catalogue restore requires empty managed snapshot journal")
         count = 0
         with ledger.db:
             for number, part in enumerate(index["parts"]):
@@ -237,7 +277,7 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
                                     item["body"],
                                 ),
                             )
-                        elif item["type"] == "wav_copy" and index["schema"] == 2:
+                        elif item["type"] == "wav_copy" and index["schema"] in {2, 3}:
                             receipt = ledger.get(item["candidate"])
                             reference = item["reference"]
                             if (
@@ -268,6 +308,57 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
                                     item["destination"],
                                     encode([]),
                                 ),
+                            )
+                        elif item["type"] == "managed_snapshot" and index["schema"] == 3:
+                            values = item.get("values")
+                            if (
+                                type(values) is not list
+                                or len(values) != 6
+                                or type(values[0]) is not str
+                                or not re.fullmatch(r"[a-f0-9]{32}", values[0])
+                                or values[1]
+                                not in {"intent", "bound", "verified", "delete_intent", "deleted"}
+                                or type(values[2]) is not str
+                                or any(
+                                    value is not None and type(value) is not str
+                                    for value in values[3:]
+                                )
+                            ):
+                                raise ArchiveBlocked("Invalid restored managed snapshot journal")
+                            try:
+                                catalog = json.loads(values[2])
+                                snapshot = json.loads(values[3]) if values[3] else None
+                                proof = json.loads(values[4]) if values[4] else None
+                                if (
+                                    type(catalog) is not dict
+                                    or (snapshot is not None and type(snapshot) is not dict)
+                                    or (proof is not None and type(proof) is not dict)
+                                ):
+                                    raise ValueError
+                            except (TypeError, ValueError):
+                                raise ArchiveBlocked(
+                                    "Invalid restored managed snapshot evidence"
+                                ) from None
+                            ledger.db.execute(
+                                "INSERT INTO managed_snapshot VALUES(?,?,?,?,?,?)", values
+                            )
+                        elif item["type"] == "managed_snapshot_action" and index["schema"] == 3:
+                            values = item.get("values")
+                            if (
+                                type(values) is not list
+                                or len(values) != 3
+                                or type(values[0]) is not str
+                                or not re.fullmatch(r"[a-f0-9]{32}", values[0])
+                                or values[1] not in {"create", "delete"}
+                                or type(values[2]) is not int
+                                or values[2] <= 0
+                                or not ledger.db.execute(
+                                    "SELECT 1 FROM managed_snapshot WHERE intent=?", (values[0],)
+                                ).fetchone()
+                            ):
+                                raise ArchiveBlocked("Invalid restored managed snapshot action")
+                            ledger.db.execute(
+                                "INSERT INTO managed_snapshot_action VALUES(?,?,?)", values
                             )
                         else:
                             raise ArchiveBlocked("Unknown catalogue record")

@@ -251,6 +251,10 @@ def wav_source(source, checkpoint, *, writing=False, copy_published_history=Fals
         configuration(),
         checkpoint,
         copy_published_history=copy_published_history,
+        include_feature_history=(
+            source == "direct"
+            and os.getenv("TIERED_ARCHIVE_DIRECT_FEATURE_HISTORY_ENABLED", "false") == "true"
+        ),
     )
 
 
@@ -305,6 +309,10 @@ def direct_payload_reader(_db, row, context):
     from app.direct.models import Chunk, PayloadReference
     from app.direct.payloads import read_payload_snapshot
 
+    if row["payload"] is None and context["payload_reference"] is None:
+        from app.direct.derived_original import reconstruct_detached
+
+        return reconstruct_detached(_db, row, context, direct_wav_reader(environment()))
     chunk = Chunk(**row)
     reference = (
         PayloadReference(**context["payload_reference"]) if context["payload_reference"] else None
@@ -435,6 +443,33 @@ def verify(identity, snapshot_id):
             )
 
 
+def bind_direct_scientific_proof(adapter, candidate, receipt, permit, store):
+    """Bind accepted immutable references; the adapter performs real snapshot readback."""
+    if candidate.source != "direct":
+        return
+    from app.services.signal_feature_contract import canonical_sha256
+
+    proofs = permit.get("direct_scientific_proofs")
+    if (
+        not isinstance(proofs, dict)
+        or not 1 <= len(proofs) <= 100
+        or permit.get("acceptance", {}).get("direct_scientific_proofs_sha256")
+        != canonical_sha256(proofs)
+        or not isinstance(proofs.get(candidate.identity), dict)
+        or not adapter.include_feature_history
+    ):
+        raise ArchiveBlocked("Accepted Direct scientific history references required")
+    snapshot = receipt.get("snapshot", {})
+    keys = ("provider_id", "box_id", "name", "created_at")
+    if any(key not in snapshot for key in keys):
+        raise ArchiveBlocked("Provider-bound Direct scientific snapshot required")
+    identity = {key: snapshot[key] for key in keys}
+    proof = proofs[candidate.identity]
+    if proof.get("provider_snapshot") != identity:
+        raise ArchiveBlocked("Scientific proof belongs to another provider snapshot")
+    adapter.install_scientific_proof(proof, identity, store)
+
+
 def evict(identity):
     from . import parquet
     from .deletion import evict as delete_exact
@@ -514,6 +549,16 @@ def evict(identity):
             reference = receipt["files"][0]
             store.download(reference["key"], path, reference["bytes"])
             adapter.expected = list(parquet.read(path, reference, checkpoint=checkpoint))
+            if candidate.source == "direct":
+                from .deletion import activation
+
+                permit = activation(
+                    os.environ["TIERED_ARCHIVE_ACTIVATION_FILE"],
+                    os.environ["TIERED_ARCHIVE_ACTIVATION_SHA256"],
+                    candidate,
+                    datetime.now(UTC),
+                )
+                bind_direct_scientific_proof(adapter, candidate, receipt, permit, store)
             return delete_exact(
                 candidate,
                 adapter,
@@ -529,6 +574,8 @@ def evict(identity):
 
 
 def latest_snapshot():
+    if environment() == "production":
+        raise ArchiveBlocked("Latest snapshot is not a managed production snapshot")
     import httpx
 
     from app.raw_archive.snapshot_api import SnapshotAPI, private_token
@@ -553,6 +600,35 @@ def latest_snapshot():
         if not snapshots or len(snapshots) > 100:
             raise ArchiveBlocked("Scheduled Storage Box snapshot unavailable")
         return max(snapshots, key=lambda row: row["created"])["id"]
+
+
+def managed_snapshot():
+    import httpx
+
+    from app.raw_archive.snapshot_api import SnapshotAPI, private_token
+
+    from .managed_snapshot import check_external_dependencies, cycle
+
+    if environment() != "production":
+        raise ArchiveBlocked("Managed production snapshot requires production bindings")
+    with worker() as (ledger, store, checkpoint):
+        with httpx.Client(
+            headers={
+                "Authorization": "Bearer "
+                + private_token(Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE"]))
+            },
+            timeout=httpx.Timeout(8, connect=3),
+            trust_env=False,
+        ) as client:
+            provider = SnapshotAPI(
+                client,
+                int(os.environ["TIERED_ARCHIVE_BOX_ID"]),
+                os.environ["RAW_ARCHIVE_SFTP_USER"],
+                os.environ["RAW_ARCHIVE_SFTP_HOST"],
+            )
+            return cycle(
+                ledger, store, provider, checkpoint, dependency_guard=check_external_dependencies
+            )
 
 
 def current_backup_schema_scope(source, checkpoint):

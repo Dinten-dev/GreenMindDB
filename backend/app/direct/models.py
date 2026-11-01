@@ -141,3 +141,32 @@ class Heartbeat(Base):
     name = Column(String(30), primary_key=True)
     updated_at = Column(Float, nullable=False)
     status = Column(String(30), nullable=False)
+
+
+class FeatureResult(Base):
+    """Independent, append-only scientific result; never overwrites a manifest."""
+    __tablename__ = "direct_feature_result"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    segment_id = Column(String(36), nullable=False)
+    revision = Column(Integer, nullable=False)
+    manifest_sha256 = Column(String(64), nullable=False)
+    input_sha256 = Column(String(64), nullable=False, unique=True)
+    inputs = Column(JSON, nullable=False)
+    payload = Column(JSON, nullable=False)
+    payload_sha256 = Column(String(64), nullable=False)
+    created_at = Column(Float, nullable=False, default=time.time)
+    verified_at = Column(Float)
+
+
+class FeatureJob(Base):
+    __tablename__ = "direct_feature_job"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    target_sha256 = Column(String(64), nullable=False, unique=True)
+    target = Column(JSON, nullable=False)
+    status = Column(String(16), nullable=False, default="pending")
+    claim_token = Column(String(36))
+    claim_until = Column(Float)
+    retry_at = Column(Float, nullable=False, default=0)
+    attempts = Column(Integer, nullable=False, default=0)
+    error = Column(String(128))
+    created_at = Column(Float, nullable=False, default=time.time)

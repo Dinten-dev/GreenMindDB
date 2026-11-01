@@ -76,3 +76,124 @@ def test_private_token_rejects_public_files_and_symlinks(tmp_path):
     link.symlink_to(path)
     with pytest.raises(ArchiveBlocked, match="private"):
         private_token(link)
+
+
+def test_inventory_uses_manual_capacity_and_requires_complete_pagination():
+    details = {"id": 42, "storage_box": 12, "name": "manual-42", "created": "2026-01-01T00:00:00Z"}
+
+    def handler(request):
+        if request.url.path.endswith("/storage_boxes/12"):
+            return httpx.Response(
+                200,
+                json={
+                    "storage_box": {
+                        "id": 12,
+                        "username": "u676312",
+                        "server": "u676312.your-storagebox.de",
+                        "access_settings": {"zfs_enabled": True},
+                        "storage_box_type": {"snapshot_limit": 10},
+                    }
+                },
+            )
+        if request.url.path.endswith("/snapshots/42"):
+            return httpx.Response(200, json={"snapshot": details})
+        return httpx.Response(
+            200,
+            json={
+                "snapshots": [{"id": 42, "is_automatic": False}, {"id": 43, "is_automatic": True}],
+                "meta": {"pagination": {"next_page": None}},
+            },
+        )
+
+    assert api(handler).inventory() == ([details], 10)
+
+    def incomplete(request):
+        response = handler(request)
+        if request.url.path.endswith("/snapshots"):
+            return httpx.Response(
+                200, json={"snapshots": [], "meta": {"pagination": {"next_page": 2}}}
+            )
+        return response
+
+    with pytest.raises(ArchiveBlocked, match="Complete provider snapshot inventory"):
+        api(incomplete).inventory()
+
+
+def test_delete_requires_own_verified_journal_intent_before_provider_access():
+    import sqlite3
+    from types import SimpleNamespace
+
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE managed_snapshot(intent TEXT,state TEXT,snapshot TEXT,proof TEXT)")
+    client = api(lambda _: pytest.fail("Unexpected provider request"))
+    with pytest.raises(ArchiveBlocked, match="delete intent"):
+        client.delete_managed(42, ledger=SimpleNamespace(db=db), intent="a" * 32)
+    db.close()
+
+
+def test_creation_action_must_succeed_and_match_both_provider_resources():
+    action = {
+        "id": 100,
+        "status": "success",
+        "command": "create_snapshot",
+        "started": "2026-01-01T00:00:00Z",
+        "finished": "2026-01-01T00:01:00Z",
+        "resources": [
+            {"type": "storage_box", "id": 12},
+            {"type": "storage_box_snapshot", "id": 42},
+        ],
+    }
+    seen = []
+
+    class FakeAPI(SnapshotAPI):
+        def read(self, snapshot_id):
+            return {"id": snapshot_id, "created": "2026-01-01T00:01:00Z"}
+
+        def request(self, method, suffix, payload=None):
+            seen.append((method, suffix))
+            if suffix == "/storage_boxes/12/actions?per_page=100&page=1":
+                return {"actions": [action], "meta": {"pagination": {"next_page": None}}}
+            assert suffix == "/storage_boxes/actions/100"
+            return {"action": action}
+
+    provider = FakeAPI(None, 12, "u676312", "u676312.your-storagebox.de")
+    assert provider.require_action(None, 42, "create") == 100
+    assert seen == [
+        ("GET", "/storage_boxes/12/actions?per_page=100&page=1"),
+        ("GET", "/storage_boxes/actions/100"),
+    ]
+    action["status"] = "running"
+    with pytest.raises(ArchiveBlocked, match="not succeeded"):
+        provider.require_action(100, 42, "create")
+    action["status"] = "success"
+    action["resources"].pop()
+    with pytest.raises(ArchiveBlocked, match="resource differs"):
+        provider.require_action(100, 42, "create")
+
+
+def test_ambiguous_creation_action_never_confirms():
+    action = {
+        "id": 100,
+        "status": "success",
+        "command": "create_snapshot",
+        "started": "2026-01-01T00:00:00Z",
+        "finished": "2026-01-01T00:01:00Z",
+        "resources": [
+            {"type": "storage_box", "id": 12},
+            {"type": "storage_box_snapshot", "id": 42},
+        ],
+    }
+
+    class FakeAPI(SnapshotAPI):
+        def read(self, snapshot_id):
+            return {"id": snapshot_id, "created": "2026-01-01T00:01:00Z"}
+
+        def request(self, method, suffix, payload=None):
+            return {
+                "actions": [action, dict(action, id=101)],
+                "meta": {"pagination": {"next_page": None}},
+            }
+
+    provider = FakeAPI(None, 12, "u676312", "u676312.your-storagebox.de")
+    with pytest.raises(ArchiveBlocked, match="uniquely reconciled"):
+        provider.require_action(None, 42, "create")

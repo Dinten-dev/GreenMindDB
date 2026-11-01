@@ -17,6 +17,21 @@ from .policy import Candidate
 from .storage import MAX_BYTES, disk_reserve
 
 
+def _gateway_feature_version_row(row):
+    """Dispatch only an explicitly versioned new signal payload to its allowlist."""
+    from app.raw_archive.feature_backup import validate_v2_row
+    from app.raw_archive.wav_catalog import COLUMNS
+
+    value = {name: getattr(row, name) for name in COLUMNS["gateway"]["wav_feature_version"]}
+    if (
+        isinstance(value["feature_payload"], dict)
+        and value["feature_payload"].get("schema") == "gateway-signal-v1"
+    ):
+        validate_v2_row("gateway", "wav_feature_version", value)
+        return value
+    return scientific_row(row, "gateway", "wav_feature_version")
+
+
 def record_json(record):
     return {
         key: value.isoformat() if isinstance(value, datetime) else value
@@ -36,8 +51,9 @@ class WavSource:
         checkpoint,
         *,
         copy_published_history=False,
+        include_feature_history=False,
     ):
-        if type(copy_published_history) is not bool:
+        if type(copy_published_history) is not bool or type(include_feature_history) is not bool:
             raise ArchiveBlocked("Explicit boolean COPY-only history scope required")
         self.sessions, self.catalog, self.objects = sessions, catalog, objects
         self.kind, self.environment, self.raw_config, self.checkpoint = (
@@ -50,8 +66,31 @@ class WavSource:
         self.deletion_guard = None
         self.deletion_intent_active = False
         self.copy_published_history = copy_published_history
+        self.include_feature_history = include_feature_history
+        self.scientific_proof = None
 
     def metadata(self, reference, *, maximum_bytes=None, maximum_wavs=None):
+        envelope, headers, flags = self._legacy_metadata(
+            reference, maximum_bytes=maximum_bytes, maximum_wavs=maximum_wavs
+        )
+        if self.kind == "gateway" and any(
+            isinstance(version.get("feature_payload"), dict)
+            and version["feature_payload"].get("schema") == "gateway-signal-v1"
+            for version in envelope["body"]["metadata"].get("feature_versions", [])
+        ):
+            envelope["body"]["feature_history_format"] = "gateway-signal-history-v2"
+        if self.include_feature_history:
+            if self.kind != "direct":
+                raise ArchiveBlocked("Scientific Direct history requires a Direct WAV source")
+            from app.raw_archive.direct_feature_history import read_history
+
+            with self.sessions() as db:
+                envelope["body"]["scientific_history"] = read_history(
+                    db, envelope["body"]["metadata"]["revision"]
+                )
+        return envelope, headers, flags
+
+    def _legacy_metadata(self, reference, *, maximum_bytes=None, maximum_wavs=None):
         records = self.catalog.resolve(reference)
         if not records or len(records) > 1024:
             raise ArchiveBlocked("No verified WAVs in revision")
@@ -145,9 +184,7 @@ class WavSource:
                 metadata = {
                     "wav": scientific_row(wav, "gateway", "wav_file"),
                     "feature": scientific_row(feature, "gateway", "wav_feature"),
-                    "feature_versions": [
-                        scientific_row(v, "gateway", "wav_feature_version") for v in versions
-                    ],
+                    "feature_versions": [_gateway_feature_version_row(v) for v in versions],
                 }
                 row = db.execute(
                     text("""SELECT z.organization_id FROM sensor s JOIN gateway g ON g.id=s.gateway_id
@@ -390,6 +427,66 @@ class WavSource:
             item.get("body", {}).get("copy_scope") for item in (self.expected or [])
         ):
             raise ArchiveBlocked("Historical COPY-only proof never authorizes WAV deletion")
+        if self.kind == "direct":
+            self._verify_scientific_history()
+
+    def install_scientific_proof(self, proof, snapshot, destination):
+        """Bind a reviewed proof to an actual snapshot-capable archive reader."""
+        if (
+            self.kind != "direct"
+            or not isinstance(proof, dict)
+            or not isinstance(snapshot, dict)
+            or not callable(getattr(destination, "download", None))
+        ):
+            raise ArchiveBlocked("Actual Direct scientific snapshot reader required")
+        self.scientific_proof = (proof, snapshot, destination)
+
+    def _verify_scientific_history(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from app.raw_archive.deletion import verify_feature_v2
+        from app.raw_archive.direct_feature_history import validate_history
+
+        if (
+            not self.include_feature_history
+            or not self.expected
+            or len(self.expected) != 1
+            or self.scientific_proof is None
+        ):
+            raise ArchiveBlocked("Direct scientific result and archive readback are not accepted")
+        body = self.expected[0]["body"]
+        history = body.get("scientific_history")
+        revision = body["metadata"]["revision"]
+        if history is None:
+            raise ArchiveBlocked("Archived Direct scientific history is missing")
+        validate_history(history, revision)
+        proof, snapshot, destination = self.scientific_proof
+        if history["sha256"] != proof.get("history_sha256"):
+            raise ArchiveBlocked("Archived scientific history differs from reviewed proof")
+        recording = Recording.from_receipt(body["originals"][0]["recording"])
+        catalog = self.catalog
+        if not callable(getattr(catalog, "scientific_history", None)):
+            raise ArchiveBlocked("Current Direct scientific source is unavailable")
+
+        class SnapshotReader:
+            identity = destination.identity
+
+            def download_catalog(self, key, path, size, *, snapshot):
+                return destination.download(key, path, size, snapshot=snapshot)
+
+        self.checkpoint()
+        with TemporaryDirectory(prefix="direct-scientific-", dir=self.raw_config.root) as folder:
+            verify_feature_v2(
+                proof,
+                recording,
+                SnapshotReader(),
+                snapshot,
+                datetime.now(UTC),
+                Path(folder),
+                catalog.scientific_history,
+            )
+        self.checkpoint()
 
     def candidate(self, envelope, metadata, flags):
         records = [

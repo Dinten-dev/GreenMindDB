@@ -173,6 +173,7 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         candidate_from_json,
         evict,
         latest_snapshot,
+        managed_snapshot,
         publish_sql,
         publish_wav,
         stage_wav,
@@ -188,9 +189,24 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
         return tick_exact_wavs(plan, clock=clock, seconds=seconds)
     if "wav_limits" in plan:
         raise ArchiveBlocked("WAV pilot limits require exact WAV jobs")
+    scheduled_snapshots = plan.get("scheduled_snapshots", False)
+    if type(scheduled_snapshots) is not bool:
+        raise ArchiveBlocked("Scheduled snapshot setting must be boolean")
     tasks = plan.get("scopes", [])
     wav_sources = plan.get("wav_sources", [])
     backups = plan.get("backups", [])
+    if (
+        scheduled_snapshots
+        and plan["environment"] == "production"
+        and (
+            type(backups) is not list
+            or sorted(backups) != ["direct", "gateway"]
+            or plan.get("snapshot_id") is not None
+        )
+    ):
+        raise ArchiveBlocked(
+            "Managed snapshots require both backups and no manual snapshot selection"
+        )
     if (
         not 0 <= len(tasks) <= 256
         or any(source not in {"gateway", "direct"} for source in wav_sources)
@@ -463,9 +479,20 @@ def tick(path, *, clock=lambda: datetime.now(UTC), seconds=300):
             if due <= clock():
                 queue.append(task)
         planning_checkpoint()
-        snapshot_id = plan.get("snapshot_id") or (
-            latest_snapshot() if plan.get("scheduled_snapshots") else None
-        )
+        if scheduled_snapshots and plan["environment"] == "production":
+            for source in ("gateway", "direct"):
+                row = db.execute(
+                    "SELECT day,due FROM sweep WHERE id=?", ("database-backup-" + source,)
+                ).fetchone()
+                if not row or not utc(row[0]) <= utc(clock()) < utc(row[1]):
+                    raise ArchiveBlocked(
+                        "Both current scheduled backups are required before snapshot"
+                    )
+            snapshot_id = managed_snapshot()
+        else:
+            snapshot_id = plan.get("snapshot_id") or (
+                latest_snapshot() if scheduled_snapshots else None
+            )
         deleted_wavs = deleted_bytes = deleted_sql = 0
         for (raw,) in db.execute("SELECT receipt FROM bundle ORDER BY start"):
             planning_checkpoint()

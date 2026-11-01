@@ -613,6 +613,8 @@ def _extract_and_verify_wav_features(db: Session, wav: WavFile) -> WavFeature:
         wav.feature_verified_at = now
         db.flush()
         _snapshot_feature_version(db, feature)
+        if settings.wav_signal_contract_enabled:
+            _persist_gateway_contract(db, wav, raw_samples, sample_rate, source_sha256, now)
         db.commit()
         db.refresh(feature)
         return feature
@@ -636,6 +638,20 @@ def _next_candidate(db: Session, now: datetime) -> WavFile | None:
             ),
         ),
     ]
+    if settings.wav_signal_contract_enabled:
+        candidate_states.append(
+            and_(
+                WavFile.feature_status == "verified",
+                ~WavFile.feature_versions.any(
+                    and_(
+                        WavFeatureVersion.extractor_version == gateway_contract_extractor_version(),
+                        WavFeatureVersion.calibration_version == WavFile.calibration_version,
+                        WavFeatureVersion.source_sha256 == WavFile.content_sha256,
+                        WavFeatureVersion.verified_at.isnot(None),
+                    )
+                ),
+            )
+        )
     if settings.wav_flac_archive_enabled:
         candidate_states.append(
             and_(
@@ -737,3 +753,153 @@ def process_pending_wav_features(db: Session) -> dict[str, int]:
             result["failed"] += 1
             logger.exception("WAV feature extraction failed for %s", wav_id)
     return result
+
+
+def gateway_contract_payload(
+    raw_samples,
+    sample_rate,
+    *,
+    descriptor,
+    continuity,
+    source_quality,
+    coverage_ratio,
+    observations,
+):
+    """Explicit new contract adapter; existing persisted Gateway history is unchanged."""
+    from app.services.signal_feature_contract import build_signal_payload
+
+    return build_signal_payload(
+        raw_samples,
+        sample_rate,
+        bits=16,
+        encoding="signed",
+        clip_bounds=(0, 32767),
+        descriptor=descriptor,
+        continuity=continuity,
+        source_quality=source_quality,
+        coverage_ratio=coverage_ratio,
+        observations=observations,
+    )
+
+
+def collect_gateway_contract_context(db: Session, wav: WavFile) -> dict:
+    """Collect known counts without treating missing telemetry as zero.
+
+    Existing SensorReading rows provide no completeness certificate for the WAV
+    interval. Accordingly they can establish faults but cannot establish validity.
+    """
+    columns = (
+        SensorReading.quality_valid_count,
+        SensorReading.quality_lead_off_count,
+        SensorReading.quality_rail_high_count,
+        SensorReading.quality_rail_low_count,
+        SensorReading.quality_jump_count,
+        SensorReading.quality_recovery_count,
+    )
+    values = (
+        db.query(*(func.sum(column) for column in columns))
+        .filter(
+            SensorReading.sensor_id == wav.sensor_id,
+            SensorReading.timestamp >= wav.started_at,
+            SensorReading.timestamp <= wav.ended_at,
+        )
+        .one()
+    )
+    counts = {
+        name: int(value) if value is not None else None
+        for name, value in zip(
+            ("valid", "lead_off", "rail_high", "rail_low", "jump", "recovery"),
+            values,
+            strict=True,
+        )
+    }
+    legacy_continuity = calculate_sequence_continuity(db, wav)
+    return {
+        "continuity": {
+            "sequence_gap_count": legacy_continuity["sequence_gap_count"]
+            if legacy_continuity["sequence_observations"] >= 2
+            else None,
+            "source_dropped_samples_delta": legacy_continuity["source_dropped_samples_delta"],
+        },
+        "source_quality": counts,
+        "coverage_ratio": wav.coverage_ratio,
+        "observations": {
+            "coverage": wav.coverage_ratio is not None,
+            "continuity": False,
+            "source_flags": False,
+            "dropped_samples": False,
+        },
+    }
+
+
+def _persist_gateway_contract(
+    db: Session, wav: WavFile, raw_samples, sample_rate, source_sha256, verified_at
+):
+    """Append a separately versioned Gateway signal result after reading full PCM."""
+    from app.services.signal_feature_contract import canonical_sha256, effective_parameter_sha256
+
+    if wav.pcm_encoding_version != "unsigned-mv-linear-int16-v1":
+        raise ValueError("Gateway encoding has no approved signal-contract adapter")
+    descriptor = {
+        "status": "declared",
+        "scale": wav.pcm_scale_mv,
+        "offset": wav.pcm_offset_mv,
+        "unit": "mV",
+        "source": "gateway-wav-metadata:" + wav.calibration_version,
+        "channel": "CH1",
+        "encoding": "signed",
+        "validity": f"{wav.started_at.isoformat()}/{wav.ended_at.isoformat()}",
+    }
+    context = collect_gateway_contract_context(db, wav)
+    signal = gateway_contract_payload(
+        raw_samples.astype(np.int32), sample_rate, descriptor=descriptor, **context
+    )
+    payload = {
+        "schema": "gateway-signal-v1",
+        "wav_file_id": str(wav.id),
+        "source_sha256": source_sha256,
+        "signal": signal,
+    }
+    digest = canonical_sha256(payload)
+    values = dict(
+        wav_file_id=wav.id,
+        extractor_version=gateway_contract_extractor_version(),
+        calibration_version=wav.calibration_version,
+        parameter_hash=effective_parameter_sha256(signal),
+        source_sha256=source_sha256,
+        feature_checksum=digest,
+        feature_payload=payload,
+        verified_at=verified_at,
+    )
+    dialect = db.get_bind().dialect.name
+    if dialect not in ("postgresql", "sqlite"):
+        raise ValueError("Unsupported Gateway feature database")
+    insert = pg_insert if dialect == "postgresql" else sqlite_insert
+    identity = (
+        "wav_file_id",
+        "extractor_version",
+        "calibration_version",
+        "parameter_hash",
+        "source_sha256",
+        "feature_checksum",
+    )
+    db.execute(
+        insert(WavFeatureVersion.__table__)
+        .values(**values)
+        .on_conflict_do_nothing(index_elements=list(identity))
+    )
+    db.flush()
+    saved = db.query(WavFeatureVersion).filter_by(**{key: values[key] for key in identity}).one()
+    db.refresh(saved)
+    if (
+        saved.feature_payload != payload
+        or canonical_sha256(saved.feature_payload) != saved.feature_checksum
+    ):
+        raise RuntimeError("Gateway signal result readback mismatch")
+    return saved
+
+
+def gateway_contract_extractor_version():
+    from app.services.signal_feature_contract import canonical_sha256, implementation_identity
+
+    return "gateway-signal-v1-" + canonical_sha256(implementation_identity())[:16]

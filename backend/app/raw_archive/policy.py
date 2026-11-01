@@ -334,17 +334,47 @@ def archive_one(
         checkpoint()
         config.guard(deleting=True)
         recording.eligible(now(), config)
-        timed("catalog_revalidate", revalidate, recording)
-        from .deletion import verify_current_authorization, verify_deletion_evidence
+        from contextlib import nullcontext
 
-        proof_at = verify_deletion_evidence(
-            config, recording, receipt, destination, now(), clock=now
+        from .deletion import approval, verify_current_authorization, verify_deletion_evidence
+        from .worklease import exclusive_wav_lease
+
+        catalog = getattr(revalidate, "__self__", None)
+        source_engine = getattr(getattr(catalog, "sessions", None), "kw", {}).get("bind")
+        fence = (
+            exclusive_wav_lease(
+                "direct", recording.bucket, recording.key, source_engine=source_engine
+            )
+            if recording.kind == "direct"
+            else nullcontext()
         )
-        checkpoint()
-        timed("catalog_revalidate", revalidate, recording)
-        if proof_at is not None:
-            verify_current_authorization(config, recording, now(), proof_at)
-        ledger.save(recording, "deleting", receipt)
-        source.evict(recording, snapshot)
-        ledger.save(recording, "evicted", receipt)
-        return "evicted"
+        with fence:
+            timed("catalog_revalidate", revalidate, recording)
+            scientific_source = (
+                getattr(catalog, "scientific_history", None) if recording.kind == "direct" else None
+            )
+            proof_at = verify_deletion_evidence(
+                config,
+                recording,
+                receipt,
+                destination,
+                now(),
+                clock=now,
+                scientific_source=scientific_source,
+            )
+            checkpoint()
+            timed("catalog_revalidate", revalidate, recording)
+            if recording.kind == "direct":
+                current_history, _ = scientific_source(recording)
+                authorization = approval(config, now())
+                if (
+                    current_history["sha256"]
+                    != authorization["feature_v2"][recording.archive_id]["history_sha256"]
+                ):
+                    raise ArchiveBlocked("Scientific history changed before deletion")
+            if proof_at is not None:
+                verify_current_authorization(config, recording, now(), proof_at)
+            ledger.save(recording, "deleting", receipt)
+            source.evict(recording, snapshot)
+            ledger.save(recording, "evicted", receipt)
+            return "evicted"

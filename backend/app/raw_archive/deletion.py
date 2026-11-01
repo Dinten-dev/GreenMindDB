@@ -81,11 +81,21 @@ def approval(config, now):
     return data
 
 
-def verify_deletion_evidence(config, recording, receipt, destination, now, *, clock=None):
+def verify_deletion_evidence(
+    config, recording, receipt, destination, now, *, clock=None, scientific_source=None
+):
     from .wav_context import require_deletable_receipt
 
     require_deletable_receipt(receipt)
-    proof_at = _verify_evidence(config, recording, receipt, destination, now, approval(config, now))
+    proof_at = _verify_evidence(
+        config,
+        recording,
+        receipt,
+        destination,
+        now,
+        approval(config, now),
+        scientific_source=scientific_source,
+    )
     # Four remote readbacks may outlive the consent or snapshot validity window.
     # Check the live deadline after their last byte, before any deletion.
     current = clock() if clock else now
@@ -104,18 +114,28 @@ def verify_current_authorization(config, recording, current, proof_at, *, consen
         raise ArchiveBlocked("Catalog restore expired during proof readback")
 
 
-def verify_preparation_evidence(config, recording, receipt, destination, now, *, clock=None):
+def verify_preparation_evidence(
+    config, recording, receipt, destination, now, *, clock=None, scientific_source=None
+):
     """Same immutable proofs without consent; does not call any source adapter."""
     from .wav_context import require_deletable_receipt
 
     require_deletable_receipt(receipt)
-    proof_at = _verify_evidence(config, recording, receipt, destination, now, proposal(config, now))
+    proof_at = _verify_evidence(
+        config,
+        recording,
+        receipt,
+        destination,
+        now,
+        proposal(config, now),
+        scientific_source=scientific_source,
+    )
     verify_current_authorization(
         config, recording, clock() if clock else now, proof_at, consent=False
     )
 
 
-def _verify_evidence(config, recording, receipt, destination, now, data):
+def _verify_evidence(config, recording, receipt, destination, now, data, *, scientific_source=None):
     check_quarantine(config, recording)
     if now < eligible_after(recording, receipt, config.local_grace_days):
         raise ArchiveBlocked("Seven-day local reserve has not elapsed")
@@ -223,6 +243,29 @@ def _verify_evidence(config, recording, receipt, destination, now, data):
         from .readiness import validate_metadata_restore
 
         validate_metadata_restore(catalog, proof)
+        if recording.kind == "direct":
+            candidate_proof = data.get("feature_v2", {}).get(recording.archive_id)
+            if not isinstance(candidate_proof, dict):
+                raise ArchiveBlocked("Scientific history proof is absent")
+            descriptor = {
+                key: value
+                for key, value in candidate_proof.items()
+                if key not in {"provider_snapshot", "checked_at", "restored_history_sha256"}
+            }
+            if (
+                recovery.get("feature_v2", {}).get(recording.archive_id) != descriptor
+                or proof.get("feature_v2", {}).get(recording.archive_id) != descriptor
+            ):
+                raise ArchiveBlocked("Scientific history descriptor is not snapshot bound")
+            verify_feature_v2(
+                candidate_proof,
+                recording,
+                destination,
+                snapshot,
+                now,
+                Path(folder),
+                scientific_source,
+            )
         wav = Path(folder) / "snapshot.wav"
         destination.download_snapshot(name, receipt["remote_key"], wav, recording.size)
         if wav.stat().st_size != recording.size or checksum(wav) != recording.sha256:
@@ -266,3 +309,122 @@ def check_quarantine(config, recording):
             raise ArchiveBlocked("Recording is quarantined; original retained")
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise ArchiveBlocked("Quarantine register is unavailable or invalid") from error
+
+
+def verify_feature_v2(proof, recording, destination, snapshot, now, folder, scientific_source):
+    """Independently download every feature part from the pinned provider snapshot."""
+    from .feature_backup import (
+        FORMAT_DIRECT_REVISION,
+        check_manifest,
+        compare_restored_direct_history,
+        restore,
+    )
+
+    if (
+        not callable(scientific_source)
+        or not isinstance(proof, dict)
+        or set(proof)
+        != {
+            "format",
+            "source",
+            "revision",
+            "manifest_sha256",
+            "history_sha256",
+            "restored_history_sha256",
+            "checked_at",
+            "provider_snapshot",
+            "manifest",
+            "parts",
+        }
+    ):
+        raise ArchiveBlocked("Exact scientific history proof and fresh source are required")
+    snapshot_binding = {
+        "provider_id": snapshot.get("provider_id"),
+        "box_id": snapshot.get("box_id", snapshot.get("storage_box_id")),
+        "name": snapshot.get("name"),
+        "created_at": snapshot.get("created_at"),
+    }
+    if (
+        type(snapshot_binding["provider_id"]) is not int
+        or snapshot_binding["provider_id"] <= 0
+        or type(snapshot_binding["box_id"]) is not int
+        or snapshot_binding["box_id"] <= 0
+        or not isinstance(snapshot_binding["name"], str)
+        or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", snapshot_binding["name"])
+    ):
+        raise ArchiveBlocked("Invalid provider snapshot identity")
+    if (
+        proof["format"] != "direct-feature-proof-v2"
+        or proof["source"] != "direct"
+        or str(proof["revision"]) != recording.identity
+        or proof["manifest_sha256"] != recording.feature_digest
+        or proof["provider_snapshot"] != snapshot_binding
+        or proof["history_sha256"] != proof["restored_history_sha256"]
+        or not re.fullmatch("[0-9a-f]{64}", proof["history_sha256"])
+    ):
+        raise ArchiveBlocked("Scientific proof source or provider snapshot mismatch")
+    checked = stamp(proof["checked_at"])
+    if not now - timedelta(hours=24) <= stamp(snapshot["created_at"]) <= checked <= now:
+        raise ArchiveBlocked("Scientific snapshot or readback proof is stale")
+    reference = proof["manifest"]
+    if (
+        not isinstance(reference, dict)
+        or set(reference) != {"key", "sha256", "size"}
+        or not re.fullmatch("[0-9a-f]{64}", reference["sha256"])
+        or type(reference["size"]) is not int
+        or not 0 < reference["size"] <= 1024**2
+        or reference["key"] != f"production/catalog-backup/{reference['sha256']}.json"
+    ):
+        raise ArchiveBlocked("Invalid feature manifest reference")
+    before, revision = scientific_source(recording)
+    if before["sha256"] != proof["history_sha256"]:
+        raise ArchiveBlocked("Current scientific history differs from reviewed proof")
+    manifest_path = folder / "feature-v2-manifest.json"
+    destination.download_catalog(
+        reference["key"], manifest_path, reference["size"], snapshot=snapshot["name"]
+    )
+    if (
+        manifest_path.stat().st_size != reference["size"]
+        or checksum(manifest_path) != reference["sha256"]
+    ):
+        raise ArchiveBlocked("Snapshot feature manifest readback mismatch")
+    manifest = json.loads(manifest_path.read_text())
+    check_manifest(manifest)
+    if (
+        manifest["format"] != FORMAT_DIRECT_REVISION
+        or manifest["destination"] != destination.identity
+        or manifest.get("scientific_coverage")
+        != {key: revision[key] for key in ("segment_id", "revision", "manifest_sha256")}
+    ):
+        raise ArchiveBlocked("Snapshot feature format, source scope or destination differs")
+    expected = [
+        {
+            "file": entry["file"],
+            "key": entry.get("remote_key"),
+            "size": entry["bytes"],
+            "sha256": entry["sha256"],
+        }
+        for entry in manifest["files"]
+    ]
+    if proof["parts"] != expected:
+        raise ArchiveBlocked("Feature proof parts differ from manifest")
+    files = {}
+    for entry in expected:
+        if entry["key"] != f"production/catalog-backup/{entry['sha256']}.jsonl.gz":
+            raise ArchiveBlocked("Unapproved feature part key")
+        path = folder / entry["file"]
+        destination.download_catalog(entry["key"], path, entry["size"], snapshot=snapshot["name"])
+        if path.stat().st_size != entry["size"] or checksum(path) != entry["sha256"]:
+            raise ArchiveBlocked("Snapshot feature part readback mismatch")
+        files[entry["file"]] = path
+    restored = folder / "feature-v2.sqlite3"
+    restore(manifest, files, restored)
+    if (
+        compare_restored_direct_history(restored, before, revision)
+        != proof["restored_history_sha256"]
+    ):
+        raise ArchiveBlocked("Scientific history typed readback differs")
+    after, after_revision = scientific_source(recording)
+    if after != before or after_revision != revision:
+        raise ArchiveBlocked("Scientific source changed during snapshot readback")
+    return proof["history_sha256"]

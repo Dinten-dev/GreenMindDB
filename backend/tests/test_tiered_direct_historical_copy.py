@@ -321,3 +321,14 @@ def test_copy_only_proof_is_explicitly_rejected_by_all_delete_paths(historical):
         pytest.fail("delete transaction entered")
     with pytest.raises(ArchiveBlocked, match="sealed"):
         writer.catalog.resolve(h.reference)
+
+
+def test_current_direct_history_cannot_authorize_deletion_without_scientific_readback(historical):
+    h = historical
+    writer = h.current
+    writer.expected = []
+    for method in (writer.absent, writer.inspect, writer.delete, writer.complete_eviction):
+        with pytest.raises(ArchiveBlocked, match="scientific result"):
+            method(None)
+    with pytest.raises(ArchiveBlocked, match="scientific result"), writer.exclusive(None):
+        pytest.fail("Direct deletion transaction entered")

@@ -40,7 +40,7 @@ def test_real_archive_blocked_origin_and_deterministic_guardcode():
     assert first == second and first["guard_code"].startswith("copy_guard_v1_")
     assert first["exception_class"] == "ArchiveBlocked"
     assert first["frames"][0]["file"] == "tiered_archive/wav_source.py"
-    assert first["frames"][0]["function"] == "metadata" and first["frames"][0]["line"] > 0
+    assert first["frames"][0]["function"] == "_legacy_metadata" and first["frames"][0]["line"] > 0
     assert len(first["frames"][0]["source_sha256"]) == 64
     assert "No verified WAVs" not in json.dumps(first)
 
@@ -134,7 +134,7 @@ def test_entry_and_durable_last_run_share_identical_static_evidence(guarded, mon
     stored = json.loads((Path(root) / "copy-last-run.json").read_text())
     assert stored["diagnostic"] == report["diagnostic"]
     assert stored["state"] == "failed" and stored["reason"] == report["reason"] == "ArchiveBlocked"
-    assert stored["diagnostic"]["frames"][0]["function"] == "metadata"
+    assert stored["diagnostic"]["frames"][0]["function"] == "_legacy_metadata"
     assert {"started_at", "finished_at", "elapsed_seconds", "self_peak_rss"} <= set(stored)
 
 

@@ -187,8 +187,58 @@ def restore_url(database_url):
     return url
 
 
+def archived_direct_original(body):
+    """Verify and return the exact chunk bytes stored in an archive context."""
+    import hashlib
+
+    row, context = body["row"], body["context"]
+    if not isinstance(context, dict) or not isinstance(context.get("original_payload"), bytes):
+        raise ArchiveBlocked("Archived Direct original bytes are missing")
+    payload = context["original_payload"]
+    if (
+        type(row.get("payload_bytes")) is not int
+        or len(payload) != row["payload_bytes"]
+        or not isinstance(row.get("payload_sha256"), str)
+        or hashlib.sha256(payload).hexdigest() != row["payload_sha256"]
+        or (row.get("payload") is not None and bytes(row["payload"]) != payload)
+    ):
+        raise ArchiveBlocked("Archived Direct original bytes differ from source identity")
+    from app.direct.capture_assignment import split
+    from app.direct.protocol import ChunkMetadata
+
+    try:
+        config, _ = split(context["session_config"])
+        metadata = ChunkMetadata(
+            **config,
+            sequence=row["sequence"],
+            first_frame=row["first_frame"],
+            frame_count=row["frame_count"],
+            payload_sha256=row["payload_sha256"],
+        )
+        if (
+            metadata.digest() != row["digest"]
+            or len(payload) != metadata.frame_count * metadata.channels * metadata.sample_bits // 8
+        ):
+            raise ValueError("original protocol identity differs")
+        pieces = sorted(context["pieces"], key=lambda piece: piece["payload_offset"])
+        expected = list(metadata.pieces())
+        if len(pieces) != len(expected) or any(
+            piece["chunk_id"] != row["id"]
+            or (piece["payload_offset"], piece["frame_count"]) != (bound[3], bound[4])
+            for piece, bound in zip(pieces, expected, strict=True)
+        ):
+            raise ValueError("archived original piece coverage differs")
+    except (KeyError, TypeError, ValueError) as error:
+        raise ArchiveBlocked("Archived Direct original protocol or pieces differ") from error
+    return payload
+
+
 def direct_children(body):
     context = body["context"]
+    # Older test/legacy rows may lack the new context; real source rows with a
+    # payload checksum require the independently verified archived original.
+    if "payload_sha256" in body["row"] or "original_payload" in context:
+        archived_direct_original(body)
     result = {
         "direct_chunk_payload_ref": [context["payload_reference"]]
         if context["payload_reference"] is not None

@@ -142,8 +142,19 @@ def load_parent(
         row = metadata["wav"]
         validate_row(source, "wav_file", row)
         validate_row(source, "wav_feature", metadata["feature"])
+        feature_format = body.get("feature_history_format")
+        if feature_format not in (None, "gateway-signal-history-v2"):
+            raise ArchiveBlocked("Unknown Gateway feature history format")
         for version in metadata["feature_versions"]:
-            validate_row(source, "wav_feature_version", version)
+            payload = version.get("feature_payload")
+            if isinstance(payload, dict) and payload.get("schema") == "gateway-signal-v1":
+                if feature_format != "gateway-signal-history-v2":
+                    raise ArchiveBlocked("Gateway signal result needs the versioned history format")
+                from app.raw_archive.feature_backup import validate_v2_row
+
+                validate_v2_row(source, "wav_feature_version", version)
+            else:
+                validate_row(source, "wav_feature_version", version)
         record = records[0]
         if (
             str(row["id"]) != reference[0]
@@ -221,6 +232,10 @@ def load_parent(
     validate_row(source, "direct_revision", revision)
     validate_row(source, "direct_session", session)
     manifest = revision["manifest"]
+    if "scientific_history" in body:
+        from app.raw_archive.direct_feature_history import validate_history
+
+        validate_history(body["scientific_history"], revision)
     if (
         not isinstance(reference, list)
         or len(reference) != 2
@@ -282,6 +297,25 @@ def restore_wav_parent(
         reference=reference,
         checkpoint=checkpoint,
     )
+    scientific_history = None
+    gateway_history_v2 = False
+    if source in ("direct", "gateway"):
+        current_manifest = json.loads((folder / "manifest.json").read_text())
+        if checksum(folder / "manifest.json") != manifest_sha256:
+            raise ArchiveBlocked("Restore manifest changed")
+        part = current_manifest["files"][0]
+        verify_file(folder / "0000.parquet", part, checkpoint)
+        envelope = list(parquet.read(folder / "0000.parquet", part, checkpoint=checkpoint))[0]
+        if source == "direct":
+            scientific_history = envelope["body"].get("scientific_history")
+            if scientific_history is not None:
+                from app.raw_archive.direct_feature_history import validate_history
+
+                validate_history(scientific_history, metadata["revision"])
+        else:
+            gateway_history_v2 = (
+                envelope["body"].get("feature_history_format") == "gateway-signal-history-v2"
+            )
     table_name = "wav_file" if source == "gateway" else "direct_segment"
     engine = create_engine(
         url,
@@ -308,7 +342,31 @@ def restore_wav_parent(
             visual = (
                 Table(visual_name, schema, autoload_with=db) if visual_row is not None else None
             )
-            for target in (table, *masters.values(), *((visual,) if visual is not None else ())):
+            gateway_feature = (
+                Table("wav_feature", schema, autoload_with=db) if gateway_history_v2 else None
+            )
+            gateway_versions = (
+                Table("wav_feature_version", schema, autoload_with=db)
+                if gateway_history_v2
+                else None
+            )
+            revision_table = (
+                Table("direct_revision", schema, autoload_with=db)
+                if scientific_history is not None
+                else None
+            )
+            result_table = (
+                Table("direct_feature_result", schema, autoload_with=db)
+                if scientific_history is not None
+                else None
+            )
+            for target in (
+                table,
+                *masters.values(),
+                *((visual,) if visual is not None else ()),
+                *((revision_table, result_table) if revision_table is not None else ()),
+                *((gateway_feature, gateway_versions) if gateway_feature is not None else ()),
+            ):
                 db.execute(text(f'LOCK TABLE "{target.name}" IN SHARE ROW EXCLUSIVE MODE'))
             verify_masters(db, masters, source, row, metadata, organization)
             if set(COLUMNS[source][table_name]) - set(table.c.keys()):
@@ -327,6 +385,58 @@ def restore_wav_parent(
                 # source state. Private retry/error metadata was never archived.
                 insert_row.update(retry_at=0, error=None)
             db.execute(table.insert().values(**insert_row))
+            if scientific_history is not None:
+                from app.raw_archive.feature_backup import FEATURE_V2_COLUMNS
+
+                revision_row = metadata["revision"]
+                if set(revision_row) - set(revision_table.c.keys()) or set(
+                    FEATURE_V2_COLUMNS["direct_feature_result"]
+                ) != set(result_table.c.keys()):
+                    raise ArchiveBlocked("Scientific result restore schema differs")
+                db.execute(revision_table.insert().values(**revision_row))
+                for result_row in scientific_history["results"]:
+                    db.execute(result_table.insert().values(**result_row))
+                    actual_result = (
+                        db.execute(
+                            select(result_table).where(result_table.c.id == result_row["id"])
+                        )
+                        .mappings()
+                        .one()
+                    )
+                    if encode({key: actual_result[key] for key in result_row}) != encode(
+                        result_row
+                    ):
+                        raise ArchiveBlocked("Restored scientific result differs")
+                actual_revision = (
+                    db.execute(
+                        select(revision_table).where(
+                            revision_table.c.segment_id == row["id"],
+                            revision_table.c.revision == revision_row["revision"],
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                if encode({key: actual_revision[key] for key in revision_row}) != encode(
+                    revision_row
+                ):
+                    raise ArchiveBlocked("Restored scientific revision differs")
+            if gateway_history_v2:
+                for target, rows_to_restore in (
+                    (gateway_feature, [metadata["feature"]]),
+                    (gateway_versions, metadata["feature_versions"]),
+                ):
+                    for feature_row in rows_to_restore:
+                        if set(feature_row) - set(target.c.keys()):
+                            raise ArchiveBlocked("Gateway feature restore schema differs")
+                        db.execute(target.insert().values(**feature_row))
+                        actual = (
+                            db.execute(select(target).where(target.c.id == feature_row["id"]))
+                            .mappings()
+                            .one()
+                        )
+                        if encode({key: actual[key] for key in feature_row}) != encode(feature_row):
+                            raise ArchiveBlocked("Restored Gateway feature differs")
             if visual is not None:
                 required = (
                     set(visual_row) if source == "direct" else set(COLUMNS["gateway"]["visual_wav"])
@@ -375,6 +485,15 @@ def restore_wav_parent(
                 raise ArchiveBlocked("Restore metadata changed during parent insertion")
         return {
             "restored_parents": 1,
+            "gateway_feature_versions_restored": len(metadata["feature_versions"])
+            if gateway_history_v2
+            else 0,
+            "direct_feature_results_restored": len(scientific_history["results"])
+            if scientific_history is not None
+            else 0,
+            "direct_scientific_history_sha256": scientific_history["sha256"]
+            if scientific_history is not None
+            else None,
             "table": table_name,
             "candidate": candidate.identity,
             "source_accesses": 0,

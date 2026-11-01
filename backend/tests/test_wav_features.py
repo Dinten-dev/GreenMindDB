@@ -501,3 +501,105 @@ def test_minio_feature_and_flac_pipeline(monkeypatch):
             if refreshed:
                 database.delete(refreshed)
                 database.commit()
+
+
+def test_gateway_contract_collector_preserves_unknown_and_observed_fault(db: Session):
+    from app.services.wav_feature_service import collect_gateway_contract_context
+
+    now = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    record = _wav_record(now, _wav_bytes(np.arange(380, dtype=np.int16)))
+    db.add(record)
+    db.commit()
+    context = collect_gateway_contract_context(db, record)
+    assert all(value is None for value in context["source_quality"].values())
+    assert context["continuity"]["source_dropped_samples_delta"] is None
+    assert context["observations"]["source_flags"] is False
+    db.add(
+        SensorReading(
+            timestamp=record.started_at,
+            sensor_id=record.sensor_id,
+            kind="bio_signal",
+            value=1,
+            unit="mV",
+            quality_lead_off_count=1,
+        )
+    )
+    db.commit()
+    context = collect_gateway_contract_context(db, record)
+    assert context["source_quality"]["lead_off"] == 1
+    assert context["source_quality"]["jump"] is None
+    assert context["observations"]["source_flags"] is False
+
+
+def test_gateway_contract_append_only_and_unknown_observations(db: Session, monkeypatch):
+    from app.raw_archive import feature_backup, wav_catalog
+    from app.raw_archive.policy import ArchiveBlocked
+    from app.services.wav_feature_service import gateway_contract_extractor_version
+
+    now = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    payload = _wav_bytes(np.arange(380, dtype=np.int16) + 1)
+    record = _wav_record(now, payload)
+    db.add(record)
+    db.commit()
+
+    def download_object(_key, destination):
+        destination.write(payload)
+        destination.seek(0)
+
+    monkeypatch.setattr(
+        "app.services.wav_feature_service.wav_service.download_object", download_object
+    )
+    monkeypatch.setattr(settings, "wav_anomaly_archive_enabled", False)
+    monkeypatch.setattr(settings, "wav_flac_archive_enabled", False)
+    monkeypatch.setattr(settings, "wav_signal_contract_enabled", False)
+    extract_and_verify_wav_features(db, record)
+    legacy = db.query(WavFeatureVersion).one()
+    legacy_digest = legacy.feature_checksum
+    monkeypatch.setattr(settings, "wav_signal_contract_enabled", True)
+    assert _next_candidate(db, now).id == record.id
+    extract_and_verify_wav_features(db, record)
+    assert _next_candidate(db, now) is None
+    contract = (
+        db.query(WavFeatureVersion)
+        .filter_by(extractor_version=gateway_contract_extractor_version())
+        .one()
+    )
+    assert contract.feature_payload["signal"]["quality"]["data_quality_status"] == "unknown"
+    assert contract.feature_payload["signal"]["quality"]["biological_candidate"] is None
+    assert db.query(WavFeatureVersion).filter_by(feature_checksum=legacy_digest).count() == 1
+    row = {
+        name: getattr(contract, name)
+        for name in wav_catalog.COLUMNS["gateway"]["wav_feature_version"]
+    }
+    feature_backup.validate_v2_row("gateway", "wav_feature_version", row)
+    with pytest.raises(ArchiveBlocked):
+        wav_catalog.validate_row("gateway", "wav_feature_version", row)
+    extract_and_verify_wav_features(db, record)
+    assert (
+        db.query(WavFeatureVersion)
+        .filter_by(extractor_version=gateway_contract_extractor_version())
+        .count()
+        == 1
+    )
+    db.add(
+        SensorReading(
+            timestamp=record.started_at,
+            sensor_id=record.sensor_id,
+            kind="bio_signal",
+            value=1,
+            unit="mV",
+            quality_lead_off_count=1,
+        )
+    )
+    db.commit()
+    extract_and_verify_wav_features(db, record)
+    contract_versions = (
+        db.query(WavFeatureVersion)
+        .filter_by(extractor_version=gateway_contract_extractor_version())
+        .all()
+    )
+    assert len(contract_versions) == 2
+    assert {
+        entry.feature_payload["signal"]["quality"]["data_quality_status"]
+        for entry in contract_versions
+    } == {"unknown", "technical_fault"}

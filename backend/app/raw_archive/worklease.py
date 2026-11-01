@@ -127,3 +127,65 @@ class LeasedBody:
 
     def __exit__(self, *_args):
         self.close()
+
+
+@contextmanager
+def exclusive_wav_lease(kind, bucket, key, *, source_engine):
+    """Fence all shared source readers across final verification and deletion."""
+    if not enabled():
+        raise ArchiveBlocked("Source-owned WAV work leases are required for deletion")
+    lock = object_lock_key(kind, bucket, key)
+    authority = _source_engine(kind)
+    actual = getattr(source_engine, "url", None)
+    bound = getattr(authority, "url", None)
+    if (
+        actual is None
+        or bound is None
+        or (actual.get_backend_name(), actual.host, actual.port, actual.database)
+        != (bound.get_backend_name(), bound.host, bound.port, bound.database)
+    ):
+        raise ArchiveBlocked("WAV lease is not bound to the authoritative source database")
+    with authority.connect() as connection, connection.begin():
+        connection.execute(text("SET TRANSACTION READ ONLY"))
+        if (
+            connection.execute(
+                text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": lock}
+            ).scalar_one()
+            is not True
+        ):
+            raise WavWorkLeaseBusy("WAV source has active readers")
+        yield
+
+
+@contextmanager
+def shared_wav_leases(kind, bucket, keys):
+    """Hold a sorted bounded set of shared WAV locks on one source connection."""
+    keys = sorted(set(keys))
+    if not keys or len(keys) > 64:
+        raise ArchiveBlocked("Bounded nonempty WAV lease scope required")
+    if not enabled():
+        yield
+        return
+    identities = frozenset((kind, bucket, key) for key in keys)
+    existing = _active.get()
+    if identities <= existing:
+        yield
+        return
+    if identities & existing:
+        raise ArchiveBlocked("Overlapping nested WAV lease scopes are unsupported")
+    with _source_engine(kind).connect() as connection, connection.begin():
+        connection.execute(text("SET TRANSACTION READ ONLY"))
+        for key in keys:
+            lock = object_lock_key(kind, bucket, key)
+            if (
+                connection.execute(
+                    text("SELECT pg_try_advisory_xact_lock_shared(:key)"), {"key": lock}
+                ).scalar_one()
+                is not True
+            ):
+                raise WavWorkLeaseBusy("WAV source is busy; retry after active maintenance")
+        token = _active.set(existing | identities)
+        try:
+            yield
+        finally:
+            _active.reset(token)

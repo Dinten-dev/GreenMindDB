@@ -193,3 +193,38 @@ def test_direct_local_read_is_leased_and_untracked_urls_are_blocked(lease, monke
     assert lease.active == 0 and lease.connections == 1
     with pytest.raises(ArchiveBlocked, match="authenticated leased"):
         wav_service.generate_presigned_url("one.wav")
+
+
+def test_multi_wav_lease_uses_one_connection_and_nests_without_reacquiring(monkeypatch):
+    class MultiTransactions:
+        def __init__(self):
+            self.connections = 0
+            self.keys = []
+
+        @contextmanager
+        def connect(self):
+            self.connections += 1
+            state = self
+
+            class Connection:
+                @contextmanager
+                def begin(self):
+                    yield
+
+                def execute(self, statement, parameters=None):
+                    if parameters:
+                        state.keys.append(parameters["key"])
+                        return SimpleNamespace(scalar_one=lambda: True)
+                    return None
+
+            yield Connection()
+
+    state = MultiTransactions()
+    monkeypatch.setenv("WAV_SOURCE_WORK_LEASES_ENABLED", "true")
+    monkeypatch.setattr(worklease, "_source_engine", lambda _kind: state)
+    keys = [f"run-{index}.wav" for index in range(20)]
+    with worklease.shared_wav_leases("direct", "greenmind-direct-test", keys):
+        assert state.connections == 1 and len(state.keys) == 20
+        with worklease.shared_wav_lease("direct", "greenmind-direct-test", keys[-1]):
+            assert state.connections == 1 and len(state.keys) == 20
+    assert len(set(state.keys)) == 20
