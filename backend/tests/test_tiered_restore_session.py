@@ -9,10 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from app.raw_archive.policy import ArchiveBlocked, checksum
 from app.tiered_archive import parquet
 from app.tiered_archive import restore_session as rs
+from app.tiered_archive import restore_universe as universe
 from app.tiered_archive.codec import digest, epoch_us
 from app.tiered_archive.pipeline import candidate_json
 from app.tiered_archive.policy import Candidate
 from app.tiered_archive.source import DATASETS, row_identity
+from tests.restore_fence_sqlite import install_sqlite_adapter
 from tests.test_tiered_archive import AT, ORG, SENSOR
 from tests.test_tiered_restore import URL
 
@@ -27,6 +29,7 @@ def target(tmp_path, monkeypatch):
     @event.listens_for(engine, "connect")
     def fk(connection, _):
         connection.execute("PRAGMA foreign_keys=ON")
+        connection.create_function("gm_restore_origin", 0, lambda: "origin")
 
     @event.listens_for(engine, "before_cursor_execute", retval=True)
     def directives(conn, cursor, statement, parameters, context, many):
@@ -45,12 +48,33 @@ def target(tmp_path, monkeypatch):
             db.execute(text(statement))
         db.execute(text("INSERT INTO zone VALUES(:id,:org)"), dict(id=ZONE, org=ORG))
         db.execute(text("INSERT INTO gateway VALUES(:id,:zone)"), dict(id=GATEWAY, zone=ZONE))
-    monkeypatch.setattr("sqlalchemy.create_engine", lambda *a, **kw: engine)
+
+    def sqlite_inventory(db):
+        names = db.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).scalars()
+        return {
+            ("public", name)
+            for name in names
+            if name not in universe.OWN_TABLES and not name.startswith("sqlite_")
+        }
+
+    monkeypatch.setattr(universe, "relation_inventory", sqlite_inventory)
+
+    def current_universe(source):
+        with engine.connect() as db:
+            names = sqlite_inventory(db)
+        return {
+            "version": 1,
+            "tables": {
+                name: "data" if name in universe.allowed_data(source) else "master"
+                for _, name in sorted(names)
+            },
+        }
+
     monkeypatch.setattr(
-        rs,
-        "target_identity",
-        lambda db: digest({"db": str(tmp_path / "restore.sqlite"), "oid": 77}),
+        __import__(__name__, fromlist=["x"]), "universe_inventory", current_universe
     )
+    monkeypatch.setattr("sqlalchemy.create_engine", lambda *a, **kw: engine)
+    monkeypatch.setattr(rs, "target_identity", install_sqlite_adapter(monkeypatch))
     yield engine
     engine.dispose()
 
@@ -59,7 +83,20 @@ def log(identity, payload=b"\x00\xff", gateway=GATEWAY):
     return dict(measurement_id=identity, gateway_id=gateway, payload=payload)
 
 
-def plan(tmp_path, groups, *, source="gateway", dataset="ingest_log", changes=None):
+def universe_inventory(source):
+    return {"version": 1, "tables": {"ingest_log": "data", "gateway": "master", "zone": "master"}}
+
+
+def plan(
+    tmp_path,
+    groups,
+    *,
+    source="gateway",
+    dataset="ingest_log",
+    changes=None,
+    organization=ORG,
+    freeze=False,
+):
     spec = DATASETS[dataset]
     page_count = rows = 0
     batches = []
@@ -75,7 +112,7 @@ def plan(tmp_path, groups, *, source="gateway", dataset="ingest_log", changes=No
             envelopes = [
                 dict(
                     identity=row_identity(spec, body["row"]),
-                    organization=ORG,
+                    organization=organization,
                     sensor=SENSOR,
                     time_us=epoch_us(AT) + i,
                     body=body,
@@ -87,7 +124,7 @@ def plan(tmp_path, groups, *, source="gateway", dataset="ingest_log", changes=No
                 "production",
                 source,
                 dataset,
-                ORG,
+                organization,
                 AT,
                 AT.replace(year=AT.year + 1),
                 part["content_sha256"],
@@ -100,6 +137,12 @@ def plan(tmp_path, groups, *, source="gateway", dataset="ingest_log", changes=No
             )
             file = folder / "manifest.json"
             file.write_text(json.dumps(manifest))
+            if freeze:
+                from app.tiered_archive.restore_inputs import freeze_restore_page
+
+                frozen_folder = tmp_path / f"frozen-page-{page_count}"
+                freeze_restore_page(folder, frozen_folder, checksum(file), checkpoint=lambda: None)
+                folder = frozen_folder
             pages.append(
                 dict(
                     folder=str(folder),
@@ -112,10 +155,11 @@ def plan(tmp_path, groups, *, source="gateway", dataset="ingest_log", changes=No
         batches.append(pages)
     head = dict(
         format=rs.FORMAT,
+        universe=universe_inventory(source),
         environment="production",
         source=source,
         dataset=dataset,
-        organization=ORG,
+        organization=organization,
         schema_master_sha256="a" * 64,
         expected_pages=page_count,
         expected_rows=rows,
@@ -138,13 +182,29 @@ def plan(tmp_path, groups, *, source="gateway", dataset="ingest_log", changes=No
             )
         )
         next_sha = checksum(path)
+        if freeze:
+            from app.tiered_archive.restore_inputs import freeze_restore_descriptor
+
+            frozen_path = tmp_path / f"frozen-batch-{index}.json"
+            freeze_restore_descriptor(path, frozen_path, next_sha, checkpoint=lambda: None)
+            path = frozen_path
         descriptors.insert(0, (path, next_sha))
     head["first_batch_sha256"] = next_sha
     return head, digest(head), descriptors
 
 
 def begin(head, sha):
-    return rs.begin_restore_session(URL, head, sha, checkpoint=lambda: None)["session_id"]
+    result = rs.begin_restore_session(URL, head, sha, checkpoint=lambda: None)
+    if not result["master_baseline_ready"]:
+        for _ in range(100):
+            step = rs.advance_restore_baseline(
+                URL, head, sha, result["session_id"], checkpoint=lambda: None
+            )
+            if step["ready"]:
+                break
+        else:
+            pytest.fail("Synthetic master baseline failed to finish")
+    return result["session_id"]
 
 
 def apply(head, sha, session, descriptor, checkpoint=lambda: None):
@@ -258,7 +318,7 @@ def test_changed_master_tenant_blocks_without_target_change(target, tmp_path):
     with target.begin() as db:
         db.execute(text("UPDATE zone SET organization_id='foreign'"))
     before = state(target)
-    with pytest.raises(ArchiveBlocked, match="masters changed"):
+    with pytest.raises(ArchiveBlocked, match="mutation|master|epoch"):
         apply(head, sha, session, descriptors[0])
     assert state(target) == before
 
@@ -302,7 +362,7 @@ def test_changed_row_not_idempotent_replay(target, tmp_path):
     with target.begin() as db:
         db.execute(text("UPDATE ingest_log SET payload=x'00'"))
     before = state(target)
-    with pytest.raises(ArchiveBlocked, match="Stored SQL values"):
+    with pytest.raises(ArchiveBlocked, match="Unexpected restore database mutation"):
         apply(head, sha, session, descriptors[0])
     assert state(target) == before
 
@@ -333,7 +393,7 @@ def test_nonempty_initial_table_not_adopted(target, tmp_path):
     with target.begin() as db:
         db.execute(text("INSERT INTO ingest_log VALUES('original',:g,x'00')"), dict(g=GATEWAY))
     head, sha, _ = plan(tmp_path, [[[log("one")]]])
-    with pytest.raises(ArchiveBlocked, match="empty target"):
+    with pytest.raises(ArchiveBlocked, match="empty"):
         begin(head, sha)
     with target.connect() as db:
         assert db.execute(text("SELECT measurement_id FROM ingest_log")).scalar_one() == "original"
@@ -347,7 +407,7 @@ def test_same_begin_recovers_committed_session_without_reset(target, tmp_path):
     assert begin(head, sha) == session
     assert state(target) == before
     different = dict(head, schema_master_sha256="b" * 64)
-    with pytest.raises(ArchiveBlocked, match="different session"):
+    with pytest.raises(ArchiveBlocked, match="Restore application universe changed"):
         begin(different, digest(different))
     assert state(target) == before
 
@@ -358,7 +418,7 @@ def test_unjournaled_insert_not_adopted(target, tmp_path):
     with target.begin() as db:
         db.execute(text("INSERT INTO ingest_log VALUES('outsider',:g,x'00')"), dict(g=GATEWAY))
     before = state(target)
-    with pytest.raises(ArchiveBlocked, match="Unjournaled"):
+    with pytest.raises(ArchiveBlocked, match="mutation|Unjournaled"):
         apply(head, sha, session, descriptors[0])
     assert state(target) == before
 
@@ -377,7 +437,7 @@ def test_changed_target_schema_blocks_batch(target, tmp_path):
     with target.begin() as db:
         db.execute(text("ALTER TABLE ingest_log ADD COLUMN additional TEXT"))
     before = state(target)
-    with pytest.raises(ArchiveBlocked, match="schema changed"):
+    with pytest.raises(ArchiveBlocked, match="catalog|relation|schema"):
         apply(head, sha, session, descriptors[0])
     assert state(target) == before
 
@@ -460,20 +520,18 @@ def test_direct_child_conflict_rolls_back_current_batch_only(target, tmp_path):
         assert db.execute(text("SELECT rows FROM greenmind_restore_session")).scalar_one() == 1
 
 
-def test_independent_dataset_sessions_can_share_same_isolated_database(target, tmp_path):
+def test_different_source_domains_cannot_share_one_isolated_restore_database(target, tmp_path):
     direct_target(target)
-    gateway = tmp_path / "gatewayplan"
-    direct = tmp_path / "directplan"
+    gateway, direct = tmp_path / "gatewayplan", tmp_path / "directplan"
     gateway.mkdir()
     direct.mkdir()
-    first, first_sha, first_pages = plan(gateway, [[[log("one")]]])
-    second, second_sha, second_pages = plan(
+    first, first_sha, _ = plan(gateway, [[[log("one")]]])
+    second, second_sha, _ = plan(
         direct, [[[direct_body("one")]]], source="direct", dataset="direct_chunk"
     )
-    first_id, second_id = begin(first, first_sha), begin(second, second_sha)
-    assert first_id != second_id
-    assert apply(first, first_sha, first_id, first_pages[0])["chain_loaded"]
-    assert apply(second, second_sha, second_id, second_pages[0])["chain_loaded"]
+    begin(first, first_sha)
+    with pytest.raises(ArchiveBlocked, match="Restore application universe changed"):
+        begin(second, second_sha)
 
 
 def test_current_batch_byte_budget_is_checked_before_any_target_access(
@@ -505,7 +563,7 @@ def test_private_master_values_never_enter_journals_or_results(target, tmp_path)
             assert secret not in str(db.execute(text("SELECT * FROM " + table)).fetchall())
 
 
-def test_later_batch_trigger_cannot_be_reported_as_full_restore_success(target, tmp_path):
+def test_later_batch_trigger_mutation_is_now_blocked_atomically(target, tmp_path):
     head, sha, descriptors = plan(tmp_path, [[[log("A")]], [[log("B")]]])
     with target.begin() as db:
         db.execute(
@@ -515,11 +573,8 @@ def test_later_batch_trigger_cannot_be_reported_as_full_restore_success(target, 
         )
     session = begin(head, sha)
     apply(head, sha, session, descriptors[0])
-    loaded = apply(head, sha, session, descriptors[1])
-    assert loaded["phase"] == "loaded" and loaded["chain_loaded"] is True
-    assert loaded["final_audit_required"] is True
-    assert loaded["full_target_content_audit_complete"] is False
-    assert loaded["production_ready"] is False
-    assert "chain_complete" not in loaded
-    with pytest.raises(ArchiveBlocked, match="Stored SQL values"):
-        apply(head, sha, session, descriptors[0])
+    before = state(target)
+    with pytest.raises(ArchiveBlocked, match="unexpected mutations"):
+        apply(head, sha, session, descriptors[1])
+    assert state(target) == before
+    assert apply(head, sha, session, descriptors[0])["replayed"]
