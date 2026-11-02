@@ -216,7 +216,7 @@ def test_v3_history_reconciles_committed_source_and_rejects_unknown():
     hashes = ["5" * 64, "6" * 64]
     permit = {"pilot_id": pilot, "candidate": candidate, "runtime_sha256": "7" * 64, "bindings_sha256": "8" * 64, "proof_contract_sha256": "9" * 64, "fence_contract_sha256": "a" * 64, "audit": {"slot": 1, "epoch": epoch, "source_row_sha256": hashes}}
     body = sql_deletion_v3.approval_body(permit, auth)
-    receipt = {"state": "deleting", "deletion_intent": {"pilot_id": pilot, "authorization_sha256": auth, "audit_v3_slot": 1, "audit_v3_epoch": epoch, "audit_v3_body": body, "source_row_sha256": hashes}}
+    receipt = {"state": "deleting", "deletion_intent": {"pilot_id": pilot, "authorization_sha256": auth, "audit_v3_slot": 1, "audit_v3_epoch": epoch, "audit_v3_body": body, "source_row_sha256": hashes, **{k: permit[k] for k in ("runtime_sha256", "bindings_sha256", "proof_contract_sha256", "fence_contract_sha256")}}}
     ledger = SimpleNamespace(db=sqlite3.connect(":memory:"), get=lambda _: receipt)
     ledger.db.execute("CREATE TABLE sql_deletion_pilot(pilot_id text,candidate text,authorization_sha256 text)")
     ledger.db.execute("INSERT INTO sql_deletion_pilot VALUES(?,?,?)", (pilot, candidate, auth))

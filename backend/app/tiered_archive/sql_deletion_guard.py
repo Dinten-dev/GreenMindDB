@@ -631,15 +631,17 @@ def _codepin():
                 "verify_history",
                 "verify_registry_snapshot",
                 "_registry_evidence",
+                "v3_registry_evidence",
+                "v3_inventory",
                 "_preflight",
                 "_table",
                 "RegistryEvidence.__init__",
             ),
         ),
-        (sql_deletion_v3, ("activation", "approval_body", "native_approval", "verify_committed_rows", "verify_history", "require_native_restore_evidence", "make_source_permit", "stage_source_approval", "_guard", "_budget", "evict")),
+        (sql_deletion_v3, ("activation", "approval_body", "native_approval", "verify_committed_rows", "verify_history", "require_native_restore_evidence", "make_source_permit", "stage_source_approval", "scope_transition", "_guard", "_budget", "evict")),
         (sql_audit_v3, ("schema_sha256", "inspect_writer", "validate_operation_body", "check_lease_expiry", "provision")),
         (sql_audit_v3_source, ("_Docker.connect", "_observe_container", "provision_source")),
-        (sql_audit_v3_backup, ("encode", "decode", "capture_structure", "validate", "AuditSnapshotCapture.__init__", "AuditSnapshotCapture.capture", "verify_remote", "verify_gateway_bundle", "record_gateway_readback", "verify_native_rows")),
+        (sql_audit_v3_backup, ("encode", "decode", "capture_structure", "validate", "history_binding", "AuditSnapshotCapture.__init__", "AuditSnapshotCapture.capture", "verify_remote", "verify_gateway_bundle", "record_gateway_readback", "verify_native_rows")),
         (registry_backup, ("restore",)),
         (registry_v5, ("schema", "validate", "canonical")),
         (runtime, ("runtime_sha256", "bindings_sha256")),
@@ -943,8 +945,10 @@ class ProductionGuardV3(ProductionGuard):
     def prepare(self, candidate, receipt, now, permit):
         from .sql_deletion_v3 import require_native_restore_evidence
 
-        require_native_restore_evidence(self, candidate, checkpoint=getattr(self, "checkpoint", None))
-        return super().prepare(candidate, receipt, now, permit)
+        evidence = require_native_restore_evidence(self, candidate, checkpoint=getattr(self, "checkpoint", None))
+        result = super().prepare(candidate, receipt, now, permit)
+        self._v3_restore = evidence
+        return result
 
 def build_guard(
     candidate,

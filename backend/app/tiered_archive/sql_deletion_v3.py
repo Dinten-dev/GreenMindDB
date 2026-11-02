@@ -203,7 +203,8 @@ def require_native_restore_evidence(guard=None, candidate=None, *, checkpoint=No
         guard._snapshot_lock(receipt["snapshot"])
         need(guard.ledger.get(backup_candidate.identity) == receipt, "V3 backup receipt changed")
         return {"candidate": backup_candidate.identity, "gateway_manifest_sha256": evidence["backup_manifest_sha256"],
-                "snapshot_sha256": payload["snapshot_sha256"], "native_schema_grants_rows_verified": True}
+                "audit_plaintext_sha256": readback["audit_plaintext_sha256"], "snapshot_sha256": payload["snapshot_sha256"],
+                "history": sql_audit_v3_backup.history_binding(payload), "native_schema_grants_rows_verified": True}
     finally:
         readonly.close()
 
@@ -250,11 +251,14 @@ def verify_history(db, ledger, epoch, *, active_permit=None, authorization_sha25
         approval_slots.add(slot)
         pilot, stored_candidate, stored_auth = pilots[0]
         need(candidate == stored_candidate and auth == stored_auth, "V3 Source pilot budget differs")
+        operation = sql_audit_v3.validate_operation_body(body, candidate, auth)
+        need(operation["pilot_id"] == pilot, "V3 Source operation pilot differs")
         receipt = ledger.get(candidate)
         need(type(receipt) is dict, "V3 pilot receipt absent")
         intent = receipt.get("deletion_intent")
         if type(intent) is dict:
-            need(intent.get("pilot_id") == pilot and intent.get("authorization_sha256") == auth and intent.get("audit_v3_slot") == slot and intent.get("audit_v3_epoch") == epoch and intent.get("audit_v3_body") == body and intent.get("source_row_sha256") == sorted(expected), "V3 durable intent differs")
+            need(intent.get("pilot_id") == pilot and intent.get("authorization_sha256") == auth and intent.get("audit_v3_slot") == slot and intent.get("audit_v3_epoch") == epoch and intent.get("audit_v3_body") == body and intent.get("source_row_sha256") == sorted(expected)
+                 and all(intent.get(k) == operation[k] for k in ("runtime_sha256", "bindings_sha256", "proof_contract_sha256", "fence_contract_sha256")), "V3 durable intent differs")
         else:
             need(type(active_permit) is dict and active_permit["pilot_id"] == pilot and active_permit["candidate"] == candidate and active_permit["audit"]["slot"] == slot and active_permit["audit"]["epoch"] == epoch and active_permit["audit"]["source_row_sha256"] == sorted(expected) and authorization_sha256 == auth and approval_body(active_permit, auth) == body and slot not in by_slot, "V3 pending approval has no durable intent")
         if slot in by_slot:
@@ -266,14 +270,15 @@ def verify_history(db, ledger, epoch, *, active_permit=None, authorization_sha25
     return {"format": "greenmind.sql-audit-history.v3", "approvals": len(approvals), "commits": len(events), "history_sha256": codec.digest({"approvals": [list(x) for x in approvals], "events": [list(x) for x in events], "rows": [list(x) for x in rows]})}
 
 
-def _guard(candidate, adapter, receipt, permit, authorization_path, authorization_sha256, runtime_sha256, bindings_sha256, checkpoint, clock, proof_guard, lock_key):
+def _guard(candidate, adapter, receipt, permit, authorization_path, authorization_sha256, runtime_sha256, bindings_sha256, checkpoint, clock, proof_guard, lock_key, *, require_enabled=True):
     """V3-native permit checks plus the real production proof/fence guard."""
     from .policy import eligibility
     from .sql_deletion_guard import ProductionGuardV3
 
     need(type(proof_guard) is ProductionGuardV3, "Exact V3 production guard required")
     checkpoint()
-    sql_deletion._enabled()
+    if require_enabled:
+        sql_deletion._enabled()
     now = utc(clock())
     need(activation(authorization_path, authorization_sha256, candidate, now) == permit and permit["runtime_sha256"] == runtime_sha256 and permit["bindings_sha256"] == bindings_sha256, "V3 authorization changed")
     eligibility(candidate, receipt, now)
@@ -300,6 +305,18 @@ def _budget(ledger, candidate, permit, authorization_sha256):
     scope = ledger.db.execute("SELECT epoch,genesis_sha256,state FROM sql_audit_v3_scope WHERE id=1").fetchone()
     need(scope == (permit["audit"]["epoch"], permit["audit"]["genesis_sha256"], "current"), "V3 audit scope requires native restore reconciliation")
     registry_v5.validate("sql_audit_v3_scope", [1, *scope], candidate.environment, ledger)
+    need(ledger.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sql_audit_v3_scope_proof'").fetchone() is not None,
+         "V3 audit scope proof provenance unavailable")
+    registry_v5.schema(ledger.db, "sql_audit_v3_scope_proof")
+    proof = ledger.db.execute("SELECT id,epoch,body,body_sha256 FROM sql_audit_v3_scope_proof WHERE id=1").fetchone()
+    need(proof is not None, "V3 audit scope proof provenance unavailable")
+    registry_v5.validate("sql_audit_v3_scope_proof", list(proof), candidate.environment, ledger)
+    need(proof[1] == permit["audit"]["epoch"], "V3 audit scope proof epoch differs")
+    body = json.loads(proof[2])
+    anchor = ledger.db.execute("SELECT candidate,gateway_manifest_sha256,plaintext_sha256 FROM sql_audit_v3_backup WHERE epoch=?", (proof[1],)).fetchone()
+    need(anchor is not None and tuple(anchor) == (body["backup_candidate"], body["backup_manifest_sha256"], body["audit_plaintext_sha256"])
+         and body["runtime_sha256"] == permit["runtime_sha256"] and body["bindings_sha256"] == permit["bindings_sha256"],
+         "V3 scope proof is stale for current backup or runtime")
     with ledger.db:
         ledger.db.execute("CREATE TABLE IF NOT EXISTS sql_deletion_pilot (pilot_id TEXT PRIMARY KEY, candidate TEXT NOT NULL, authorization_sha256 TEXT NOT NULL)")
         existing = ledger.db.execute("SELECT pilot_id,candidate,authorization_sha256 FROM sql_deletion_pilot ORDER BY pilot_id LIMIT 2").fetchall()
@@ -307,6 +324,142 @@ def _budget(ledger, candidate, permit, authorization_sha256):
         need(not existing or existing == [expected], "V3 pilot budget already consumed")
         if not existing:
             ledger.db.execute("INSERT INTO sql_deletion_pilot VALUES (?,?,?)", expected)
+
+
+def scope_transition(candidate, adapter, ledger, *, authorization_path, authorization_sha256,
+                     runtime_sha256, bindings_sha256, checkpoint, clock, proof_guard,
+                     registry_evidence, bootstrap=False):
+    """CAS one evidence-bound V3 scope while the real Source audit fence is held."""
+    from . import registry_v5, sql_deletion_scope
+    from .ledger import Ledger
+    from .policy import eligibility
+    from .sql_deletion_guard import ProductionGuardV3, _identity
+
+    need(os.geteuid() == 0 and os.getenv("TIERED_ARCHIVE_SQL_V3_SCOPE_ENABLED") == "true"
+         and type(bootstrap) is bool and type(ledger) is Ledger and not ledger.read_only
+         and not ledger.db.in_transaction and type(adapter) is Source and type(proof_guard) is ProductionGuardV3
+         and callable(checkpoint) and callable(clock), "Explicit root V3 scope controller required")
+    bound_job_lock()
+    require_bound_source_lease()
+    sql_deletion_scope.v3_registry_evidence(ledger, registry_evidence)
+    db = ledger.db
+    need(sql_deletion_scope._table(db, "sql_deletion_pilot"), "Persisted SQL pilot budget required")
+    registry_v5.schema(db, "sql_deletion_pilot")
+    need(not sql_deletion_scope._table(db, "sql_deletion_transition"), "Unresolved SQL scope transition")
+    before = sql_deletion_scope.inventory(ledger)
+    v3_before = sql_deletion_scope.v3_inventory(ledger)
+    scope_info = v3_before["sql_audit_v3_scope"]
+    proof_info = v3_before["sql_audit_v3_scope_proof"]
+    if bootstrap:
+        need(not scope_info["present"] and not proof_info["present"] and not before["pilots"] and not before["receipts"],
+             "V3 bootstrap requires a known empty origin")
+        previous_scope = previous_proof = None
+    else:
+        need(scope_info["present"] and proof_info["present"] and len(scope_info["rows"]) == len(proof_info["rows"]) == 1,
+             "Restored V3 scope proof missing")
+        previous_scope = db.execute("SELECT id,epoch,genesis_sha256,state FROM sql_audit_v3_scope WHERE id=1").fetchone()
+        previous_proof = db.execute("SELECT id,epoch,body,body_sha256 FROM sql_audit_v3_scope_proof WHERE id=1").fetchone()
+        need(previous_scope is not None and previous_scope[3] in {"current", "needs_reconcile"}, "V3 scope state is ambiguous")
+        registry_v5.validate("sql_audit_v3_scope_proof", list(previous_proof), candidate.environment, ledger)
+    sql_deletion._scope(candidate, adapter, checkpoint)
+    now = utc(clock())
+    permit = activation(authorization_path, authorization_sha256, candidate, now)
+    pins = permit["audit"]
+    need(permit["runtime_sha256"] == runtime_sha256 and permit["bindings_sha256"] == bindings_sha256
+         and pins["schema_sha256"] == proof_guard.config["audit_schema_sha256"]
+         and pins["epoch"] == proof_guard.config["audit_v3_epoch"]
+         and pins["genesis_sha256"] == proof_guard.config["audit_v3_genesis_sha256"], "V3 scope authorization differs")
+    if previous_scope is not None:
+        need(tuple(previous_scope[1:3]) == (pins["epoch"], pins["genesis_sha256"]), "V3 scope generation changed")
+    receipt = ledger.get(candidate.identity)
+    need(type(receipt) is dict, "V3 scope candidate receipt required")
+    eligibility(candidate, receipt, now)
+    proof_guard.prepare(candidate, receipt, now, permit)
+    restore = proof_guard._v3_restore
+    need(type(restore) is dict and restore.get("native_schema_grants_rows_verified") is True
+         and restore.get("candidate") == proof_guard.config["audit_v3_backup_candidate"]
+         and restore.get("gateway_manifest_sha256") == proof_guard.config["audit_v3_backup_manifest_sha256"],
+         "Actual independent V3 audit restore required")
+    sql_deletion_scope.v3_registry_evidence(ledger, registry_evidence)
+    lock_key = sql_deletion._lock_key(candidate)
+    proof_guard.begin_source()
+    committed = False
+    try:
+        with adapter.exclusive(candidate):
+            _guard(candidate, adapter, receipt, permit, authorization_path, authorization_sha256,
+                   runtime_sha256, bindings_sha256, checkpoint, clock, proof_guard, lock_key, require_enabled=False)
+            source_db = adapter.connection
+            identity = _identity(source_db)
+            need(identity == proof_guard.config["source_identity"] and sql_audit_v3.schema_sha256(source_db) == pins["schema_sha256"],
+                 "Live V3 Source identity or schema changed")
+            sql_audit_v3.inspect_writer(source_db, identity["role"], identity["role_oid"])
+            generation = source_db.execute(text("SELECT epoch,genesis_sha,writer_oid::bigint FROM public.gm_sql_v3_generation WHERE singleton")).one_or_none()
+            need(generation is not None and tuple(generation) == (pins["epoch"], pins["genesis_sha256"], identity["role_oid"]),
+                 "Live V3 Source generation differs")
+            history = verify_history(source_db, ledger, pins["epoch"])
+            expected_history = {k: history[k] for k in ("approvals", "commits", "history_sha256")}
+            need(restore.get("history") == expected_history, "Current Source history differs from restored V3 snapshot")
+            need(len(before["pilots"]) <= 1 and history["approvals"] == history["commits"] == len(before["pilots"]),
+                 "V3 pilot approval or commit is unresolved")
+            if before["pilots"]:
+                need(len(before["receipts"]) == 1 and before["receipts"][0][0] == before["pilots"][0][1]
+                     and before["receipts"][0][2] == "evicted", "Consumed V3 pilot receipt requires reconciliation")
+            else:
+                need(not before["receipts"], "Unexplained SQL deletion history")
+            if previous_proof is not None:
+                previous = json.loads(previous_proof[2])
+                need(previous["approvals"] <= history["approvals"] and previous["commits"] <= history["commits"]
+                     and (previous["commits"] == 0 or previous["history_sha256"] == history["history_sha256"]),
+                     "V3 Source history was reset or rewritten")
+            body = {"format": "greenmind.sql-audit-v3-scope-proof.v1", "epoch": pins["epoch"],
+                    "genesis_sha256": pins["genesis_sha256"], "source_identity_sha256": codec.digest(identity),
+                    "audit_schema_sha256": pins["schema_sha256"], "backup_candidate": restore["candidate"],
+                    "backup_manifest_sha256": restore["gateway_manifest_sha256"], "audit_plaintext_sha256": restore["audit_plaintext_sha256"],
+                    "snapshot_sha256": restore["snapshot_sha256"], "restore_evidence_sha256": proof_guard.config["audit_v3_restore_evidence_sha256"],
+                    "registry_reference_sha256": registry_evidence.reference_sha, "history_sha256": history["history_sha256"],
+                    "inventory_sha256": codec.digest(before), "runtime_sha256": runtime_sha256, "bindings_sha256": bindings_sha256,
+                    "approvals": history["approvals"], "commits": history["commits"]}
+            raw = registry_v5.canonical(body)
+            proof_row = [1, pins["epoch"], raw, hashlib.sha256(raw.encode()).hexdigest()]
+            _guard(candidate, adapter, receipt, permit, authorization_path, authorization_sha256,
+                   runtime_sha256, bindings_sha256, checkpoint, clock, proof_guard, lock_key, require_enabled=False)
+            sql_deletion_scope.v3_registry_evidence(ledger, registry_evidence)
+            need(sql_deletion_scope.inventory(ledger) == before and not db.in_transaction, "V3 SQL journal changed")
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                if bootstrap:
+                    need(not sql_deletion_scope._table(db, "sql_audit_v3_scope") and not sql_deletion_scope._table(db, "sql_audit_v3_scope_proof"), "V3 scope appeared")
+                    db.execute(registry_v5.DDL["sql_audit_v3_scope"])
+                    db.execute(registry_v5.DDL["sql_audit_v3_scope_proof"])
+                    db.execute("INSERT INTO sql_audit_v3_scope VALUES(1,?,?,?)", (pins["epoch"], pins["genesis_sha256"], "needs_reconcile"))
+                    db.execute("INSERT INTO sql_audit_v3_scope_proof VALUES(?,?,?,?)", proof_row)
+                else:
+                    changed = db.execute("UPDATE sql_audit_v3_scope_proof SET epoch=?,body=?,body_sha256=? WHERE id=? AND epoch=? AND body=? AND body_sha256=?",
+                                         (*proof_row[1:], *previous_proof)).rowcount
+                    need(changed == 1, "V3 scope proof CAS failed")
+                registry_v5.validate("sql_audit_v3_scope_proof", proof_row, candidate.environment, ledger)
+                old_state = "needs_reconcile" if bootstrap else previous_scope[3]
+                changed = db.execute("UPDATE sql_audit_v3_scope SET state='current' WHERE id=1 AND epoch=? AND genesis_sha256=? AND state=?",
+                                     (pins["epoch"], pins["genesis_sha256"], old_state)).rowcount
+                need(changed == 1 and sql_deletion_scope.inventory(ledger) == before, "V3 scope CAS or budget changed")
+                checkpoint()
+                require_bound_source_lease()
+                proof_guard.check_deadline()
+                db.commit()
+                committed = True
+            except BaseException:
+                db.rollback()
+                raise
+    except BaseException:
+        # An uncertain Source transaction after a local CAS must not leave current.
+        if committed and not db.in_transaction and sql_deletion_scope._table(db, "sql_audit_v3_scope"):
+            with db:
+                db.execute("UPDATE sql_audit_v3_scope SET state='needs_reconcile' WHERE id=1 AND epoch=? AND genesis_sha256=? AND state='current'",
+                           (pins["epoch"], pins["genesis_sha256"]))
+        raise
+    ledger.publish_read_view()
+    return {"status": "SQL_AUDIT_V3_SCOPE_CURRENT", "epoch": pins["epoch"], "proof_sha256": proof_row[3],
+            "pilot_budget_consumed": bool(before["pilots"]), "deletion_performed": False}
 
 
 def stage_source_approval(candidate, adapter, ledger, *, authorization_path, authorization_sha256,

@@ -101,10 +101,11 @@ def evict(
     from . import sql_deletion, sql_deletion_guard, sql_deletion_scope, sql_deletion_v3
 
     _need(
-        operation in {"evict", "evict-v3", "source-approval-v3", "scope-bootstrap", "scope-reconcile"}, "Exact SQL operation required"
+        operation in {"evict", "evict-v3", "source-approval-v3", "scope-bootstrap", "scope-reconcile", "scope-bootstrap-v3", "scope-reconcile-v3"}, "Exact SQL operation required"
     )
     enabled = (
-        "TIERED_ARCHIVE_SQL_V3_CLI_ENABLED" if operation in {"evict-v3", "source-approval-v3"}
+        "TIERED_ARCHIVE_SQL_V3_SCOPE_ENABLED" if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"}
+        else "TIERED_ARCHIVE_SQL_V3_CLI_ENABLED" if operation in {"evict-v3", "source-approval-v3"}
         else "TIERED_ARCHIVE_SQL_CLI_ENABLED" if operation == "evict"
         else "TIERED_ARCHIVE_SQL_SCOPE_ENABLED"
     )
@@ -181,7 +182,7 @@ def evict(
                         os.environ["RAW_ARCHIVE_SFTP_USER"],
                         os.environ["RAW_ARCHIVE_SFTP_HOST"],
                     )
-                    guard_factory = (sql_deletion_guard.build_guard_v3 if operation in {"evict-v3", "source-approval-v3"} else sql_deletion_guard.build_guard)
+                    guard_factory = (sql_deletion_guard.build_guard_v3 if operation in {"evict-v3", "source-approval-v3", "scope-bootstrap-v3", "scope-reconcile-v3"} else sql_deletion_guard.build_guard)
                     proof = guard_factory(
                         candidate,
                         adapter,
@@ -199,6 +200,8 @@ def evict(
                         "source-approval-v3": sql_deletion_v3.stage_source_approval,
                         "scope-bootstrap": sql_deletion_scope.bootstrap,
                         "scope-reconcile": sql_deletion_scope.reconcile,
+                        "scope-bootstrap-v3": sql_deletion_v3.scope_transition,
+                        "scope-reconcile-v3": sql_deletion_v3.scope_transition,
                     }[operation]
                     extra = {}
                     if operation == "source-approval-v3":
@@ -232,6 +235,8 @@ def evict(
                             )
                         finally:
                             readonly.close()
+                        if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"}:
+                            extra["bootstrap"] = operation == "scope-bootstrap-v3"
                     result = action(
                         candidate,
                         adapter,
@@ -248,7 +253,8 @@ def evict(
                     return {
                         "status": result["state"] if operation in {"evict", "evict-v3"} else result["status"],
                         "identity": candidate.identity,
-                        **({"epoch": result["epoch"]} if operation in {"scope-bootstrap", "scope-reconcile"} else {}),
+                        **({"epoch": result["epoch"]} if operation in {"scope-bootstrap", "scope-reconcile", "scope-bootstrap-v3", "scope-reconcile-v3"} else {}),
+                        **({"proof_sha256": result["proof_sha256"]} if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"} else {}),
                     }
         finally:
             source_engine.dispose()
@@ -330,7 +336,7 @@ def prepare_sql_registry():
             readonly.close()
 
 
-def _await_source_frame(challenge_file, frame_file, action, payload, checkpoint, *, seconds=45):
+def _await_source_frame(challenge_file, frame_file, action, payload, checkpoint, *, seconds=45, maximum=1024 * 1024):
     """Exchange a fresh lease challenge with an independently managed root bridge."""
     import json
     import stat
@@ -340,6 +346,7 @@ def _await_source_frame(challenge_file, frame_file, action, payload, checkpoint,
 
     from .restore_inputs import protected_parents
 
+    _need(type(maximum) is int and 0 < maximum <= 6 * 1024 * 1024, "Bounded Source frame required")
     challenge, frame = Path(challenge_file), Path(frame_file)
     _need(
         challenge.is_absolute()
@@ -384,7 +391,7 @@ def _await_source_frame(challenge_file, frame_file, action, payload, checkpoint,
             _need(current_source_session() == session, "Source lease generation changed")
             if os.path.lexists(frame):
                 before = frozen(frame)
-                raw_frame = _private_read(frame, 1024 * 1024)
+                raw_frame = _private_read(frame, maximum)
                 _need(frozen(frame) == before, "Source bridge frame changed")
                 return hashlib.sha256(raw_frame).hexdigest()
             _need(

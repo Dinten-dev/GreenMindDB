@@ -343,7 +343,7 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
                 or extension["version"] != 1
                 or type(extension["managed_pin_coverage"]) is not bool
                 or type(extension["tables"]) is not dict
-                or not (set(registry_v5.TABLES) - {"sql_deletion_epoch", "science_v3_import_provenance", "sql_audit_v3_backup", "sql_audit_v3_scope"}
+                or not (set(registry_v5.TABLES) - {"sql_deletion_epoch", "science_v3_import_provenance", "sql_audit_v3_backup", "sql_audit_v3_backup_history", "sql_audit_v3_scope", "sql_audit_v3_scope_proof"}
                         <= set(extension["tables"]) <= set(registry_v5.TABLES))
             ):
                 raise ArchiveBlocked("Exact V5 journal coverage required")
@@ -355,8 +355,12 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
                 extension["tables"]["science_v3_import_provenance"] = {"present": False, "rows": 0}
             if "sql_audit_v3_backup" not in extension["tables"]:
                 extension["tables"]["sql_audit_v3_backup"] = {"present": False, "rows": 0}
+            if "sql_audit_v3_backup_history" not in extension["tables"]:
+                extension["tables"]["sql_audit_v3_backup_history"] = {"present": False, "rows": 0}
             if "sql_audit_v3_scope" not in extension["tables"]:
                 extension["tables"]["sql_audit_v3_scope"] = {"present": False, "rows": 0}
+            if "sql_audit_v3_scope_proof" not in extension["tables"]:
+                extension["tables"]["sql_audit_v3_scope_proof"] = {"present": False, "rows": 0}
             for value in extension["tables"].values():
                 if (
                     type(value) is not dict

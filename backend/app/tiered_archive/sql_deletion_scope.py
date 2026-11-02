@@ -74,9 +74,32 @@ _REGISTRY_TOKEN = object()
 
 
 class RegistryEvidence:
-    def __init__(self, token, ledger, inventory_sha, reference_sha):
+    def __init__(self, token, ledger, inventory_sha, reference_sha, v3_inventory_sha=None):
         need(token is _REGISTRY_TOKEN, "Use independently restored registry evidence")
         self.ledger, self.inventory_sha, self.reference_sha = ledger, inventory_sha, reference_sha
+        self.v3_inventory_sha = v3_inventory_sha
+
+
+def v3_inventory(ledger):
+    """Exact V3 table presence and rows; restore intentionally normalizes scope state."""
+    result = {}
+    for name in ("sql_audit_v3_backup", "sql_audit_v3_backup_history", "sql_audit_v3_scope", "sql_audit_v3_scope_proof"):
+        present = _table(ledger.db, name)
+        rows = []
+        if present:
+            registry_v5.schema(ledger.db, name)
+            rows = [list(row) for row in ledger.db.execute("SELECT * FROM " + name + " ORDER BY 1 LIMIT 130")]
+            need(len(rows) < 130, "V3 SQL journal inventory exceeds bound")
+            for row in rows:
+                registry_v5.validate(name, row, "production", ledger)
+            if name == "sql_audit_v3_scope":
+                need(len(rows) <= 1, "V3 SQL scope inventory differs")
+                for row in rows:
+                    row[3] = "reconcile_required_or_current"
+            if name == "sql_audit_v3_scope_proof":
+                need(len(rows) <= 1, "V3 SQL scope proof inventory differs")
+        result[name] = {"present": present, "rows": rows}
+    return result
 
 
 def verify_registry_snapshot(ledger, verifier, reference, *, environment, checkpoint):
@@ -107,6 +130,7 @@ def verify_registry_snapshot(ledger, verifier, reference, *, environment, checkp
         _table(ledger.db, "sql_deletion_pilot"), "Explicit persisted SQL budget inventory required"
     )
     before = inventory(ledger)
+    before_v3 = v3_inventory(ledger)
     before_epoch = (
         ledger.db.execute("SELECT id,epoch,genesis FROM sql_deletion_epoch ORDER BY id").fetchall()
         if _table(ledger.db, "sql_deletion_epoch")
@@ -154,11 +178,13 @@ def verify_registry_snapshot(ledger, verifier, reference, *, environment, checkp
                 else []
             )
             need(restored_epoch == before_epoch, "Registry SQL scope genesis differs")
+            need(v3_inventory(restored) == before_v3, "Registry V3 audit scope or proof differs")
         finally:
             restored.close()
     checkpoint()
     need(inventory(ledger) == before, "SQL ledger changed during independent registry restore")
-    return RegistryEvidence(_REGISTRY_TOKEN, ledger, codec.digest(before), codec.digest(reference))
+    need(v3_inventory(ledger) == before_v3, "V3 SQL journal changed during registry restore")
+    return RegistryEvidence(_REGISTRY_TOKEN, ledger, codec.digest(before), codec.digest(reference), codec.digest(before_v3))
 
 
 def _registry_evidence(ledger, evidence):
@@ -169,6 +195,12 @@ def _registry_evidence(ledger, evidence):
         and registry_v5.sha(evidence.reference_sha),
         "Fresh actual SQL registry restore evidence required",
     )
+
+
+def v3_registry_evidence(ledger, evidence):
+    _registry_evidence(ledger, evidence)
+    need(registry_v5.sha(evidence.v3_inventory_sha) and evidence.v3_inventory_sha == codec.digest(v3_inventory(ledger)),
+         "Fresh independent V3 SQL registry restore required")
 
 
 def _preflight(

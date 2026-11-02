@@ -146,10 +146,49 @@ def validate(payload):
     return payload
 
 
+def history_binding(payload):
+    """Normalize the actual encrypted snapshot to the live audit-history query."""
+    from . import codec
+
+    validate(payload)
+    need(not payload["data"]["unknown"], "Unknown Source DELETE holds V3 history")
+    data = payload["data"]
+    approvals = [[a[k] for k in ("slot", "epoch", "candidate_sha", "permit_sha", "body", "expected")]
+                 for a in data["approvals"]]
+    events = [[item["slot"], str(item["txid"])] for item in data["events"]]
+    rows = [[item["slot"], item["hash"]] for item in data["rows"]]
+    return {"approvals": len(approvals), "commits": len(events),
+            "history_sha256": codec.digest({"approvals": approvals, "events": events, "rows": rows})}
+
+
+def snapshot_payload(db, snapshot, *, source_identity, schema_sha256, epoch, genesis_sha256, checkpoint):
+    """Read complete audit data on a transaction already bound to the RR snapshot."""
+    from .sql_deletion_guard import _identity
+
+    need(db.dialect.name == "postgresql" and type(snapshot) is str and 0 < len(snapshot) <= 256, "Live PostgreSQL snapshot required")
+    db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+    need(db.execute(text("SHOW transaction_isolation")).scalar_one() == "repeatable read"
+         and db.execute(text("SHOW transaction_read_only")).scalar_one() == "on", "V3 capture requires read-only repeatable-read")
+    need(_identity(db) == source_identity and sql_audit_v3.schema_sha256(db) == schema_sha256, "V3 Source identity or schema differs")
+    data = {}
+    for label, (table, order, limit) in TABLES.items():
+        checkpoint()
+        data[label] = db.execute(text(f"SELECT row_to_json(t) FROM public.{table} t ORDER BY {order} LIMIT {limit}")).scalars().all()
+    need(len(data["generation"]) == 1 and type(data["generation"][0].get("writer_oid")) is int, "V3 generation writer identity unavailable")
+    writer_role = db.execute(text("SELECT rolname FROM pg_catalog.pg_roles WHERE oid=:oid"), {"oid": data["generation"][0]["writer_oid"]}).scalar_one()
+    structure = capture_structure(db, writer_role)
+    need(sql_audit_v3.schema_sha256(db) == schema_sha256 and _identity(db) == source_identity, "V3 Source schema or identity changed during snapshot")
+    payload = {"format": FORMAT, "source_identity": source_identity, "schema_sha256": schema_sha256,
+               "snapshot_sha256": hashlib.sha256(snapshot.encode()).hexdigest(), "data": data, "structure": structure}
+    validate(payload)
+    need(data["generation"][0]["epoch"] == epoch and data["generation"][0]["genesis_sha"] == genesis_sha256, "V3 generation pin differs")
+    return payload
+
+
 class AuditSnapshotCapture:
     """A single-use, root-private AES artifact producer called by backup.dump."""
 
-    def __init__(self, *, output, key, source_identity, schema_sha256, epoch, genesis_sha256):
+    def __init__(self, *, output, key, source_identity, schema_sha256, epoch, genesis_sha256, root_bridge=None):
         self.output = Path(output)
         need(self.output.is_absolute() and self.output.resolve() == self.output and self.output.is_dir(), "Private V3 capture directory required")
         st = self.output.stat()
@@ -161,30 +200,22 @@ class AuditSnapshotCapture:
         self.schema_sha256 = schema_sha256
         self.epoch = epoch
         self.genesis = genesis_sha256
+        if root_bridge is not None:
+            from .sql_audit_v3_snapshot_bridge import RootSnapshotBridge
+
+            need(type(root_bridge) is RootSnapshotBridge, "Exact Source-root snapshot bridge required")
+        self.root_bridge = root_bridge
         self.reference = None
 
     def capture(self, db, snapshot, *, checkpoint):
-        from .sql_deletion_guard import _identity
-
         need(self.reference is None and db.dialect.name == "postgresql" and type(snapshot) is str and 0 < len(snapshot) <= 256, "Live single-use PostgreSQL snapshot required")
-        db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
-        need(db.execute(text("SHOW transaction_isolation")).scalar_one() == "repeatable read" and db.execute(text("SHOW transaction_read_only")).scalar_one() == "on", "V3 capture requires same read-only repeatable-read transaction")
-        need(_identity(db) == self.identity and sql_audit_v3.schema_sha256(db) == self.schema_sha256, "V3 Source identity or schema differs")
-        data = {}
-        for label, (table, order, limit) in TABLES.items():
-            checkpoint()
-            rows = db.execute(text(f"SELECT row_to_json(t) FROM public.{table} t ORDER BY {order} LIMIT {limit}" )).scalars().all()
-            data[label] = rows
-        need(len(data["generation"]) == 1 and type(data["generation"][0].get("writer_oid")) is int,
-             "V3 generation writer identity unavailable")
-        writer_role = db.execute(text("SELECT rolname FROM pg_catalog.pg_roles WHERE oid=:oid"),
-                                 {"oid": data["generation"][0]["writer_oid"]}).scalar_one()
-        structure = capture_structure(db, writer_role)
-        need(sql_audit_v3.schema_sha256(db) == self.schema_sha256 and _identity(db) == self.identity,
-             "V3 Source schema or identity changed during snapshot")
-        payload = {"format": FORMAT, "source_identity": self.identity, "schema_sha256": self.schema_sha256, "snapshot_sha256": hashlib.sha256(snapshot.encode()).hexdigest(), "data": data, "structure": structure}
-        validate(payload)
-        need(data["generation"][0]["epoch"] == self.epoch and data["generation"][0]["genesis_sha"] == self.genesis, "V3 generation pin differs")
+        if self.root_bridge is None:
+            payload = snapshot_payload(db, snapshot, source_identity=self.identity, schema_sha256=self.schema_sha256,
+                                       epoch=self.epoch, genesis_sha256=self.genesis, checkpoint=checkpoint)
+        else:
+            payload = self.root_bridge.capture(snapshot, reader_db=db, reader_identity=self.identity,
+                                               schema_sha256=self.schema_sha256, epoch=self.epoch,
+                                               genesis_sha256=self.genesis, checkpoint=checkpoint)
         raw = encode(payload)
         plaintext, sealed, verify = (self.output / name for name in ("sql-audit-v3.plain", "sql-audit-v3.bin", "sql-audit-v3.verify"))
         try:
@@ -202,6 +233,37 @@ class AuditSnapshotCapture:
         finally:
             plaintext.unlink(missing_ok=True)
             verify.unlink(missing_ok=True)
+
+
+def root_snapshot_capture(output, key, *, profile_path, profile_sha256):
+    """Build the explicit production bridge from immutable root-owned inputs."""
+    from app.raw_archive.scientific_scope_control import _private_json
+
+    from .sql_audit_v3_snapshot_bridge import RootSnapshotBridge
+
+    need(os.geteuid() == 0 and os.getenv("RAW_ARCHIVE_ENVIRONMENT") == "production"
+         and os.getenv("RAW_ARCHIVE_WORKER_ROLE") == "archive"
+         and os.getenv("TIERED_ARCHIVE_SQL_V3_SOURCE_SNAPSHOT_ENABLED") == "true",
+         "Explicit production Source-root V3 backup required")
+    value = _private_json(profile_path, profile_sha256, limit=16384)
+    fields = {"format", "source_identity", "schema_sha256", "epoch", "genesis_sha256", "binding_path", "binding_sha256",
+              "dba_identity_path", "dba_identity_sha256", "challenge_file", "frame_file", "source_manifest_sha256", "producer_sha256",
+              "pg_client_dir", "pg_client_manifest_sha256", "crypto_runtime_dir", "crypto_manifest_sha256"}
+    need(set(value) == fields and value["format"] == "greenmind.sql-audit-v3-root-snapshot-profile.v1"
+         and type(value["source_identity"]) is dict and type(value["epoch"]) is str and sql_audit_v3.HEX32.fullmatch(value["epoch"])
+         and all(type(value[k]) is str and sql_audit_v3.HEX64.fullmatch(value[k]) for k in
+                 ("schema_sha256", "genesis_sha256", "binding_sha256", "dba_identity_sha256", "source_manifest_sha256", "producer_sha256"))
+         and all(type(value[k]) is str and Path(value[k]).is_absolute() for k in ("binding_path", "dba_identity_path", "challenge_file", "frame_file")),
+         "Exact V3 Source snapshot profile required")
+    bridge = RootSnapshotBridge(binding_path=value["binding_path"], binding_sha256=value["binding_sha256"],
+                                dba_identity_path=value["dba_identity_path"], dba_identity_sha256=value["dba_identity_sha256"],
+                                challenge_file=value["challenge_file"], frame_file=value["frame_file"],
+                                source_manifest_sha256=value["source_manifest_sha256"], producer_sha256=value["producer_sha256"],
+                                pg_client_dir=value["pg_client_dir"], pg_client_manifest_sha256=value["pg_client_manifest_sha256"],
+                                crypto_runtime_dir=value["crypto_runtime_dir"], crypto_manifest_sha256=value["crypto_manifest_sha256"])
+    return AuditSnapshotCapture(output=output, key=key, source_identity=value["source_identity"],
+                                schema_sha256=value["schema_sha256"], epoch=value["epoch"],
+                                genesis_sha256=value["genesis_sha256"], root_bridge=bridge)
 
 
 def verify_remote(verifier, reference, key, directory, *, checkpoint):
@@ -325,15 +387,40 @@ def record_gateway_readback(candidate, ledger, verifier, key, *, checkpoint):
     refs = receipt["files"]
     row = [refs[0]["audit_v3_epoch"], candidate.identity, evidence["gateway_manifest_sha256"], refs[5]["sha256"], evidence["audit_plaintext_sha256"]]
     registry_v5.validate("sql_audit_v3_backup", row, candidate.environment, ledger)
-    with ledger.db:
+    need(not ledger.db.in_transaction, "Idle V3 audit backup journal required")
+    try:
+        ledger.db.execute("BEGIN IMMEDIATE")
         ledger.db.execute(registry_v5.DDL["sql_audit_v3_backup"])
+        ledger.db.execute(registry_v5.DDL["sql_audit_v3_backup_history"])
         registry_v5.schema(ledger.db, "sql_audit_v3_backup")
+        registry_v5.schema(ledger.db, "sql_audit_v3_backup_history")
         previous = ledger.db.execute("SELECT epoch,candidate,gateway_manifest_sha256,audit_sha256,plaintext_sha256 FROM sql_audit_v3_backup WHERE epoch=?", (row[0],)).fetchone()
-        need(previous is None or tuple(previous) == tuple(row), "V3 audit epoch already has another backup")
+        for entry in ([list(previous)] if previous is not None else []) + [row]:
+            registry_v5.validate("sql_audit_v3_backup_history", entry, candidate.environment, ledger)
+            historical = ledger.db.execute("SELECT epoch,candidate,gateway_manifest_sha256,audit_sha256,plaintext_sha256 FROM sql_audit_v3_backup_history WHERE epoch=? AND candidate=?", (entry[0], entry[1])).fetchone()
+            need(historical is None or tuple(historical) == tuple(entry), "V3 audit backup history changed")
+            if historical is None:
+                count = ledger.db.execute("SELECT count(*) FROM sql_audit_v3_backup_history WHERE epoch=?", (entry[0],)).fetchone()[0]
+                need(count < 128, "V3 audit backup history capacity exhausted")
+                ledger.db.execute("INSERT INTO sql_audit_v3_backup_history VALUES(?,?,?,?,?)", entry)
         if previous is None:
             ledger.db.execute("INSERT INTO sql_audit_v3_backup VALUES (?,?,?,?,?)", row)
+        elif tuple(previous) != tuple(row):
+            scope_exists = ledger.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sql_audit_v3_scope'").fetchone()
+            if scope_exists:
+                registry_v5.schema(ledger.db, "sql_audit_v3_scope")
+                scope = ledger.db.execute("SELECT epoch,state FROM sql_audit_v3_scope WHERE id=1").fetchone()
+                need(scope is not None and scope[0] == row[0] and scope[1] in {"current", "needs_reconcile"}, "V3 scope generation differs during backup rotation")
+                changed = ledger.db.execute("UPDATE sql_audit_v3_scope SET state='needs_reconcile' WHERE id=1 AND epoch=? AND state=?", tuple(scope)).rowcount
+                need(changed == 1, "V3 backup rotation scope CAS failed")
+            changed = ledger.db.execute("UPDATE sql_audit_v3_backup SET candidate=?,gateway_manifest_sha256=?,audit_sha256=?,plaintext_sha256=? WHERE epoch=? AND candidate=? AND gateway_manifest_sha256=? AND audit_sha256=? AND plaintext_sha256=?", (*row[1:], *previous)).rowcount
+            need(changed == 1, "V3 backup rotation CAS failed")
         checkpoint()
         require_bound_source_lease()
+        ledger.db.commit()
+    except BaseException:
+        ledger.db.rollback()
+        raise
     ledger.publish_read_view()
     return {**evidence, "registry_reference_recorded": True, "restore_verified": False}
 

@@ -61,11 +61,24 @@ TABLES = {
         ("audit_sha256", "TEXT", 1, 0),
         ("plaintext_sha256", "TEXT", 1, 0),
     ),
+    "sql_audit_v3_backup_history": (
+        ("epoch", "TEXT", 1, 1),
+        ("candidate", "TEXT", 1, 2),
+        ("gateway_manifest_sha256", "TEXT", 1, 0),
+        ("audit_sha256", "TEXT", 1, 0),
+        ("plaintext_sha256", "TEXT", 1, 0),
+    ),
     "sql_audit_v3_scope": (
         ("id", "INTEGER", 0, 1),
         ("epoch", "TEXT", 1, 0),
         ("genesis_sha256", "TEXT", 1, 0),
         ("state", "TEXT", 1, 0),
+    ),
+    "sql_audit_v3_scope_proof": (
+        ("id", "INTEGER", 0, 1),
+        ("epoch", "TEXT", 1, 0),
+        ("body", "TEXT", 1, 0),
+        ("body_sha256", "TEXT", 1, 0),
     ),
     "science_v3_import_provenance": (
         ("id", "TEXT", 0, 1),
@@ -83,7 +96,9 @@ DDL = {
     "science_v3_scope_epoch": "CREATE TABLE IF NOT EXISTS science_v3_scope_epoch (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL, source_session TEXT NOT NULL, capture_id TEXT NOT NULL, capture_sha256 TEXT NOT NULL, index_sha256 TEXT NOT NULL, frame_sha256 TEXT NOT NULL, created_at TEXT NOT NULL)",
     "science_v3_scope_history": "CREATE TABLE IF NOT EXISTS science_v3_scope_history (epoch TEXT PRIMARY KEY, previous_epoch TEXT NOT NULL, inventory_sha256 TEXT NOT NULL, authority_session TEXT NOT NULL, created_at TEXT NOT NULL)",
     "sql_audit_v3_backup": "CREATE TABLE IF NOT EXISTS sql_audit_v3_backup (epoch TEXT PRIMARY KEY, candidate TEXT NOT NULL, gateway_manifest_sha256 TEXT NOT NULL, audit_sha256 TEXT NOT NULL, plaintext_sha256 TEXT NOT NULL)",
+    "sql_audit_v3_backup_history": "CREATE TABLE IF NOT EXISTS sql_audit_v3_backup_history (epoch TEXT NOT NULL, candidate TEXT NOT NULL, gateway_manifest_sha256 TEXT NOT NULL, audit_sha256 TEXT NOT NULL, plaintext_sha256 TEXT NOT NULL, PRIMARY KEY(epoch,candidate))",
     "sql_audit_v3_scope": "CREATE TABLE IF NOT EXISTS sql_audit_v3_scope (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL, genesis_sha256 TEXT NOT NULL, state TEXT NOT NULL)",
+    "sql_audit_v3_scope_proof": "CREATE TABLE IF NOT EXISTS sql_audit_v3_scope_proof (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL, body TEXT NOT NULL, body_sha256 TEXT NOT NULL)",
     "science_v3_import_provenance": "CREATE TABLE IF NOT EXISTS science_v3_import_provenance (id TEXT PRIMARY KEY, manifest_sha256 TEXT NOT NULL, inventory_sha256 TEXT NOT NULL, record TEXT NOT NULL)",
 }
 
@@ -134,7 +149,33 @@ def validate(kind, values, environment, ledger):
         kind in TABLES and type(values) is list and len(values) == len(TABLES[kind]),
         "Unknown V5 journal record",
     )
-    if kind == "sql_audit_v3_scope":
+    if kind == "sql_audit_v3_scope_proof":
+        item_id, epoch, raw, body_sha = values
+        body = _json(raw)
+        fields = {"format", "epoch", "genesis_sha256", "source_identity_sha256", "audit_schema_sha256",
+                  "backup_candidate", "backup_manifest_sha256", "audit_plaintext_sha256", "snapshot_sha256",
+                  "restore_evidence_sha256", "registry_reference_sha256", "history_sha256", "inventory_sha256",
+                  "runtime_sha256", "bindings_sha256", "approvals", "commits"}
+        need(item_id == 1 and sha(epoch, 32) and sha(body_sha) and hashlib.sha256(raw.encode()).hexdigest() == body_sha
+             and set(body) == fields and body["format"] == "greenmind.sql-audit-v3-scope-proof.v1"
+             and body["epoch"] == epoch and all(sha(body[k]) for k in fields - {"format", "epoch", "approvals", "commits"})
+             and type(body["approvals"]) is int and body["approvals"] in (0, 1)
+             and type(body["commits"]) is int and body["commits"] == body["approvals"], "Invalid V3 SQL scope proof")
+        scope = ledger.db.execute("SELECT epoch,genesis_sha256,state FROM sql_audit_v3_scope WHERE id=1").fetchone()
+        history_exists = ledger.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sql_audit_v3_backup_history'").fetchone()
+        anchor = (ledger.db.execute("SELECT candidate,gateway_manifest_sha256,plaintext_sha256 FROM sql_audit_v3_backup_history WHERE epoch=? AND candidate=?", (epoch, body["backup_candidate"])).fetchone()
+                  if history_exists else None)
+        if anchor is None:
+            anchor = ledger.db.execute("SELECT candidate,gateway_manifest_sha256,plaintext_sha256 FROM sql_audit_v3_backup WHERE epoch=? AND candidate=?", (epoch, body["backup_candidate"])).fetchone()
+        need(scope is not None and tuple(scope[:2]) == (epoch, body["genesis_sha256"])
+             and scope[2] in {"current", "needs_reconcile"} and anchor is not None
+             and tuple(anchor) == (body["backup_candidate"], body["backup_manifest_sha256"], body["audit_plaintext_sha256"]),
+             "V3 SQL scope proof anchor differs")
+        receipt = ledger.get(body["backup_candidate"])
+        need(type(receipt) is dict and type(receipt.get("files")) is list and len(receipt["files"]) == 6
+             and type(receipt["files"][0]) is dict and receipt["files"][0].get("audit_v3_schema_sha256") == body["audit_schema_sha256"]
+             and receipt["files"][0].get("audit_v3_snapshot_sha256") == body["snapshot_sha256"], "V3 SQL scope snapshot differs")
+    elif kind == "sql_audit_v3_scope":
         item_id, epoch, genesis_sha, state = values
         need(item_id == 1 and sha(epoch, 32) and sha(genesis_sha) and state in {"current", "needs_reconcile"}, "Invalid V3 SQL audit scope")
         need(ledger.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sql_audit_v3_backup'").fetchone() is not None, "V3 SQL audit backup inventory absent")
@@ -142,7 +183,7 @@ def validate(kind, values, environment, ledger):
         need(anchor is not None, "V3 SQL audit scope backup anchor absent")
         receipt = ledger.get(anchor[0])
         need(type(receipt) is dict and type(receipt.get("files")) is list and len(receipt["files"]) == 6 and type(receipt["files"][0]) is dict and receipt["files"][0].get("audit_v3_genesis_sha256") == genesis_sha, "V3 SQL audit scope genesis differs")
-    elif kind == "sql_audit_v3_backup":
+    elif kind in {"sql_audit_v3_backup", "sql_audit_v3_backup_history"}:
         epoch, candidate, manifest_sha, audit_sha, plain_sha = values
         receipt = ledger.get(candidate) if sha(candidate) else None
         need(sha(epoch, 32) and all(sha(value) for value in (candidate, manifest_sha, audit_sha, plain_sha))

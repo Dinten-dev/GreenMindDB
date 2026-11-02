@@ -932,9 +932,9 @@ def backup(source, *, backup_format="schema-master-v2"):
     from .pipeline import publish
     from .policy import Candidate
 
-    if backup_format not in {"schema-master-v2", "postgres-full-v1", schema_provider.FORMAT}:
+    if backup_format not in {"schema-master-v2", "postgres-full-v1", schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
         raise ArchiveBlocked("Unknown database backup format")
-    if backup_format == schema_provider.FORMAT:
+    if backup_format in {schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
         if os.geteuid() != 0:
             raise ArchiveBlocked("Provider schema/master capture is root-only")
         provider_scope = schema_provider.read_scope(
@@ -943,6 +943,9 @@ def backup(source, *, backup_format="schema-master-v2"):
         )
         if provider_scope["environment"] != environment() or provider_scope["source"] != source:
             raise ArchiveBlocked("Provider authority belongs to another environment or source")
+        if backup_format == schema_provider.AUDIT_V3_FORMAT and (source != "gateway" or environment() != "production"
+                or os.getenv("TIERED_ARCHIVE_SQL_V3_SOURCE_SNAPSHOT_ENABLED") != "true"):
+            raise ArchiveBlocked("Explicit production Gateway V3 Source snapshot required")
     if backup_format == "postgres-full-v1" and environment() != "staging":
         raise ArchiveBlocked("Native full backup is currently restricted to Staging")
 
@@ -983,16 +986,28 @@ def backup(source, *, backup_format="schema-master-v2"):
                     checkpoint=checkpoint,
                 )
                 return publish(candidate, files, store, ledger, checkpoint=checkpoint)
-            if backup_format == schema_provider.FORMAT:
+            if backup_format in {schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
                 from app.raw_archive.policy import checksum
 
                 if checksum(Path(os.environ["TIERED_ARCHIVE_BACKUP_KEY_FILE"])) != os.environ.get(
                     "TIERED_ARCHIVE_BACKUP_KEY_SHA256"
                 ):
                     raise ArchiveBlocked("Provider backup key differs from recovery binding")
-                candidate, files = schema_provider.capture(
-                    database_url, source, folder, key, provider_scope, checkpoint=checkpoint
-                )
+                options = {}
+                if backup_format == schema_provider.AUDIT_V3_FORMAT:
+                    from .sql_audit_v3_backup import root_snapshot_capture
+
+                    options["audit_capture"] = root_snapshot_capture(
+                        folder, key, profile_path=os.environ["TIERED_ARCHIVE_SQL_V3_SNAPSHOT_PROFILE_FILE"],
+                        profile_sha256=os.environ["TIERED_ARCHIVE_SQL_V3_SNAPSHOT_PROFILE_SHA256"])
+                    options["schema_capture"] = options["audit_capture"].root_bridge.schema_capture(provider_scope, folder)
+                try:
+                    candidate, files = schema_provider.capture(
+                        database_url, source, folder, key, provider_scope, checkpoint=checkpoint, **options
+                    )
+                finally:
+                    if "audit_capture" in options:
+                        options["audit_capture"].root_bridge.cleanup()
                 return publish(candidate, files, store, ledger, checkpoint=checkpoint)
             originals, proof = dump(
                 database_url,

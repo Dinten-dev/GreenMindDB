@@ -122,7 +122,7 @@ def test_v5_roundtrip_keeps_all_journals_and_requires_reconciliation(bundle, tmp
     index = json.loads((box.root / reference["key"]).read_bytes())
     assert index["schema"] == 5
     assert all(
-        value["rows"] == (0 if name in {"science_v3_scope_history", "science_v3_import_provenance", "sql_audit_v3_backup", "sql_audit_v3_scope"} else 1)
+        value["rows"] == (0 if name in {"science_v3_scope_history", "science_v3_import_provenance", "sql_audit_v3_backup", "sql_audit_v3_backup_history", "sql_audit_v3_scope", "sql_audit_v3_scope_proof"} else 1)
         for name, value in index["journal_v5"]["tables"].items()
     )
     recovered = Ledger(tmp_path / "new")
