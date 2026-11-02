@@ -15,7 +15,16 @@ from app.raw_archive.policy import ArchiveBlocked
 
 from . import parquet
 from .codec import digest, encode
-from .recovery import direct_children, restore_url
+from .recovery import (
+    RestoreTLSBinding,
+    direct_children,
+    restore_tls_checkpoint,
+    restore_tls_connect_args,
+    restore_tls_engine_guard,
+    restore_tls_identity,
+    restore_tls_source,
+    restore_url,
+)
 from .runtime import candidate_from_json
 from .source import DATASETS, row_identity
 
@@ -257,15 +266,34 @@ def schema_fingerprint(tables):
     )
 
 
-def connection(database_url):
+def connection(database_url, *, tls_binding: RestoreTLSBinding | None = None, checkpoint=None):
     from sqlalchemy import create_engine
 
-    return create_engine(
-        restore_url(database_url),
+    url = restore_url(database_url)
+    if tls_binding is not None:
+        require(callable(checkpoint), "TLS restore session checkpoint required")
+    engine = create_engine(
+        url,
         pool_size=1,
         max_overflow=0,
-        connect_args={"connect_timeout": 3, "options": "-c default_transaction_read_only=off"},
+        connect_args={
+            "connect_timeout": 3,
+            "options": "-c default_transaction_read_only=off",
+            **restore_tls_connect_args(tls_binding, url),
+        },
     )
+    restore_tls_engine_guard(engine, tls_binding, url, checkpoint=checkpoint)
+    return engine
+
+
+def _session_transport(database_url, plan, tls_binding, checkpoint):
+    """Preserve legacy connection calls; TLS reuses the existing Root authority."""
+    if tls_binding is None:
+        return checkpoint, connection(database_url)
+    url = restore_url(database_url)
+    checkpoint = restore_tls_checkpoint(tls_binding, url, checkpoint)
+    restore_tls_source(tls_binding, plan["source"])
+    return checkpoint, connection(database_url, tls_binding=tls_binding, checkpoint=checkpoint)
 
 
 def admission(db):
@@ -302,16 +330,19 @@ def dataset_total(db, dataset):
     ).mappings().one_or_none()
 
 
-def begin_restore_session(database_url, plan, plan_sha256, *, checkpoint):
+def begin_restore_session(
+    database_url, plan, plan_sha256, *, checkpoint, tls_binding: RestoreTLSBinding | None = None
+):
     from sqlalchemy import select
 
     from . import restore_baseline as baseline
     from . import restore_fence as fence
 
     validate_plan(plan, plan_sha256)
-    engine = connection(database_url)
+    checkpoint, engine = _session_transport(database_url, plan, tls_binding, checkpoint)
     try:
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             admission(db)
             sessions, _, _ = journals(db)
             identity = target_identity(db)
@@ -423,6 +454,7 @@ def advance_restore_baseline(
     checkpoint,
     maximum_rows=500,
     maximum_bytes=8 * 1024**2,
+    tls_binding: RestoreTLSBinding | None = None,
 ):
     from sqlalchemy import select
 
@@ -430,9 +462,10 @@ def advance_restore_baseline(
     from . import restore_fence as fence
 
     validate_plan(plan, plan_sha256)
-    engine = connection(database_url)
+    checkpoint, engine = _session_transport(database_url, plan, tls_binding, checkpoint)
     try:
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             admission(db)
             sessions, _, _ = journals(db)
             session = (
@@ -612,7 +645,15 @@ def check_row(db, target, children, spec, body, organization):
 
 
 def apply_restore_batch(
-    database_url, plan, plan_sha256, session_id, batch_path, batch_sha256, *, checkpoint
+    database_url,
+    plan,
+    plan_sha256,
+    session_id,
+    batch_path,
+    batch_sha256,
+    *,
+    checkpoint,
+    tls_binding: RestoreTLSBinding | None = None,
 ):
     """Commit at most one bounded batch; failed batches roll back rows and journal."""
     from sqlalchemy import select
@@ -623,9 +664,10 @@ def apply_restore_batch(
     validate_plan(plan, plan_sha256)
     require(sha(session_id) and sha(batch_sha256), "Pinned session and batch required")
     descriptor, pages = load_batch(batch_path, batch_sha256, plan, checkpoint)
-    engine = connection(database_url)
+    checkpoint, engine = _session_transport(database_url, plan, tls_binding, checkpoint)
     try:
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             admission(db)
             sessions, batches, journal = journals(db)
             session = (
@@ -909,7 +951,15 @@ def audit_journal(db):
     return table
 
 
-def begin_restore_audit(database_url, plan, plan_sha256, session_id, *, checkpoint):
+def begin_restore_audit(
+    database_url,
+    plan,
+    plan_sha256,
+    session_id,
+    *,
+    checkpoint,
+    tls_binding: RestoreTLSBinding | None = None,
+):
     """Freeze all registered load sessions before any final content-audit call."""
     from sqlalchemy import select
 
@@ -917,9 +967,10 @@ def begin_restore_audit(database_url, plan, plan_sha256, session_id, *, checkpoi
     from . import restore_fence as fence
 
     validate_plan(plan, plan_sha256)
-    engine = connection(database_url)
+    checkpoint, engine = _session_transport(database_url, plan, tls_binding, checkpoint)
     try:
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             admission(db)
             sessions, _, _ = journals(db)
             session = (
@@ -991,7 +1042,15 @@ def frozen_batch_inputs(batch_path, pages):
 
 
 def audit_restore_batch(
-    database_url, plan, plan_sha256, session_id, batch_path, batch_sha256, *, checkpoint
+    database_url,
+    plan,
+    plan_sha256,
+    session_id,
+    batch_path,
+    batch_sha256,
+    *,
+    checkpoint,
+    tls_binding: RestoreTLSBinding | None = None,
 ):
     """Bounded final typed readback. No target data DML; audit journal commits atomically."""
     from sqlalchemy import select
@@ -1004,9 +1063,10 @@ def audit_restore_batch(
     frozen(batch_path)
     descriptor, pages = load_batch(batch_path, batch_sha256, plan, checkpoint)
     input_pins = frozen_batch_inputs(batch_path, pages)
-    engine = connection(database_url)
+    checkpoint, engine = _session_transport(database_url, plan, tls_binding, checkpoint)
     try:
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             admission(db)
             sessions, batches, page_journal = journals(db)
             audits = audit_journal(db)
