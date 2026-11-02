@@ -1,8 +1,8 @@
 """Central gateway API-key generation and authentication.
 
 New keys embed the gateway UUID so authentication requires one database lookup.
-Legacy unprefixed keys remain valid through an explicitly isolated O(N) fallback
-until operators rotate them.
+Legacy keys need a device identity until controlled digest enrollment. Public
+requests never scan the fleet, including on cache misses and malformed keys.
 """
 
 from __future__ import annotations
@@ -71,14 +71,6 @@ def _reserve_legacy_check(peer: str):
         _legacy_global[1] += 1
 
 
-def _refund_legacy_success(peer: str):
-    with _cache_lock:
-        if peer in _legacy_attempts:
-            start, count = _legacy_attempts[peer]
-            _legacy_attempts[peer] = (start, max(0, count - 1))
-        _legacy_global[1] = max(0, _legacy_global[1] - 1)
-
-
 def clear_gateway_auth_cache() -> None:
     with _cache_lock:
         _verified_keys.clear()
@@ -131,6 +123,10 @@ def set_gateway_api_key(gateway: Gateway, api_key: str) -> None:
         gateway.api_key_hash = get_password_hash(api_key)
 
 
+def gateway_key_digest(api_key: str) -> str:
+    return f"{_DIGEST_PREFIX}{sha256(api_key.encode()).hexdigest()}"
+
+
 def _verify_gateway_key(gateway: Gateway, api_key: str | None) -> bool:
     """Verify a candidate against one already-resolved gateway."""
     if not api_key or len(api_key) > _MAX_API_KEY_LENGTH or not gateway.api_key_hash:
@@ -151,16 +147,26 @@ def verify_gateway_api_key(gateway: Gateway, api_key: str | None, peer: str = "i
         return False
     if gateway.api_key_hash.startswith(_DIGEST_PREFIX):
         return _verify_gateway_key(gateway, api_key)
-    with _legacy_lock:
+    # Do not queue unbounded password work behind a busy verifier. The budget
+    # counts individual bcrypt operations, including successful ones.
+    if not _legacy_lock.acquire(blocking=False):
+        raise HTTPException(
+            429, "Legacy authentication temporarily limited", headers={"Retry-After": "60"}
+        )
+    try:
         _reserve_legacy_check(peer)
-        verified = _verify_gateway_key(gateway, api_key)
-        if verified and gateway.is_active:
-            _refund_legacy_success(peer)
-        return verified
+        return _verify_gateway_key(gateway, api_key)
+    finally:
+        _legacy_lock.release()
 
 
 def authenticate_gateway_api_key(
-    db: Session, api_key: str | None, peer: str = "internal"
+    db: Session,
+    api_key: str | None,
+    peer: str = "internal",
+    *,
+    gateway_id: str | uuid.UUID | None = None,
+    hardware_id: str | None = None,
 ) -> Gateway:
     """Authenticate a gateway with O(1) lookup for new keys.
 
@@ -173,23 +179,38 @@ def authenticate_gateway_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing X-Api-Key header",
         )
-    if len(api_key) > _MAX_API_KEY_LENGTH:
+    if len(api_key.encode()) > _MAX_API_KEY_LENGTH:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+
+    if gateway_id is not None:
+        try:
+            gateway_id = uuid.UUID(str(gateway_id))
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(401, "Invalid API key") from None
+    if hardware_id is not None and not 1 <= len(hardware_id) <= 100:
+        raise HTTPException(401, "Invalid API key")
+
+    def checked(gateway):
+        if gateway_id is not None and gateway.id != gateway_id:
+            raise HTTPException(401, "Invalid API key")
+        if hardware_id is not None and gateway.hardware_id != hardware_id:
+            raise HTTPException(403, "Gateway identity mismatch")
+        return gateway
 
     match = _NEW_KEY_RE.fullmatch(api_key)
     if api_key.startswith(f"{GATEWAY_KEY_PREFIX}_") and not match:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
     cached = _cached_gateway(db, api_key)
     if cached is not None:
-        return cached
+        return checked(cached)
     with _verification_locks[sha256(api_key.encode()).digest()[0] % 64]:
         cached = _cached_gateway(db, api_key)
         if cached is not None:
-            return cached
-        return _authenticate_uncached(db, api_key, match, peer)
+            return checked(cached)
+        return checked(_authenticate_uncached(db, api_key, match, peer, gateway_id, hardware_id))
 
 
-def _authenticate_uncached(db, api_key, match, peer):
+def _authenticate_uncached(db, api_key, match, peer, gateway_id, hardware_id):
     if match:
         gateway_id = uuid.UUID(hex=match.group(1))
         gateway = db.query(Gateway).filter(Gateway.id == gateway_id).first()
@@ -204,26 +225,34 @@ def _authenticate_uncached(db, api_key, match, peer):
             _remember_verified(db, api_key, gateway)
         return gateway
 
-    # Compatibility only: remove after all deployed gateways have rotated to gmk_* keys.
-    with _legacy_lock:
-        _reserve_legacy_check(peer)
-        for gateway in db.query(Gateway).populate_existing().filter(legacy_hash_filter()).all():
-            if _verify_gateway_key(gateway, api_key):
-                if not gateway.is_active:
-                    raise HTTPException(403, "Gateway deactivated")
-                _refund_legacy_success(peer)
-                _remember_verified(db, api_key, gateway)
-                return gateway
-
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+    query = db.query(Gateway).populate_existing()
+    # An indexed digest can resolve an enrolled key even when a supplied hint is
+    # wrong. The caller still checks the hint after proving the credential.
+    matches = query.filter(Gateway.api_key_hash == gateway_key_digest(api_key)).limit(2).all()
+    if len(matches) == 1:
+        gateway = matches[0]
+    elif gateway_id is not None:
+        gateway = query.filter(Gateway.id == gateway_id).first()
+    elif hardware_id is not None:
+        gateway = query.filter(Gateway.hardware_id == hardware_id).first()
+    else:
+        gateway = None
+    if not gateway or not verify_gateway_api_key(gateway, api_key, peer):
+        raise HTTPException(401, "Invalid API key")
+    if not gateway.is_active:
+        raise HTTPException(403, "Gateway deactivated")
+    if not gateway.api_key_hash.startswith(_DIGEST_PREFIX):
+        _remember_verified(db, api_key, gateway)
+    return gateway
 
 
 def get_current_gateway(
     request: Request,
     x_api_key: str | None = Header(None, alias="X-Api-Key"),
     db: Session = Depends(get_db),
+    x_gateway_id: str | None = Header(None, alias="X-Gateway-Id"),
 ) -> Gateway:
     """FastAPI dependency returning the authenticated, active gateway."""
     return authenticate_gateway_api_key(
-        db, x_api_key, request.client.host if request.client else "unknown"
+        db, x_api_key, request.client.host if request.client else "unknown", gateway_id=x_gateway_id
     )

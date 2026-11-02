@@ -300,6 +300,8 @@ def test_idle_websocket_closes_on_session_revocation(
 def test_failed_legacy_checks_ignore_spoofed_proxy_headers(
     client, db, setup_test_data, monkeypatch
 ):
+    setup_test_data["gateway"].api_key_hash = gateway_auth.get_password_hash("legacy-test-secret")
+    db.commit()
     calls = []
     monkeypatch.setattr(gateway_auth, "verify_password", lambda *args: calls.append(1) or False)
     modern = Gateway(
@@ -313,7 +315,11 @@ def test_failed_legacy_checks_ignore_spoofed_proxy_headers(
     for i in range(7):
         response = client.post(
             "/api/v1/ingest",
-            json={"gateway_serial": "none", "measurement_id": str(uuid.uuid4()), "readings": []},
+            json={
+                "gateway_serial": setup_test_data["gateway"].hardware_id,
+                "measurement_id": str(uuid.uuid4()),
+                "readings": [],
+            },
             headers={
                 "X-Api-Key": f"bad-{i}",
                 "X-Forwarded-For": f"192.0.2.{i}",
@@ -326,6 +332,8 @@ def test_failed_legacy_checks_ignore_spoofed_proxy_headers(
 
 
 def test_prefixed_old_hash_checks_are_throttled(db, setup_test_data, monkeypatch):
+    setup_test_data["gateway"].api_key_hash = gateway_auth.get_password_hash("legacy-test-secret")
+    db.commit()
     calls = []
     monkeypatch.setattr(gateway_auth, "verify_password", lambda *args: calls.append(1) or False)
     for i in range(6):
@@ -340,6 +348,7 @@ def test_direct_legacy_verifier_cannot_bypass_throttle(setup_test_data, monkeypa
     calls = []
     monkeypatch.setattr(gateway_auth, "verify_password", lambda *args: calls.append(1) or False)
     gateway = setup_test_data["gateway"]
+    gateway.api_key_hash = gateway_auth.get_password_hash("legacy-test-secret")
     for _ in range(5):
         assert not gateway_auth.verify_gateway_api_key(gateway, "wrong")
     with pytest.raises(HTTPException) as error:

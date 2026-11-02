@@ -12,6 +12,7 @@ from fastapi import (
 )
 from pydantic import UUID4
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import get_current_user
 from app.database import get_db
@@ -39,14 +40,19 @@ async def provisioning_ws(
     websocket: WebSocket,
     db: Session = Depends(get_db),
     x_api_key: str | None = Header(None, alias="X-Api-Key"),
+    x_gateway_id: str | None = Header(None, alias="X-Gateway-Id"),
 ):
     """
     WebSocket endpoint for the Gateway.
     The Gateway connects here to receive real-time notifications about new provisioning jobs.
     """
     try:
-        gateway = authenticate_gateway_api_key(
-            db, x_api_key, websocket.client.host if websocket.client else "unknown"
+        gateway = await run_in_threadpool(
+            authenticate_gateway_api_key,
+            db,
+            x_api_key,
+            websocket.client.host if websocket.client else "unknown",
+            gateway_id=x_gateway_id,
         )
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

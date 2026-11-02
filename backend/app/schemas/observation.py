@@ -1,6 +1,6 @@
 """Pydantic schemas for Plant Observation & Public QR Access."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ObservationAccessResponse(BaseModel):
@@ -15,7 +15,7 @@ class ObservationAccessResponse(BaseModel):
 
 
 class ObservationSessionCreate(BaseModel):
-    public_id: str
+    public_id: str = Field(max_length=128)
 
 
 class ObservationSessionResponse(BaseModel):
@@ -37,13 +37,13 @@ class PublicPlantContextResponse(BaseModel):
 class PlantObservationCreate(BaseModel):
     wellbeing_score: int
     stress_score: int | None = None
-    plant_condition: str
+    plant_condition: str = Field(min_length=1, max_length=50)
     leaf_droop: bool | None = None
-    leaf_color: str | None = None
+    leaf_color: str | None = Field(None, max_length=100)
     spots_present: bool | None = None
-    soil_condition: str | None = None
-    suspected_stress_type: str | None = None
-    notes: str | None = None
+    soil_condition: str | None = Field(None, max_length=100)
+    suspected_stress_type: str | None = Field(None, max_length=100)
+    notes: str | None = Field(None, max_length=4000)
 
 
 class PlantObservationPhotoResponse(BaseModel):

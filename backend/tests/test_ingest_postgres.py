@@ -87,7 +87,9 @@ def test_parallel_cold_legacy_keys_share_one_verification(pg_receipts, monkeypat
     def authenticate(_):
         barrier.wait()
         with Session(pg_receipts) as db:
-            return gateway_auth.authenticate_gateway_api_key(db, "isolated-test-key").hardware_id
+            return gateway_auth.authenticate_gateway_api_key(
+                db, "isolated-test-key", hardware_id="peter-test"
+            ).hardware_id
 
     with ThreadPoolExecutor(max_workers=14) as pool:
         assert list(pool.map(authenticate, range(14))) == ["peter-test"] * 14

@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse
 from app.config import settings
 from app.logging_config import get_logger, setup_logging
 from app.operational_metrics import OperationalCollector
+from app.request_limits import RequestBodyLimitMiddleware
 
 if settings.service_role != "application":
     raise RuntimeError(
@@ -111,6 +112,7 @@ app = FastAPI(
     openapi_url=None if _is_production else "/openapi.json",
     lifespan=_lifespan,
 )
+app.add_middleware(RequestBodyLimitMiddleware, wav_bytes=settings.max_wav_upload_bytes)
 
 # ── CORS ─────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -118,7 +120,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Api-Key"],
+    allow_headers=["Authorization", "Content-Type", "X-Api-Key", "X-Gateway-Id"],
 )
 
 

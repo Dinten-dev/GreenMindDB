@@ -60,7 +60,9 @@ def _persist(data, api_key, bind, peer="internal"):
     # or ORM-backed crosses into the async response/notification path.
     with Session(bind=bind, autoflush=False) as db:
         with INGEST_STAGE.labels("authenticate").time():
-            gateway = authenticate_gateway_api_key(db, api_key, peer)
+            gateway = authenticate_gateway_api_key(
+                db, api_key, peer, hardware_id=data.gateway_serial
+            )
         if gateway.hardware_id != data.gateway_serial:
             raise HTTPException(status_code=403, detail="Gateway identity mismatch")
         gateway_id = str(gateway.id)

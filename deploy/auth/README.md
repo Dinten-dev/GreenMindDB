@@ -71,12 +71,17 @@ The development checkout contains the current ingest implementation. The older
 Staging receiver already authenticates through `get_current_gateway`; its ingest
 implementation is deliberately retained in the Staging candidate.
 
-Legacy bcrypt checks reserve a bounded budget before work, including direct
-re-provisioning callers. Each worker permits at most five failed/cold checks per
-peer and thirty globally per minute, with one legacy scan at a time. Successful
-checks refund their reservation; the bounded success cache still checks the
-current database hash and activation state. This is a per-worker budget, not a
-claim of a distributed rate limiter.
+Legacy bcrypt checks now require a lookup identity, and every actual password
+verification consumes the bounded per-worker budget, including successful checks
+and direct re-provisioning callers. There is no anonymous fleet scan. A busy
+verifier returns 429 instead of queuing another password operation. The success
+cache still rereads the current credential hash and activation flag.
+
+Before installing this receiver, follow [the client-first transition](../../docs/PUBLIC-API-BOUNDS.md).
+Existing Staging overlays must include `app/request_limits.py` and the updated
+Gateway dependency; retaining an older unscoped authentication copy is unsupported.
+The lookup index has an independent preparation command; do not upgrade through
+unrelated invitation or feature migrations to obtain it.
 
 ## Acceptance
 

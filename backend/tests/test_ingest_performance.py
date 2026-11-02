@@ -23,6 +23,8 @@ def empty_auth_cache():
 
 def test_legacy_cache_skips_bcrypt_but_rechecks_revocation(db, setup_test_data, monkeypatch):
     gateway = setup_test_data["gateway"]
+    gateway.api_key_hash = gateway_auth.get_password_hash("ci-api-key")
+    db.commit()
     original = gateway_auth.verify_password
     checks = []
 
@@ -31,33 +33,56 @@ def test_legacy_cache_skips_bcrypt_but_rechecks_revocation(db, setup_test_data, 
         return original(key, value)
 
     monkeypatch.setattr(gateway_auth, "verify_password", verify)
-    assert gateway_auth.authenticate_gateway_api_key(db, "ci-api-key").id == gateway.id
+    assert (
+        gateway_auth.authenticate_gateway_api_key(
+            db, "ci-api-key", hardware_id=setup_test_data["gateway"].hardware_id
+        ).id
+        == gateway.id
+    )
     count = len(checks)
-    assert gateway_auth.authenticate_gateway_api_key(db, "ci-api-key").id == gateway.id
+    assert (
+        gateway_auth.authenticate_gateway_api_key(
+            db, "ci-api-key", hardware_id=setup_test_data["gateway"].hardware_id
+        ).id
+        == gateway.id
+    )
     assert len(checks) == count
     gateway.is_active = False
     db.commit()
     with pytest.raises(HTTPException) as rejected:
-        gateway_auth.authenticate_gateway_api_key(db, "ci-api-key")
+        gateway_auth.authenticate_gateway_api_key(
+            db, "ci-api-key", hardware_id=setup_test_data["gateway"].hardware_id
+        )
     assert rejected.value.status_code == 403
     gateway.is_active = True
     gateway.api_key_hash = gateway_auth.get_password_hash("changed-key")
     db.commit()
     with pytest.raises(HTTPException) as rejected:
-        gateway_auth.authenticate_gateway_api_key(db, "ci-api-key")
+        gateway_auth.authenticate_gateway_api_key(
+            db, "ci-api-key", hardware_id=setup_test_data["gateway"].hardware_id
+        )
     assert rejected.value.status_code == 401
-    assert gateway_auth.authenticate_gateway_api_key(db, "changed-key").id == gateway.id
+    assert (
+        gateway_auth.authenticate_gateway_api_key(db, "changed-key", gateway_id=gateway.id).id
+        == gateway.id
+    )
 
 
 def test_cache_expires_and_never_caches_failed_keys(db, setup_test_data, monkeypatch):
+    setup_test_data["gateway"].api_key_hash = gateway_auth.get_password_hash("ci-api-key")
+    db.commit()
     monkeypatch.setattr(gateway_auth, "_CACHE_SECONDS", -1)
-    gateway_auth.authenticate_gateway_api_key(db, "ci-api-key")
+    gateway_auth.authenticate_gateway_api_key(
+        db, "ci-api-key", hardware_id=setup_test_data["gateway"].hardware_id
+    )
     checked = []
     original = gateway_auth.verify_password
     monkeypatch.setattr(
         gateway_auth, "verify_password", lambda k, h: checked.append(k) or original(k, h)
     )
-    gateway_auth.authenticate_gateway_api_key(db, "ci-api-key")
+    gateway_auth.authenticate_gateway_api_key(
+        db, "ci-api-key", hardware_id=setup_test_data["gateway"].hardware_id
+    )
     assert checked
     before = len(gateway_auth._verified_keys)
     with pytest.raises(HTTPException):
