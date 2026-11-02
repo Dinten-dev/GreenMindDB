@@ -32,7 +32,8 @@ def test_runtime_provider_requires_matching_reviewed_scope_before_worker(monkeyp
     class ReviewedWorkerReached(Exception):
         pass
 
-    def worker():
+    def worker(*, coordination_kind="copy"):
+        assert coordination_kind == "copy"
         raise ReviewedWorkerReached
 
     monkeypatch.setattr(provider, "read_scope", read_scope)
