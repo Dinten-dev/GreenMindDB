@@ -48,10 +48,14 @@ def fast_prepare_index(
     library,
     library_sha256,
     target_part_bytes=MAX_PART_BYTES,
+    parent_mode=False,
 ):
     """Index exact COPY bytes with bounded reads; no data spool or network access."""
     if not callable(checkpoint):
         raise ArchiveBlocked("Bounded offline checkpoint required")
+    need(type(parent_mode) is bool, "Explicit parent native indexing mode required")
+    if parent_mode:
+        need(target_part_bytes <= 16 * 1024**2, "Parent native part budget exceeds existing workset")
     if os.geteuid() != 0:
         raise ArchiveBlocked("Root-owned offline V3 index required")
     if (
@@ -94,7 +98,16 @@ def fast_prepare_index(
     )
     scanner_class = scanner_factory(library, library_sha256)
     # File hashes are checked during the single streaming scan below.
-    proof = load_capture(source, capture_sha256, checkpoint=bounded_checkpoint, verify_files=False)
+    if parent_mode:
+        from . import parent_capture
+
+        proof = parent_capture.load_capture(
+            source, capture_sha256, checkpoint=bounded_checkpoint, verify_files=False
+        )
+    else:
+        proof = load_capture(
+            source, capture_sha256, checkpoint=bounded_checkpoint, verify_files=False
+        )
     parts = []
     for entry in proof["files"]:
         bounded_checkpoint(force=True)
@@ -242,6 +255,16 @@ def fast_prepare_index(
         "parent_fk_closure_proven": False,
         "authenticated": False,
     }
+    if parent_mode:
+        from .parent_scope import SCOPE_SHA256 as PARENT_SCOPE_SHA256
+
+        index = {
+            "format": PART_FORMAT,
+            "capture_sha256": capture_sha256,
+            "scope_sha256": PARENT_SCOPE_SHA256,
+            "parts": parts,
+        }
+        parent_capture.validate_index(proof, index, capture_sha256)
     raw = (json.dumps(index, sort_keys=True, separators=(",", ":")) + "\n").encode()
     need(len(raw) <= MAX_MANIFEST, "V3 part inventory exceeds budget")
     bounded_checkpoint(force=True)

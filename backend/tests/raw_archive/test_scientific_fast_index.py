@@ -94,6 +94,32 @@ def test_bounded_scanner_offsets_match_rows_across_fragmentation(scanner):
         assert parser.finish() == len(records)
 
 
+@pytest.mark.parametrize("source", ["gateway", "direct"])
+def test_parent_mode_reuses_pinned_scanner_and_matches_reference_index(
+    tmp_path, scanner, simulated_root, monkeypatch, source
+):
+    from app.raw_archive import parent_capture
+    from tests.raw_archive.test_parent_capture import fixture_capture
+
+    folder, proof, sha = fixture_capture(tmp_path, source)
+    reference = parent_capture.prepare_index(
+        folder, sha, tmp_path / "reference.json", checkpoint=lambda: None
+    )
+    monkeypatch.setattr(fast, "scanner_factory", lambda *a: scanner)
+    result = fast.fast_prepare_index(
+        folder,
+        sha,
+        tmp_path / "native.json",
+        checkpoint=lambda: None,
+        library=scanner.test_path,
+        library_sha256=hashlib.sha256(scanner.test_path.read_bytes()).hexdigest(),
+        target_part_bytes=parent_capture.MAX_PART_BYTES,
+        parent_mode=True,
+    )
+    assert result["index"] == reference["index"]
+    parent_capture.validate_index(proof, result["index"], sha)
+
+
 def test_scanner_blocks_bad_lengths_trailers_and_output_bounds(scanner):
     for bad in (
         HEADER + row(10)[:-1],
