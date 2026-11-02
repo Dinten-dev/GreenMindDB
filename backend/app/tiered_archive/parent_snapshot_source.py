@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 import socket
+import stat
 import sys
 import time
 from datetime import UTC, datetime
@@ -17,6 +18,28 @@ from .parent_snapshot import aad, canonical, snapshot_sha
 def need(value, message):
     if not value:
         raise ArchiveBlocked(message)
+
+
+def _reader_profile_bytes(path, expected_sha256):
+    """Read the existing 0600 profile without treating it as a 0400 restore input."""
+    from .restore_inputs import protected_parents
+
+    need(path.is_absolute() and path.resolve(strict=False) == path, "Source reader path differs")
+    protected_parents(path)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        first = os.fstat(stream.fileno())
+        need(stat.S_ISREG(first.st_mode) and first.st_uid == 0 and first.st_nlink == 1
+             and stat.S_IMODE(first.st_mode) == 0o600 and 0 < first.st_size <= 32768,
+             "Existing Source reader profile identity differs")
+        raw = stream.read(32769)
+        after = os.fstat(stream.fileno())
+    current = path.lstat()
+    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_mode", "st_uid", "st_nlink")
+    need(len(raw) == first.st_size and all(getattr(first, k) == getattr(after, k) == getattr(current, k)
+         for k in fields) and hashlib.sha256(raw).hexdigest() == expected_sha256,
+         "Existing Source reader profile differs")
+    return raw
 
 
 def encrypt_response(response, request):
@@ -91,7 +114,7 @@ def capture(request, binding, *, checkpoint):
     root = Path(__file__).resolve().parents[3]
     manifest = scientific_scope_control._private_json(root / "manifest.json", request["source_manifest_sha256"])
     from . import parent_snapshot
-    for module, names in ((sys.modules[__name__], ("capture", "encrypt_response")),
+    for module, names in ((sys.modules[__name__], ("capture", "encrypt_response", "_reader_profile_bytes")),
                           (parent_snapshot, ("aad", "canonical", "snapshot_sha")),
                           (parent_capture, ("capture", "scope", "_identity", "_schema")),
                           (scientific_native, ("counter_factory", "_load_pinned_library")),
@@ -130,9 +153,7 @@ def capture(request, binding, *, checkpoint):
              and scientific_scope_control._source_lock(full=False) == holder, "Source lease expired or changed")
     check()
     profile = Path("/etc/greenmind/delete-preparation/4de3e890632e.env")
-    first = frozen(profile)
-    raw = _private_read(profile, 32768)
-    need(frozen(profile) == first and hashlib.sha256(raw).hexdigest() == "aa970526fcd0677587a101098fe42681704a72f4f9daab0ffdaa49ad2f37656f", "Existing Source reader profile differs")
+    raw = _reader_profile_bytes(profile, "aa970526fcd0677587a101098fe42681704a72f4f9daab0ffdaa49ad2f37656f")
     lines = [line.split("=", 1)[1] for line in raw.decode().splitlines() if line.startswith("RAW_ARCHIVE_GATEWAY_DATABASE_URL=")]
     need(len(lines) == 1, "Existing Source reader required")
     url = make_url(lines[0])
