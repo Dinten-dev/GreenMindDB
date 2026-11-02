@@ -21,4 +21,4 @@ boto3==1.43.45
 cryptography==50.0.0
 packaging==26.2
 numpy==2.4.3
-Pillow==12.3.0
+Pillow==13.0.0
