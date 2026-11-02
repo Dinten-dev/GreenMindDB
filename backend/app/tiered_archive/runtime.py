@@ -932,6 +932,9 @@ def backup(source, *, backup_format="schema-master-v2"):
     from .pipeline import publish
     from .policy import Candidate
 
+    parent_enabled = os.getenv("TIERED_ARCHIVE_PARENT_SNAPSHOT_ENABLED") == "true"
+    if parent_enabled and backup_format != schema_provider.FORMAT:
+        raise ArchiveBlocked("Parent snapshot requires the explicit provider backup format")
     if backup_format not in {"schema-master-v2", "postgres-full-v1", schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
         raise ArchiveBlocked("Unknown database backup format")
     if backup_format in {schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
@@ -994,6 +997,12 @@ def backup(source, *, backup_format="schema-master-v2"):
                 ):
                     raise ArchiveBlocked("Provider backup key differs from recovery binding")
                 options = {}
+                if parent_enabled:
+                    from .parent_snapshot import root_snapshot_capture
+
+                    options["parent_capture"] = root_snapshot_capture(
+                        folder, source, profile_path=os.environ["TIERED_ARCHIVE_PARENT_SNAPSHOT_PROFILE_FILE"],
+                        profile_sha256=os.environ["TIERED_ARCHIVE_PARENT_SNAPSHOT_PROFILE_SHA256"])
                 if backup_format == schema_provider.AUDIT_V3_FORMAT:
                     from .sql_audit_v3_backup import root_snapshot_capture
 
@@ -1008,7 +1017,22 @@ def backup(source, *, backup_format="schema-master-v2"):
                 finally:
                     if "audit_capture" in options:
                         options["audit_capture"].root_bridge.cleanup()
-                return publish(candidate, files, store, ledger, checkpoint=checkpoint)
+                receipt = publish(candidate, files, store, ledger, checkpoint=checkpoint)
+                if parent_enabled:
+                    parent = options["parent_capture"]
+                    if not getattr(parent, "join", None):
+                        raise ArchiveBlocked("Parent completion join missing")
+                    published = parent.record_publication(receipt, ledger=ledger, checkpoint=checkpoint)
+                    return {"backup_candidate": candidate.identity,
+                            "backup_manifest_sha256": receipt["manifest"]["sha256"],
+                            "parent_join_path": parent.join["path"],
+                            "parent_join_sha256": parent.join["sha256"],
+                            "parent_capture_sha256": parent.result["capture_sha256"],
+                            "parent_frame_sha256": parent.result["frame_sha256"],
+                            "parent_publication_join_path": published["path"],
+                            "parent_publication_join_sha256": published["sha256"],
+                            "native_restore_verified": False, "archive_accepted": False}
+                return receipt
             originals, proof = dump(
                 database_url,
                 source,

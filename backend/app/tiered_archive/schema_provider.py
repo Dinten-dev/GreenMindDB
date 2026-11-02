@@ -498,7 +498,7 @@ def inspect_dump(path, scope, role, master_names, env, *, checkpoint):
     return validate_toc(target.read_bytes(), scope, role, master_names)
 
 
-def capture(database_url, source, output, key, scope, *, checkpoint, schema_capture=None, audit_capture=None):
+def capture(database_url, source, output, key, scope, *, checkpoint, schema_capture=None, audit_capture=None, parent_capture=None):
     """Root-only new Gateway5/Direct4 capture using the existing dump/encryption pipeline."""
     from datetime import timedelta
 
@@ -527,6 +527,11 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         need(type(audit_capture) is AuditSnapshotCapture and audit_capture.output == output
              and audit_capture.key == key and source == "gateway",
              "Exact Gateway V3 audit capture and Archive key required")
+    if parent_capture is not None:
+        from .parent_snapshot import ParentSnapshotCapture
+
+        need(type(parent_capture) is ParentSnapshotCapture and parent_capture.output == output
+             and parent_capture.source == source, "Exact provider-bound parent capture required")
     dumped = backup.dump(
         database_url,
         source,
@@ -536,6 +541,7 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         provider_scope=scope,
         **({"schema_capture": schema_capture} if schema_capture is not None else {}),
         **({"audit_capture": audit_capture} if audit_capture is not None else {}),
+        **({"parent_capture": parent_capture} if parent_capture is not None else {}),
     )
     if audit_capture is None:
         originals, proof, at = dumped
@@ -626,7 +632,10 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         "features",
         at,
     )
-    return candidate, [(index, ref), *files]
+    final_files = [(index, ref), *files]
+    if parent_capture is not None:
+        parent_capture.complete(candidate, final_files, proof, checkpoint=checkpoint)
+    return candidate, final_files
 
 
 def current_descriptor(files, source):

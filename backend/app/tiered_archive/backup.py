@@ -537,11 +537,14 @@ def dump(
     provider_scope=None,
     schema_capture=None,
     audit_capture=None,
+    parent_capture=None,
 ):
     """One exported snapshot spans schema and allowlisted master rows."""
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
 
+    if parent_capture is not None and audit_capture is not None:
+        raise ArchiveBlocked("Combined parent and SQL-audit Source relay is not yet available")
     # V2/V3 remain unchanged file-restorable contracts. New Gateway captures
     # use an explicit V4 scope; Direct has no Alembic/auth-table contract.
     if provider_scope is not None:
@@ -581,6 +584,14 @@ def dump(
             or audit_capture.output != Path(output)
         ):
             raise ArchiveBlocked("Exact provider-bound V3 audit capture required")
+    if parent_capture is not None:
+        from .parent_snapshot import ParentSnapshotCapture
+
+        if (type(parent_capture) is not ParentSnapshotCapture or provider_scope is None
+            or not with_proof or parent_capture.source != source
+            or parent_capture.output != Path(output) or os.geteuid() != 0):
+            raise ArchiveBlocked("Exact Root same-snapshot parent hook required")
+        parent_capture.require_scope(provider_scope)
     version = 4 if source == "gateway" else MASTER_PROOF_VERSION
     scope = fresh_schema_scope(database_url, checkpoint=checkpoint) if version == 4 else None
     tables = master_tables(source, proof_version=version, schema_scope=scope)
@@ -625,6 +636,8 @@ def dump(
                     "sequences": native_backup.sequence_proof(db, checkpoint=checkpoint),
                 }
             snapshot = db.execute(text("SELECT pg_export_snapshot()")).scalar_one()
+            if parent_capture is not None:
+                parent_capture.capture(db, snapshot, checkpoint=checkpoint)
             if audit_capture is not None:
                 audit_capture.capture(db, snapshot, checkpoint=checkpoint)
             outputs = []
