@@ -925,7 +925,9 @@ def current_backup_schema_scope(source, checkpoint):
     return fresh_schema_scope(database_url, checkpoint=checkpoint)
 
 
-def backup(source, *, backup_format="schema-master-v2"):
+def backup(source, *, backup_format="schema-master-v2", coordination_kind="copy"):
+    if type(coordination_kind) is not str or coordination_kind not in {"copy", "catalog"}:
+        raise ArchiveBlocked("Unsupported backup coordination kind")
     from . import parquet, schema_provider
     from .backup import decrypt, dump, encrypt, key_from_file
     from .codec import digest
@@ -952,7 +954,7 @@ def backup(source, *, backup_format="schema-master-v2"):
     if backup_format == "postgres-full-v1" and environment() != "staging":
         raise ArchiveBlocked("Native full backup is currently restricted to Staging")
 
-    with worker() as (ledger, store, checkpoint):
+    with worker(coordination_kind=coordination_kind) as (ledger, store, checkpoint):
         from sqlalchemy.engine import make_url
 
         from app.raw_archive.runner import metadata_source_settings
