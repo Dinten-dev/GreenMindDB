@@ -23,6 +23,8 @@ OWN_TABLES = frozenset(
         "greenmind_restore_universe",
         "greenmind_restore_fence",
         "greenmind_restore_fence_table",
+        "greenmind_science_restore",
+        "greenmind_science_restore_part",
     }
 )
 MAX_TABLES = 64
@@ -103,6 +105,9 @@ def chunk_exemption(db):
 def relation_inventory(db, empty_compressed_oids=()):
     if db.dialect.name != "postgresql":
         raise ArchiveBlocked("Native restore-universe catalog requires PostgreSQL")
+    from app.raw_archive.scientific_restore import validate_application_journals
+
+    validate_application_journals(db)
     # A schema name is never proof of extension ownership. Retain unrelated
     # internal-schema user tables in the result so the exact universe rejects them.
     query = text(
