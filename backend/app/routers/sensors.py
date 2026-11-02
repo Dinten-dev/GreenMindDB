@@ -18,6 +18,7 @@ from app.config import settings
 from app.database import get_db
 from app.gateway_auth import get_current_gateway
 from app.models.master import Gateway, Sensor, Zone
+from app.models.pairing import PairingPurpose
 from app.models.timeseries import SensorReading
 from app.models.user import Role, User
 from app.rate_limit import limiter
@@ -140,14 +141,14 @@ async def claim_sensor(
 
 @router.post("/pairing-code", response_model=PairingCodeResponse, status_code=201)
 @limiter.limit("5/minute")
-async def handle_generate_pairing_code(
+def handle_generate_pairing_code(
     request: Request,
     data: PairingCodeRequest,
     current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Generate a short-lived pairing code for a sensor to use in its Captive Portal."""
-    return generate_pairing_code(db, current_user, data.zone_id)
+    return generate_pairing_code(db, current_user, data.zone_id, purpose=PairingPurpose.SENSOR)
 
 
 # ── Move / Update Sensor ─────────────────────────────────────

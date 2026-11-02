@@ -4,10 +4,12 @@ import logging
 import secrets
 import string
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.gateway_auth import (
@@ -16,7 +18,8 @@ from app.gateway_auth import (
     verify_gateway_api_key,
 )
 from app.models.master import Gateway, Sensor, Zone
-from app.models.pairing import PairingCode
+from app.models.pairing import PairingCode, PairingPurpose
+from app.models.provisioning import ProvisioningJob
 from app.models.user import User
 from app.schemas.gateway import (
     GatewayResponse,
@@ -95,9 +98,12 @@ def list_gateways(
     return results
 
 
-def generate_pairing_code(db: Session, user: User, zone_id: uuid.UUID | str) -> PairingCodeResponse:
+def generate_pairing_code(
+    db: Session, user: User, zone_id: uuid.UUID | str, *, purpose: PairingPurpose
+) -> PairingCodeResponse:
     _require_org(user)
-
+    if purpose not in (PairingPurpose.GATEWAY, PairingPurpose.SENSOR):
+        raise ValueError("Only typed pairing codes may be issued")
     z = db.query(Zone).filter(Zone.id == zone_id, zone_access_filter(user)).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
@@ -105,27 +111,71 @@ def generate_pairing_code(db: Session, user: User, zone_id: uuid.UUID | str) -> 
     chars = string.ascii_uppercase + string.digits
     for _ in range(10):
         code = "".join(secrets.choice(chars) for _ in range(PAIRING_CODE_LENGTH))
-        existing = (
-            db.query(PairingCode)
-            .filter(PairingCode.code == code, PairingCode.used_at.is_(None))
-            .first()
+        # Retention can remove a code before its provisioning job. Do not bind
+        # that old job (including its credentials) to a newly issued code.
+        if db.query(PairingCode.id).filter(PairingCode.code == code).first():
+            continue
+        if db.query(ProvisioningJob.id).filter(ProvisioningJob.pairing_code == code).first():
+            continue
+        pc = PairingCode(
+            code=code,
+            purpose=purpose.value,
+            zone_id=z.id,
+            expires_at=datetime.now(UTC) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES),
+            created_by_user_id=user.id,
         )
-        if not existing:
-            break
-    else:
-        raise HTTPException(status_code=500, detail="Could not generate unique code")
+        try:
+            with db.begin_nested():
+                db.add(pc)
+                db.flush()
+        except IntegrityError:
+            # A concurrent issuer may have chosen the same code.
+            continue
+        db.commit()
+        return PairingCodeResponse(
+            code=pc.code,
+            purpose=pc.purpose,
+            expires_at=pc.expires_at.isoformat(),
+            zone_id=str(pc.zone_id),
+        )
+    db.rollback()
+    raise HTTPException(status_code=503, detail="Could not generate unique code")
 
-    expires_at = datetime.now(UTC) + timedelta(minutes=PAIRING_CODE_EXPIRY_MINUTES)
-    pc = PairingCode(code=code, zone_id=z.id, expires_at=expires_at, created_by_user_id=user.id)
-    db.add(pc)
-    db.commit()
-    db.refresh(pc)
 
-    return PairingCodeResponse(
-        code=pc.code,
-        expires_at=pc.expires_at.isoformat(),
-        zone_id=str(pc.zone_id),
+@contextmanager
+def _pairing_transaction(db: Session):
+    try:
+        yield
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Device identity already assigned") from exc
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _locked_pairing_code(db: Session, code: str, purpose: PairingPurpose):
+    # Lock by unique code before checking state. PostgreSQL rechecks the row
+    # after a concurrent redemption; populate_existing discards stale ORM state.
+    pc = (
+        db.query(PairingCode)
+        .filter(PairingCode.code == code.upper())
+        .populate_existing()
+        .with_for_update()
+        .first()
     )
+    return pc, _pairing_code_time(pc, purpose)
+
+
+def _pairing_code_time(pc: PairingCode | None, purpose: PairingPurpose):
+    now = datetime.now(UTC)  # Codes may expire while waiting for any device lock.
+    expiry = pc.expires_at if pc else None
+    if expiry is not None and expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=UTC)
+    if not pc or pc.purpose != purpose.value or pc.used_at or expiry <= now:
+        raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
+    return now
 
 
 def register_gateway(
@@ -133,84 +183,76 @@ def register_gateway(
     data: RegisterGatewayRequest,
     current_api_key: str | None = None,
 ) -> RegisterGatewayResponse:
-    now = datetime.now(UTC)
-
-    pc = (
-        db.query(PairingCode)
-        .filter(
-            PairingCode.code == data.code.upper(),
-            PairingCode.used_at.is_(None),
-            PairingCode.expires_at > now,
+    with _pairing_transaction(db):
+        pc, now = _locked_pairing_code(db, data.code, PairingPurpose.GATEWAY)
+        existing = (
+            db.query(Gateway)
+            .filter(Gateway.hardware_id == data.hardware_id)
+            .populate_existing()
+            .with_for_update()
+            .first()
         )
-        .first()
-    )
-    if not pc:
-        raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
+        if existing:
+            if not existing.is_active:
+                raise HTTPException(status_code=403, detail="Gateway deactivated")
+            if not verify_gateway_api_key(existing, current_api_key):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Existing gateway must prove possession of its current API key",
+                )
 
-    existing = db.query(Gateway).filter(Gateway.hardware_id == data.hardware_id).first()
-    if existing:
-        if not existing.is_active:
-            raise HTTPException(status_code=403, detail="Gateway deactivated")
-        if not verify_gateway_api_key(existing, current_api_key):
-            raise HTTPException(
-                status_code=409,
-                detail="Existing gateway must prove possession of its current API key",
+            current_zone = db.query(Zone).filter(Zone.id == existing.zone_id).first()
+            requested_zone = db.query(Zone).filter(Zone.id == pc.zone_id).first()
+            if (
+                not current_zone
+                or not requested_zone
+                or current_zone.organization_id != requested_zone.organization_id
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Gateway reassignment across organizations is not allowed",
+                )
+
+            # Same-tenant re-provisioning rotates the credential and keeps sensor identity.
+            existing.zone_id = pc.zone_id
+            existing.name = data.name or existing.name
+            existing.fw_version = data.fw_version or existing.fw_version
+            existing.local_ip = data.local_ip
+            existing.status = "online"
+            existing.paired_at = now
+            existing.last_seen = now
+            gateway = existing
+            logger.info(
+                "Re-provisioned gateway %s (hw: %s) to zone %s",
+                gateway.id,
+                data.hardware_id,
+                pc.zone_id,
             )
-
-        current_zone = db.query(Zone).filter(Zone.id == existing.zone_id).first()
-        requested_zone = db.query(Zone).filter(Zone.id == pc.zone_id).first()
-        if (
-            not current_zone
-            or not requested_zone
-            or current_zone.organization_id != requested_zone.organization_id
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Gateway reassignment across organizations is not allowed",
+        else:
+            gateway = Gateway(
+                zone_id=pc.zone_id,
+                hardware_id=data.hardware_id,
+                name=data.name or data.hardware_id,
+                fw_version=data.fw_version,
+                local_ip=data.local_ip,
+                status="online",
+                paired_at=now,
+                last_seen=now,
             )
+            db.add(gateway)
+        db.flush()
 
-        # Same-tenant re-provisioning rotates the credential and keeps sensor identity.
-        existing.zone_id = pc.zone_id
-        existing.name = data.name or existing.name
-        existing.fw_version = data.fw_version or existing.fw_version
-        existing.local_ip = data.local_ip
-        existing.status = "online"
-        existing.paired_at = now
-        existing.last_seen = now
-        gateway = existing
-        logger.info(
-            "Re-provisioned gateway %s (hw: %s) to zone %s",
-            gateway.id,
-            data.hardware_id,
-            pc.zone_id,
+        api_key = generate_gateway_api_key(gateway.id)
+        set_gateway_api_key(gateway, api_key)
+
+        pc.used_at = _pairing_code_time(pc, PairingPurpose.GATEWAY)
+        pc.gateway_id = gateway.id
+
+        return RegisterGatewayResponse(
+            gateway_id=str(gateway.id),
+            api_key=api_key,
+            zone_id=str(gateway.zone_id),
         )
-    else:
-        gateway = Gateway(
-            zone_id=pc.zone_id,
-            hardware_id=data.hardware_id,
-            name=data.name or data.hardware_id,
-            fw_version=data.fw_version,
-            local_ip=data.local_ip,
-            status="online",
-            paired_at=now,
-            last_seen=now,
-        )
-        db.add(gateway)
-    db.flush()
-
-    api_key = generate_gateway_api_key(gateway.id)
-    set_gateway_api_key(gateway, api_key)
-
-    pc.used_at = now
-    pc.gateway_id = gateway.id
-    db.commit()
-    db.refresh(gateway)
-
-    return RegisterGatewayResponse(
-        gateway_id=str(gateway.id),
-        api_key=api_key,
-        zone_id=str(gateway.zone_id),
-    )
 
 
 def delete_gateway(db: Session, user: User, gateway_id: uuid.UUID | str) -> None:
@@ -232,48 +274,60 @@ def delete_gateway(db: Session, user: User, gateway_id: uuid.UUID | str) -> None
 # --- Sensor Pairing Workflow ---
 
 
-def register_sensor(db: Session, gw: Gateway, mac_address: str, code: str) -> dict:
+def register_sensor(
+    db: Session, gw: Gateway, mac_address: str, code: str, current_api_key: str | None = None
+) -> dict:
     """Gateway forwards the sensor's pairing code to register it to its zone."""
-    now = datetime.now(UTC)
-
-    pc = (
-        db.query(PairingCode)
-        .filter(
-            PairingCode.code == code.upper(),
-            PairingCode.used_at.is_(None),
-            PairingCode.expires_at > now,
+    authenticated_hash = gw.api_key_hash
+    with _pairing_transaction(db):
+        pc, now = _locked_pairing_code(db, code, PairingPurpose.SENSOR)
+        # Authentication happened before the code lock. Refresh zone/active state
+        # before binding a sensor, including a concurrent Gateway reassignment.
+        gateway = (
+            db.query(Gateway)
+            .filter(Gateway.id == gw.id)
+            .populate_existing()
+            .with_for_update()
+            .first()
         )
-        .first()
-    )
-    if not pc:
-        raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
+        if not gateway or not gateway.is_active:
+            raise HTTPException(status_code=403, detail="Gateway deactivated")
+        if gateway.api_key_hash != authenticated_hash and not verify_gateway_api_key(
+            gateway, current_api_key
+        ):
+            raise HTTPException(status_code=401, detail="Gateway credential changed")
+        if pc.zone_id != gateway.zone_id:
+            raise HTTPException(
+                status_code=400, detail="Pairing code zone does not match Gateway zone"
+            )
 
-    if pc.zone_id != gw.zone_id:
-        raise HTTPException(status_code=400, detail="Pairing code zone does not match Gateway zone")
-
-    existing = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
-    if existing:
-        if existing.gateway_id != gw.id:
-            raise HTTPException(status_code=409, detail="Sensor is already assigned")
-        sensor = existing
-        sensor.status = "online"
-        sensor.last_seen = now
-    else:
-        sensor = Sensor(
-            gateway_id=gw.id,
-            mac_address=mac_address,
-            name=f"Sensor-{mac_address[-4:]}",
-            sensor_type="generic",
-            status="online",
-            last_seen=now,
+        existing = (
+            db.query(Sensor)
+            .filter(Sensor.mac_address == mac_address)
+            .populate_existing()
+            .with_for_update()
+            .first()
         )
-        db.add(sensor)
-
-    pc.used_at = now
-    db.commit()
-    db.refresh(sensor)
-
-    return {"status": "ok", "sensor_id": str(sensor.id)}
+        if existing:
+            if existing.gateway_id != gateway.id:
+                raise HTTPException(status_code=409, detail="Sensor is already assigned")
+            sensor = existing
+            sensor.status = "online"
+            sensor.last_seen = now
+        else:
+            sensor = Sensor(
+                gateway_id=gateway.id,
+                mac_address=mac_address,
+                name=f"Sensor-{mac_address[-4:]}",
+                sensor_type="generic",
+                status="online",
+                last_seen=now,
+            )
+            db.add(sensor)
+        db.flush()
+        pc.used_at = _pairing_code_time(pc, PairingPurpose.SENSOR)
+        pc.gateway_id = gateway.id
+        return {"status": "ok", "sensor_id": str(sensor.id)}
 
 
 def pull_gateway_commands(db: Session, gateway: Gateway) -> list[dict]:

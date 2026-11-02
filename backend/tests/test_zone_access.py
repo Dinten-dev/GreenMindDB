@@ -311,6 +311,7 @@ def test_provisioning_cannot_target_ungranted_zone(db, access_data):
     member, zones, _, _ = access_data
     db.add(
         PairingCode(
+            purpose="sensor",
             code="ABC123",
             zone_id=zones[0].id,
             created_by_user_id=member.id,

@@ -525,6 +525,7 @@ def test_gateway_reprovision_cannot_cross_organizations(
         organization_id=other_org.id,
     )
     pairing = PairingCode(
+        purpose="gateway",
         code="XZ91AB",
         zone_id=other_zone.id,
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
