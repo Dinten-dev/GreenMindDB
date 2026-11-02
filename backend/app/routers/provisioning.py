@@ -18,7 +18,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.gateway_auth import authenticate_gateway_api_key, get_current_gateway
 from app.models.master import Gateway, Zone
-from app.models.pairing import PairingCode
+from app.models.pairing import PairingCode, PairingPurpose
 from app.models.provisioning import ProvisioningJob, ProvisioningStatus
 from app.models.user import User
 from app.schemas.provisioning import (
@@ -90,6 +90,7 @@ async def create_provisioning_job(
         .join(Zone, Zone.id == PairingCode.zone_id)
         .filter(
             PairingCode.code == job_in.pairing_code,
+            PairingCode.purpose == PairingPurpose.SENSOR.value,
             PairingCode.used_at.is_(None),
             PairingCode.expires_at > datetime.now(UTC),
             zone_access_filter(current_user),
@@ -129,6 +130,7 @@ def get_pending_jobs(
         .filter(
             ProvisioningJob.status == ProvisioningStatus.PENDING,
             PairingCode.zone_id == gateway.zone_id,
+            PairingCode.purpose == PairingPurpose.SENSOR.value,
         )
         .all()
     )
@@ -146,7 +148,11 @@ def update_provisioning_job(
     job = (
         db.query(ProvisioningJob)
         .join(PairingCode, PairingCode.code == ProvisioningJob.pairing_code)
-        .filter(ProvisioningJob.id == job_id, PairingCode.zone_id == gateway.zone_id)
+        .filter(
+            ProvisioningJob.id == job_id,
+            PairingCode.zone_id == gateway.zone_id,
+            PairingCode.purpose == PairingPurpose.SENSOR.value,
+        )
         .first()
     )
     if not job:

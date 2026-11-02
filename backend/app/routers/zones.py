@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_role
 from app.database import get_db
+from app.models.pairing import PairingPurpose
 from app.models.user import Role, User
 from app.schemas.gateway import PairingCodeResponse
 from app.schemas.zone import ZoneCreate, ZoneOverview, ZoneResponse
@@ -73,10 +74,10 @@ async def handle_get_zone_overview(
 
 
 @router.post("/{zone_id}/pairing-codes", response_model=PairingCodeResponse, status_code=201)
-async def handle_generate_pairing_code(
+def handle_generate_pairing_code(
     zone_id: uuid.UUID,
     current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Generate a short-lived pairing code for a zone."""
-    return generate_pairing_code(db, current_user, zone_id)
+    return generate_pairing_code(db, current_user, zone_id, purpose=PairingPurpose.GATEWAY)

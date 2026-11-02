@@ -10,6 +10,7 @@ from app.auth import get_current_user, require_role
 from app.database import get_db
 from app.gateway_auth import get_current_gateway
 from app.models.master import Gateway
+from app.models.pairing import PairingPurpose
 from app.models.user import Role, User
 from app.rate_limit import limiter
 from app.schemas.gateway import (
@@ -46,19 +47,19 @@ async def handle_list_gateways(
 
 @router.post("/pairing-code", response_model=PairingCodeResponse, status_code=201)
 @limiter.limit("5/minute")
-async def handle_generate_pairing_code(
+def handle_generate_pairing_code(
     request: Request,
     data: PairingCodeRequest,
     current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
     """Generate a short-lived pairing code for a zone."""
-    return generate_pairing_code(db, current_user, data.zone_id)
+    return generate_pairing_code(db, current_user, data.zone_id, purpose=PairingPurpose.GATEWAY)
 
 
 @router.post("/register", response_model=RegisterGatewayResponse, status_code=201)
 @limiter.limit("5/minute")
-async def handle_register_gateway(
+def handle_register_gateway(
     request: Request,
     data: RegisterGatewayRequest,
     db: Session = Depends(get_db),
@@ -103,17 +104,18 @@ async def handle_delete_gateway(
 
 
 @router.post("/{gateway_id}/sensors/register", status_code=201)
-async def handle_sensor_register(
+def handle_sensor_register(
     gateway_id: uuid.UUID,
     data: GatewayDiscoveryRequest,
     gateway: Gateway = Depends(get_current_gateway),
     db: Session = Depends(get_db),
+    x_api_key: str | None = Header(None, alias="X-Api-Key"),
 ):
     """Gateway registers a sensor utilizing a pairing code."""
     if gateway.id != gateway_id:
         raise HTTPException(status_code=403, detail="Gateway ID mismatch")
 
-    return register_sensor(db, gateway, data.mac_address, data.code)
+    return register_sensor(db, gateway, data.mac_address, data.code, current_api_key=x_api_key)
 
 
 @router.get("/{gateway_id}/commands", response_model=list[dict])
