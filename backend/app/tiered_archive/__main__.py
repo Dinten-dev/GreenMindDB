@@ -237,10 +237,12 @@ def main():
         from .execution import bounded_job
 
         with bounded_job(runtime.state_root(), kind="backup-" + args.source):
-            if args.format == "schema-master-provider-sql-audit-v3":
-                result = with_source_catalogue_lease(lambda: runtime.backup(args.source, backup_format=args.format))
-            else:
-                result = runtime.backup(args.source, backup_format=args.format)
+            result = with_source_catalogue_lease(
+                lambda: runtime.backup(
+                    args.source, backup_format=args.format, coordination_kind="catalog"
+                ),
+                job_kind="catalog",
+            )
     elif args.operation == "inventory":
         from .source import Source
 
