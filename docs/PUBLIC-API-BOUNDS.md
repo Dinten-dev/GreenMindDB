@@ -97,8 +97,8 @@ rerouted through this change.
 ## Existing dependency audit gate
 
 The first CI run also flagged preceding production dependency pins. The patch
-updates Pillow to 13.0.0, PyJWT to at least 2.14.0 (the current receiver retains
-its newer 2.15.0), Next.js and its lint configuration to 16.4.4, and resolves
+updates Pillow to 13.0.0, PyJWT to 2.15.0 (retaining the current receiver
+version), Next.js and its lint configuration to 16.4.4, and resolves
 Sharp 0.35.5 and source-map-js 1.2.2 in the lockfile. Other existing newer pins
 are retained. The application byte cap does not replace maintained image/JWT
 parsers. Regression checks cover normal images, login/session behavior and the
