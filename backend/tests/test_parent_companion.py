@@ -374,3 +374,77 @@ def test_faithful_native_restore_preserves_error_null_and_retry_without_defaults
 def test_parent_audit_requires_real_existing_master_baseline():
     with pytest.raises(ArchiveBlocked, match="master baseline contract"):
         parent._master_anchor(None, {}, None)
+
+
+@pytest.mark.parametrize("failure", [None, "control", "aborted_sql"])
+def test_existing_public_control_journals_visible_with_catalog_first_and_path_restored(
+    monkeypatch, failure
+):
+    from app.tiered_archive import (
+        codec,
+        restore_baseline,
+        restore_fence,
+        restore_session,
+        restore_universe,
+    )
+
+    plan = {
+        "format": restore_session.FORMAT,
+        "universe": {
+            "version": 1,
+            "tables": {"wav_file": "master", "visual_wav": "master", "wav_feature": "data"},
+        },
+        "environment": "production",
+        "source": "gateway",
+        "dataset": "wav_feature",
+        "organization": "00000000-0000-0000-0000-000000000000",
+        "schema_master_sha256": "a" * 64,
+        "expected_pages": 1,
+        "expected_rows": 2,
+        "first_batch_sha256": "b" * 64,
+    }
+    contract = {"plan": plan, "plan_sha256": codec.digest(plan), "masters_sha256": "c" * 64}
+    state = {"path": "pg_catalog", "failed": False}
+    commands = []
+
+    class DB:
+        def execute(self, query):
+            sql = str(query)
+            commands.append(sql)
+            if sql == "SHOW search_path":
+                return SimpleNamespace(scalar_one=lambda: state["path"])
+            assert sql in {
+                "SET LOCAL search_path=pg_catalog,public",
+                "SET LOCAL search_path=pg_catalog",
+            }
+            if failure == "aborted_sql" and state["failed"]:
+                raise RuntimeError("transaction_already_aborted")
+            state["path"] = sql.split("=", 1)[1]
+
+    def bind(db, actual_plan):
+        assert state["path"] == "pg_catalog,public"
+        assert actual_plan == plan
+        if failure:
+            state["failed"] = True
+            raise ArchiveBlocked("expected_control_failure")
+
+    monkeypatch.setattr(restore_universe, "bind", bind)
+    monkeypatch.setattr(restore_universe, "tables", lambda *args: ({}, {"wav_file": object()}))
+    monkeypatch.setattr(restore_fence, "check", lambda *args: {"master_epoch": 7})
+    monkeypatch.setattr(restore_baseline, "anchor", lambda *args: "c" * 64)
+    if failure:
+        with pytest.raises(ArchiveBlocked, match="expected_control_failure"):
+            parent._master_anchor(
+                DB(), {"kind": "gateway", "schema_master_sha256": "a" * 64}, contract
+            )
+    else:
+        assert parent._master_anchor(
+            DB(), {"kind": "gateway", "schema_master_sha256": "a" * 64}, contract
+        ) == {"master_epoch": 7}
+    assert commands == [
+        "SHOW search_path",
+        "SET LOCAL search_path=pg_catalog,public",
+        "SET LOCAL search_path=pg_catalog",
+    ]
+    if failure != "aborted_sql":
+        assert state["path"] == "pg_catalog"

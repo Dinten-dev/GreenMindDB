@@ -521,15 +521,35 @@ def _master_anchor(db, proof, contract):
         ),
         "Parent baseline source/backup/roles differ",
     )
-    restore_universe.bind(db, contract["plan"])
-    _, masters = restore_universe.tables(db, contract["plan"])
-    snapshot = restore_fence.check(db)
     need(
-        contract["masters_sha256"] != "0" * 64
-        and restore_baseline.anchor(db, masters, snapshot) == contract["masters_sha256"],
-        "Actual parent master baseline changed or incomplete",
+        db.execute(text("SHOW search_path")).scalar_one() == "pg_catalog",
+        "Restricted parent catalog path required",
     )
-    return snapshot
+    # Existing control helpers use unqualified names for already initialized
+    # public journals. Catalog functions still resolve before any public object.
+    db.execute(text("SET LOCAL search_path=pg_catalog,public"))
+    failed = False
+    try:
+        restore_universe.bind(db, contract["plan"])
+        _, masters = restore_universe.tables(db, contract["plan"])
+        snapshot = restore_fence.check(db)
+        need(
+            contract["masters_sha256"] != "0" * 64
+            and restore_baseline.anchor(db, masters, snapshot) == contract["masters_sha256"],
+            "Actual parent master baseline changed or incomplete",
+        )
+        return snapshot
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        try:
+            db.execute(text("SET LOCAL search_path=pg_catalog"))
+        except Exception:
+            # An aborted SQL transaction cannot accept SET; its caller rolls
+            # back the whole transaction. Preserve that original database error.
+            if not failed:
+                raise
 
 
 def complete_restore(
