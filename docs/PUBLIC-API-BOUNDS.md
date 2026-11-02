@@ -93,3 +93,17 @@ The application-level limits also protect the firmware hostname and alternate
 proxies routing to this app. The independent Direct receiver retains its own
 binary/metadata/pairing limits; raw uploads and historical readers are not
 rerouted through this change.
+
+## Existing dependency audit gate
+
+The first CI run also flagged preceding production dependency pins. The patch
+updates Pillow to 13.0.0, PyJWT to at least 2.14.0 (the current receiver retains
+its newer 2.15.0), Next.js and its lint configuration to 16.4.4, and resolves
+Sharp 0.35.5 and source-map-js 1.2.2 in the lockfile. Other existing newer pins
+are retained. The application byte cap does not replace maintained image/JWT
+parsers. Regression checks cover normal images, login/session behavior and the
+frontend build; production dependency audits must pass before integration.
+
+Sources: [PyJWT advisory](https://github.com/advisories/GHSA-pxh4-856f-4h89),
+[Pillow release and security notes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html),
+[Next.js advisory](https://github.com/advisories/GHSA-vcvr-r3jv-pc5j).
