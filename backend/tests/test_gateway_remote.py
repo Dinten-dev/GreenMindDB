@@ -250,7 +250,7 @@ def test_state_report_updates_gateway(client, gateway):
             "status": "idle",
             "disk_free_mb": 2048,
         },
-        headers={"X-Api-Key": "test-api-key-secret"},
+        headers={"X-Api-Key": "test-api-key-secret", "X-Gateway-Id": str(gateway.id)},
     )
     assert resp.status_code == 200
 
@@ -511,7 +511,7 @@ def test_command_result_executed(client: TestClient, db: Session, gateway: Gatew
 
     response = client.post(
         "/api/v1/gateway/command-result",
-        headers={"X-Api-Key": "test-api-key-secret"},
+        headers={"X-Api-Key": "test-api-key-secret", "X-Gateway-Id": str(gateway.id)},
         json={
             "gateway_id": str(gateway.id),
             "command_id": str(cmd_id),

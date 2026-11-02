@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LeafColor(StrEnum):
@@ -49,8 +49,8 @@ class PlantEvaluationCreate(BaseModel):
     structure_raw: LeafStructure
     growth_raw: GrowthState
     water_raw: WaterState
-    anomalies_raw: list[Anomaly]
-    detail_notes: str | None = None
+    anomalies_raw: list[Anomaly] = Field(max_length=5)
+    detail_notes: str | None = Field(None, max_length=4000)
 
     @field_validator("overall_score")
     @classmethod
