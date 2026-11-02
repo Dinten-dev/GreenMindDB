@@ -99,6 +99,8 @@
 - Codeeinlösung und Geräteanlage innerhalb derselben Transaktion sperren.
 - Bestehende untypisierte, unbenutzte Codes bei Migration ungültig machen.
 - Direct-Sperren und sichere Wiederholungen erhalten.
+- Umsetzung und kontrolliertes Datenbank-Upgrade: [TYPED-PAIRING.md](TYPED-PAIRING.md).
+- Vorbereitung erfolgt isoliert; Produktionsfreigabe und OTA sind nicht enthalten.
 
 ### 4. Öffentlichen Zugang widerrufen: S4 und S5
 

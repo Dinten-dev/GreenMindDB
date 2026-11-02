@@ -3,6 +3,7 @@
 import ipaddress
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -36,6 +37,7 @@ class PairingCodeRequest(BaseModel):
 
 
 class PairingCodeResponse(BaseModel):
+    purpose: Literal["gateway", "sensor"]
     code: str
     expires_at: str
     zone_id: str
