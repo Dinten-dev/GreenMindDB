@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, "fix/typed-pairing-20261102"]
   pull_request:
     branches: [main, develop, "fix/public-api-bounds-develop-20261102"]
 
