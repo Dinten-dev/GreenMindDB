@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.auth import create_access_token, get_password_hash
 from app.config import settings
 from app.database import Base, get_db
+from app.gateway_auth import gateway_key_digest
 from app.main import app
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import Organization, Role, User
@@ -101,6 +102,9 @@ def _reset_tables(monkeypatch):
     from app.rate_limit import limiter
 
     limiter.reset()
+    from app.gateway_auth import clear_gateway_auth_cache
+
+    clear_gateway_auth_cache()
     monkeypatch.setattr(settings, "wav_feature_extraction_enabled", False)
     Base.metadata.create_all(bind=_sqlite_engine)
     yield
@@ -182,7 +186,7 @@ def setup_test_data(db: Session) -> dict:
         zone_id=zone.id,
         hardware_id="test-gw-ci",
         name="CI Gateway",
-        api_key_hash=get_password_hash("ci-api-key"),
+        api_key_hash=gateway_key_digest("ci-api-key"),
         status="online",
         is_active=True,
         last_seen=datetime.now(UTC),

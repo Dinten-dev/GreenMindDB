@@ -61,7 +61,7 @@ class Gateway(Base):
     local_ip = Column(String(45), nullable=True)
     fw_version = Column(String(50), nullable=True)
     status = Column(String(20), nullable=False, default="offline")
-    api_key_hash = Column(String(200), nullable=True)
+    api_key_hash = Column(String(200), nullable=True, index=True)
     is_active = Column(Boolean, nullable=False, default=True)
     last_seen = Column(DateTime(timezone=True), nullable=True)
     paired_at = Column(DateTime(timezone=True), nullable=True)

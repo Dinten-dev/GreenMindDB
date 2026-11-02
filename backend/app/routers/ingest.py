@@ -2,12 +2,13 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.database import get_db
-from app.gateway_auth import get_current_gateway
-from app.models.master import Gateway, Sensor
+from app.gateway_auth import authenticate_gateway_api_key
+from app.models.master import Sensor
 from app.routers.ws import manager
 from app.schemas.ingest import IngestRequest, IngestResponse
 from app.services.ingest_service import DuplicateIngestionError, process_ingestion
@@ -20,13 +21,21 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 async def ingest_data(
     data: IngestRequest,
     background_tasks: BackgroundTasks,
-    gateway: Gateway = Depends(get_current_gateway),
+    request: Request,
+    x_api_key: str | None = Header(None, alias="X-Api-Key"),
     db: Session = Depends(get_db),
 ):
     """
     Ingest sensor readings from a gateway.
     Authenticate via X-Api-Key header (the key returned from gateway registration).
     """
+    gateway = await run_in_threadpool(
+        authenticate_gateway_api_key,
+        db,
+        x_api_key,
+        request.client.host if request.client else "unknown",
+        hardware_id=data.gateway_serial,
+    )
     if gateway.hardware_id != data.gateway_serial:
         raise HTTPException(status_code=403, detail="Gateway identity mismatch")
 
