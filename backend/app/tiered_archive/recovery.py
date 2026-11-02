@@ -1,7 +1,13 @@
 """Archive-only restoration into a new directory; originals are never replaced."""
 
+import hashlib
 import json
 import os
+import re
+import stat
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from app.raw_archive.policy import ArchiveBlocked, checksum
 
@@ -9,6 +15,346 @@ from . import parquet
 from .codec import encode
 from .pipeline import candidate_json, verify_file
 from .runtime import candidate_from_json
+
+
+@dataclass(frozen=True)
+class RestoreTLSFilePin:
+    """Explicit immutable Archive Root artifact generation; never auto-discovered."""
+
+    path: Path
+    device: int
+    inode: int
+    bytes: int
+    modified_ns: int
+    changed_ns: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class RestoreTLSTarget:
+    database: str
+    database_oid: int
+    role: str
+    role_oid: int
+    port: int
+    server_address: str
+    postmaster_start: str
+    marker_sha256: str
+
+    def identity(self):
+        return {key: value for key, value in asdict(self).items() if key != "marker_sha256"}
+
+
+@dataclass(frozen=True)
+class RestoreTLSBinding:
+    """Real Root artifacts plus the existing coordinator's fresh Source authority.
+
+    guard(binding, actual_source_artifact_bytes) must validate the actual Source
+    lifecycle/generation and its server-CA/SQL-target bindings, or raise. The API
+    does not manufacture or reinterpret Source proofs. SHA/Root ownership alone
+    never supplies that authority. The guard must remain cheap enough for the
+    caller's existing checkpoints; Source resource monitoring stays its owner's job.
+    """
+
+    source_target_proof: RestoreTLSFilePin
+    root_certificate: RestoreTLSFilePin
+    client_certificate: RestoreTLSFilePin
+    client_key: RestoreTLSFilePin
+    target: RestoreTLSTarget
+    guard: Callable[["RestoreTLSBinding", bytes], None] = field(repr=False, compare=False)
+
+
+_TLS_ROOT = Path("/var/lib/greenmind")
+_TLS_ARCHIVE_MACHINE = "b09421f9d8d4e1c392da9b1cca2ccb2e5d710ae73cf7051a615c3dc040bbd0a9"
+
+
+def _tls_need(value, reason):
+    if not value:
+        raise ArchiveBlocked(reason)
+
+
+def _tls_archive_authority():
+    _tls_need(
+        os.geteuid() == 0
+        and hashlib.sha256(Path("/etc/machine-id").read_bytes()).hexdigest()
+        == _TLS_ARCHIVE_MACHINE,
+        "TLS restore requires the Archive Root coordinator",
+    )
+
+
+def _tls_read_file(pin):
+    _tls_need(type(pin) is RestoreTLSFilePin, "Typed Root TLS file pin required")
+    path = pin.path
+    _tls_need(
+        isinstance(path, Path)
+        and path.is_absolute()
+        and ".." not in path.parts
+        and path.is_relative_to(_TLS_ROOT)
+        and path != _TLS_ROOT
+        and all(
+            type(value) is int and value > 0
+            for value in (pin.device, pin.inode, pin.bytes, pin.modified_ns, pin.changed_ns)
+        )
+        and pin.bytes <= 256 * 1024
+        and isinstance(pin.sha256, str)
+        and re.fullmatch(r"[a-f0-9]{64}", pin.sha256),
+        "Exact bounded Archive Root TLS artifact required",
+    )
+    parent = path.parent
+    while True:
+        info = parent.lstat()
+        _tls_need(
+            stat.S_ISDIR(info.st_mode)
+            and info.st_uid == 0
+            and not info.st_mode & 0o022
+            and (parent == _TLS_ROOT or stat.S_IMODE(info.st_mode) == 0o700),
+            "Private Archive Root TLS directory required",
+        )
+        if parent == _TLS_ROOT:
+            break
+        parent = parent.parent
+
+    def identity(info):
+        _tls_need(
+            stat.S_ISREG(info.st_mode)
+            and info.st_uid == info.st_gid == 0
+            and info.st_nlink == 1
+            and stat.S_IMODE(info.st_mode) == 0o400,
+            "Immutable private Archive Root TLS file required",
+        )
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    expected = (pin.device, pin.inode, pin.bytes, pin.modified_ns, pin.changed_ns)
+    _tls_need(identity(path.lstat()) == expected, "Archive Root TLS file generation changed")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "rb") as stream:
+        _tls_need(
+            identity(os.fstat(stream.fileno())) == expected,
+            "Archive Root TLS file generation changed",
+        )
+        raw = stream.read(256 * 1024 + 1)
+        _tls_need(
+            identity(os.fstat(stream.fileno())) == expected,
+            "Archive Root TLS file generation changed",
+        )
+    _tls_need(
+        identity(path.lstat()) == expected
+        and len(raw) == pin.bytes
+        and hashlib.sha256(raw).hexdigest() == pin.sha256,
+        "Archive Root TLS artifact SHA or generation changed",
+    )
+    return raw
+
+
+def _validate_restore_tls(binding, url):
+    if binding is None:
+        return {}
+    _tls_archive_authority()
+    _tls_need(
+        type(binding) is RestoreTLSBinding and type(binding.target) is RestoreTLSTarget,
+        "Typed explicit restore TLS binding required",
+    )
+    target = binding.target
+    _tls_need(
+        url.drivername == "postgresql+psycopg2"
+        and url.host == "127.0.0.1"
+        and url.port == target.port == 19442
+        and type(target.port) is int
+        and url.username == target.role
+        and bool(url.password)
+        and not url.query
+        and isinstance(target.database, str)
+        and url.database == target.database
+        and re.fullmatch(
+            r"gm_native_restore_[a-f0-9]{12,32}_(gateway|direct)", target.database or ""
+        )
+        and isinstance(target.role, str)
+        and re.fullmatch(r"[a-z][a-z0-9_]{0,62}", target.role)
+        and all(
+            type(value) is int and value > 0 for value in (target.database_oid, target.role_oid)
+        )
+        and isinstance(target.server_address, str)
+        and target.server_address in {"127.0.0.1", "127.0.0.1/32"}
+        and isinstance(target.postmaster_start, str)
+        and re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?[+-][0-9]{2}(?::[0-9]{2})?",
+            target.postmaster_start,
+        )
+        and isinstance(target.marker_sha256, str)
+        and re.fullmatch(r"[a-f0-9]{64}", target.marker_sha256)
+        and callable(binding.guard),
+        "Pinned isolated loopback19442 TLS target required",
+    )
+    pins = (
+        binding.source_target_proof,
+        binding.root_certificate,
+        binding.client_certificate,
+        binding.client_key,
+    )
+    _tls_need(
+        all(type(pin) is RestoreTLSFilePin and isinstance(pin.path, Path) for pin in pins)
+        and len({pin.path for pin in pins}) == 4,
+        "Distinct typed Root TLS artifacts required",
+    )
+    source = _tls_read_file(binding.source_target_proof)
+    for pin in pins[1:]:
+        _tls_read_file(pin)
+    # A caller-provided actual Root coordinator, never a backend-generated proof.
+    _tls_need(binding.guard(binding, source) is None, "Fresh Source target authority required")
+    # The fresh observer cannot silently replace an artifact during its check.
+    for pin in pins:
+        _tls_read_file(pin)
+    return {
+        "hostaddr": "127.0.0.1",
+        "sslmode": "verify-full",
+        "sslrootcert": str(binding.root_certificate.path),
+        "sslcert": str(binding.client_certificate.path),
+        "sslkey": str(binding.client_key.path),
+    }
+
+
+def restore_tls_checkpoint(binding, url, checkpoint):
+    if binding is None:
+        return checkpoint
+    _validate_restore_tls(binding, url)
+
+    def checked():
+        checkpoint()
+        _validate_restore_tls(binding, url)
+
+    return checked
+
+
+def restore_tls_env(binding, url):
+    options = _validate_restore_tls(binding, url)
+    return (
+        {
+            key: options[value]
+            for key, value in (
+                ("PGHOSTADDR", "hostaddr"),
+                ("PGSSLMODE", "sslmode"),
+                ("PGSSLROOTCERT", "sslrootcert"),
+                ("PGSSLCERT", "sslcert"),
+                ("PGSSLKEY", "sslkey"),
+            )
+        }
+        if options
+        else {}
+    )
+
+
+def restore_tls_connect_args(binding, url):
+    return _validate_restore_tls(binding, url)
+
+
+def restore_tls_identity(db, engine, binding, *, checkpoint):
+    if binding is None:
+        return
+    from sqlalchemy import text
+
+    from .parent_companion import _target
+
+    _validate_restore_tls(binding, engine.url)
+
+    def target_guard():
+        _validate_restore_tls(binding, engine.url)
+
+    _target(
+        db,
+        engine,
+        binding.target.identity(),
+        binding.target.marker_sha256,
+        binding.target.database.rsplit("_", 1)[1],
+        checkpoint,
+        target_guard,
+    )
+    encrypted = db.execute(
+        text("SELECT ssl AND bits>=128 FROM pg_stat_ssl WHERE pid=pg_backend_pid()")
+    ).scalar_one()
+    _tls_need(encrypted is True, "Pinned restore connection requires actual PostgreSQL TLS")
+
+
+def restore_tls_engine_guard(engine, binding, url, *, checkpoint):
+    if binding is None:
+        return
+    from sqlalchemy import event
+
+    def before_connect(dialect, connection_record, arguments, parameters):
+        checkpoint()
+        expected = _validate_restore_tls(binding, url)
+        _tls_need(
+            all(parameters.get(key) == value for key, value in expected.items())
+            and parameters.get("host") == "127.0.0.1"
+            and parameters.get("port") == 19442
+            and parameters.get("dbname") == binding.target.database
+            and parameters.get("user") == binding.target.role
+            and parameters.get("password") == url.password,
+            "Restore driver TLS or endpoint parameters changed",
+        )
+
+    event.listen(engine, "do_connect", before_connect)
+
+
+def restore_tls_guard_sql(binding, url):
+    if binding is None:
+        return ""
+    _validate_restore_tls(binding, url)
+    target = binding.target
+
+    # Fixed typed identifiers/numbers; E literals quote the one live timestamp.
+    def literal(value):
+        return "E'" + value.replace("\\", "\\\\").replace("'", "''") + "'"
+
+    return (
+        "SET LOCAL search_path=pg_catalog;\nDO $greenmind_tls_target$ BEGIN IF "
+        "current_database()<>"
+        + literal(target.database)
+        + " OR (SELECT oid FROM pg_database WHERE datname=current_database())<>"
+        + str(target.database_oid)
+        + " OR (SELECT datdba FROM pg_database WHERE datname=current_database())<>"
+        + str(target.role_oid)
+        + " OR current_user<>"
+        + literal(target.role)
+        + " OR current_user<>session_user"
+        + " OR (SELECT oid FROM pg_roles WHERE rolname=current_user)<>"
+        + str(target.role_oid)
+        + " OR EXISTS(SELECT 1 FROM pg_roles WHERE rolname=current_user AND(NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls))"
+        + " OR inet_server_port() IS DISTINCT FROM 19442"
+        + " OR inet_server_addr()::text IS DISTINCT FROM "
+        + literal(target.server_address)
+        + " OR pg_postmaster_start_time()::text<>"
+        + literal(target.postmaster_start)
+        + " OR current_setting('server_version_num')<>'150010'"
+        + " OR pg_is_in_recovery() OR current_setting('session_replication_role')<>'origin'"
+        + " OR has_database_privilege('public',current_database(),'CONNECT')"
+        + " OR has_database_privilege('public',current_database(),'TEMPORARY')"
+        + " OR encode(sha256(convert_to(coalesce((SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()),''),'UTF8')),'hex')<>"
+        + literal(target.marker_sha256)
+        + " OR NOT EXISTS(SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl AND bits>=128)"
+        + " THEN RAISE EXCEPTION 'Pinned TLS restore target changed'; END IF; END; $greenmind_tls_target$;\n"
+    )
+
+
+def restore_tls_source(binding, source):
+    if binding is not None:
+        _tls_need(
+            binding.target.database.endswith("_" + source),
+            "TLS target belongs to another restore source",
+        )
+
+
+def restore_tls_evidence(binding, url=None):
+    if binding is None:
+        return {}
+    _tls_need(url is not None, "Pinned TLS receipt target required")
+    _validate_restore_tls(binding, url)
+    from .codec import digest
+
+    return {
+        "tls_verified_target_sha256": digest(asdict(binding.target)),
+        "tls_source_target_proof_sha256": binding.source_target_proof.sha256,
+        "tls_root_certificate_sha256": binding.root_certificate.sha256,
+    }
 
 
 def restore(identity, output, ledger, store, *, checkpoint):
@@ -58,18 +404,27 @@ def restore(identity, output, ledger, store, *, checkpoint):
     return result
 
 
-def restore_database(folder, database_url, manifest_sha256, *, checkpoint):
+def restore_database(
+    folder,
+    database_url,
+    manifest_sha256,
+    *,
+    checkpoint,
+    tls_binding: RestoreTLSBinding | None = None,
+):
     """Restore exact typed rows into an empty table in an isolated local DB."""
     from sqlalchemy import MetaData, Table, and_, create_engine, func, select, text
 
     from .source import DATASETS
 
     url = restore_url(database_url)
+    checkpoint = restore_tls_checkpoint(tls_binding, url, checkpoint)
     manifest_path = folder / "manifest.json"
     if checksum(manifest_path) != manifest_sha256:
         raise ArchiveBlocked("Restore manifest changed")
     manifest = json.loads(manifest_path.read_text())
     candidate = candidate_from_json(manifest["candidate"])
+    restore_tls_source(tls_binding, candidate.source)
     if candidate.dataset not in DATASETS:
         raise ArchiveBlocked("Use metadata/WAV restore for this bundle")
     spec = DATASETS[candidate.dataset]
@@ -97,10 +452,21 @@ def restore_database(folder, database_url, manifest_sha256, *, checkpoint):
                 yield envelope["body"]
 
     checkpoint()
-    engine = create_engine(url, pool_size=1, max_overflow=0)
+    engine = create_engine(
+        url,
+        pool_size=1,
+        max_overflow=0,
+        **(
+            {"connect_args": restore_tls_connect_args(tls_binding, url)}
+            if tls_binding is not None
+            else {}
+        ),
+    )
+    restore_tls_engine_guard(engine, tls_binding, url, checkpoint=checkpoint)
     count = 0
     try:
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             db.execute(text("SET LOCAL lock_timeout='150ms'"))
             db.execute(text("SET LOCAL statement_timeout='8000ms'"))
             metadata = MetaData()
@@ -162,7 +528,12 @@ def restore_database(folder, database_url, manifest_sha256, *, checkpoint):
                             encode(row) for row in expected_rows
                         ):
                             raise ArchiveBlocked("Stored Direct dependencies differ from archive")
-        return {"restored_rows": count, "typed_values_verified": True, "source_accesses": 0}
+        return {
+            "restored_rows": count,
+            "typed_values_verified": True,
+            "source_accesses": 0,
+            **restore_tls_evidence(tls_binding, url),
+        }
     finally:
         engine.dispose()
 

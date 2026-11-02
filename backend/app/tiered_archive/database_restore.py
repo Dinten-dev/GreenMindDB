@@ -25,7 +25,18 @@ from .backup import (
 )
 from .codec import decode, digest
 from .pipeline import verify_file
-from .recovery import restore_url
+from .recovery import (
+    RestoreTLSBinding,
+    restore_tls_checkpoint,
+    restore_tls_connect_args,
+    restore_tls_engine_guard,
+    restore_tls_env,
+    restore_tls_evidence,
+    restore_tls_guard_sql,
+    restore_tls_identity,
+    restore_tls_source,
+    restore_url,
+)
 from .runtime import candidate_from_json
 
 
@@ -62,9 +73,12 @@ def restore_backup(
     checkpoint,
     provider_target=None,
     post_restore=None,
+    tls_binding: RestoreTLSBinding | None = None,
 ):
     """SQL errors roll back; a failed post-commit value proof never yields success."""
     url = restore_url(database_url)
+    restore_checkpoint = checkpoint
+    checkpoint = restore_tls_checkpoint(tls_binding, url, checkpoint)
     folder = Path(folder)
     if not folder.is_absolute() or folder.is_symlink():
         raise ArchiveBlocked("Absolute isolated backup restore directory required")
@@ -73,6 +87,7 @@ def restore_backup(
         raise ArchiveBlocked("Restore manifest changed")
     manifest = json.loads(manifest_path.read_text())
     candidate = candidate_from_json(manifest["candidate"])
+    restore_tls_source(tls_binding, candidate.source)
     parts = manifest["files"]
     if (
         candidate.dataset != "database_backup"
@@ -113,7 +128,8 @@ def restore_backup(
             body,
             provider_target=provider_target,
             post_restore=post_restore,
-            checkpoint=checkpoint,
+            tls_binding=tls_binding,
+            checkpoint=restore_checkpoint,
         )
     if body.get("backup_format") == "postgres-full-v1":
         raise ArchiveBlocked("Native backup requires the controlled Timescale restore coordinator")
@@ -140,6 +156,7 @@ def restore_backup(
     elif len(parts) != 3 or body.get("backup_format") not in (None, "schema-master-v2"):
         raise ArchiveBlocked("Legacy master backup file version differs")
     env = {
+        **restore_tls_env(tls_binding, url),
         "PATH": "/usr/bin:/bin",
         "LANG": "C.UTF-8",
         "PGHOST": url.host,
@@ -210,7 +227,8 @@ def restore_backup(
             scripts.append(target)
         guard = work / "guard.sql"
         guard.write_text(
-            "SELECT pg_advisory_xact_lock(1735157614,hashtext(current_database()));\n"
+            restore_tls_guard_sql(tls_binding, url)
+            + "SELECT pg_advisory_xact_lock(1735157614,hashtext(current_database()));\n"
             "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname=current_user AND "
             "(rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) OR "
             "(SELECT datdba FROM pg_database WHERE datname=current_database()) <> "
@@ -242,7 +260,13 @@ def restore_backup(
         )
     # No success receipt until PostgreSQL's stored typed values and table shapes
     # match the proof made in the same snapshot as both original pg_dump files.
-    engine = create_engine(url, pool_size=1, max_overflow=0, connect_args={"connect_timeout": 3})
+    engine = create_engine(
+        url,
+        pool_size=1,
+        max_overflow=0,
+        connect_args={"connect_timeout": 3, **restore_tls_connect_args(tls_binding, url)},
+    )
+    restore_tls_engine_guard(engine, tls_binding, url, checkpoint=checkpoint)
     try:
         with (
             engine.connect().execution_options(isolation_level="REPEATABLE READ") as db,
@@ -251,6 +275,7 @@ def restore_backup(
             from sqlalchemy import text
 
             db.execute(text("SET TRANSACTION READ ONLY"))
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             db.execute(text("SET LOCAL statement_timeout='8000ms'"))
             actual = master_proof(
                 db,
@@ -271,6 +296,7 @@ def restore_backup(
             "master_rows": sum(item["rows"] for item in actual["tables"].values()),
             "source_accesses": 0,
             "manifest_sha256": manifest_sha256,
+            **restore_tls_evidence(tls_binding, url),
         }
     finally:
         engine.dispose()
@@ -418,12 +444,17 @@ def _restore_provider(
     provider_target,
     post_restore,
     checkpoint,
+    tls_binding: RestoreTLSBinding | None = None,
 ):
     from sqlalchemy import text
 
     from . import native_backup, schema_provider
 
-    guard_sql = _provider_target_guard(provider_target, url)
+    checkpoint = restore_tls_checkpoint(tls_binding, url, checkpoint)
+    restore_tls_source(tls_binding, candidate.source)
+    guard_sql = restore_tls_guard_sql(tls_binding, url) + _provider_target_guard(
+        provider_target, url
+    )
     if not callable(post_restore):
         raise ArchiveBlocked("Existing controlled supervisor post-restore handshake required")
     proof = body.get("master_proof")
@@ -442,6 +473,7 @@ def _restore_provider(
     ):
         raise ArchiveBlocked("Explicit provider bundle descriptor differs")
     env = {
+        **restore_tls_env(tls_binding, url),
         "PATH": "/usr/bin:/bin",
         "LANG": "C.UTF-8",
         "PGHOST": url.host,
@@ -540,13 +572,16 @@ def _restore_provider(
         max_overflow=0,
         connect_args={
             "connect_timeout": 3,
+            **restore_tls_connect_args(tls_binding, url),
             "options": "-c default_transaction_read_only=off -c statement_timeout=8000 -c lock_timeout=150 -c idle_in_transaction_session_timeout=30000",
         },
     )
+    restore_tls_engine_guard(engine, tls_binding, url, checkpoint=checkpoint)
     try:
         # Restore exact authenticated sequence values using the same bounded
         # per-name binding used by the existing native coordinator.
         with engine.begin() as db:
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             _provider_target_identity(db, provider_target, url, "on")
             existing = native_backup.sequence_proof(db, checkpoint=checkpoint)
             sequences = proof["provider"]["sequences"]
@@ -565,6 +600,7 @@ def _restore_provider(
             db.begin(),
         ):
             db.execute(text("SET TRANSACTION READ ONLY"))
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             _provider_target_identity(db, provider_target, url, "on")
             legacy = schema_provider.legacy_proof(proof, candidate.source)
             actual = master_proof(
@@ -609,6 +645,7 @@ def _restore_provider(
             db.begin(),
         ):
             db.execute(text("SET TRANSACTION READ ONLY"))
+            restore_tls_identity(db, engine, tls_binding, checkpoint=checkpoint)
             _provider_target_identity(db, provider_target, url, "off")
             if (
                 db.execute(text("SHOW timescaledb.restoring")).scalar_one() != "off"
@@ -637,6 +674,7 @@ def _restore_provider(
             ):
                 raise ArchiveBlocked("Controlled post-restore changed verified schema or masters")
         return {
+            **restore_tls_evidence(tls_binding, url),
             "schema_restored": True,
             "typed_values_verified": True,
             "master_proof_version": proof["version"],
