@@ -131,7 +131,10 @@ export default function PlantDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/app/plants" className="p-2 bg-white/40 rounded-xl hover:bg-white/60">
+          <Link
+            href={`/${tx.locale}/app/plants`}
+            className="p-2 bg-white/40 rounded-xl hover:bg-white/60"
+          >
             ←
           </Link>
           <div>
@@ -235,7 +238,7 @@ export default function PlantDetailPage() {
 
               <div className="flex gap-2">
                 <Link
-                  href={`/app/plants/${plant.id}/print-qr`}
+                  href={`/${tx.locale}/app/plants/${plant.id}/print-qr`}
                   className="flex-1 text-center py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 shadow-sm"
                 >
                   {tx('QR Code betrachten')}

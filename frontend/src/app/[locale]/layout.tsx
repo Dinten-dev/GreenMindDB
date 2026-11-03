@@ -5,25 +5,31 @@ import Navbar from '@/components/Navbar';
 import { AuthProvider } from '@/contexts/AuthContext';
 import Footer from '@/components/Footer';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getMessages, getTranslations } from 'next-intl/server';
 
-export const metadata: Metadata = {
-  title: 'GreenMind — Forschungsplattform für bioelektrische Phytosensorik',
-  description:
-    'Forschungs- und Entwicklungsplattform der Galaxyadvisors AG für die datenbasierte Analyse bioelektrischer Pflanzensignale.',
-  openGraph: {
-    title: 'GreenMind — Forschungsplattform',
-    description: 'Datenbasierte Analyse bioelektrischer Pflanzensignale in der Schweiz.',
-    url: 'https://green-mind.ch',
-    siteName: 'GreenMind',
-    locale: 'de_CH',
-    type: 'website',
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'Metadata' });
+  return {
+    title: t('title'),
+    description: t('description'),
+    openGraph: {
+      title: t('shortTitle'),
+      description: t('shortDescription'),
+      url: 'https://green-mind.ch',
+      siteName: 'GreenMind',
+      locale: ({ de: 'de_CH', en: 'en_GB', fr: 'fr_CH', it: 'it_CH' } as Record<string, string>)[
+        locale
+      ],
+      type: 'website',
+    },
+    robots: { index: true, follow: true },
+  };
+}
 
 const jsonLd = {
   '@context': 'https://schema.org',

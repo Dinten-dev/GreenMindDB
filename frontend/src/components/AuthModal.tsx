@@ -1,6 +1,10 @@
 'use client';
 
+import { usePublicText } from '@/i18n/public-text';
+
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { loginErrorKey } from '@/lib/auth-errors';
 import Modal from './Modal';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -10,6 +14,8 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const tx = usePublicText();
+  const auth = useTranslations('Auth');
   const { login, signup } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -33,14 +39,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         setPassword('');
         setName('');
       } else {
-        const detail = await signup(email, password, name);
-        setNotice(detail);
+        await signup(email, password, name);
+        setNotice(tx('Konto erstellt. Bitte anmelden.'));
         setMode('login');
         setPassword('');
         setName('');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(mode === 'login' ? auth(`errors.${loginErrorKey(err)}`) : tx.error(err));
     } finally {
       setLoading(false);
     }
@@ -50,7 +56,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     email.length > 0 && password.length >= 8 && (mode === 'login' || name.trim().length > 0);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={mode === 'login' ? 'Login' : 'Create Account'}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={mode === 'login' ? tx('Login') : tx('Create Account')}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg">
@@ -65,43 +75,45 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
         {mode === 'signup' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{tx('Name')}</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Your name"
+              placeholder={tx('Your name')}
               required
             />
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{tx('Email')}</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="your@email.com"
+            placeholder={tx('your@email.com')}
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{tx('Password')}</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Min. 8 characters"
+            placeholder={tx('Min. 8 characters')}
             minLength={8}
             required
           />
           {mode === 'signup' && password.length > 0 && password.length < 8 && (
-            <p className="mt-1 text-xs text-red-500">Password must be at least 8 characters</p>
+            <p className="mt-1 text-xs text-red-500">
+              {tx('Password must be at least 8 characters')}
+            </p>
           )}
         </div>
 
@@ -110,13 +122,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           disabled={!isFormValid || loading}
           className="w-full py-2 px-4 bg-gray-800 text-white font-medium rounded-lg hover:bg-gray-900 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >
-          {loading ? 'Loading...' : mode === 'login' ? 'Login' : 'Create Account'}
+          {loading ? tx('Loading...') : mode === 'login' ? tx('Login') : tx('Create Account')}
         </button>
 
         <div className="text-center text-sm text-gray-500">
           {mode === 'login' ? (
             <>
-              Don&apos;t have an account?{' '}
+              {tx("Don't have an account?")}{' '}
               <button
                 type="button"
                 onClick={() => {
@@ -126,12 +138,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 }}
                 className="text-blue-600 hover:underline"
               >
-                Sign up
+                {tx('Sign up')}
               </button>
             </>
           ) : (
             <>
-              Already have an account?{' '}
+              {tx('Already have an account?')}{' '}
               <button
                 type="button"
                 onClick={() => {
@@ -141,7 +153,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 }}
                 className="text-blue-600 hover:underline"
               >
-                Login
+                {tx('Login')}
               </button>
             </>
           )}

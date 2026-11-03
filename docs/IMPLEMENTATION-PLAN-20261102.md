@@ -253,6 +253,9 @@ Visuelle Browserabnahme bleibt offen.
 
 ### 12. Vier Sprachen vervollständigen
 
+Softwarekandidat vervollständigt am 03.11.2026; öffentliche Inhalte, QR-Bewertung,
+Metadaten und verbleibende Sprachwechsel sind eingeschlossen. Visuelle Abnahme offen.
+
 - Angemeldeter Bereich auf Benutzerwunsch bereits bei Schritt 6 vorgezogen.
 - Alle geschützten Seiten und Administrationswerkzeuge gehören zum Sprachumfang.
 - Umsetzungsstand und Prüfungen: [I18N-APPLICATION.md](I18N-APPLICATION.md).
