@@ -1,0 +1,11 @@
+{
+  "format": "greenmind.public-isolated-test-patch.v1",
+  "synthetic_test_only": true,
+  "application_deployed": false,
+  "purpose": "Use the SQLAlchemy Connection property to access the native test connection.",
+  "patch_sha256": "903eccae80d3a6c35a7399d01c803924db57933a4389761741ca70d5fc6b9964",
+  "candidate_tests_passed": 46,
+  "native_end_to_end_acceptance": false,
+  "production_ready": false,
+  "source_originals_deleted": 0
+}
