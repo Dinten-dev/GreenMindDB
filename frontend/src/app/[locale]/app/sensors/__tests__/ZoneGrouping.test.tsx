@@ -58,6 +58,7 @@ jest.mock('@/lib/api', () => ({
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/de/app/sensors');
+  sessionStorage.clear();
 });
 
 test('groups Gateway and Direct sensors under their permitted zone', async () => {
@@ -82,7 +83,7 @@ test('groups Gateway and Direct sensors under their permitted zone', async () =>
   expect(screen.getByRole('region', { name: 'Rudi Meier' })).toBeInTheDocument();
 });
 
-test('restores permitted sensor, zone and time range after changing locale', async () => {
+test('restores permitted device and zone but resets old range URLs to 24 hours', async () => {
   window.history.replaceState(
     { router: 'preserved' },
     '',
@@ -93,16 +94,20 @@ test('restores permitted sensor, zone and time range after changing locale', asy
     expect(apiGetSensorDataAdvanced).toHaveBeenCalledWith(
       'rudi-sensor',
       expect.objectContaining({
-        range: '7d',
+        range: '24h',
         from_dt: expect.any(String),
         to_dt: expect.any(String),
       })
     )
   );
   expect(screen.getByRole('combobox', { name: 'Zone' })).toHaveValue('rudi');
-  expect(screen.getByRole('button', { name: '7 Tage' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '24 Stunden' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  expect(screen.queryByRole('button', { name: '7 Tage' })).not.toBeInTheDocument();
   expect(new URLSearchParams(window.location.search).get('sensor')).toBe('rudi-sensor');
-  expect(new URLSearchParams(window.location.search).get('range')).toBe('7d');
+  expect(new URLSearchParams(window.location.search).get('range')).toBeNull();
   expect(window.location.hash).toBe('#chart');
 });
 

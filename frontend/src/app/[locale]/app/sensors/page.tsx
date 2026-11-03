@@ -1,5 +1,7 @@
 'use client';
 import { readViewValue, replaceViewValues } from '@/lib/view-state';
+import { initialMeasurementMode, finishMeasurementRestore } from '@/lib/measurement-view';
+import ExportButton, { type ExportDevice } from './ExportButton';
 
 import { useAppText } from '@/i18n/app-text';
 
@@ -10,25 +12,19 @@ import {
   apiListZones,
   Zone,
   apiGetSensorDataAdvanced,
-  apiExportSensorData,
   apiDeleteSensor,
-  apiDownloadWavBundle,
-  apiCountWavFiles,
   createSensorWebSocket,
   apiUpdateSensor,
   SensorInfo,
   SensorDataResponse,
-  WavCountInfo,
 } from '@/lib/api';
 import SignalChart from './SignalChart';
-import ArchiveExportPanel from './ArchiveExportPanel';
-import WavCompletenessList from './WavCompletenessList';
 import PairSensorDialog from './PairSensorDialog';
 import DirectSensorsPanel, { useDirectDevices } from './DirectSensorsPanel';
 import SensorCard from './SensorCard';
 import ZoneSensorCard from './ZoneSensorCard';
 
-type TimeRange = 'live' | '1h' | '24h' | '7d' | '30d';
+type TimeRange = 'live' | '24h';
 
 const KIND_CONFIG: Record<string, { label: string; unit: string; color: string; icon: string }> = {
   temperature: { label: 'Temperatur', unit: '°C', color: '#ef4444', icon: '🌡' },
@@ -60,17 +56,6 @@ function detectElectrodeDisconnect(
   return 'ok';
 }
 
-function formatDateStr(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 function isSensorArchived(s: SensorInfo): boolean {
@@ -93,8 +78,6 @@ function isSensorArchived(s: SensorInfo): boolean {
   return true;
 }
 
-type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
-
 export default function SensorsPage() {
   const tx = useAppText();
 
@@ -109,11 +92,41 @@ export default function SensorsPage() {
   const selectionRestored = useRef(false);
   const directFeed = useDirectDevices();
 
+  useEffect(() => {
+    if (!directFeed.available || directFeed.error || loading) return;
+    const selected = readViewValue('direct');
+    if (
+      selected &&
+      !directFeed.devices.some(
+        (device) => device.id === selected && zones.some((zone) => zone.id === device.zone_id)
+      )
+    ) {
+      replaceViewValues({ direct: null, directRange: null, directLiveWindow: null });
+    }
+  }, [directFeed.available, directFeed.error, directFeed.devices, loading, zones]);
+
   const activeSensors = useMemo(() => sensors.filter((s) => !isSensorArchived(s)), [sensors]);
   const archivedSensors = useMemo(() => sensors.filter((s) => isSensorArchived(s)), [sensors]);
   const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+  const [timeRange, setTimeRange] = useState<TimeRange>(() => initialMeasurementMode('range'));
+  const [liveSeconds, setLiveSeconds] = useState<30 | 60 | 180>(30);
+  const [liveNow, setLiveNow] = useState(Date.now());
+  const [pageVisible, setPageVisible] = useState(true);
+  useEffect(() => {
+    finishMeasurementRestore('range');
+  }, []);
+  useEffect(() => {
+    const update = () => setPageVisible(document.visibilityState !== 'hidden');
+    update();
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+  useEffect(() => {
+    if (timeRange !== 'live' || !pageVisible) return;
+    const timer = setInterval(() => setLiveNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [timeRange, pageVisible]);
   const [exportWindow, setExportWindow] = useState<{
     sensorId: string;
     range: TimeRange;
@@ -122,24 +135,16 @@ export default function SensorsPage() {
   } | null>(null);
   const [electrodeStatuses, setElectrodeStatuses] = useState<Record<string, ElectrodeStatus>>({});
   const hasInitialData = useRef(false);
+  const dataRequest = useRef(0);
   const [brushRanges, setBrushRanges] = useState<
     Record<string, { startIndex: number; endIndex: number }>
   >({});
-  const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
   const [deletingSensorId, setDeletingSensorId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingSms, setIsUpdatingSms] = useState(false);
   const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
 
-  const [wavLoading, setWavLoading] = useState(false);
-
-  const [bundleLoading, setBundleLoading] = useState(false);
-  const [wavFromDate, setWavFromDate] = useState(
-    formatDateStr(new Date(Date.now() - 7 * 86400000))
-  );
-  const [wavToDate, setWavToDate] = useState(formatDateStr(new Date()));
-  const [wavCount, setWavCount] = useState<WavCountInfo | null>(null);
   const wsCleanupRef = useRef<(() => void) | null>(null);
   const [realtimeActive, setRealtimeActive] = useState(false);
   const [realtimeRemaining, setRealtimeRemaining] = useState(0);
@@ -168,9 +173,6 @@ export default function SensorsPage() {
           if (zoneId && allowed.has(zoneId)) {
             setSelectedZone(zoneId);
           }
-          const selectedRange = readViewValue('range');
-          if (selectedRange && ['live', '1h', '24h', '7d', '30d'].includes(selectedRange))
-            setTimeRange(selectedRange as TimeRange);
           selectionRestored.current = true;
           const sensorId = params.get('sensor');
           if (sensorId && data.some((s) => s.id === sensorId)) {
@@ -215,6 +217,7 @@ export default function SensorsPage() {
   }, [selectedZone, selectedSensor, timeRange, loading]);
 
   const loadSensorData = useCallback(async (sensorId: string, range: TimeRange, silent = false) => {
+    const request = ++dataRequest.current;
     if (!silent) {
       setLoadingData(true);
       hasInitialData.current = false;
@@ -225,29 +228,33 @@ export default function SensorsPage() {
         // Raw data for last 5 minutes — max resolution (~1600 points at 5Hz)
         data = await apiGetSensorDataAdvanced(sensorId, { range: '5m', resolution: 'raw' });
       } else {
-        const duration = { '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range];
         const to = new Date();
         const bounds = {
-          from_dt: new Date(to.getTime() - duration * 1000).toISOString(),
+          from_dt: new Date(to.getTime() - 86400000).toISOString(),
           to_dt: to.toISOString(),
         };
-        data = await apiGetSensorDataAdvanced(sensorId, { range, ...bounds });
-        setExportWindow({ sensorId, range, ...bounds });
+        data = await apiGetSensorDataAdvanced(sensorId, { range: '24h', ...bounds });
+        if (request === dataRequest.current) setExportWindow({ sensorId, range, ...bounds });
       }
+      if (request !== dataRequest.current) return;
       setSensorData(data);
       setDataError(false);
       hasInitialData.current = true;
     } catch (err) {
+      if (request !== dataRequest.current) return;
       console.error('Failed to load sensor data:', err);
       setDataError(true);
       if (!silent) setSensorData([]);
     } finally {
-      if (!silent) setLoadingData(false);
+      if (!silent && request === dataRequest.current) setLoadingData(false);
     }
   }, []);
 
   useEffect(() => {
     if (selectedSensor) void loadSensorData(selectedSensor, timeRange);
+    return () => {
+      dataRequest.current += 1;
+    };
   }, [selectedSensor, timeRange, loadSensorData]);
 
   // Background fetch to check electrode status for all sensors
@@ -286,6 +293,8 @@ export default function SensorsPage() {
   }, [sensors]);
 
   const handleSensorClick = (sensorId: string) => {
+    setTimeRange('24h');
+    setLiveSeconds(30);
     if (selectedSensor === sensorId) {
       setSelectedSensor(null);
       setSensorData([]);
@@ -312,32 +321,6 @@ export default function SensorsPage() {
       minute: '2-digit',
       second: '2-digit',
     }).format(new Date(t));
-  };
-
-  const formatDate = (t: string) => {
-    const d = new Date(t);
-    const day = d.getDate().toString().padStart(2, '0');
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    return `${day}.${month}`;
-  };
-
-  const handleExport = async () => {
-    if (!selectedSensor) return;
-    setExportStatus('loading');
-    try {
-      setExportStatus('zipping');
-      const bounds =
-        exportWindow?.sensorId === selectedSensor && exportWindow.range === timeRange
-          ? { from_dt: exportWindow.from_dt, to_dt: exportWindow.to_dt }
-          : undefined;
-      await apiExportSensorData(selectedSensor, timeRange === 'live' ? '1h' : timeRange, bounds);
-      setExportStatus('done');
-      setTimeout(() => setExportStatus('idle'), 2000);
-    } catch (err) {
-      console.error('Export failed:', err);
-      setExportStatus('error');
-      setTimeout(() => setExportStatus('idle'), 3000);
-    }
   };
 
   // Check if any chart is zoomed
@@ -383,10 +366,10 @@ export default function SensorsPage() {
 
   // Stop realtime when leaving live mode or deselecting sensor
   useEffect(() => {
-    if (timeRange !== 'live' || !selectedSensor) {
+    if (timeRange !== 'live' || !selectedSensor || !pageVisible) {
       stopRealtime();
     }
-  }, [timeRange, selectedSensor, stopRealtime]);
+  }, [timeRange, selectedSensor, stopRealtime, pageVisible]);
 
   // WebSocket: only active during Realtime mode
   useEffect(() => {
@@ -397,7 +380,8 @@ export default function SensorsPage() {
       setWsConnected(false);
     }
 
-    if (!selectedSensor || timeRange !== 'live' || !realtimeActive || isZoomed) return;
+    if (!selectedSensor || timeRange !== 'live' || !realtimeActive || isZoomed || !pageVisible)
+      return;
 
     const cleanup = createSensorWebSocket(
       selectedSensor,
@@ -414,7 +398,10 @@ export default function SensorsPage() {
               value: r.value,
             }));
 
-            const merged = [...series.data, ...newPoints].slice(-300);
+            const cutoff = Date.now() - 180000;
+            const merged = [...series.data, ...newPoints]
+              .filter((p) => Date.parse(p.timestamp) >= cutoff)
+              .slice(-2000);
             return { ...series, data: merged };
           });
         });
@@ -428,48 +415,23 @@ export default function SensorsPage() {
       wsCleanupRef.current = null;
       setWsConnected(false);
     };
-  }, [selectedSensor, timeRange, realtimeActive, isZoomed]);
+  }, [selectedSensor, timeRange, realtimeActive, isZoomed, pageVisible]);
 
   // Default live polling (5s) — always runs in live mode unless Realtime is active
   useEffect(() => {
-    if (!selectedSensor || timeRange !== 'live' || isZoomed || realtimeActive) return;
+    if (!selectedSensor || timeRange !== 'live' || isZoomed || realtimeActive || !pageVisible)
+      return;
     const interval = setInterval(() => {
       loadSensorData(selectedSensor, 'live', true);
     }, 5000);
     return () => clearInterval(interval);
-  }, [selectedSensor, timeRange, loadSensorData, isZoomed, realtimeActive]);
+  }, [selectedSensor, timeRange, loadSensorData, isZoomed, realtimeActive, pageVisible]);
 
   const formatCountdown = (seconds: number): string => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
-
-  // Load WAV count when a sensor is selected or date range changes
-  const loadWavFiles = useCallback(
-    async (sensorId: string) => {
-      setWavLoading(true);
-      const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
-      const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
-      try {
-        const count = await apiCountWavFiles(sensorId, fromIso, toIso);
-        setWavCount(count);
-      } catch {
-        setWavCount(null);
-      } finally {
-        setWavLoading(false);
-      }
-    },
-    [wavFromDate, wavToDate]
-  );
-
-  useEffect(() => {
-    if (!selectedSensor) {
-      setWavCount(null);
-      return;
-    }
-    loadWavFiles(selectedSensor);
-  }, [selectedSensor, loadWavFiles]);
 
   const confirmDeleteSensor = async () => {
     if (!deletingSensorId) return;
@@ -518,7 +480,7 @@ export default function SensorsPage() {
   if (listError)
     return (
       <div className="glass-card p-8">
-        <h1 className="text-2xl font-semibold text-gray-800">{tx('Messungen & Sensoren')}</h1>
+        <h1 className="text-2xl font-semibold text-gray-800">{tx('Messungen')}</h1>
         <p role="alert" className="mt-3 text-sm text-gray-600">
           {tx('Deine Sensoren konnten nicht geladen werden.')}
         </p>
@@ -532,6 +494,20 @@ export default function SensorsPage() {
     );
 
   const selectedSensorInfo = sensors.find((s) => s.id === selectedSensor);
+  const exportDevices: ExportDevice[] = [
+    ...sensors.map((sensor) => ({
+      id: sensor.id,
+      kind: 'gateway' as const,
+      name: sensor.name || sensor.mac_address,
+    })),
+    ...directFeed.devices
+      .filter((device) => zones.some((zone) => zone.id === device.zone_id))
+      .map((device) => ({
+        id: device.id,
+        kind: 'direct' as const,
+        name: `Biolingo ${device.hardware_id?.slice(-5).replace(':', '') || device.id.slice(0, 8)}`,
+      })),
+  ];
 
   const renderSensorDetailPanel = () => {
     if (!selectedSensor || !selectedSensorInfo) return null;
@@ -545,39 +521,16 @@ export default function SensorsPage() {
                 <h2 className="text-lg font-semibold text-gray-800">
                   {selectedSensorInfo.name || selectedSensorInfo.mac_address}
                 </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {selectedSensorInfo.mac_address} · {selectedSensorInfo.gateway_name}
-                </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* SMS Alerts Toggle */}
-                <button
-                  onClick={toggleSmsAlerts}
-                  disabled={isUpdatingSms}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all border shrink-0 disabled:opacity-50 ${
-                    selectedSensorInfo.sms_alerts_enabled
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                  }`}
-                  aria-pressed={selectedSensorInfo.sms_alerts_enabled}
-                  title={tx('SMS Warnungen bei Elektroden-Abfall')}
-                >
-                  <span className="text-sm">📱</span>
-                  {isUpdatingSms
-                    ? tx('Speichere...')
-                    : selectedSensorInfo.sms_alerts_enabled
-                      ? tx('SMS aktiv')
-                      : tx('SMS stumm')}
-                </button>
-
                 {/* Time Range Segmented Control */}
                 <div
                   role="group"
                   aria-label={tx('Zeitraum')}
                   className="flex flex-wrap bg-black/[0.03] rounded-xl p-0.5"
                 >
-                  {(['live', '1h', '24h', '7d', '30d'] as TimeRange[]).map((range) => (
+                  {(['24h', 'live'] as TimeRange[]).map((range) => (
                     <button
                       key={range}
                       onClick={() => handleRangeChange(range)}
@@ -600,10 +553,7 @@ export default function SensorsPage() {
                       ) : (
                         tx(
                           {
-                            '1h': '1 Stunde',
                             '24h': '24 Stunden',
-                            '7d': '7 Tage',
-                            '30d': '30 Tage',
                           }[range]
                         )
                       )}
@@ -611,49 +561,15 @@ export default function SensorsPage() {
                   ))}
                 </div>
 
-                {/* Export Button */}
-                <button
-                  onClick={handleExport}
-                  disabled={exportStatus !== 'idle'}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
-                  title={tx('Sensordaten als ZIP exportieren')}
-                >
-                  {exportStatus === 'idle' && (
-                    <>
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                      </svg>
-                      {tx('Daten herunterladen')}
-                    </>
-                  )}
-                  {exportStatus === 'loading' && 'Lade…'}
-                  {exportStatus === 'zipping' && tx('Wird gepackt…')}
-                  {exportStatus === 'done' && tx('✓ Fertig')}
-                  {exportStatus === 'error' && tx('✗ Fehler')}
-                </button>
-              </div>
-            </div>
-
-            {/* Export Progress */}
-            {(exportStatus === 'loading' || exportStatus === 'zipping') && (
-              <div className="export-progress">
-                <div
-                  className="export-progress-bar"
-                  style={{ width: exportStatus === 'loading' ? '40%' : '80%' }}
+                <ExportButton
+                  devices={exportDevices}
+                  initialKey={`gateway:${selectedSensor}`}
+                  initialBounds={
+                    exportWindow?.sensorId === selectedSensor ? exportWindow : undefined
+                  }
                 />
               </div>
-            )}
+            </div>
 
             {dataError && (
               <div
@@ -669,6 +585,56 @@ export default function SensorsPage() {
                 >
                   {tx('Erneut versuchen')}
                 </button>
+              </div>
+            )}
+            <details className="mx-4 mt-3 text-xs text-gray-500 sm:mx-6">
+              <summary className="cursor-pointer">{tx('Geräteeinstellungen')}</summary>
+              <p className="my-2">
+                {selectedSensorInfo.mac_address} · {selectedSensorInfo.gateway_name}
+              </p>
+              {/* SMS Alerts Toggle */}
+              <button
+                onClick={toggleSmsAlerts}
+                disabled={isUpdatingSms}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all border shrink-0 disabled:opacity-50 ${
+                  selectedSensorInfo.sms_alerts_enabled
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                }`}
+                aria-pressed={selectedSensorInfo.sms_alerts_enabled}
+                title={tx('SMS Warnungen bei Elektroden-Abfall')}
+              >
+                <span className="text-sm">📱</span>
+                {isUpdatingSms
+                  ? tx('Speichere...')
+                  : selectedSensorInfo.sms_alerts_enabled
+                    ? tx('SMS aktiv')
+                    : tx('SMS stumm')}
+              </button>
+            </details>
+            {timeRange === 'live' && (
+              <div className="mx-4 mt-4 space-y-2 sm:mx-6">
+                <div role="group" aria-label={tx('Livefenster')} className="flex flex-wrap gap-2">
+                  {([30, 60, 180] as const).map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      aria-pressed={liveSeconds === value}
+                      onClick={() => setLiveSeconds(value)}
+                      className={`rounded-lg border px-3 py-2 text-sm ${liveSeconds === value ? 'bg-emerald-700 text-white' : 'bg-white text-gray-600'}`}
+                    >
+                      {tx(value === 30 ? '30 Sekunden' : value === 60 ? '1 Minute' : '3 Minuten')}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500">
+                  {tx(
+                    'Dieses Gateway liefert keine Rail-Prozentwerte oder Live-Markierungen. Die schnelle Vorschau ist bei geeigneten Direct-Sensoren verfügbar.'
+                  )}
+                </p>
+                {!pageVisible && (
+                  <p role="status">{tx('Live pausiert, solange dieser Tab ausgeblendet ist.')}</p>
+                )}
               </div>
             )}
             {/* Charts */}
@@ -689,7 +655,17 @@ export default function SensorsPage() {
                 <div className="grid grid-cols-1 gap-6">
                   {sensorData
                     .filter((s) => s.kind in KIND_CONFIG)
-                    .map((series) => {
+                    .map((storedSeries) => {
+                      const series =
+                        timeRange === 'live'
+                          ? {
+                              ...storedSeries,
+                              time_info: undefined,
+                              data: storedSeries.data.filter(
+                                (p) => Date.parse(p.timestamp) >= liveNow - liveSeconds * 1000
+                              ),
+                            }
+                          : storedSeries;
                       const config = KIND_CONFIG[series.kind];
                       const displayUnit = series.unit || config.unit;
                       const latestValue =
@@ -749,6 +725,16 @@ export default function SensorsPage() {
                                 <span className="text-xs text-gray-500 ml-1">{displayUnit}</span>
                                 {latestTimestamp && (
                                   <p className="text-xs text-gray-500 mt-1">
+                                    {timeRange === 'live' && (
+                                      <span className="block">
+                                        {tx('Signalalter: {value0} ms', {
+                                          value0: Math.max(
+                                            0,
+                                            liveNow - Date.parse(latestTimestamp)
+                                          ),
+                                        })}
+                                      </span>
+                                    )}
                                     {tx('Letzter Messwert ·')}{' '}
                                     <time dateTime={latestTimestamp}>
                                       {new Date(latestTimestamp).toLocaleString(locale, {
@@ -773,11 +759,7 @@ export default function SensorsPage() {
                               color={config.color}
                               unit={displayUnit}
                               formatTick={(t) =>
-                                timeRange === 'live'
-                                  ? formatTimeWithSeconds(t)
-                                  : timeRange === '1h' || timeRange === '24h'
-                                    ? formatTime(t)
-                                    : formatDate(t)
+                                timeRange === 'live' ? formatTimeWithSeconds(t) : formatTime(t)
                               }
                             />
                           ) : (
@@ -837,118 +819,6 @@ export default function SensorsPage() {
                   )}
                 </div>
               )}
-
-              <WavCompletenessList
-                sensorId={selectedSensor}
-                fromDate={wavFromDate}
-                toDate={wavToDate}
-              />
-              {/* WAV Files Section */}
-              <div className="mt-6 pt-6 border-t border-black/[0.04]">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">🎵</span>
-                  <span className="text-sm font-medium text-gray-700">
-                    {tx('WAV-Dateien (380 Hz Rohdaten)')}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-400 mb-3">
-                  {tx('Rohdaten 90 Tage · verifizierte Merkmale mindestens zwei Jahre')}
-                </p>
-
-                {/* Date Range + Download */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <label className="text-xs text-gray-500 font-medium">{tx('Von')}</label>
-                    <input
-                      type="date"
-                      value={wavFromDate}
-                      onChange={(e) => setWavFromDate(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    />
-                    <label className="text-xs text-gray-500 font-medium">{tx('Bis')}</label>
-                    <input
-                      type="date"
-                      value={wavToDate}
-                      onChange={(e) => setWavToDate(e.target.value)}
-                      max={formatDateStr(new Date())}
-                      className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3 ml-auto">
-                    {wavLoading ? (
-                      <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                        <span className="w-3 h-3 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
-                        {tx('Lade…')}
-                      </span>
-                    ) : wavCount && wavCount.count > 0 ? (
-                      <>
-                        <span className="text-xs text-gray-400">
-                          {tx('{count, plural, one {# Datei} other {# Dateien}}', {
-                            count: wavCount.count,
-                          })}
-                          {wavCount.total_bytes > 0 && <> · {formatBytes(wavCount.total_bytes)}</>}
-                        </span>
-                        {selectedSensor && (
-                          <button
-                            onClick={async () => {
-                              setBundleLoading(true);
-                              try {
-                                const fromIso = new Date(wavFromDate + 'T00:00:00Z').toISOString();
-                                const toIso = new Date(wavToDate + 'T23:59:59Z').toISOString();
-                                await apiDownloadWavBundle(selectedSensor, fromIso, toIso);
-                              } catch (err) {
-                                console.error('Bundle download failed:', err);
-                              } finally {
-                                setBundleLoading(false);
-                              }
-                            }}
-                            disabled={bundleLoading}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 border border-emerald-200/50"
-                          >
-                            {bundleLoading ? (
-                              <span className="flex items-center gap-1">
-                                <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                                {tx('ZIP…')}
-                              </span>
-                            ) : (
-                              <>
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                  <polyline points="7 10 12 15 17 10" />
-                                  <line x1="12" y1="15" x2="12" y2="3" />
-                                </svg>
-                                {tx('Als ZIP herunterladen')}
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-xs text-gray-400">
-                        {tx('Keine Dateien im gewählten Zeitraum')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {selectedSensor && wavFromDate && wavToDate && (
-                  <ArchiveExportPanel
-                    kind="gateway"
-                    sensorId={selectedSensor}
-                    from={new Date(`${wavFromDate}T00:00:00Z`).toISOString()}
-                    to={new Date(`${wavToDate}T23:59:59Z`).toISOString()}
-                  />
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -983,13 +853,16 @@ export default function SensorsPage() {
           }
         >
           {renderSensorDetailPanel()}
-          <button
-            type="button"
-            onClick={() => setDeletingSensorId(sensor.id)}
-            className="mt-3 rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
-          >
-            {tx('Sensor entfernen')}
-          </button>
+          <details className="mt-3 text-xs text-gray-500">
+            <summary className="cursor-pointer">{tx('Geräteeinstellungen')}</summary>
+            <button
+              type="button"
+              onClick={() => setDeletingSensorId(sensor.id)}
+              className="mt-3 rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
+            >
+              {tx('Sensor entfernen')}
+            </button>
+          </details>
         </SensorCard>
       ))}
     </div>
@@ -999,24 +872,39 @@ export default function SensorsPage() {
     <div className="space-y-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
-            {tx('Messungen & Sensoren')}
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{tx('Messungen')}</h1>
           <p className="text-sm text-gray-400 mt-1">
-            {tx('Deine freigegebenen Zonen mit Sensoren, Messwerten und Originalaufnahmen.')}
+            {tx('Gerät auswählen und Messungen ansehen.')}
           </p>
         </div>
-        <button
-          onClick={() => setIsPairDialogOpen(true)}
-          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors text-center whitespace-nowrap"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          {tx('Sensor verbinden')}
-        </button>
+        <ExportButton
+          devices={exportDevices}
+          initialKey={selectedSensor ? `gateway:${selectedSensor}` : undefined}
+        />
       </div>
 
+      <details className="text-sm text-gray-600">
+        <summary className="cursor-pointer">{tx('Geräte verwalten')}</summary>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <a className="text-emerald-800 underline" href={`/${locale}/app/manage`}>
+            {tx('Verwaltung öffnen')}
+          </a>
+          <button
+            onClick={() => setIsPairDialogOpen(true)}
+            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors text-center whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            {tx('Sensor verbinden')}
+          </button>{' '}
+        </div>
+      </details>
       {zones.length > 1 && (
         <label className="block text-sm font-medium text-gray-700">
           {tx('Zone')}
@@ -1076,7 +964,8 @@ export default function SensorsPage() {
                 ].join(' · ')}
                 reveal={
                   selectedZone === zone.id ||
-                  [...active, ...archived].some((sensor) => sensor.id === selectedSensor)
+                  [...active, ...archived].some((sensor) => sensor.id === selectedSensor) ||
+                  devices.some((device) => device.id === readViewValue('direct'))
                 }
                 onCollapse={() => {
                   if ([...active, ...archived].some((sensor) => sensor.id === selectedSensor)) {

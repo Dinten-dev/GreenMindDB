@@ -11,10 +11,14 @@ export default function WavCompletenessList({
   sensorId,
   fromDate,
   toDate,
+  from,
+  to,
 }: {
   sensorId: string;
   fromDate: string;
   toDate: string;
+  from?: string;
+  to?: string;
 }) {
   const tx = useAppText();
 
@@ -31,8 +35,8 @@ export default function WavCompletenessList({
       if (pending) return;
       pending = true;
       return apiListWavFiles(sensorId, {
-        from_dt: `${fromDate}T00:00:00Z`,
-        to_dt: `${toDate}T23:59:59Z`,
+        from_dt: from ?? `${fromDate}T00:00:00Z`,
+        to_dt: to ?? `${toDate}T23:59:59Z`,
         limit: 100,
       })
         .then((rows) => {
@@ -55,7 +59,7 @@ export default function WavCompletenessList({
       current = false;
       window.clearInterval(timer);
     };
-  }, [sensorId, fromDate, toDate]);
+  }, [sensorId, fromDate, toDate, from, to]);
   const short = files.filter((file) =>
     ['short', 'partial'].includes(file.completeness?.status || '')
   ).length;
