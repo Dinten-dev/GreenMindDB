@@ -1,3 +1,4 @@
+import { ApiError } from '@/lib/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import StorageMonitor from '../StorageMonitor';
 import ArchiveOverview from '../ArchiveOverview';
@@ -13,7 +14,7 @@ import {
   adminArchiveStatus,
   adminRequestArchiveCopy,
 } from '@/lib/administration-api';
-jest.mock('next-intl', () => ({ useLocale: () => 'de' }));
+
 jest.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'account' } }) }));
 jest.mock('@/lib/administration-api');
 const storage = jest.mocked(adminStorage);
@@ -37,7 +38,9 @@ test('archive overview never starts a copy on Staging', async () => {
     message: 'Kopieren wird erst nach dem Production-Rollout aktiviert.',
   });
   render(<ArchiveOverview />);
-  expect(await screen.findByText(/erst nach dem Production-Rollout aktiviert/)).toBeInTheDocument();
+  expect(
+    (await screen.findAllByText(/erst nach Production-Rollout freigeschaltet/)).length
+  ).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: 'WAV-Dateien jetzt kopieren' })).toBeDisabled();
   expect(screen.getAllByText('–').length).toBeGreaterThanOrEqual(3);
   fireEvent.click(screen.getByRole('button', { name: 'WAV-Dateien jetzt kopieren' }));
@@ -239,7 +242,9 @@ test('company deletion needs its exact name and displays server blockers', async
   jest
     .mocked(adminCatalog)
     .mockResolvedValue({ companies: [{ id: 'y', name: 'Company Y' }], zones: [] });
-  jest.mocked(adminDeleteCompany).mockRejectedValue(new Error('Benutzer sind noch zugeordnet.'));
+  jest
+    .mocked(adminDeleteCompany)
+    .mockRejectedValue(new ApiError(409, 'Benutzer sind noch zugeordnet.'));
   render(<Companies />);
   fireEvent.click(await screen.findByRole('button', { name: 'Firma löschen' }));
   expect(screen.getByRole('button', { name: 'Endgültig löschen' })).toBeDisabled();
@@ -252,7 +257,9 @@ test('company deletion needs its exact name and displays server blockers', async
   });
   fireEvent.click(screen.getByRole('button', { name: 'Endgültig löschen' }));
   await waitFor(() => expect(adminDeleteCompany).toHaveBeenCalledWith('y', 'Company Y'));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Benutzer sind noch zugeordnet.');
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Benutzer, Zonen oder andere Daten sind noch zugeordnet.'
+  );
   expect(screen.getByRole('heading', { name: 'Company Y' })).toBeInTheDocument();
 });
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
 import Link from 'next/link';
@@ -9,6 +11,8 @@ import { useDirectDevices } from '../sensors/DirectSensorsPanel';
 import { apiListZones, apiCreateZone, apiDeleteZone, Zone, ZONE_TYPES } from '@/lib/api';
 
 export default function ZonesPage() {
+  const tx = useAppText();
+
   const locale = useLocale();
   const directFeed = useDirectDevices();
   const { user } = useAuth();
@@ -99,15 +103,15 @@ export default function ZonesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Zonen</h1>
-          <p className="text-sm text-gray-400 mt-1">Verwalte deine Anbauflächen</p>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{tx('Zonen')}</h1>
+          <p className="text-sm text-gray-400 mt-1">{tx('Verwalte deine Anbauflächen')}</p>
         </div>
         {canManage && (
           <button
             onClick={() => setShowCreate(true)}
             className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm whitespace-nowrap"
           >
-            + Neue Zone
+            {tx('+ Neue Zone')}
           </button>
         )}
       </div>
@@ -116,21 +120,25 @@ export default function ZonesPage() {
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
           <div className="glass-card p-8 w-full max-w-md mx-4 shadow-xl">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Neue Zone</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">{tx('Neue Zone')}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1.5">Name</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                  {tx('Name')}
+                </label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 backdrop-blur-sm"
-                  placeholder="z.B. Hauptgewächshaus, Feld Sektor A"
+                  placeholder={tx('z.B. Hauptgewächshaus, Feld Sektor A')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1.5">Zonentyp</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                  {tx('Zonentyp')}
+                </label>
                 <div className="grid grid-cols-2 gap-2">
                   {ZONE_TYPES.map((zt) => (
                     <button
@@ -144,28 +152,28 @@ export default function ZonesPage() {
                       }`}
                     >
                       <span>{zt.icon}</span>
-                      <span>{zt.label}</span>
+                      <span>{tx(zt.label)}</span>
                     </button>
                   ))}
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                  Standort (optional)
+                  {tx('Standort (optional)')}
                 </label>
                 <input
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 backdrop-blur-sm"
-                  placeholder="z.B. Brugg, Schweiz"
+                  placeholder={tx('z.B. Brugg, Schweiz')}
                 />
               </div>
               {(zoneType === 'OPEN_FIELD' || zoneType === 'ORCHARD') && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Breitengrad
+                      {tx('Breitengrad')}
                     </label>
                     <input
                       type="number"
@@ -178,7 +186,7 @@ export default function ZonesPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Längengrad
+                      {tx('Längengrad')}
                     </label>
                     <input
                       type="number"
@@ -197,14 +205,14 @@ export default function ZonesPage() {
                   onClick={() => setShowCreate(false)}
                   className="flex-1 py-2.5 bg-black/[0.04] text-gray-600 rounded-xl text-sm font-medium hover:bg-black/[0.06] transition-colors"
                 >
-                  Abbrechen
+                  {tx('Abbrechen')}
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
                   className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 shadow-sm"
                 >
-                  {creating ? 'Erstelle…' : 'Erstellen'}
+                  {creating ? tx('Erstelle…') : tx('Erstellen')}
                 </button>
               </div>
             </form>
@@ -220,7 +228,7 @@ export default function ZonesPage() {
             aria-expanded={showAccess}
             className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800"
           >
-            Zugänge verwalten
+            {tx('Zugänge verwalten')}
           </button>
           {showAccess && (
             <div className="mt-4">
@@ -233,18 +241,18 @@ export default function ZonesPage() {
       {zones.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-4xl mb-4">🌱</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Zonen</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">{tx('Noch keine Zonen')}</h3>
           <p className="text-sm text-gray-400 mb-4">
             {canManage
-              ? 'Erstelle deine erste Zone, um Gateways und Sensoren hinzuzufügen.'
-              : 'Für dein Konto sind noch keine Zonen freigegeben.'}
+              ? tx('Erstelle deine erste Zone, um Gateways und Sensoren hinzuzufügen.')
+              : tx('Für dein Konto sind noch keine Zonen freigegeben.')}
           </p>
           {canManage && (
             <button
               onClick={() => setShowCreate(true)}
               className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm"
             >
-              Zone erstellen
+              {tx('Zone erstellen')}
             </button>
           )}
         </div>
@@ -259,7 +267,7 @@ export default function ZonesPage() {
                     <h3 className="text-lg font-semibold text-gray-800 mb-0.5">{z.name}</h3>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200/50">
-                        {getZoneLabel(z.zone_type)}
+                        {tx(getZoneLabel(z.zone_type))}
                       </span>
                       {z.location && <span className="text-sm text-gray-400">{z.location}</span>}
                     </div>
@@ -272,7 +280,7 @@ export default function ZonesPage() {
                         setDeletingZoneId(z.id);
                       }}
                       className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
-                      title="Zone löschen"
+                      title={tx('Zone löschen')}
                     >
                       <svg
                         className="w-4 h-4"
@@ -295,15 +303,15 @@ export default function ZonesPage() {
                 href={`/${locale}/app/sensors?zone=${z.id}`}
                 className="mt-4 inline-block text-sm font-medium text-emerald-800 underline underline-offset-4"
               >
-                Sensoren und Messungen ansehen →
+                {tx('Sensoren und Messungen ansehen →')}
               </Link>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mt-4 pointer-events-none">
                 <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
-                  <p className="text-gray-400 text-xs">Gateways</p>
+                  <p className="text-gray-400 text-xs">{tx('Gateways')}</p>
                   <p className="font-semibold text-gray-800">{z.gateway_count}</p>
                 </div>
                 <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
-                  <p className="text-gray-400 text-xs">Sensoren</p>
+                  <p className="text-gray-400 text-xs">{tx('Sensoren')}</p>
                   <p className="font-semibold text-gray-800">
                     {z.sensor_count +
                       directFeed.devices.filter((device) => device.zone_id === z.id).length}
@@ -311,7 +319,7 @@ export default function ZonesPage() {
                 </div>
                 {z.latitude != null && z.longitude != null && (
                   <div className="bg-white/40 rounded-xl px-3 py-2 border border-black/[0.03]">
-                    <p className="text-gray-400 text-xs">GPS</p>
+                    <p className="text-gray-400 text-xs">{tx('GPS')}</p>
                     <p className="font-semibold text-gray-800 text-xs font-mono">
                       {z.latitude.toFixed(4)}, {z.longitude.toFixed(4)}
                     </p>
@@ -341,24 +349,27 @@ export default function ZonesPage() {
                 />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">Zone löschen?</h3>
+            <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
+              {tx('Zone löschen?')}
+            </h3>
             <p className="text-sm text-center text-gray-500 mb-6">
-              Alle zugehörigen Gateways, Sensoren und Messdaten werden{' '}
-              <strong className="font-semibold text-gray-700">unwiderruflich</strong> gelöscht.
+              {tx('Alle zugehörigen Gateways, Sensoren und Messdaten werden')}{' '}
+              <strong className="font-semibold text-gray-700">{tx('unwiderruflich')}</strong>{' '}
+              {tx('gelöscht.')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingZoneId(null)}
                 className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
               >
-                Abbrechen
+                {tx('Abbrechen')}
               </button>
               <button
                 onClick={confirmDeleteZone}
                 disabled={isDeleting}
                 className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? 'Lösche…' : 'Löschen'}
+                {isDeleting ? tx('Lösche…') : tx('Löschen')}
               </button>
             </div>
           </div>

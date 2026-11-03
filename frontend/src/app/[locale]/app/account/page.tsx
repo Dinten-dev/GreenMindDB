@@ -1,29 +1,36 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiUpdateMe } from '@/lib/api';
 
 export default function AccountPage() {
+  const tx = useAppText();
+
   const { user, refresh } = useAuth();
   const [phone, setPhone] = useState(user?.phone_number || '');
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [saved, setSaved] = useState(false);
 
   if (!user) return null;
 
   const handleSave = async () => {
     setIsSaving(true);
     setMessage('');
+    setSaved(false);
     try {
       await apiUpdateMe({ phone_number: phone });
       await refresh();
-      setMessage('Profile updated successfully');
+      setMessage(tx('Profile updated successfully'));
+      setSaved(true);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setMessage(err.message);
+        setMessage(tx.error(err));
       } else {
-        setMessage('Failed to update profile');
+        setMessage(tx('Failed to update profile'));
       }
     } finally {
       setIsSaving(false);
@@ -33,8 +40,8 @@ export default function AccountPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-apple-gray-800">Account</h1>
-        <p className="text-sm text-apple-gray-400 mt-1">Your profile and settings</p>
+        <h1 className="text-2xl font-bold text-apple-gray-800">{tx('Account')}</h1>
+        <p className="text-sm text-apple-gray-400 mt-1">{tx('Your profile and settings')}</p>
       </div>
 
       <div className="bg-white rounded-apple-lg shadow-apple-card p-6 space-y-6">
@@ -46,7 +53,7 @@ export default function AccountPage() {
           </div>
           <div>
             <p className="text-lg font-semibold text-apple-gray-800">
-              {user.name || 'No name set'}
+              {user.name || tx('No name set')}
             </p>
             <p className="text-sm text-apple-gray-400">{user.email}</p>
           </div>
@@ -55,33 +62,36 @@ export default function AccountPage() {
         <hr className="border-apple-gray-200" />
 
         <div className="grid grid-cols-2 gap-y-4 text-sm">
-          <span className="text-apple-gray-400">Role</span>
-          <span className="text-apple-gray-800 capitalize font-medium">{user.role}</span>
+          <span className="text-apple-gray-400">{tx('Role')}</span>
+          <span className="text-apple-gray-800 capitalize font-medium">{tx.status(user.role)}</span>
 
-          <span className="text-apple-gray-400">Organization</span>
+          <span className="text-apple-gray-400">{tx('Organization')}</span>
           <span className="text-apple-gray-800 font-medium">
-            {user.organization_name || 'None'}
+            {user.organization_name || tx('None')}
           </span>
 
-          <span className="text-apple-gray-400">Status</span>
+          <span className="text-apple-gray-400">{tx('Status')}</span>
           <span className="text-apple-gray-800 font-medium flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${user.is_active ? 'bg-gm-green-500' : 'bg-red-500'}`}
             />
-            {user.is_active ? 'Active' : 'Disabled'}
+            {user.is_active ? tx('Active') : tx('Disabled')}
           </span>
 
-          <span className="text-apple-gray-400">User ID</span>
+          <span className="text-apple-gray-400">{tx('User ID')}</span>
           <span className="text-apple-gray-400 font-mono text-xs">{user.id}</span>
         </div>
 
         <hr className="border-apple-gray-200" />
 
         <div>
-          <h3 className="text-md font-semibold text-apple-gray-800 mb-2">Notification Settings</h3>
+          <h3 className="text-md font-semibold text-apple-gray-800 mb-2">
+            {tx('Notification Settings')}
+          </h3>
           <p className="text-sm text-apple-gray-400 mb-4">
-            Enter your phone number (e.g. +41791234567) to receive SMS alerts for electrode
-            disconnects.
+            {tx(
+              'Enter your phone number (e.g. +41791234567) to receive SMS alerts for electrode disconnects.'
+            )}
           </p>
           <div className="flex gap-4 items-center">
             <input
@@ -96,12 +106,13 @@ export default function AccountPage() {
               disabled={isSaving}
               className="bg-gm-green-500 hover:bg-gm-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
-              {isSaving ? 'Saving...' : 'Save'}
+              {isSaving ? tx('Saving...') : tx('Save')}
             </button>
           </div>
           {message && (
             <p
-              className={`text-sm mt-2 ${message.includes('successfully') ? 'text-gm-green-600' : 'text-red-500'}`}
+              role={saved ? 'status' : 'alert'}
+              className={`text-sm mt-2 ${saved ? 'text-gm-green-600' : 'text-red-500'}`}
             >
               {message}
             </p>

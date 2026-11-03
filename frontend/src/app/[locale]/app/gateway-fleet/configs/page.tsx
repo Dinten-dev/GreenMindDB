@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState, useCallback } from 'react';
 import {
   listConfigReleases,
@@ -9,6 +11,8 @@ import {
 } from '@/lib/gateway-admin-api';
 
 export default function GatewayConfigsPage() {
+  const tx = useAppText();
+
   const [configs, setConfigs] = useState<GatewayConfigRelease[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -33,11 +37,11 @@ export default function GatewayConfigsPage() {
       setTotal(data.total);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load configs');
+      setError(tx.error(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tx]);
 
   useEffect(() => {
     loadConfigs();
@@ -59,7 +63,7 @@ export default function GatewayConfigsPage() {
       setConfigJson('{\n  "upload_interval": 30,\n  "log_level": "INFO"\n}');
       loadConfigs();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create failed');
+      setError(tx.error(err));
     } finally {
       setCreating(false);
     }
@@ -70,7 +74,7 @@ export default function GatewayConfigsPage() {
       await toggleConfigRelease(id, active);
       loadConfigs();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Toggle failed');
+      alert(tx.error(err));
     }
   };
 
@@ -78,36 +82,40 @@ export default function GatewayConfigsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Gateway Configs</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{total} Config Releases</p>
+          <h2 className="text-lg font-semibold text-gray-800">{tx('Gateway Configs')}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {total} {tx('Config Releases')}
+          </p>
         </div>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors shadow-sm"
           id="create-config-btn"
         >
-          + Config erstellen
+          {tx('+ Config erstellen')}
         </button>
       </div>
 
       {showCreate && (
         <form onSubmit={handleCreate} className="glass-card rounded-2xl p-6 space-y-4">
-          <h3 className="font-semibold text-gray-800">Neue Config Version</h3>
+          <h3 className="font-semibold text-gray-800">{tx('Neue Config Version')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Version</label>
+              <label className="block text-xs text-gray-500 mb-1">{tx('Version')}</label>
               <input
                 type="text"
                 value={version}
                 onChange={(e) => setVersion(e.target.value)}
-                placeholder="v3"
+                placeholder={tx('v3')}
                 className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
                 required
                 id="config-version-input"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kompatibel ab (App)</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                {tx('Kompatibel ab (App)')}
+              </label>
               <input
                 type="text"
                 value={compatMin}
@@ -117,7 +125,9 @@ export default function GatewayConfigsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kompatibel bis (App)</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                {tx('Kompatibel bis (App)')}
+              </label>
               <input
                 type="text"
                 value={compatMax}
@@ -129,7 +139,7 @@ export default function GatewayConfigsPage() {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Config JSON</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Config JSON')}</label>
             <textarea
               value={configJson}
               onChange={(e) => setConfigJson(e.target.value)}
@@ -145,14 +155,14 @@ export default function GatewayConfigsPage() {
               disabled={creating || !version}
               className="px-6 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors shadow-sm"
             >
-              {creating ? 'Erstelle…' : 'Erstellen'}
+              {creating ? tx('Erstelle…') : tx('Erstellen')}
             </button>
             <button
               type="button"
               onClick={() => setShowCreate(false)}
               className="px-4 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-black/[0.04] transition-colors"
             >
-              Abbrechen
+              {tx('Abbrechen')}
             </button>
           </div>
         </form>
@@ -167,10 +177,12 @@ export default function GatewayConfigsPage() {
       {/* Configs List */}
       <div className="space-y-3">
         {loading ? (
-          <div className="glass-card rounded-2xl p-12 text-center text-gray-400">Lade Configs…</div>
+          <div className="glass-card rounded-2xl p-12 text-center text-gray-400">
+            {tx('Lade Configs…')}
+          </div>
         ) : configs.length === 0 ? (
           <div className="glass-card rounded-2xl p-12 text-center text-gray-400">
-            Keine Config Releases vorhanden
+            {tx('Keine Config Releases vorhanden')}
           </div>
         ) : (
           configs.map((c) => (
@@ -186,21 +198,23 @@ export default function GatewayConfigsPage() {
                       c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'
                     }`}
                   >
-                    {c.is_active ? '● aktiv' : '○ inaktiv'}
+                    {c.is_active ? tx('● aktiv') : tx('○ inaktiv')}
                   </span>
                   {c.compatible_app_min && (
                     <span className="text-xs text-gray-400">
-                      App ≥ {c.compatible_app_min}
+                      {tx('App ≥')}
+                      {c.compatible_app_min}
                       {c.compatible_app_max ? ` ≤ ${c.compatible_app_max}` : ''}
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-400 font-mono">
-                    SHA256: {c.sha256.substring(0, 8)}…
+                    {tx('SHA256:')}
+                    {c.sha256.substring(0, 8)}…
                   </span>
                   <span className="text-xs text-gray-400">
-                    {new Date(c.created_at).toLocaleDateString('de-CH')}
+                    {new Date(c.created_at).toLocaleDateString(tx.locale)}
                   </span>
                   <button
                     onClick={(e) => {
@@ -213,7 +227,7 @@ export default function GatewayConfigsPage() {
                         : 'text-emerald-600 hover:bg-emerald-50'
                     }`}
                   >
-                    {c.is_active ? 'Deaktivieren' : 'Aktivieren'}
+                    {c.is_active ? tx('Deaktivieren') : tx('Aktivieren')}
                   </button>
                   <span className="text-gray-300 text-sm">{expanded === c.id ? '▲' : '▼'}</span>
                 </div>

@@ -130,6 +130,9 @@
 - Ladezustand, Passwortanzeige und verständliche Fehlermeldungen ergänzen.
 - Bestehende Sitzungsschutzfunktionen erhalten.
 - Umsetzung und Prüfgrenzen: [WEB-LOGIN.md](WEB-LOGIN.md).
+- Erweiterung: gesamter angemeldeter Bereich in Deutsch, Englisch, Französisch, Italienisch.
+- Navigation, Verwaltung, Diagramme, Bestätigungen und Fehlermeldungen ausdrücklich einschliessen.
+- Vorgezogene Umsetzung: [I18N-APPLICATION.md](I18N-APPLICATION.md).
 - Lokal geprüft; Produktionsfreigabe und OTA bleiben separat.
 
 ### 7. Gateway-Entfernung reparieren
@@ -231,6 +234,10 @@
 - Weitergehende Unterrichtsfunktionen bleiben ausserhalb dieses Umfangs.
 
 ### 12. Vier Sprachen vervollständigen
+
+- Angemeldeter Bereich auf Benutzerwunsch bereits bei Schritt 6 vorgezogen.
+- Alle geschützten Seiten und Administrationswerkzeuge gehören zum Sprachumfang.
+- Umsetzungsstand und Prüfungen: [I18N-APPLICATION.md](I18N-APPLICATION.md).
 
 - Deutsch, Englisch, Französisch und Italienisch vollständig unterstützen.
 - Italienisch zu Sprachwahl und Routen ergänzen.

@@ -1,3 +1,5 @@
+import { apiFetch, ApiError } from './api';
+
 /**
  * Gateway Remote Management API client.
  * Type-safe wrappers for RPi gateway fleet, releases, config, commands, and rollout.
@@ -9,17 +11,7 @@ const API_BASE =
     : '/api/v1';
 
 async function gwFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}/admin${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `API error ${res.status}`);
-  }
-  if (res.status === 204) return {} as T;
-  return res.json();
+  return apiFetch<T>(`/admin${path}`, options);
 }
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -166,7 +158,10 @@ export async function uploadAppRelease(formData: FormData): Promise<GatewayAppRe
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `Upload failed: ${res.status}`);
+    throw new ApiError(
+      res.status,
+      typeof body?.detail === 'string' ? body.detail : `API error ${res.status}`
+    );
   }
   return res.json();
 }

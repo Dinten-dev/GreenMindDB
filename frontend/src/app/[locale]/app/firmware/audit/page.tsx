@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect, useCallback } from 'react';
 import { listAuditLogs, AuditLogList } from '@/lib/firmware-api';
 
@@ -13,6 +15,8 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function AuditPage() {
+  const tx = useAppText();
+
   const [data, setData] = useState<AuditLogList | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionFilter, setActionFilter] = useState('');
@@ -60,14 +64,18 @@ export default function AuditPage() {
           }}
           className="px-3 py-2 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 backdrop-blur-sm"
         >
-          <option value="">Alle Aktionen</option>
+          <option value="">{tx('Alle Aktionen')}</option>
           {Object.entries(ACTION_LABELS).map(([key, { label }]) => (
             <option key={key} value={key}>
-              {label}
+              {tx(label)}
             </option>
           ))}
         </select>
-        {data && <span className="text-xs text-gray-400">{data.meta.total} Einträge</span>}
+        {data && (
+          <span className="text-xs text-gray-400">
+            {data.meta.total} {tx('Einträge')}
+          </span>
+        )}
       </div>
 
       {/* Table */}
@@ -76,11 +84,11 @@ export default function AuditPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-400 uppercase tracking-wider bg-black/[0.02]">
-                <th className="px-4 py-3">Zeitpunkt</th>
-                <th className="px-4 py-3">Benutzer</th>
-                <th className="px-4 py-3">Aktion</th>
-                <th className="px-4 py-3">Details</th>
-                <th className="px-4 py-3">IP</th>
+                <th className="px-4 py-3">{tx('Zeitpunkt')}</th>
+                <th className="px-4 py-3">{tx('Benutzer')}</th>
+                <th className="px-4 py-3">{tx('Aktion')}</th>
+                <th className="px-4 py-3">{tx('Details')}</th>
+                <th className="px-4 py-3">{tx('IP')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04]">
@@ -95,7 +103,7 @@ export default function AuditPage() {
               ) : data?.items.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
-                    Keine Audit-Einträge vorhanden.
+                    {tx('Keine Audit-Einträge vorhanden.')}
                   </td>
                 </tr>
               ) : (
@@ -108,14 +116,14 @@ export default function AuditPage() {
                   return (
                     <tr key={entry.id} className="hover:bg-black/[0.01] transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                        {new Date(entry.created_at).toLocaleString('de-CH')}
+                        {new Date(entry.created_at).toLocaleString(tx.locale)}
                       </td>
                       <td className="px-4 py-3 text-gray-700">{entry.user_email || '–'}</td>
                       <td className="px-4 py-3">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${actionStyle.color}`}
                         >
-                          {actionStyle.label}
+                          {tx(actionStyle.label)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -150,17 +158,18 @@ export default function AuditPage() {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              ← Zurück
+              {tx('← Zurück')}
             </button>
             <span className="text-xs text-gray-400">
-              Seite {page + 1} von {Math.ceil(data.meta.total / limit)}
+              {tx('Seite')}
+              {page + 1} {tx('von')} {Math.ceil(data.meta.total / limit)}
             </span>
             <button
               disabled={(page + 1) * limit >= data.meta.total}
               onClick={() => setPage((p) => p + 1)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              Weiter →
+              {tx('Weiter →')}
             </button>
           </div>
         )}

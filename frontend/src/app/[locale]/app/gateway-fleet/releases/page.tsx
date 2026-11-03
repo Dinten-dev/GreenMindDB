@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState, useCallback } from 'react';
 import {
   listAppReleases,
@@ -11,6 +13,8 @@ import {
 } from '@/lib/gateway-admin-api';
 
 export default function GatewayReleasesPage() {
+  const tx = useAppText();
+
   const [releases, setReleases] = useState<GatewayAppRelease[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -34,11 +38,11 @@ export default function GatewayReleasesPage() {
       setTotal(data.total);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load releases');
+      setError(tx.error(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tx]);
 
   useEffect(() => {
     loadReleases();
@@ -66,7 +70,7 @@ export default function GatewayReleasesPage() {
       setSignature('');
       loadReleases();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      setError(tx.error(err));
     } finally {
       setUploading(false);
     }
@@ -77,26 +81,28 @@ export default function GatewayReleasesPage() {
       await toggleAppRelease(id, active);
       loadReleases();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Toggle failed');
+      alert(tx.error(err));
     }
   };
 
   const handleDelete = async (id: string, ver: string) => {
-    if (!confirm(`Release ${ver} wirklich löschen?`)) return;
+    if (!confirm(tx('Release {value0} wirklich löschen?', { value0: ver }))) return;
     try {
       await deleteAppRelease(id);
       loadReleases();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      alert(tx.error(err));
     }
   };
 
   const handleRollout = async (version: string, ring: string) => {
     try {
       const result = await startRollout({ release_version: version, target_ring: ring });
-      alert(`Rollout gestartet: ${result.gateways_updated} Gateways aktualisiert`);
+      alert(
+        tx('Rollout gestartet: {value0} Gateways aktualisiert', { value0: result.gateways_updated })
+      );
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Rollout failed');
+      alert(tx.error(err));
     }
   };
 
@@ -112,25 +118,27 @@ export default function GatewayReleasesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Gateway App Releases</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{total} Releases</p>
+          <h2 className="text-lg font-semibold text-gray-800">{tx('Gateway App Releases')}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {total} {tx('Releases')}
+          </p>
         </div>
         <button
           onClick={() => setShowUpload(!showUpload)}
           className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors shadow-sm"
           id="upload-release-btn"
         >
-          + Release hochladen
+          {tx('+ Release hochladen')}
         </button>
       </div>
 
       {/* Upload Form */}
       {showUpload && (
         <form onSubmit={handleUpload} className="glass-card rounded-2xl p-6 space-y-4">
-          <h3 className="font-semibold text-gray-800">Neues Release hochladen</h3>
+          <h3 className="font-semibold text-gray-800">{tx('Neues Release hochladen')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Version (semver)</label>
+              <label className="block text-xs text-gray-500 mb-1">{tx('Version (semver)')}</label>
               <input
                 type="text"
                 value={version}
@@ -142,16 +150,16 @@ export default function GatewayReleasesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Channel</label>
+              <label className="block text-xs text-gray-500 mb-1">{tx('Channel')}</label>
               <select
                 value={channel}
                 onChange={(e) => setChannel(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
                 id="release-channel-select"
               >
-                <option value="stable">stable</option>
-                <option value="beta">beta</option>
-                <option value="canary">canary</option>
+                <option value="stable">{tx('stable')}</option>
+                <option value="beta">{tx('beta')}</option>
+                <option value="canary">{tx('canary')}</option>
               </select>
             </div>
             <div className="flex items-end">
@@ -162,13 +170,13 @@ export default function GatewayReleasesPage() {
                   onChange={(e) => setMandatory(e.target.checked)}
                   className="rounded"
                 />
-                Mandatory Update
+                {tx('Mandatory Update')}
               </label>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tarball (.tar.gz)</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Tarball (.tar.gz)')}</label>
             <input
               type="file"
               accept=".tar.gz,.tgz"
@@ -181,25 +189,25 @@ export default function GatewayReleasesPage() {
 
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              Ed25519 Signatur (Base64, optional)
+              {tx('Ed25519 Signatur (Base64, optional)')}
             </label>
             <input
               type="text"
               value={signature}
               onChange={(e) => setSignature(e.target.value)}
-              placeholder="Base64-encoded Ed25519 signature"
+              placeholder={tx('Base64-encoded Ed25519 signature')}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 font-mono"
             />
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Changelog (Markdown)</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Changelog (Markdown)')}</label>
             <textarea
               value={changelog}
               onChange={(e) => setChangelog(e.target.value)}
               rows={3}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
-              placeholder="Was ist neu in dieser Version?"
+              placeholder={tx('Was ist neu in dieser Version?')}
               id="release-changelog-input"
             />
           </div>
@@ -210,14 +218,14 @@ export default function GatewayReleasesPage() {
               disabled={uploading || !file || !version}
               className="px-6 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors shadow-sm"
             >
-              {uploading ? 'Uploading…' : 'Upload'}
+              {uploading ? tx('Uploading…') : tx('Upload')}
             </button>
             <button
               type="button"
               onClick={() => setShowUpload(false)}
               className="px-4 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-black/[0.04] transition-colors"
             >
-              Abbrechen
+              {tx('Abbrechen')}
             </button>
           </div>
         </form>
@@ -249,7 +257,7 @@ export default function GatewayReleasesPage() {
                     key={h}
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider"
                   >
-                    {h}
+                    {tx(h)}
                   </th>
                 ))}
               </tr>
@@ -258,13 +266,13 @@ export default function GatewayReleasesPage() {
               {loading ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                    Lade Releases…
+                    {tx('Lade Releases…')}
                   </td>
                 </tr>
               ) : releases.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                    Keine Releases vorhanden
+                    {tx('Keine Releases vorhanden')}
                   </td>
                 </tr>
               ) : (
@@ -274,7 +282,7 @@ export default function GatewayReleasesPage() {
                       <span className="font-mono font-medium text-gray-800">{r.version}</span>
                       {r.mandatory && (
                         <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 uppercase">
-                          mandatory
+                          {tx('mandatory')}
                         </span>
                       )}
                     </td>
@@ -291,7 +299,7 @@ export default function GatewayReleasesPage() {
                             : 'bg-gray-50 text-gray-400'
                         }`}
                       >
-                        {r.is_active ? '● aktiv' : '○ inaktiv'}
+                        {r.is_active ? tx('● aktiv') : tx('○ inaktiv')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -301,16 +309,18 @@ export default function GatewayReleasesPage() {
                     </td>
                     <td className="px-4 py-3">
                       {r.signature ? (
-                        <span className="text-xs text-emerald-600 font-medium">✓ signed</span>
+                        <span className="text-xs text-emerald-600 font-medium">
+                          {tx('✓ signed')}
+                        </span>
                       ) : (
-                        <span className="text-xs text-amber-500">⚠ unsigned</span>
+                        <span className="text-xs text-amber-500">{tx('⚠ unsigned')}</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {formatSize(r.file_size_bytes)}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
-                      {new Date(r.created_at).toLocaleDateString('de-CH')}
+                      {new Date(r.created_at).toLocaleDateString(tx.locale)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
@@ -322,14 +332,14 @@ export default function GatewayReleasesPage() {
                               : 'text-emerald-600 hover:bg-emerald-50'
                           }`}
                         >
-                          {r.is_active ? 'Deaktivieren' : 'Aktivieren'}
+                          {r.is_active ? tx('Deaktivieren') : tx('Aktivieren')}
                         </button>
                         {r.is_active && (
                           <button
                             onClick={() => handleRollout(r.version, 'canary')}
                             className="px-2 py-1 rounded-lg text-xs text-blue-600 hover:bg-blue-50 transition-colors"
                           >
-                            Rollout →
+                            {tx('Rollout →')}
                           </button>
                         )}
                         <button

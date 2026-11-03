@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
@@ -16,6 +18,8 @@ const GATEWAY_TABS = [
 ];
 
 export default function GatewayFleetLayout({ children }: { children: React.ReactNode }) {
+  const tx = useAppText();
+
   const { user, loading } = useAuth();
   const locale = useLocale();
   const router = useRouter();
@@ -44,10 +48,10 @@ export default function GatewayFleetLayout({ children }: { children: React.React
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
-          Gateway Fleet Management
+          {tx('Gateway Fleet Management')}
         </h1>
         <p className="text-sm text-gray-400 mt-1">
-          Remote Updates, Konfiguration und Steuerung für Raspberry Pi Gateways
+          {tx('Remote Updates, Konfiguration und Steuerung für Raspberry Pi Gateways')}
         </p>
       </div>
 
@@ -65,7 +69,7 @@ export default function GatewayFleetLayout({ children }: { children: React.React
                 isActive ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab.label}
+              {tx(tab.label)}
             </Link>
           );
         })}
