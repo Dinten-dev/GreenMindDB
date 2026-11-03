@@ -35,7 +35,7 @@ export default function RemoveGatewayDialog({
       ref={dialog}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className="m-auto w-[90vw] max-w-sm rounded-2xl border-0 bg-white p-6 shadow-xl backdrop:bg-black/30 backdrop:backdrop-blur-sm"
+      className="!m-auto w-[90vw] max-w-sm rounded-2xl border-0 bg-white p-6 shadow-xl backdrop:bg-black/30 backdrop:backdrop-blur-sm"
       onCancel={(event) => {
         event.preventDefault();
         if (!busy) onCancel();
