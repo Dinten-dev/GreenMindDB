@@ -218,6 +218,9 @@ GitHub-Prüfung ersetzt keine produktive Aktivierung oder physische Latenzmessun
 
 ### 10. Aufnahmezeit und Vollständigkeit darstellen
 
+Softwarekandidat: [Zeitbezug, Abdeckung und Prüfgrenzen](RECORDING-TIME.md).
+Physische Zeitgenauigkeit bleibt gesondert zu messen.
+
 - Aufnahmezeit aus Zeitanker, Sitzung und Sampleindex bestimmen.
 - Hashwerte zur Integritätsprüfung und Zuordnung verwenden.
 - Empfangszeit getrennt von Aufnahmezeit behandeln.

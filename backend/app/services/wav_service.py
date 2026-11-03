@@ -280,30 +280,20 @@ def generate_download_filename(
     ended_at: datetime | None = None,
     extension: str = "wav",
 ) -> str:
-    """Generate a standardized, sortable download filename.
-
-    Single:  greenmind_{sensor}_{YYYYMMDD-HHmmss}.wav
-    Bundle:  greenmind_{sensor}_{from}_bis_{to}.zip
-    """
-    import zoneinfo
-
-    switzerland_tz = zoneinfo.ZoneInfo("Europe/Zurich")
+    """Use capture bounds in UTC; object keys and stored originals are unchanged."""
+    from app.services.recording_time import utc_filename
 
     if started_at.tzinfo is None:
         started_at = started_at.replace(tzinfo=UTC)
-    local_start = started_at.astimezone(switzerland_tz)
-
-    slug = _sanitize_filename(sensor_name)
-    start_str = local_start.strftime("%Y%m%d-%H%M%S")
-
-    if ended_at and extension == "zip":
-        if ended_at.tzinfo is None:
-            ended_at = ended_at.replace(tzinfo=UTC)
-        local_end = ended_at.astimezone(switzerland_tz)
-        end_str = local_end.strftime("%Y%m%d-%H%M%S")
-        return f"greenmind_{slug}_{start_str}_bis_{end_str}.zip"
-
-    return f"greenmind_{slug}_{start_str}.{extension}"
+    if ended_at is not None and ended_at.tzinfo is None:
+        ended_at = ended_at.replace(tzinfo=UTC)
+    return utc_filename(
+        "greenmind",
+        _sanitize_filename(sensor_name),
+        started_at,
+        ended_at if extension == "zip" else None,
+        extension,
+    )
 
 
 def stream_wav_zip(s3_keys: list[str], filenames: list[str]) -> Generator[bytes, None, None]:

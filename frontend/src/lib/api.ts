@@ -312,7 +312,30 @@ export interface DataPoint {
   signal_source?: 'wav' | 'readings' | 'pending' | 'overlap';
 }
 
+export interface CaptureTimeInfo {
+  anchor_status: 'available' | 'missing' | 'mixed';
+  basis: string;
+  physical_accuracy_verified: boolean;
+  recorded_from?: string | null;
+  recorded_to?: string | null;
+  requested_from?: string;
+  requested_to?: string;
+  coverage_ratio?: number | null;
+  coverage_status?: 'covered' | 'incomplete' | 'unknown';
+  gap_count?: number;
+  ongoing?: boolean;
+  overlap?: boolean;
+  session_id?: string;
+  first_frame?: number;
+  sample_count?: number;
+  sample_rate?: number;
+  anchor_utc?: string | null;
+  sha256?: string;
+  sessions_truncated?: boolean;
+}
+
 export interface SensorDataResponse {
+  time_info?: CaptureTimeInfo;
   source?: 'direct';
   analytics_scope?: 'direct' | 'comparison';
   updated_at?: string;
@@ -420,6 +443,17 @@ export async function apiExportSensorData(sensorId: string, range: string = '24h
 }
 
 // ── WAV Files ────────────────────────────────────
+export interface RecordingCompleteness {
+  status: 'complete' | 'partial' | 'short' | 'partial_start' | 'collecting' | 'unknown';
+  received_samples?: number;
+  expected_samples?: number;
+  received_seconds?: number;
+  expected_seconds?: number;
+  coverage_ratio?: number | null;
+  missing_seconds?: number;
+  basis?: string;
+  close_reason?: string;
+}
 export interface WavFileInfo {
   id: string;
   sensor_mac: string;

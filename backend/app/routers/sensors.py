@@ -591,6 +591,7 @@ async def export_sensor_data(
         zone_meta += f"# GPS: {zone.latitude}, {zone.longitude}\n"
     zone_meta += f"# Gateway: {_safe_export_text(gw.name or gw.hardware_id)}\n"
     zone_meta += f"# Sensor: {_safe_export_text(sensor.name or sensor.mac_address)}\n"
+    zone_meta += "# Timezone: Europe/Zurich; timestamp_utc: UTC\n"
 
     # Build a strictly bounded ZIP. Each CSV is written directly into its ZIP
     # member so there is no second, unbounded StringIO copy per measurement kind.
@@ -623,7 +624,7 @@ async def export_sensor_data(
                 text_writer = _BoundedZipTextWriter(member, budget)
                 text_writer.write(zone_meta)
                 csv_writer = csv.writer(text_writer, lineterminator="\n")
-                csv_writer.writerow(["timestamp", "value", "unit"])
+                csv_writer.writerow(["timestamp", "value", "unit", "timestamp_utc"])
 
                 for ts, val, unit in readings:
                     emitted_rows += 1
@@ -639,6 +640,7 @@ async def export_sensor_data(
                             ts_local.strftime("%Y-%m-%d %H:%M:%S"),
                             round(val, 4),
                             _safe_export_text(unit),
+                            ts.astimezone(UTC).isoformat(),
                         ]
                     )
 
@@ -648,7 +650,9 @@ async def export_sensor_data(
 
     zip_buffer.seek(0)
     sensor_label = _safe_export_component(sensor.name or sensor.mac_address, "sensor")
-    filename = f"greenmind_{sensor_label}_{range}_{datetime.now(UTC).strftime('%Y%m%d')}.zip"
+    from app.services.recording_time import utc_filename
+
+    filename = utc_filename("greenmind", sensor_label, cutoff, extension="zip")
 
     return StreamingResponse(
         zip_buffer,

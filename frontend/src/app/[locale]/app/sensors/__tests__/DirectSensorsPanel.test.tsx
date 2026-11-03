@@ -49,10 +49,18 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
   expect(global.fetch).toHaveBeenCalledTimes(1);
   fireEvent.click(toggle);
   expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
-  expect(screen.getByRole('link', { name: 'CSV herunterladen' })).toHaveAttribute(
-    'href',
-    '/api/v1/visualization/direct/direct-a/export?range=24h'
+  const csvUrl = new URL(
+    screen.getByRole('link', { name: 'CSV herunterladen' }).getAttribute('href')!,
+    window.location.origin
   );
+  const dataCall = jest
+    .mocked(global.fetch)
+    .mock.calls.map(([url]) => String(url))
+    .find((url) => url.includes('/data?'))!;
+  const dataUrl = new URL(dataCall, window.location.origin);
+  expect(csvUrl.pathname).toBe('/api/v1/visualization/direct/direct-a/export');
+  expect(csvUrl.searchParams.get('from_dt')).toBe(dataUrl.searchParams.get('from_dt'));
+  expect(csvUrl.searchParams.get('to_dt')).toBe(dataUrl.searchParams.get('to_dt'));
   expect(screen.getByRole('link', { name: 'WAV herunterladen', hidden: true })).toHaveAttribute(
     'href',
     '/api/v1/visualization/direct/direct-a/wav/segment-a/4/0'
@@ -60,7 +68,7 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
   fireEvent.click(screen.getByRole('button', { name: '5 Minuten' }));
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/visualization/direct/direct-a/data?range=5m',
+      expect.stringContaining('/api/v1/visualization/direct/direct-a/data?range=5m&from_dt='),
       expect.objectContaining({ cache: 'no-store' })
     )
   );

@@ -15,10 +15,34 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.rate_limit import limiter
+from app.services.recording_time import (
+    annotate_direct,
+    recording_time,
+    utc_filename,
+    verify_manifest,
+    window_bounds,
+)
+from app.services.wav_completeness import direct_completeness
 from app.visualization import direct
 from app.zone_access import require_zone_access
 
 WINDOWS = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
+
+
+def wav_download_name(manifest, revision, run_index):
+    from app.direct.storage import utc_stamp
+
+    run = manifest["runs"][run_index]
+    stamp, epoch_ms = utc_stamp(run["started_at_us"])
+    config = manifest["config"]
+    boot = config.get("boot_counter", "unknown")
+    chunks = run.get("chunks", [])
+    sequence = chunks[0]["sequence"] if chunks else "unknown"
+    session = str(uuid.UUID(manifest["session_id"]))
+    return (
+        f"direct_{stamp}_e{epoch_ms}_b{boot}_s{session}_q{sequence}"
+        f"_f{run['first_frame']}_r{revision}_i{run_index}.wav"
+    )
 
 
 def connection():
@@ -46,12 +70,16 @@ def authorize(db, legacy, user, device_id):
     return row
 
 
-def get_series(db, device_id, range):
-    end = datetime.now(UTC).timestamp()
-    seconds = WINDOWS[range]
+def get_series(db, device_id, range, *, from_dt=None, to_dt=None):
+    try:
+        start, end = window_bounds(WINDOWS[range], from_dt, to_dt)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    seconds = (end - start).total_seconds()
     step = 1 if seconds <= 3600 else 60 if seconds <= 604800 else 600
     try:
-        return direct.query_series(db, str(device_id), end - seconds, end, step)
+        result = direct.query_series(db, str(device_id), start.timestamp(), end.timestamp(), step)
+        return annotate_direct(db, device_id, result, start, end)
     except ValueError as exc:
         raise HTTPException(413, "Bitte kürzeren Zeitraum wählen") from exc
 
@@ -60,7 +88,7 @@ def recordings(db, device_id, start, end):
     # Latest verified revision only. Never send storage credentials or object keys.
     rows = (
         db.execute(
-            text("""SELECT s.id AS segment_id,r.revision,r.manifest FROM direct_segment s
+            text("""SELECT s.id AS segment_id,s.sealed,r.revision,r.manifest,r.manifest_sha256 FROM direct_segment s
         JOIN direct_revision r ON r.segment_id=s.id AND r.revision=s.published_revision
         WHERE s.device_id=:id AND (s.bucket+1)*600>:start AND s.bucket*600<:end
           AND r.raw_deleted_at IS NULL ORDER BY s.bucket DESC LIMIT 101"""),
@@ -71,18 +99,28 @@ def recordings(db, device_id, start, end):
     )
     result = []
     for row in rows:
+        try:
+            verify_manifest(row["manifest"], row["manifest_sha256"], device_id)
+        except ValueError as exc:
+            raise HTTPException(503, "Aufnahme konnte nicht geprüft werden") from exc
         cfg = row["manifest"]["config"]
         for index, run in enumerate(row["manifest"]["runs"]):
             stamp = run["started_at_us"] / 1e6
             duration = run["frame_count"] / cfg["sample_rate"]
             if stamp < end and stamp + duration > start:
+                try:
+                    time_info = recording_time(row["manifest"], run)
+                except ValueError as exc:
+                    raise HTTPException(503, "Aufnahme konnte nicht geprüft werden") from exc
                 result.append(
                     {
                         "segment_id": row["segment_id"],
                         "revision": row["revision"],
                         "run": index,
                         "started_at": datetime.fromtimestamp(stamp, UTC).isoformat(),
+                        "time_info": time_info,
                         "duration_seconds": duration,
+                        "completeness": direct_completeness(row["manifest"], row["sealed"]),
                         "sample_rate": cfg["sample_rate"],
                         "channels": cfg["channels"],
                         "sample_bits": cfg["sample_bits"],
@@ -96,12 +134,14 @@ def install(app):
     def data(
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         device = authorize(db, legacy, user, device_id)
-        result = get_series(db, device_id, range)
+        result = get_series(db, device_id, range, from_dt=from_dt, to_dt=to_dt)
         updated = db.execute(
             text(
                 "SELECT max(v.updated_at) FROM direct_visual_segment v JOIN direct_segment s ON s.id=v.segment_id WHERE s.device_id=:id"
@@ -119,12 +159,18 @@ def install(app):
         request: Request,
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        series = get_series(db, device_id, range)
+        try:
+            from_dt, to_dt = window_bounds(WINDOWS[range], from_dt, to_dt)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        series = get_series(db, device_id, range, from_dt=from_dt, to_dt=to_dt)
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(
@@ -141,6 +187,9 @@ def install(app):
                 "sample_count",
                 "coverage_ratio",
                 "source",
+                "time_basis",
+                "anchor_status",
+                "physical_time_accuracy_verified",
             ]
         )
         for item in series:
@@ -159,6 +208,9 @@ def install(app):
                         p["reading_count"],
                         p["coverage_ratio"],
                         p["signal_source"],
+                        item["time_info"]["basis"],
+                        item["time_info"]["anchor_status"],
+                        "false",
                     ]
                 )
         payload = output.getvalue().encode()
@@ -168,7 +220,7 @@ def install(app):
             payload,
             media_type="text/csv; charset=utf-8",
             headers={
-                "Content-Disposition": f'attachment; filename="direct-{device_id}-{range}.csv"'
+                "Content-Disposition": f'attachment; filename="{utc_filename("direct", device_id, from_dt, to_dt)}"'
             },
         )
 
@@ -197,14 +249,22 @@ def install(app):
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        row = db.execute(
-            text("""SELECT r.manifest FROM direct_revision r JOIN direct_segment s ON s.id=r.segment_id
+        selected = (
+            db.execute(
+                text("""SELECT r.manifest,r.manifest_sha256 FROM direct_revision r JOIN direct_segment s ON s.id=r.segment_id
             WHERE s.id=:segment AND s.device_id=:device AND r.revision=:revision AND r.raw_deleted_at IS NULL"""),
-            {"segment": str(segment_id), "device": str(device_id), "revision": revision},
-        ).scalar()
+                {"segment": str(segment_id), "device": str(device_id), "revision": revision},
+            )
+            .mappings()
+            .first()
+        )
+        row = selected["manifest"] if selected else None
+        manifest_hash = selected["manifest_sha256"] if selected else None
         if not row or not 0 <= run_index < len(row["runs"]):
             raise HTTPException(404, "Aufnahme nicht gefunden")
         try:
+            verify_manifest(row, manifest_hash, device_id)
+            recording_time(row, row["runs"][run_index])
             payload, _ = direct.read_wav(
                 direct.resources()[1],
                 row["runs"][run_index],
@@ -218,7 +278,7 @@ def install(app):
             payload,
             media_type="audio/wav",
             headers={
-                "Content-Disposition": f'attachment; filename="direct-{segment_id}-{run_index}.wav"'
+                "Content-Disposition": f'attachment; filename="{wav_download_name(row, revision, run_index)}"'
             },
         )
 

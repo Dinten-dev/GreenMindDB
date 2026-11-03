@@ -1,7 +1,15 @@
 'use client';
 import { readViewValue, replaceViewValues } from '@/lib/view-state';
 
+import { RecordingTimeDetails } from './CaptureTimeSummary';
+import { captureTimeZone, formatCaptureTime } from '@/lib/capture-time';
+import type { CaptureTimeInfo } from '@/lib/api';
+
 import { useAppText } from '@/i18n/app-text';
+
+import RecordingCompletenessBadge from './RecordingCompletenessBadge';
+import { nominalCompleteness } from '@/lib/recordingCompleteness';
+import type { RecordingCompleteness } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
@@ -22,7 +30,9 @@ type Recording = {
   revision: number;
   run: number;
   started_at: string;
+  time_info?: CaptureTimeInfo;
   duration_seconds: number;
+  completeness?: RecordingCompleteness;
   sample_rate: number;
 };
 const ranges = [
@@ -56,6 +66,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
+  const [viewBounds, setViewBounds] = useState<{ from_dt: string; to_dt: string } | null>(null);
   const base = `/api/v1/visualization/direct/${device.id}`;
   useEffect(() => {
     if (isLive) return;
@@ -65,15 +76,27 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
     setLoading(true);
     setSeries([]);
     setRecordings([]);
+    setViewBounds(null);
     setError('');
     const refresh = async () => {
       try {
+        const end = new Date();
+        const duration =
+          { '5m': 300, '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range] ?? 86400;
+        const bounds = {
+          from_dt: new Date(end.getTime() - duration * 1000).toISOString(),
+          to_dt: end.toISOString(),
+        };
         const [data, files] = await Promise.all([
-          read<SensorDataResponse[]>(`${base}/data?range=${range}`, controller.signal),
+          read<SensorDataResponse[]>(
+            `${base}/data?${new URLSearchParams({ range, ...bounds })}`,
+            controller.signal
+          ),
           read<Recording[]>(`${base}/recordings?range=${range}`, controller.signal),
         ]);
         if (controller.signal.aborted) return;
         setSeries(data);
+        setViewBounds(bounds);
         setRecordings(files);
         setError('');
       } catch {
@@ -126,7 +149,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           </p>
         </div>
         <a
-          href={`${base}/export?range=${range}`}
+          href={`${base}/export?${new URLSearchParams({ range, ...(viewBounds ?? {}) })}`}
           className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-800"
         >
           {tx('CSV herunterladen')}
@@ -180,7 +203,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           {latest && (
             <p className="mb-3 text-xs text-gray-500">
               {tx('Letzter Messpunkt:')}
-              {new Date(latest.timestamp).toLocaleString(tx.locale)}
+              {formatCaptureTime(latest.timestamp, tx.locale)}
             </p>
           )}
           {series.map((item) => (
@@ -243,12 +266,15 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
                 key={`${file.segment_id}-${file.revision}-${file.run}`}
                 className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
               >
-                <span>
-                  {new Date(file.started_at).toLocaleString(tx.locale)}{' '}
+                <div>
+                  {formatCaptureTime(file.started_at, tx.locale)}{' '}
                   <span className="text-gray-500">
-                    · {Math.round(file.duration_seconds)} {tx('s ·')} {file.sample_rate} {tx('Hz')}
+                    · {captureTimeZone()} · {Math.round(file.duration_seconds)} {tx('s ·')}{' '}
+                    {file.sample_rate} {tx('Hz')}
+                    <RecordingCompletenessBadge completeness={nominalCompleteness(file, true)} />
                   </span>
-                </span>
+                  <RecordingTimeDetails time={file.time_info} />
+                </div>
                 <a
                   className="font-medium text-emerald-800 underline"
                   href={`${base}/wav/${file.segment_id}/${file.revision}/${file.run}`}

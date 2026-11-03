@@ -965,6 +965,25 @@
     "m0825": "Preview: 12.5 values per second, nominal mV. Original recording continues independently.",
     "m0826": "Markers are visible to authorized viewers for three minutes. No export.",
     "m0827": "5 minutes",
-    "m0828": "mV"
+    "m0828": "mV",
+    "m0829": "Time and integrity details",
+    "m0830": "Recording time uncertain: the time anchor is missing or incomplete.",
+    "m0831": "Time anchor and nominal sample rate",
+    "m0832": "Time accuracy has not been independently verified.",
+    "m0833": "Session: {value0}",
+    "m0834": "First sample: {value0}",
+    "m0835": "SHA-256: {value0}",
+    "m0836": "File integrity and time accuracy are separate checks.",
+    "m0837": "Recording time and data coverage",
+    "m0838": "Recording time: {value0} – {value1}",
+    "m0839": "Recording time unavailable",
+    "m0840": "Time zone: {value0}",
+    "m0841": "Displayed time window is incomplete",
+    "m0842": "Overlapping time ranges: coverage is unverified.",
+    "m0843": "Overview data coverage: {value0} %",
+    "m0844": "Data coverage unverified",
+    "m0845": "Missing time ranges: {value0}",
+    "m0846": "Overview coverage does not certify a complete raw recording.",
+    "m0847": "Reception time is shown separately in the device status."
   }
 }
