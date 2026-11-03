@@ -20,6 +20,11 @@ from app.models.observation import (
     PlantObservationSession,
 )
 from app.models.plant import Plant, PlantSensorAssignment
+from app.observation_access import (
+    has_single_live_access,
+    lock_observation_plant,
+    observation_transaction,
+)
 from app.schemas.observation import (
     ObservationSessionResponse,
     PlantObservationCreate,
@@ -61,113 +66,139 @@ def _get_s3_client():
 def create_observation_session(
     db: Session, public_id: str, ip: str, user_agent: str
 ) -> ObservationSessionResponse:
-    try:
-        uuid_obj = uuid.UUID(public_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid public ID format") from None
+    with observation_transaction(db):
+        try:
+            uuid_obj = uuid.UUID(public_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid public ID format") from None
 
-    access = (
-        db.query(PlantObservationAccess)
-        .filter(PlantObservationAccess.public_id == uuid_obj, PlantObservationAccess.is_active)
-        .first()
-    )
+        access = (
+            db.query(PlantObservationAccess)
+            .filter(PlantObservationAccess.public_id == uuid_obj)
+            .first()
+        )
+        if not access or not lock_observation_plant(db, access.plant_id):
+            raise HTTPException(status_code=404, detail="Observation access not found or revoked")
+        access = (
+            db.query(PlantObservationAccess)
+            .filter(
+                PlantObservationAccess.public_id == uuid_obj,
+                PlantObservationAccess.is_active,
+                PlantObservationAccess.revoked_at.is_(None),
+            )
+            .populate_existing()
+            .first()
+        )
+        if not access or not has_single_live_access(db, access.plant_id):
+            raise HTTPException(status_code=404, detail="Observation access not found or revoked")
 
-    if not access:
-        raise HTTPException(status_code=404, detail="Observation access not found or revoked")
+        # Access is valid. Increment usage and timestamp.
+        access.usage_count += 1
+        access.last_used_at = datetime.now(UTC)
 
-    # Access is valid. Increment usage and timestamp.
-    access.usage_count += 1
-    access.last_used_at = datetime.now(UTC)
+        # Create session (TTL: 30 minutes)
+        session_token = str(uuid.uuid4())
+        expires_at = datetime.now(UTC) + timedelta(minutes=30)
 
-    # Create session (TTL: 30 minutes)
-    session_token = str(uuid.uuid4())
-    expires_at = datetime.now(UTC) + timedelta(minutes=30)
+        session = PlantObservationSession(
+            plant_id=access.plant_id,
+            access_id=access.id,
+            session_token=session_token,
+            expires_at=expires_at,
+            used_ip=ip,
+            user_agent=user_agent,
+            is_active=True,
+        )
+        db.add(session)
+        db.flush()
 
-    session = PlantObservationSession(
-        plant_id=access.plant_id,
-        access_id=access.id,
-        session_token=session_token,
-        expires_at=expires_at,
-        used_ip=ip,
-        user_agent=user_agent,
-        is_active=True,
-    )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-
-    return ObservationSessionResponse(
-        session_token=session.session_token, expires_at=session.expires_at.isoformat()
-    )
+        return ObservationSessionResponse(
+            session_token=session.session_token, expires_at=session.expires_at.isoformat()
+        )
 
 
 def _get_valid_session(db: Session, session_token: str) -> PlantObservationSession:
     session = (
         db.query(PlantObservationSession)
+        .filter(PlantObservationSession.session_token == session_token)
+        .first()
+    )
+    if not session or not lock_observation_plant(db, session.plant_id):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+    session = (
+        db.query(PlantObservationSession)
+        .join(
+            PlantObservationAccess, PlantObservationAccess.id == PlantObservationSession.access_id
+        )
         .filter(
             PlantObservationSession.session_token == session_token,
             PlantObservationSession.is_active,
+            PlantObservationAccess.is_active,
+            PlantObservationAccess.revoked_at.is_(None),
+            PlantObservationAccess.plant_id == PlantObservationSession.plant_id,
         )
+        .populate_existing()
         .first()
     )
-
-    if not session:
+    if not session or not has_single_live_access(db, session.plant_id):
         raise HTTPException(status_code=401, detail="Invalid session token")
-
-    if datetime.now(UTC) > session.expires_at.replace(tzinfo=UTC):
+    expiry = session.expires_at
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=UTC)
+    if datetime.now(UTC) >= expiry:
         session.is_active = False
         db.commit()
         raise HTTPException(status_code=401, detail="Session expired")
-
     return session
 
 
 def get_plant_context(db: Session, session_token: str) -> PublicPlantContextResponse:
-    session = _get_valid_session(db, session_token)
-    plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
-    zone = db.query(Zone).filter(Zone.id == plant.zone_id).first()
+    with observation_transaction(db):
+        session = _get_valid_session(db, session_token)
+        plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
+        zone = db.query(Zone).filter(Zone.id == plant.zone_id).first()
 
-    return PublicPlantContextResponse(
-        plant_id=str(plant.id),
-        name=plant.name,
-        plant_code=plant.plant_code,
-        zone_name=zone.name if zone else None,
-    )
+        return PublicPlantContextResponse(
+            plant_id=str(plant.id),
+            name=plant.name,
+            plant_code=plant.plant_code,
+            zone_name=zone.name if zone else None,
+        )
 
 
 def create_observation(
     db: Session, session_token: str, data: PlantObservationCreate
 ) -> PlantObservationResponse:
-    session = _get_valid_session(db, session_token)
-    plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
+    with observation_transaction(db):
+        session = _get_valid_session(db, session_token)
+        plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
 
-    active_assignment = (
-        db.query(PlantSensorAssignment)
-        .filter(PlantSensorAssignment.plant_id == plant.id, PlantSensorAssignment.is_active)
-        .first()
-    )
-    sensor_id = active_assignment.sensor_id if active_assignment else None
+        active_assignment = (
+            db.query(PlantSensorAssignment)
+            .filter(PlantSensorAssignment.plant_id == plant.id, PlantSensorAssignment.is_active)
+            .first()
+        )
+        sensor_id = active_assignment.sensor_id if active_assignment else None
 
-    obs = PlantObservation(
-        plant_id=plant.id,
-        sensor_id=sensor_id,
-        zone_id=plant.zone_id,
-        observation_session_id=session.id,
-        wellbeing_score=data.wellbeing_score,
-        stress_score=data.stress_score,
-        plant_condition=data.plant_condition,
-        leaf_droop=data.leaf_droop,
-        leaf_color=data.leaf_color,
-        spots_present=data.spots_present,
-        soil_condition=data.soil_condition,
-        suspected_stress_type=data.suspected_stress_type,
-        notes=data.notes,
-    )
-    db.add(obs)
-    db.commit()
-    db.refresh(obs)
+        obs = PlantObservation(
+            plant_id=plant.id,
+            sensor_id=sensor_id,
+            zone_id=plant.zone_id,
+            observation_session_id=session.id,
+            wellbeing_score=data.wellbeing_score,
+            stress_score=data.stress_score,
+            plant_condition=data.plant_condition,
+            leaf_droop=data.leaf_droop,
+            leaf_color=data.leaf_color,
+            spots_present=data.spots_present,
+            soil_condition=data.soil_condition,
+            suspected_stress_type=data.suspected_stress_type,
+            notes=data.notes,
+        )
+        db.add(obs)
+        db.flush()
 
-    return get_observation(db, str(obs.id))
+        return get_observation(db, str(obs.id))
 
 
 def upload_observation_photo(
@@ -178,52 +209,50 @@ def upload_observation_photo(
     mime_type: str,
     file_size: int,
 ) -> PlantObservationPhotoResponse:
-    session = _get_valid_session(db, session_token)
+    with observation_transaction(db):
+        session = _get_valid_session(db, session_token)
 
-    obs = (
-        db.query(PlantObservation)
-        .filter(
-            PlantObservation.id == observation_id,
-            PlantObservation.plant_id == session.plant_id,
-            PlantObservation.observation_session_id == session.id,
+        obs = (
+            db.query(PlantObservation)
+            .filter(
+                PlantObservation.id == observation_id,
+                PlantObservation.plant_id == session.plant_id,
+                PlantObservation.observation_session_id == session.id,
+            )
+            .first()
         )
-        .first()
-    )
-    if not obs:
-        raise HTTPException(status_code=404, detail="Observation not found in this session")
+        if not obs:
+            raise HTTPException(status_code=404, detail="Observation not found in this session")
 
-    # Generate key
-    date_str = datetime.now(UTC).strftime("%Y%m%d")
-    time_str = datetime.now(UTC).strftime("%H%M%S")
-    file_ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[mime_type]
-    s3_key = (
-        f"photos/plant/{session.plant_id}/{date_str}/{time_str}_{uuid.uuid4().hex[:8]}.{file_ext}"
-    )
+        # Generate key
+        date_str = datetime.now(UTC).strftime("%Y%m%d")
+        time_str = datetime.now(UTC).strftime("%H%M%S")
+        file_ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[mime_type]
+        s3_key = f"photos/plant/{session.plant_id}/{date_str}/{time_str}_{uuid.uuid4().hex[:8]}.{file_ext}"
 
-    # Upload to MinIO
-    client = _get_s3_client()
-    client.upload_fileobj(
-        file_data,
-        _PHOTO_BUCKET,
-        s3_key,
-        ExtraArgs={"ContentType": mime_type},
-    )
+        # Upload to MinIO
+        client = _get_s3_client()
+        client.upload_fileobj(
+            file_data,
+            _PHOTO_BUCKET,
+            s3_key,
+            ExtraArgs={"ContentType": mime_type},
+        )
 
-    photo = PlantObservationPhoto(
-        observation_id=obs.id, storage_key=s3_key, mime_type=mime_type, file_size=file_size
-    )
-    db.add(photo)
-    db.commit()
-    db.refresh(photo)
+        photo = PlantObservationPhoto(
+            observation_id=obs.id, storage_key=s3_key, mime_type=mime_type, file_size=file_size
+        )
+        db.add(photo)
+        db.flush()
 
-    return PlantObservationPhotoResponse(
-        id=str(photo.id),
-        observation_id=str(photo.observation_id),
-        storage_key=photo.storage_key,
-        mime_type=photo.mime_type,
-        file_size=photo.file_size,
-        created_at=photo.created_at.isoformat(),
-    )
+        return PlantObservationPhotoResponse(
+            id=str(photo.id),
+            observation_id=str(photo.observation_id),
+            storage_key=photo.storage_key,
+            mime_type=photo.mime_type,
+            file_size=photo.file_size,
+            created_at=photo.created_at.isoformat(),
+        )
 
 
 def get_observation(db: Session, observation_id: str) -> PlantObservationResponse:

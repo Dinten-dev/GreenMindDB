@@ -45,9 +45,17 @@ export async function apiGetSensorHistory(plantId: string): Promise<PlantSensorA
   return apiFetch<PlantSensorAssignment[]>(`/plants/${plantId}/sensor-history`);
 }
 
-export async function apiCreateObservationAccess(plantId: string): Promise<ObservationAccess> {
+export async function apiGetObservationAccess(plantId: string): Promise<ObservationAccess | null> {
+  return apiFetch<ObservationAccess | null>(`/plants/${plantId}/observation-access`);
+}
+
+export async function apiCreateObservationAccess(
+  plantId: string,
+  reissue = false
+): Promise<ObservationAccess> {
   return apiFetch<ObservationAccess>(`/plants/${plantId}/observation-access`, {
     method: 'POST',
+    params: reissue ? { reissue: 'true' } : undefined,
   });
 }
 

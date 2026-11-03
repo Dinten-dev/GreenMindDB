@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import QRCode from 'react-qr-code';
-import { apiGetPlant, apiCreateObservationAccess } from '@/lib/plants-api';
+import { apiGetPlant, apiGetObservationAccess } from '@/lib/plants-api';
 import { Plant, ObservationAccess } from '@/types';
 
 export default function PrintQRPage() {
@@ -14,6 +14,7 @@ export default function PrintQRPage() {
   const [plant, setPlant] = useState<Plant | null>(null);
   const [access, setAccess] = useState<ObservationAccess | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessError, setAccessError] = useState(false);
   const [baseUrl, setBaseUrl] = useState('');
 
   const loadData = useCallback(async () => {
@@ -21,10 +22,12 @@ export default function PrintQRPage() {
       const p = await apiGetPlant(plantId);
       setPlant(p);
 
-      // Get or create access
-      const a = await apiCreateObservationAccess(plantId);
+      // Printing only reads an existing grant.
+      const a = await apiGetObservationAccess(plantId);
       setAccess(a);
+      setAccessError(false);
     } catch (err) {
+      setAccessError(true);
       console.error(err);
     } finally {
       setLoading(false);
@@ -37,7 +40,32 @@ export default function PrintQRPage() {
   }, [loadData]);
 
   if (loading) return <div className="p-8 text-gray-500">Lade QR Code...</div>;
-  if (!plant || !access) return <div className="p-8 text-red-500">Fehler beim Laden.</div>;
+  if (!plant) return <div className="p-8 text-red-500">Fehler beim Laden.</div>;
+  if (accessError) {
+    return (
+      <div className="p-8 space-y-4" role="alert">
+        <p>
+          Zugangsstatus konnte nicht geladen werden. Öffentliche Zugänge können weiterhin aktiv
+          sein.
+        </p>
+        <Link href={`/app/plants/${plant.id}`} className="underline">
+          Zur Pflanze
+        </Link>
+      </div>
+    );
+  }
+  if (!access?.is_active) {
+    return (
+      <div className="p-8 space-y-4">
+        <p>
+          Kein aktiver öffentlicher Zugang. Stellen Sie ihn auf der Pflanzenseite bewusst neu aus.
+        </p>
+        <Link href={`/app/plants/${plant.id}`} className="underline">
+          Zur Pflanze
+        </Link>
+      </div>
+    );
+  }
 
   const observePath = `/observe/${access.public_id}`;
   const fullUrl = `${baseUrl}${observePath}`;
