@@ -66,7 +66,7 @@ test('loads Direct measurements only when expanded and exposes authenticated WAV
     'href',
     '/api/v1/visualization/direct/direct-a/wav/segment-a/4/0'
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Live · 5 Min.' }));
+  fireEvent.click(screen.getByRole('button', { name: '5 Minuten' }));
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringMatching(

@@ -15,6 +15,8 @@ class DirectSettings(BaseSettings):
 
     environment: Literal["development", "staging", "production"] = "development"
     ingest_enabled: bool = False
+    live_enabled: bool = False
+    live_socket: Path | None = None
     capture_assignment_enabled: bool = False
     timestamp_object_keys_enabled: bool = False
     dashboard_api_url: str = ""
@@ -47,6 +49,10 @@ class DirectSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_isolation(self):
+        if self.live_socket is not None and not self.live_socket.is_absolute():
+            raise ValueError("Live preview requires an absolute private socket path")
+        if self.live_enabled and self.live_socket is None:
+            raise ValueError("Live preview requires the shared RAM owner socket")
         if self.archive_broker_socket is not None and not self.archive_broker_socket.is_absolute():
             raise ValueError("Direct archive broker requires an absolute private socket path")
         if self.payload_offload_enabled and self.archive_broker_socket is None:

@@ -1,0 +1,131 @@
+"""The real private owner serves independent clients and rejects split ownership."""
+
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+from pathlib import Path
+
+import httpx
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def short_socket_directory():
+    # Darwin's sockaddr_un is shorter than pytest's default temporary path.
+    with tempfile.TemporaryDirectory(prefix="gm-live-", dir="/tmp") as directory:
+        yield Path(directory)
+
+
+def test_unix_owner_is_shared_exclusive_and_restart_is_volatile(tmp_path, short_socket_directory):
+    directory = short_socket_directory / "s"
+    directory.mkdir(mode=0o700)
+    socket = directory / "live.sock"
+    environment = dict(
+        os.environ,
+        DIRECT_LIVE_SOCKET=str(socket),
+        DIRECT_DATABASE_URL="unused-not-a-database-connection",
+    )
+    log_path = tmp_path / "owner.log"
+
+    def launch(log):
+        return subprocess.Popen(
+            [sys.executable, "-m", "app.direct.live_worker"],
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+
+    def stop(process):
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+    def ready(client, process):
+        until = time.monotonic() + 8
+        while time.monotonic() < until:
+            if process.poll() is not None:
+                pytest.fail(log_path.read_text())
+            try:
+                if client.get("/health").status_code == 200:
+                    return
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.05)
+        pytest.fail("Private live owner did not start")
+
+    with (
+        log_path.open("w") as log,
+        httpx.Client(
+            transport=httpx.HTTPTransport(uds=str(socket)), base_url="http://live", timeout=1
+        ) as one,
+        httpx.Client(
+            transport=httpx.HTTPTransport(uds=str(socket)), base_url="http://live", timeout=1
+        ) as two,
+    ):
+        process = launch(log)
+        try:
+            ready(one, process)
+            device, lease = str(uuid.uuid4()), str(uuid.uuid4())
+            principal = "a" * 64
+            assert (
+                one.post(
+                    "/dispatch",
+                    json={
+                        "namespace": "a" * 64,
+                        "op": "lease",
+                        "device": device,
+                        "lease": lease,
+                        "principal": principal,
+                    },
+                ).status_code
+                == 200
+            )
+            result = two.post(
+                "/dispatch",
+                json={
+                    "namespace": "a" * 64,
+                    "op": "preview",
+                    "device": device,
+                    "lease": lease,
+                    "principal": principal,
+                    "seconds": 30,
+                    "after": 0,
+                    "generation": "",
+                },
+            )
+            assert result.status_code == 200 and result.json()["rail"] is None
+            second = launch(log)
+            try:
+                assert second.wait(timeout=8) != 0
+                # A rejected second owner must not unlink the working socket.
+                assert two.get("/health").status_code == 200
+            finally:
+                if second.poll() is None:
+                    stop(second)
+            stop(process)
+            process = launch(log)
+            ready(one, process)
+            result = two.post(
+                "/dispatch",
+                json={
+                    "namespace": "a" * 64,
+                    "op": "preview",
+                    "device": device,
+                    "lease": lease,
+                    "principal": principal,
+                    "seconds": 30,
+                    "after": 0,
+                    "generation": "",
+                },
+            )
+            assert result.status_code == 404
+        finally:
+            stop(process)

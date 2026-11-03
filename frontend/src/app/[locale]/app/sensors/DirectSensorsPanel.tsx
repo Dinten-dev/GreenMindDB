@@ -10,6 +10,7 @@ import type { RecordingCompleteness } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
 import SignalChart from './SignalChart';
+import DirectLiveView from './DirectLiveView';
 import SensorCard from './SensorCard';
 import ArchiveExportPanel from './ArchiveExportPanel';
 
@@ -31,7 +32,7 @@ type Recording = {
   sample_rate: number;
 };
 const ranges = [
-  ['5m', 'Live · 5 Min.'],
+  ['5m', '5 Minuten'],
   ['1h', '1 Stunde'],
   ['24h', '24 Stunden'],
   ['7d', '7 Tage'],
@@ -61,6 +62,7 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 }
 
 function DirectMeasurements({ device }: { device: DirectDevice }) {
+  const [isLive, setIsLive] = useState(() => readViewValue('directRange') === 'live');
   const tx = useAppText();
 
   const [range, setRange] = useState(() => {
@@ -68,8 +70,8 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
     return value && ranges.some(([key]) => key === value) ? value : '24h';
   });
   useEffect(() => {
-    replaceViewValues({ directRange: range === '24h' ? null : range });
-  }, [range]);
+    replaceViewValues({ directRange: isLive ? 'live' : range === '24h' ? null : range });
+  }, [range, isLive]);
   const [series, setSeries] = useState<SensorDataResponse[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState('');
@@ -80,6 +82,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
   const [viewBounds, setViewBounds] = useState<{ from_dt: string; to_dt: string } | null>(null);
   const base = `/api/v1/visualization/direct/${device.id}`;
   useEffect(() => {
+    if (isLive) return;
     const controller = new AbortController();
     let dataTimer: ReturnType<typeof setTimeout>;
     let recordingsTimer: ReturnType<typeof setTimeout>;
@@ -154,7 +157,18 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
       clearTimeout(dataTimer);
       clearTimeout(recordingsTimer);
     };
-  }, [tx, base, range, retry]);
+  }, [tx, base, range, retry, isLive]);
+  if (isLive)
+    return (
+      <DirectLiveView
+        deviceId={device.id}
+        onHistory={() => {
+          replaceViewValues({ directLiveWindow: null });
+          setIsLive(false);
+          setRange('24h');
+        }}
+      />
+    );
   const points = series.reduce((sum, item) => sum + item.data.length, 0);
   const latest = series
     .flatMap((item) => item.data)
@@ -180,6 +194,14 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
         </a>
       </div>
       <div className="my-4 flex flex-wrap gap-2" aria-label={tx('Zeitraum')}>
+        <button
+          type="button"
+          aria-pressed={false}
+          onClick={() => setIsLive(true)}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600"
+        >
+          {tx('Live')}
+        </button>
         {ranges.map(([value, label]) => (
           <button
             key={value}
@@ -411,7 +433,10 @@ export default function DirectSensorsPanel({
           online={device.status === 'online' && !error}
           lastSeen={device.last_seen}
           expanded={selected === device.id}
-          onToggle={() => setSelected(selected === device.id ? null : device.id)}
+          onToggle={() => {
+            replaceViewValues({ directRange: null, directLiveWindow: null });
+            setSelected(selected === device.id ? null : device.id);
+          }}
         >
           <DirectMeasurements device={device} />
         </SensorCard>
