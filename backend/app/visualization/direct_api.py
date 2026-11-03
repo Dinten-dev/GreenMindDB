@@ -228,13 +228,18 @@ def install(app):
     def wav_list(
         device_id: uuid.UUID,
         range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
         user: User = Depends(get_current_user),
         legacy: Session = Depends(get_db),
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        end = datetime.now(UTC).timestamp()
-        return recordings(db, device_id, end - WINDOWS[range], end)
+        try:
+            start, end = window_bounds(WINDOWS[range], from_dt, to_dt)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return recordings(db, device_id, start.timestamp(), end.timestamp())
 
     @app.get("/api/v1/visualization/direct/{device_id}/wav/{segment_id}/{revision}/{run_index}")
     @limiter.limit("12/minute")

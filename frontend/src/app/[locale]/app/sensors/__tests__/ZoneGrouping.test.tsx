@@ -1,4 +1,4 @@
-import { apiGetSensorData, apiListSensors } from '@/lib/api';
+import { apiGetSensorDataAdvanced, apiListSensors } from '@/lib/api';
 import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import SensorsPage from '../page';
 
@@ -58,6 +58,7 @@ jest.mock('@/lib/api', () => ({
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/de/app/sensors');
+  sessionStorage.clear();
 });
 
 test('groups Gateway and Direct sensors under their permitted zone', async () => {
@@ -82,18 +83,31 @@ test('groups Gateway and Direct sensors under their permitted zone', async () =>
   expect(screen.getByRole('region', { name: 'Rudi Meier' })).toBeInTheDocument();
 });
 
-test('restores permitted sensor, zone and time range after changing locale', async () => {
+test('restores permitted device and zone but resets old range URLs to 24 hours', async () => {
   window.history.replaceState(
     { router: 'preserved' },
     '',
     '/fr/app/sensors?zone=rudi&sensor=rudi-sensor&range=7d#chart'
   );
   render(<SensorsPage />);
-  await waitFor(() => expect(apiGetSensorData).toHaveBeenCalledWith('rudi-sensor', '7d'));
+  await waitFor(() =>
+    expect(apiGetSensorDataAdvanced).toHaveBeenCalledWith(
+      'rudi-sensor',
+      expect.objectContaining({
+        range: '24h',
+        from_dt: expect.any(String),
+        to_dt: expect.any(String),
+      })
+    )
+  );
   expect(screen.getByRole('combobox', { name: 'Zone' })).toHaveValue('rudi');
-  expect(screen.getByRole('button', { name: '7 Tage' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '24 Stunden' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  expect(screen.queryByRole('button', { name: '7 Tage' })).not.toBeInTheDocument();
   expect(new URLSearchParams(window.location.search).get('sensor')).toBe('rudi-sensor');
-  expect(new URLSearchParams(window.location.search).get('range')).toBe('7d');
+  expect(new URLSearchParams(window.location.search).get('range')).toBeNull();
   expect(window.location.hash).toBe('#chart');
 });
 
@@ -131,6 +145,11 @@ test('keeps a disconnected old sensor visible and its historical measurements ac
   expect(retained).toHaveTextContent('Getrennt');
   expect(retained).not.toHaveTextContent('Inaktiv (>3 Tage)');
   fireEvent.click(retained);
-  await waitFor(() => expect(apiGetSensorData).toHaveBeenCalledWith('retained-sensor', '24h'));
+  await waitFor(() =>
+    expect(apiGetSensorDataAdvanced).toHaveBeenCalledWith(
+      'retained-sensor',
+      expect.objectContaining({ range: '24h' })
+    )
+  );
   expect(screen.getByRole('button', { name: '24 Stunden' })).toBeInTheDocument();
 });

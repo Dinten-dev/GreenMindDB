@@ -233,6 +233,9 @@ Physische Zeitgenauigkeit bleibt gesondert zu messen.
 
 ### 11. Oberfläche vereinfachen
 
+Softwarekandidat: [Messansicht, Verwaltung und Export](SIMPLE-WORKSPACE.md).
+Visuelle Browserabnahme bleibt offen.
+
 - Messansicht zeigt ausschliesslich „24 Stunden“ und „Live“.
 - Jede neu geöffnete Messansicht startet mit „24 Stunden“.
 - Hauptnavigation: Überblick, Pflanzen, Messungen, Verwaltung.

@@ -3,7 +3,6 @@
 import { useAppText } from '@/i18n/app-text';
 
 import BrandLogo from '@/components/BrandLogo';
-import AdministrationLink from '@/components/AdministrationLink';
 import AppLocaleSwitcher from '@/components/AppLocaleSwitcher';
 
 import { useEffect, useState, useRef } from 'react';
@@ -13,25 +12,19 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { signInPath } from '@/lib/auth-routing';
 
-const NAV_GROUPS = [
-  {
-    label: 'Dein Gewächshaus',
-    links: [
-      { href: '/app/dashboard', label: 'Überblick', icon: '◉' },
-      { href: '/app/plants', label: 'Pflanzen', icon: '⍋' },
-      { href: '/app/sensors', label: 'Messungen & Sensoren', icon: '∿' },
-      { href: '/app/zones', label: 'Zonen', icon: '⌂' },
-    ],
-  },
-  {
-    label: 'Verwaltung',
-    links: [
-      { href: '/app/gateways', label: 'Gateways', icon: '◎' },
-      { href: '/app/account', label: 'Mein Konto', icon: '○' },
-      { href: '/app/firmware/dashboard', label: 'Firmware', icon: '⬡', roles: ['admin'] },
-      { href: '/app/gateway-fleet/overview', label: 'Gateway-Flotte', icon: '⊞', roles: ['admin'] },
-    ],
-  },
+const NAV_LINKS = [
+  { href: '/app/dashboard', label: 'Überblick', icon: '◉' },
+  { href: '/app/plants', label: 'Pflanzen', icon: '⍋' },
+  { href: '/app/sensors', label: 'Messungen', icon: '∿' },
+  { href: '/app/manage', label: 'Verwaltung', icon: '⚙' },
+];
+const managementPaths = [
+  '/app/manage',
+  '/app/gateways',
+  '/app/zones',
+  '/app/firmware',
+  '/app/gateway-fleet',
+  '/app/administration',
 ];
 
 function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
@@ -67,49 +60,42 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 
       <nav
         aria-label={tx('Hauptnavigation')}
-        className="flex-1 overflow-y-auto px-3 py-5 space-y-7"
+        className="flex-1 overflow-y-auto px-3 py-5 space-y-1"
       >
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 mb-2 text-xs font-medium text-gray-500">{tx(group.label)}</p>
-            <div className="space-y-1">
-              {group.links
-                .filter((link) => !('roles' in link) || (user && link.roles?.includes(user.role)))
-                .map((link) => {
-                  const sectionPath = link.href.replace(/\/(dashboard|overview)$/, '');
-                  const isActive =
-                    localPath === link.href ||
-                    (link.href !== '/app/dashboard' &&
-                      (localPath === sectionPath || localPath.startsWith(sectionPath + '/')));
-                  return (
-                    <Link
-                      key={link.href}
-                      href={`/${locale}${link.href}`}
-                      onClick={onNavigate}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-colors ${isActive ? 'nav-active' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
-                    >
-                      <span aria-hidden="true" className="w-5 text-center text-lg leading-none">
-                        {link.icon}
-                      </span>
-                      <span>{tx(link.label)}</span>
-                    </Link>
-                  );
-                })}
-              {group.label === 'Verwaltung' && (
-                <AdministrationLink
-                  active={localPath.startsWith('/app/administration')}
-                  onNavigate={onNavigate}
-                />
-              )}
-            </div>
-          </div>
-        ))}
+        {NAV_LINKS.map((link) => {
+          const isActive =
+            link.href === '/app/manage'
+              ? managementPaths.some(
+                  (path) => localPath === path || localPath.startsWith(path + '/')
+                )
+              : localPath === link.href || localPath.startsWith(link.href + '/');
+          return (
+            <Link
+              key={link.href}
+              href={`/${locale}${link.href}`}
+              onClick={onNavigate}
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-colors ${isActive ? 'nav-active' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+            >
+              <span aria-hidden="true" className="w-5 text-center text-lg leading-none">
+                {link.icon}
+              </span>
+              <span>{tx(link.label)}</span>
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="px-6 py-3">
         <AppLocaleSwitcher />
       </div>
+      <Link
+        href={`/${locale}/app/account`}
+        onClick={onNavigate}
+        className="mx-6 mb-3 text-sm text-gray-600 hover:text-emerald-800"
+      >
+        {tx('Mein Konto')}
+      </Link>
       {/* User */}
       <div className="px-3 py-4 border-t border-black/[0.04]">
         <div className="px-3 py-2">

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useId } from 'react';
 import { useAppText } from '@/i18n/app-text';
 import { localePath } from '@/lib/auth-routing';
+import { preserveMeasurementLocale } from '@/lib/measurement-view';
 
 export default function AppLocaleSwitcher() {
   const locale = useLocale();
@@ -18,11 +19,11 @@ export default function AppLocaleSwitcher() {
         id={id}
         value={locale}
         className="max-w-36 rounded-lg border border-gray-200 bg-white px-2 py-2"
-        onChange={(event) =>
-          router.push(
-            localePath(event.target.value, pathname) + window.location.search + window.location.hash
-          )
-        }
+        onChange={(event) => {
+          const target = localePath(event.target.value, pathname);
+          preserveMeasurementLocale(target);
+          router.push(target + window.location.search + window.location.hash);
+        }}
       >
         <option value="de">Deutsch</option>
         <option value="en">English</option>

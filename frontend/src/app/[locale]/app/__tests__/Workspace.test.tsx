@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import AppLayout from '../layout';
 import DashboardPage from '../dashboard/page';
+import ManagementPage from '../manage/page';
 import { apiListZones, apiListGateways, apiListSensors } from '@/lib/api';
 
 let mockRole = 'member';
@@ -33,25 +34,43 @@ it('keeps the plant section active on a translated detail route and hides admin 
     </AppLayout>
   );
   expect(screen.getByRole('link', { name: 'Pflanzen' })).toHaveAttribute('aria-current', 'page');
-  expect(screen.getByRole('link', { name: 'Messungen & Sensoren' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'Messungen' })).toHaveAttribute(
     'href',
     '/de/app/sensors'
   );
   expect(screen.queryByRole('link', { name: 'Firmware' })).not.toBeInTheDocument();
 });
 
-it('keeps firmware and fleet navigation available to admins', () => {
+it('shows only four primary destinations and moves firmware into management', () => {
   mockRole = 'admin';
-  render(
+  const page = render(
     <AppLayout>
       <p>Inhalt</p>
     </AppLayout>
   );
-  expect(screen.getByRole('link', { name: 'Firmware' })).toHaveAttribute(
+  const navigation = screen.getByRole('navigation', { name: 'Hauptnavigation' });
+  expect(navigation.querySelectorAll('a')).toHaveLength(4);
+  expect(screen.getByRole('link', { name: 'Verwaltung' })).toHaveAttribute(
+    'href',
+    '/de/app/manage'
+  );
+  expect(screen.queryByRole('link', { name: 'Firmware' })).not.toBeInTheDocument();
+  page.unmount();
+  render(<ManagementPage />);
+  expect(screen.getByRole('link', { name: /Firmware/ })).toHaveAttribute(
     'href',
     '/de/app/firmware/dashboard'
   );
-  expect(screen.getByRole('link', { name: 'Gateway-Flotte' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Gateway-Flotte/ })).toBeInTheDocument();
+});
+it('keeps ordinary device management available without exposing firmware tools', () => {
+  render(<ManagementPage />);
+  expect(screen.getByRole('link', { name: /Zonen/ })).toHaveAttribute('href', '/de/app/zones');
+  expect(screen.getByRole('link', { name: /Gateways/ })).toHaveAttribute(
+    'href',
+    '/de/app/gateways'
+  );
+  expect(screen.queryByRole('link', { name: /Firmware/ })).not.toBeInTheDocument();
 });
 
 it('shows a connection failure instead of empty inventory and recovers on retry', async () => {

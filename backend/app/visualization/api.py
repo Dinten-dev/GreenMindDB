@@ -26,7 +26,7 @@ from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.rate_limit import limiter
-from app.services.recording_time import utc_filename, window_time
+from app.services.recording_time import utc_filename, window_bounds, window_time
 from app.zone_access import zone_access_filter
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -247,6 +247,8 @@ def data(
     range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
     resolution: str | None = Query(None, pattern="^(raw|1m|5m|10m|1h|1d)$"),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -259,6 +261,11 @@ def data(
             end = start + timedelta(days=1)
         except ValueError as exc:
             raise HTTPException(400, "Invalid date") from exc
+    if from_dt is not None or to_dt is not None:
+        try:
+            start, end = window_bounds(86400, from_dt, to_dt)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     step = (
         RESOLUTIONS[resolution]
         if resolution
@@ -287,13 +294,22 @@ def export(
     request: Request,
     sensor_id: uuid.UUID,
     range: str = Query("24h", pattern="^(1h|24h|7d|30d|all)$"),
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     authorize(db, user, sensor_id)
     end = datetime.now(UTC)
     start = end - (timedelta(days=3650) if range == "all" else RANGES[range])
-    step = 1 if range == "1h" else 60 if range in ("24h", "7d") else 600
+    if from_dt is not None or to_dt is not None:
+        try:
+            start, end = window_bounds(86400, from_dt, to_dt)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    step = (
+        1 if end - start <= timedelta(hours=1) else 60 if end - start <= timedelta(days=7) else 600
+    )
     records = query_series(db, sensor_id, start, end, step, settings.sensor_export_max_rows)
     if not records:
         raise HTTPException(404, "No data available for export")
