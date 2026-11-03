@@ -264,3 +264,26 @@ def test_bounds_and_cross_principal_cannot_displace_a_valid_lease():
         with pytest.raises(DirectError):
             store.lease(device, ident, principal)
     assert store.devices[d].leases[lease_id][0] == PRINCIPAL
+
+
+def test_sixteen_point_catchup_is_bounded_and_ack_carries_demand(live):
+    p = live
+    p.ram.wall = lambda: p.start_us / 1e6 + 1.4
+    assert lease(p).status_code == 200
+    generation = control(p).json()["generation"]
+    body = packet(p, generation, frame=511)
+    body["points"] = [dict(frame=(i + 1) * 32 - 1, samples=32, mv=1650.0) for i in range(16)]
+    body["rail"] = dict(
+        start_us=p.start_us, end_us=p.start_us + 1280000, raw_samples=512, rail_samples=0
+    )
+    response = p.client.post(p.base + "/live-preview", headers=p.device_headers, json=body)
+    assert response.status_code == 200
+    assert response.json()["generation"] == generation
+    assert 0 < response.json()["expires_in_ms"] <= 30000
+    assert len(read(p).json()["points"]) == 16
+    body["sequence"] = 1
+    body["points"].append(dict(frame=543, samples=32, mv=1650.0))
+    assert (
+        p.client.post(p.base + "/live-preview", headers=p.device_headers, json=body).status_code
+        == 422
+    )

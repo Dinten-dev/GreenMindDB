@@ -163,7 +163,8 @@ class LiveStore:
             ).hexdigest()
             if packet.sequence <= state.packet_sequence:
                 if packet.sequence == state.packet_sequence and digest == state.packet_digest:
-                    return {"status": "duplicate"}
+                    state.control_seen = self.clock()
+                    return self._push_ack(state, "duplicate")
                 raise DirectError(409, "live_sequence_conflict")
             if state.packet_seen is not None and self.clock() - state.packet_seen < 0.2:
                 raise DirectError(429, "live_packet_rate")
@@ -207,7 +208,19 @@ class LiveStore:
             state.rail = rail.model_dump()
             state.packet_seen = self.clock()
             state.packet_sequence, state.packet_digest = packet.sequence, digest
-            return {"status": "accepted"}
+            state.control_seen = self.clock()
+            return self._push_ack(state, "accepted")
+
+    def _push_ack(self, state, status):
+        # A validated upload also confirms demand, avoiding a second round trip
+        # on the device's single TLS connection. Old clients ignore these fields.
+        remaining = max(v[1] for v in state.leases.values()) - self.clock()
+        return {
+            "status": status,
+            "enabled": remaining > 0,
+            "expires_in_ms": max(0, min(LEASE_SECONDS * 1000, int(remaining * 1000))),
+            "generation": state.generation,
+        }
 
     def preview(self, device, lease, principal, *, seconds=30, after=0, generation=""):
         with self.lock:

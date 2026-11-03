@@ -54,7 +54,7 @@ class PreviewPacket(BaseModel):
     generation: UUID
     session_id: UUID
     sequence: int = Field(ge=0, le=2**32 - 1, strict=True)
-    points: list[PreviewPoint] = Field(min_length=1, max_length=8)
+    points: list[PreviewPoint] = Field(min_length=1, max_length=16)
     rail: RailWindow
 
 

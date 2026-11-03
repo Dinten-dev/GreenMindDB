@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from app.direct.live_api import bounded_json
 from app.direct.live_state import LiveStore
 from app.direct.protocol import DirectError
 
@@ -63,8 +64,6 @@ def create_live_worker(store=None, socket_path=None):
 
     @app.post("/dispatch")
     async def dispatch(request: Request):
-        from app.direct.live_api import bounded_json
-
         body = await bounded_json(request, 8192)
         try:
             return app.state.live.dispatch(body)
