@@ -35,8 +35,10 @@ def create_app(settings=None, engine=None, store=None):
     install_pairing_routes(app)
 
     @app.exception_handler(DirectError)
-    async def domain_error(_, exc):
+    async def domain_error(request, exc):
         headers = {"Retry-After": "30"} if exc.status in (429, 503) else {}
+        if "/live-" in request.url.path or request.url.path.endswith("/control"):
+            headers["Cache-Control"] = "private, no-store"
         return JSONResponse({"error": exc.code}, status_code=exc.status, headers=headers)
 
     @app.exception_handler(SQLAlchemyError)
@@ -166,6 +168,9 @@ def create_app(settings=None, engine=None, store=None):
             data, media_type="audio/wav", headers={"Cache-Control": "private, no-store"}
         )
 
+    from app.direct.live_api import install_live_routes
+
+    install_live_routes(app)
     return app
 
 
