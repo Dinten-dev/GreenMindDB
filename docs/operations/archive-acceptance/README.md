@@ -20,7 +20,7 @@ Private inventories and raw evidence remain with the operator. [`status.json`](s
 
 ## Step 2 — data lifecycle policy
 
-In progress. Existing archive paths, account separation and encryption contracts must be preserved. Unknown provenance, active processing and quarantine block affected deletion. A policy entry or local adapter does not enable production deletion.
+Specification completed. All 57 production relations and 16 data categories have an explicit treatment. Seven proposed SQL datasets remain on HOLD; 50 relations are preserved. Existing archive paths, account separation and encryption bindings are retained. Unknown provenance, active processing and quarantine block affected deletion. See [step 2](step-2.md), the [versioned lifecycle policy](lifecycle-policy.json) and [table treatments](table-policy.json). A policy entry or local adapter does not enable production deletion.
 
 ## Production state
 
