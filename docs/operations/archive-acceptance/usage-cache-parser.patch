@@ -1,0 +1,202 @@
+--- a/isolated-test/usage_cache_codec.py
++++ b/isolated-test/usage_cache_codec.py
+@@ -202,20 +202,188 @@
+     return output.raw[:size]
+ 
+ 
++_DIAGNOSTIC = None
++ENTRY_ENUM = ((b'ch','ch'),(b'sz','sz'),(b'os','os'),(b'vs','vs'),
++              (b'dms','dms'),(b'szs','szs'),(b'vh','vh'),(b'ats','ats'),(b'c','c'))
++ENTRY_STAGES = {'ch':'entry-ch','sz':'entry-sz','os':'entry-os','vs':'entry-vs',
++                'dms':'entry-dms','szs':'entry-szs','vh':'entry-vh','ats':'entry-ats','c':'entry-c'}
++
++
++def diagnostic():
++    # Only fixed labels and bounded numeric metadata can leave this module.
++    return _DIAGNOSTIC
++
++
++class SelectiveReader(Reader):
++    """Build only aggregation fields; traverse all other values in place."""
++    def __init__(self, data):
++        super().__init__(data)
++        self.skipped_bytes = 0
++        self.skipped_tokens = 0
++        self.skipped_keys = 0
++        self.enum_tokens = 0
++        self.enum_bytes = 0
++        self.stage = 'root-header'
++        self.counts = {}
++        self.map_sizes = {'root':0, 'info':0, 'cache':0, 'entry_last':0, 'entry_max':0}
++        self.failure = None
++
++    def snapshot(self, depth):
++        global _DIAGNOSTIC
++        if self.failure is None:
++            self.failure = {'field':self.stage, 'depth':depth, 'position':self.pos,
++                            'input_bytes':len(self.data), 'nodes':self.nodes,
++                            'skipped_bytes':self.skipped_bytes, 'skipped_tokens':self.skipped_tokens,
++                            'skipped_map_keys':self.skipped_keys,
++                            'enum_tokens':self.enum_tokens, 'enum_bytes':self.enum_bytes,
++                            'node_counts':dict(self.counts), 'map_sizes':dict(self.map_sizes)}
++            _DIAGNOSTIC = self.failure
++
++    def read(self, depth=0):
++        self.counts[self.stage] = self.counts.get(self.stage, 0) + 1
++        try:
++            return super().read(depth)
++        except Exception:
++            self.snapshot(depth)
++            raise
++
++    def enum_entry_key(self, depth):
++        # Fixed labels are interned literals, not materialized tree nodes.
++        need(depth <= 32)
++        self.enum_tokens += 1
++        need(self.enum_tokens + self.skipped_tokens <= LIMIT)
++        start=self.pos
++        tag=self.num(1)
++        if 0xa0 <= tag <= 0xbf: size=tag & 31
++        elif tag in (0xd9,0xda,0xdb): size=self.num({0xd9:1,0xda:2,0xdb:4}[tag])
++        else: raise CacheHold('contract')
++        need(size <= LIMIT and size <= len(self.data)-self.pos)
++        value=None
++        for encoded,literal in ENTRY_ENUM:
++            if size == len(encoded) and self.data.startswith(encoded,self.pos):
++                value=literal
++                break
++        need(value is not None)
++        self.pos += size
++        self.enum_bytes += self.pos-start
++        need(self.enum_bytes + self.skipped_bytes <= LIMIT)
++        return value
++
++    def container(self, kind, depth):
++        self.counts[self.stage] = self.counts.get(self.stage, 0) + 1
++        self.nodes += 1
++        if depth > 32 or self.nodes > 25000:
++            self.snapshot(depth)
++        need(depth <= 32 and self.nodes <= 25000)
++        tag = self.num(1)
++        if kind == 'map':
++            count = tag & 15 if 0x80 <= tag <= 0x8f else self.num(2 if tag == 0xde else 4) if tag in (0xde, 0xdf) else None
++        else:
++            count = tag & 15 if 0x90 <= tag <= 0x9f else self.num(2 if tag == 0xdc else 4) if tag in (0xdc, 0xdd) else None
++        need(count is not None and count <= 25000 and count <= len(self.data)-self.pos)
++        return count
++
++    def skip(self, depth):
++        start = self.pos
++        self._skip(depth)
++        self.skipped_bytes += self.pos-start
++        need(self.skipped_bytes + self.enum_bytes <= LIMIT)
++
++    def _skip(self, depth, key=False):
++        need(depth <= 32)
++        self.skipped_tokens += 1
++        need(self.skipped_tokens + self.enum_tokens <= LIMIT)
++        tag = self.num(1)
++        if 0xa0 <= tag <= 0xbf:
++            n = tag & 31
++        elif tag in (0xd9, 0xda, 0xdb):
++            n = self.num({0xd9:1, 0xda:2, 0xdb:4}[tag])
++        else:
++            n = None
++        if n is not None:
++            need(n <= LIMIT and n <= len(self.data)-self.pos)
++            # The legacy reader requires UTF-8 even in values it ignores.
++            value = self.data[self.pos:self.pos+n].decode('utf8')
++            self.pos += n
++            return value if key else None
++        need(not key)
++        if tag <= 0x7f or tag >= 0xe0 or tag in (0xc0,0xc2,0xc3): return
++        if tag in (0xcc,0xcd,0xce,0xcf,0xd0,0xd1,0xd2,0xd3,0xca,0xcb):
++            self.take({0xcc:1,0xcd:2,0xce:4,0xcf:8,0xd0:1,0xd1:2,0xd2:4,0xd3:8,0xca:4,0xcb:8}[tag]); return
++        if tag in (0xc4,0xc5,0xc6,0xc7,0xc8,0xc9):
++            size=self.num({0xc4:1,0xc5:2,0xc6:4,0xc7:1,0xc8:2,0xc9:4}[tag])
++            if tag in (0xc7,0xc8,0xc9): self.num(1)
++            need(size <= LIMIT and size <= len(self.data)-self.pos)
++            self.pos += size
++            return
++        if tag in (0xd4,0xd5,0xd6,0xd7,0xd8):
++            self.take(1+{0xd4:1,0xd5:2,0xd6:4,0xd7:8,0xd8:16}[tag]); return
++        if 0x90 <= tag <= 0x9f: count=tag & 15; ismap=False
++        elif 0x80 <= tag <= 0x8f: count=tag & 15; ismap=True
++        elif tag in (0xdc,0xdd,0xde,0xdf):
++            count=self.num(2 if tag in (0xdc,0xde) else 4); ismap=tag in (0xde,0xdf)
++        else: raise CacheHold('contract')
++        # Every child occupies at least one encoded byte; maps have two.
++        need(count <= (len(self.data)-self.pos)//(2 if ismap else 1))
++        if ismap:
++            need(count <= 2000)
++            keys=set()
++            for _ in range(count):
++                self.skipped_keys += 1
++                need(self.skipped_keys <= 25000)
++                k=self._skip(depth+1, True)
++                need(k not in keys); keys.add(k)
++                self._skip(depth+1)
++        else:
++            for _ in range(count): self._skip(depth+1)
++
++
+ def aggregate_uncompressed(data,bucket):
+-    value=one(data)
+-    need(isinstance(value,dict) and set(value)=={'Info','Cache'})
+-    info,cache=value['Info'],value['Cache']
+-    need(isinstance(info,dict) and info.get('Name')==bucket and isinstance(cache,dict) and bucket in cache and len(cache)<=2000)
+-    when=timestamp(info.get('LastUpdate'))
++    global _DIAGNOSTIC
++    _DIAGNOSTIC = None
++    r=SelectiveReader(data)
++    root_count=r.container('map',0); r.map_sizes['root']=root_count
++    need(root_count==2)
++    root={}
++    for _ in range(2):
++        r.stage='root-key'; key=r.read(1); need(isinstance(key,str) and key not in root and key in ('Info','Cache'))
++        if key=='Info':
++            r.stage='info-header'; count=r.container('map',1); r.map_sizes['info']=count; info={}; keys=set()
++            for _ in range(count):
++                r.stage='info-key'; name=r.read(2); need(isinstance(name,str) and name not in keys); keys.add(name)
++                if name in ('Name','LastUpdate'):
++                    r.stage='info-'+name; info[name]=r.read(2)
++                else:
++                    r.stage='info-other'; r.skip(2)
++            need(set(info)=={'Name','LastUpdate'} and info['Name']==bucket)
++            root[key]=info
++        else:
++            r.stage='cache-header'; count=r.container('map',1); r.map_sizes['cache']=count; need(count<=2000)
++            cache={}
++            for _ in range(count):
++                r.stage='cache-key'; name=r.read(2); need(isinstance(name,str) and name not in cache and (name==bucket or name.startswith(bucket+'/')))
++                r.stage='entry-header'; fields=r.container('map',2); r.map_sizes['entry_last']=fields; r.map_sizes['entry_max']=max(fields,r.map_sizes['entry_max']); entry={}; keys=set()
++                for _ in range(fields):
++                    r.stage='entry-key'; field=r.enum_entry_key(3); need(field not in keys); keys.add(field)
++                    r.stage=ENTRY_STAGES[field]
++                    if field in ('szs','vh','ats'): r.skip(3)
++                    else: entry[field]=r.read(3)
++                need(set(entry).issuperset(('ch','sz','os','vs','dms','c')))
++                need('c' not in entry or isinstance(entry['c'],bool))
++                need(isinstance(entry['ch'],list) and all(isinstance(x,str) for x in entry['ch']) and len(entry['ch'])==len(set(entry['ch'])))
++                need(all(isinstance(entry[k],int) and not isinstance(entry[k],bool) and 0<=entry[k]<(1<<63) for k in ('sz','os','vs','dms')))
++                need(not entry.get('c',False) or not entry['ch'])
++                cache[name]=entry
++            root[key]=cache
++    need(set(root)=={'Info','Cache'} and r.pos==len(data))
++    when=timestamp(root['Info']['LastUpdate']); cache=root['Cache']
++    need(bucket in cache)
+     stack=[bucket]; seen=set(); totals=[0,0,0,0]
+     while stack:
+         key=stack.pop(); need(key not in seen and key in cache and (key==bucket or key.startswith(bucket+'/')))
+-        seen.add(key);entry=cache[key]
+-        need(isinstance(entry,dict) and all(isinstance(entry.get(k),int) and not isinstance(entry.get(k),bool) and entry[k]>=0 for k in ('sz','os','vs','dms')))
+-        children=entry.get('ch'); need(isinstance(children,list) and len(children)==len(set(children)))
+-        need(not entry.get('c',False) or not children)
+-        for i,k in enumerate(('sz','os','vs','dms')): totals[i]+=entry[k];need(totals[i] < 1<<63)
+-        stack.extend(children)
++        seen.add(key); entry=cache[key]
++        for i,k in enumerate(('sz','os','vs','dms')):
++            totals[i]+=entry[k]; need(totals[i] < 1<<63)
++        stack.extend(entry['ch'])
+     need(len(seen)==len(cache))
+     return {'bytes':totals[0],'objects':totals[1],'versions':totals[2],'delete_markers':totals[3],'last_update_unix_ns':when,'tree_entries':len(seen)}
