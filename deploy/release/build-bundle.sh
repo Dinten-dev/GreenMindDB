@@ -22,7 +22,7 @@ for component in backend frontend; do
     docker build "${build_args[@]}" -t "greenmind-release-${component}:${revision}" "$build_source/$component"
 done
 docker image save "greenmind-release-backend:${revision}" "greenmind-release-frontend:${revision}" | gzip > "$out/images.tar.gz"
-git archive "$revision" deploy/release deploy/direct-production nginx/green-mind.ch.conf nginx/test.green-mind.ch.conf | tar -x -C "$out"
+git archive "$revision" deploy/release deploy/direct-production docs/ACCEPTANCE-20261103.md nginx/green-mind.ch.conf nginx/test.green-mind.ch.conf | tar -x -C "$out"
 python3 - "$out" "$revision" <<'PY'
 import hashlib,json,sys,tarfile
 from pathlib import Path
