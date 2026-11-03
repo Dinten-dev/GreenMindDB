@@ -12,6 +12,8 @@ class DirectSettings(BaseSettings):
 
     environment: Literal["development", "staging", "production"] = "development"
     ingest_enabled: bool = False
+    live_enabled: bool = False
+    live_socket: Path | None = None
     dashboard_api_url: str = ""
     dashboard_origin: str = ""
     database_url: SecretStr = SecretStr("")
@@ -37,6 +39,10 @@ class DirectSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_isolation(self):
+        if self.live_socket is not None and not self.live_socket.is_absolute():
+            raise ValueError("Live preview requires an absolute private socket path")
+        if self.live_enabled and self.live_socket is None:
+            raise ValueError("Live preview requires the shared RAM owner socket")
         if self.environment != "development":
             if not self.require_tls:
                 raise ValueError("Direct TLS is mandatory outside development")
