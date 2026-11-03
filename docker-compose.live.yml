@@ -1,0 +1,40 @@
+# Optional overlay after Direct reception is configured and reviewed.
+# Enable only with the direct + direct-live profiles; no production activation here.
+services:
+  direct-api:
+    environment:
+      DIRECT_LIVE_ENABLED: ${DIRECT_LIVE_ENABLED:-false}
+      DIRECT_LIVE_SOCKET: /run/direct-live/live.sock
+    volumes:
+      - direct_live_socket:/run/direct-live
+
+  direct-live:
+    profiles: [direct-live]
+    image: ${DIRECT_BACKEND_IMAGE:-greenmind-backend-staging:latest}
+    command: [python, -m, app.direct.live_worker]
+    user: "10001:10001"
+    restart: unless-stopped
+    environment:
+      DIRECT_LIVE_SOCKET: /run/direct-live/live.sock
+    volumes:
+      - direct_live_socket:/run/direct-live
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+
+volumes:
+  direct_live_socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=1m,uid=10001,gid=10001,mode=0700"

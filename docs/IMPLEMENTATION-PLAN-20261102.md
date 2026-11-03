@@ -175,6 +175,9 @@
 
 ### 9. Live bei Bedarf einschalten
 
+Softwarekandidat umgesetzt: [Vertrag und offene Hardwareabnahme](DIRECT-DEMAND-LIVE.md).
+GitHub-Prüfung ersetzt keine produktive Aktivierung oder physische Latenzmessung.
+
 - Standardansicht bleibt **24 Stunden**.
 - Auswahl **Live** fordert eine zeitlich begrenzte Vorschau an.
 - Ziel: weniger als drei Sekunden von Blattberührung bis Bildschirm.
@@ -206,7 +209,8 @@
 - Hohe Rail-Anteile trotz plausibler Mittelwertkurve deutlich hervorheben.
 - Einen **Mark-Knopf** für Ereignisse im Livefenster ergänzen.
 - Markierungen an Sensor, Sitzung, Aufnahmezeit und Samplebezug binden.
-- Marker-Sichtbarkeit, Haltbarkeit und Exportbedarf vor Implementierung konkretisieren.
+- Nutzerentscheid: Markierungen nur live, nach drei Minuten verschwunden.
+- Sichtbar für berechtigte Zuschauer desselben Sensors; keine Speicherung oder Exporte.
 - Mehrere Zuschauer erhalten unabhängige, verlängerbare Anzeigefreigaben.
 - Freigaben gelten 30 Sekunden; Verlängerung erfolgt alle zehn.
 - Letzter Zuschauer beendet Live; Freigabeablauf stoppt spätestens Übertragung.
