@@ -1,0 +1,11 @@
+--- a/isolated-test/archive_probe.py
++++ b/isolated-test/archive_probe.py
+@@ -314,7 +314,7 @@
+                             "CREATE TABLE public.gm_tls_probe(id integer PRIMARY KEY,payload bytea NOT NULL)"
+                         )
+                     )
+-                    connection = db.connection().driver_connection
++                    connection = db.connection.driver_connection
+                     incoming, outgoing = SyntheticCopy(), DigestSink()
+                     with connection.cursor() as q:
+                         q.copy_expert(
