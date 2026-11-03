@@ -1,5 +1,8 @@
 'use client';
 
+import CaptureTimeSummary from './CaptureTimeSummary';
+import { formatCaptureTime } from '@/lib/capture-time';
+
 import { useAppText } from '@/i18n/app-text';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -75,6 +78,7 @@ export default function SignalChart({
 
   return (
     <div>
+      <CaptureTimeSummary series={series} />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
         <span>
           {tx('Zeitfenster:')} {tx(resolutionLabel(series.data))}
@@ -130,7 +134,7 @@ export default function SignalChart({
               return (
                 <div className="rounded-xl border border-gray-100 bg-white p-3 text-xs shadow-lg">
                   <p className="mb-1 text-gray-500">
-                    {new Date(point.timestamp).toLocaleString(tx.locale)}
+                    {formatCaptureTime(point.timestamp, tx.locale)}
                   </p>
                   <p>
                     {metric === 'value' ? tx('Mittelwert') : tx('Signalstärke')}:{' '}
@@ -209,7 +213,7 @@ export default function SignalChart({
           {selected && (
             <p className="mt-2 text-xs text-gray-500">
               {tx('Auswahl:')}
-              {new Date(selected).toLocaleString(tx.locale)}
+              {formatCaptureTime(selected, tx.locale)}
             </p>
           )}
           {error && (

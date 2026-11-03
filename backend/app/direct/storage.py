@@ -4,11 +4,18 @@ import hashlib
 import os
 import re
 import tempfile
+from datetime import UTC, datetime
 
 import boto3
 from botocore.config import Config
 
 KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
+
+
+def utc_stamp(started_at_us):
+    epoch_ms = started_at_us // 1000
+    seconds, ms = divmod(epoch_ms, 1000)
+    return datetime.fromtimestamp(seconds, UTC).strftime("%Y%m%dT%H%M%S") + f"{ms:03d}Z", epoch_ms
 
 
 class ArtifactStore:

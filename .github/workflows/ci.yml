@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, "fix/typed-pairing-20261102", "fix/public-access-revocation-20261103", "fix/web-login-20261103", "feat/app-four-languages-20261103", "fix/gateway-removal-20261103", "feat/direct-raw400-20261103", "feat/direct-demand-live-20261103"]
+    branches: [main, develop, "fix/typed-pairing-20261102", "fix/public-access-revocation-20261103", "fix/web-login-20261103", "feat/app-four-languages-20261103", "fix/gateway-removal-20261103", "feat/direct-raw400-20261103", "feat/direct-demand-live-20261103", "feat/recording-time-20261103"]
   pull_request:
     branches: [main, develop, "fix/public-api-bounds-develop-20261102"]
 

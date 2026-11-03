@@ -965,6 +965,25 @@
     "m0825": "Anteprima: 12,5 valori al secondo, mV nominali. La registrazione originale continua indipendentemente.",
     "m0826": "Gli indicatori sono visibili agli utenti autorizzati per tre minuti. Nessuna esportazione.",
     "m0827": "5 minuti",
-    "m0828": "mV"
+    "m0828": "mV",
+    "m0829": "Dettagli temporali e integrità",
+    "m0830": "Ora di registrazione incerta: riferimento temporale mancante o incompleto.",
+    "m0831": "Riferimento temporale e frequenza di campionamento nominale",
+    "m0832": "La precisione temporale non è stata verificata indipendentemente.",
+    "m0833": "Sessione: {value0}",
+    "m0834": "Primo campione: {value0}",
+    "m0835": "SHA-256: {value0}",
+    "m0836": "Integrità del file e precisione temporale sono verifiche separate.",
+    "m0837": "Ora di registrazione e copertura dei dati",
+    "m0838": "Registrazione: {value0} – {value1}",
+    "m0839": "Ora di registrazione non disponibile",
+    "m0840": "Fuso orario: {value0}",
+    "m0841": "La finestra temporale visualizzata è incompleta",
+    "m0842": "Intervalli temporali sovrapposti: copertura non verificata.",
+    "m0843": "Copertura dei dati dell’anteprima: {value0} %",
+    "m0844": "Copertura dei dati non verificata",
+    "m0845": "Intervalli temporali mancanti: {value0}",
+    "m0846": "La copertura dell’anteprima non certifica una registrazione grezza completa.",
+    "m0847": "L’ora di ricezione è indicata separatamente nello stato del dispositivo."
   }
 }
