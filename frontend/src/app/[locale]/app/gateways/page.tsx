@@ -1,13 +1,15 @@
 'use client';
 
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppText } from '@/i18n/app-text';
+import { useGatewayRemoval } from '@/hooks/useGatewayRemoval';
+import RemoveGatewayDialog, { GatewayRemovalNotice } from '@/components/RemoveGatewayDialog';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   apiListGateways,
   apiListZones,
   apiGeneratePairingCode,
-  apiDeleteGateway,
   gatewayHasWavIssue,
   GatewayInfo,
   Zone,
@@ -16,6 +18,10 @@ import {
 
 export default function GatewaysPage() {
   const tx = useAppText();
+  const removedIds = useRef(new Set<string>());
+  const { user } = useAuth();
+  const canManage = user?.role === 'owner' || user?.role === 'admin';
+  const [loadError, setLoadError] = useState(false);
 
   const [gateways, setGateways] = useState<GatewayInfo[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -27,25 +33,31 @@ export default function GatewaysPage() {
   const [pairingCode, setPairingCode] = useState<PairingCode | null>(null);
   const [generating, setGenerating] = useState(false);
 
-  // Deletion
-  const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    loadData();
+  const refreshData = useCallback(async () => {
+    const [gws, zs] = await Promise.all([apiListGateways(), apiListZones()]);
+    setGateways(gws.filter((gateway) => !removedIds.current.has(gateway.id)));
+    setZones(zs);
+    setLoadError(false);
   }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const [gws, zs] = await Promise.all([apiListGateways(), apiListZones()]);
-      setGateways(gws);
-      setZones(zs);
-    } catch (err) {
-      console.error(err);
+      await refreshData();
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshData]);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+  const removal = useGatewayRemoval({
+    onRemoved: (id) => {
+      removedIds.current.add(id);
+      setGateways((previous) => previous.filter((gateway) => gateway.id !== id));
+    },
+    refresh: refreshData,
+  });
 
   const handleGenerateCode = async () => {
     if (!selectedZone) return;
@@ -57,20 +69,6 @@ export default function GatewaysPage() {
       console.error(err);
     } finally {
       setGenerating(false);
-    }
-  };
-
-  const confirmDeleteGateway = async () => {
-    if (!deletingGatewayId) return;
-    setIsDeleting(true);
-    try {
-      await apiDeleteGateway(deletingGatewayId);
-      setGateways((prev) => prev.filter((g) => g.id !== deletingGatewayId));
-      setDeletingGatewayId(null);
-    } catch (err) {
-      console.error('Failed to delete gateway:', err);
-    } finally {
-      setIsDeleting(false);
     }
   };
 
@@ -95,13 +93,22 @@ export default function GatewaysPage() {
             setShowPairing(true);
             setPairingCode(null);
           }}
-          disabled={zones.length === 0}
+          disabled={zones.length === 0 || !canManage}
           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
           {tx('+ Gateway pairen')}
         </button>
       </div>
 
+      <GatewayRemovalNotice notice={removal.notice} busy={removal.busy} onRetry={removal.retry} />
+      {loadError && (
+        <p role="alert">
+          {tx(
+            'Deine Daten konnten nicht geladen werden. Bitte prüfe die Verbindung und versuche es erneut.'
+          )}{' '}
+          <button onClick={() => void loadData()}>{tx('Erneut laden')}</button>
+        </p>
+      )}
       {/* Pairing Modal */}
       {showPairing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
@@ -208,23 +215,6 @@ export default function GatewaysPage() {
                   />
                   {tx.status(gw.status)}
                 </span>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setDeletingGatewayId(gw.id);
-                  }}
-                  className="ml-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
-                  title={tx('Gateway entfernen')}
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
               </div>
 
               {gatewayHasWavIssue(gw) && (
@@ -260,55 +250,44 @@ export default function GatewaysPage() {
                   {new Date(gw.last_seen).toLocaleString(tx.locale)}
                 </p>
               )}
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    removal.begin(gw);
+                  }}
+                  disabled={!canManage || removal.busy}
+                  className="ml-2 flex items-center gap-1 p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label={tx('Gateway entfernen')}
+                  title={
+                    canManage
+                      ? tx('Gateway entfernen')
+                      : tx('Keine Berechtigung für diesen Vorgang.')
+                  }
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                  <span>{tx('Gateway entfernen')}</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Delete Gateway Confirmation Modal */}
-      {deletingGatewayId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-            onClick={() => setDeletingGatewayId(null)}
-          />
-          <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
-            <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
-              {tx('Gateway entfernen?')}
-            </h3>
-            <p className="text-sm text-center text-gray-500 mb-6">
-              {tx(
-                'Damit wird auch die Verbindung aller zugehörigen Sensoren getrennt. Die Sensordaten werden ebenfalls gelöscht.'
-              )}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeletingGatewayId(null)}
-                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-              >
-                {tx('Abbrechen')}
-              </button>
-              <button
-                onClick={confirmDeleteGateway}
-                disabled={isDeleting}
-                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? tx('Lösche…') : tx('Löschen')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RemoveGatewayDialog
+        gateway={removal.target}
+        busy={removal.busy}
+        error={removal.error}
+        onCancel={removal.cancel}
+        onConfirm={removal.confirm}
+      />
     </div>
   );
 }

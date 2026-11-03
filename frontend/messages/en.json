@@ -934,6 +934,11 @@
     "m0794": "Email not verified: no access.",
     "m0795": "No company assigned: no zone access.",
     "m0796": "All current and future zones of this company.",
-    "m0797": "Only explicitly shared zones of this company."
+    "m0797": "Only explicitly shared zones of this company.",
+    "m0798": "Disconnected",
+    "m0799": "Removing…",
+    "m0800": "The gateway will be deactivated and its access revoked. Sensors will be shown as disconnected. Measurements, recordings and assignments will be retained.",
+    "m0801": "Gateway removed. Measurements and assignments have been retained.",
+    "m0802": "Gateway removed. The view could not be refreshed. Please reload."
   }
 }

@@ -9,6 +9,7 @@ const keys: Record<string, string> = messageKeys;
 const statuses: Record<string, string> = {
   online: 'Online',
   offline: 'Offline',
+  disconnected: 'Getrennt',
   active: 'Aktiv',
   disabled: 'Deaktiviert',
   inactive: 'Inaktiv',

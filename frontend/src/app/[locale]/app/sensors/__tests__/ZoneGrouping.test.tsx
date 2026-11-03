@@ -1,4 +1,4 @@
-import { apiGetSensorDataAdvanced } from '@/lib/api';
+import { apiGetSensorDataAdvanced, apiListSensors } from '@/lib/api';
 import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import SensorsPage from '../page';
 
@@ -118,4 +118,33 @@ test('does not restore a sensor outside permitted zones', async () => {
   expect(new URLSearchParams(window.location.search).get('zone')).toBeNull();
   expect(new URLSearchParams(window.location.search).get('range')).toBeNull();
   expect(screen.queryByText('Geheimer Sensor')).not.toBeInTheDocument();
+});
+
+test('keeps a disconnected old sensor visible and its historical measurements accessible', async () => {
+  jest.mocked(apiListSensors).mockResolvedValueOnce([
+    {
+      id: 'retained-sensor',
+      zone_id: 'peter',
+      gateway_id: 'removed-gateway',
+      gateway_name: 'Retained gateway',
+      name: 'Retained sensor',
+      mac_address: 'DD',
+      status: 'disconnected',
+      last_seen: '2020-01-01T00:00:00Z',
+    },
+  ] as Awaited<ReturnType<typeof apiListSensors>>);
+  render(<SensorsPage />);
+  const zone = await screen.findByRole('region', { name: 'Peter Büro' });
+  fireEvent.click(within(zone).getByRole('button', { name: /Peter Büro/ }));
+  const retained = within(zone).getByRole('button', { name: /Retained sensor/ });
+  expect(retained).toHaveTextContent('Getrennt');
+  expect(retained).not.toHaveTextContent('Inaktiv (>3 Tage)');
+  fireEvent.click(retained);
+  await waitFor(() =>
+    expect(apiGetSensorDataAdvanced).toHaveBeenCalledWith(
+      'retained-sensor',
+      expect.objectContaining({ range: '24h' })
+    )
+  );
+  expect(screen.getByRole('button', { name: '24 Stunden' })).toBeInTheDocument();
 });

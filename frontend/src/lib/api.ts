@@ -257,8 +257,14 @@ export async function apiListGateways(zone_id?: string): Promise<GatewayInfo[]> 
   return apiFetch<GatewayInfo[]>('/gateways', { params });
 }
 
+export async function apiRemoveGateway(gatewayId: string): Promise<void> {
+  // Never fall back to the legacy DELETE on an older, destructive server.
+  return apiFetch<void>(`/gateways/${gatewayId}/remove`, { method: 'POST' });
+}
+
+/** Compatibility for existing imports; the new client always uses safe removal. */
 export async function apiDeleteGateway(gatewayId: string): Promise<void> {
-  return apiFetch<void>(`/gateways/${gatewayId}`, { method: 'DELETE' });
+  return apiRemoveGateway(gatewayId);
 }
 
 export async function apiGeneratePairingCode(zone_id: string): Promise<PairingCode> {
