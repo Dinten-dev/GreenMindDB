@@ -1,0 +1,109 @@
+{
+  "format": "greenmind.public-ram-reduction-assessment.v1",
+  "observed_utc": "2026-11-03T19:16:57.202347+00:00",
+  "assessment_only": true,
+  "services_stopped": 0,
+  "source_available_bytes": 917647360,
+  "source_restore_admission_bytes": 939524096,
+  "source_running_floor_bytes": 738197504,
+  "source_candidates": [
+    {
+      "name": "gm-admin-production-1b449e9-application-1",
+      "charged_bytes": 2252800,
+      "anon_bytes": 1101824,
+      "file_bytes": 0,
+      "swap_bytes": 93024256
+    },
+    {
+      "name": "gm-admin-production-e148f83-application-1",
+      "charged_bytes": 2297856,
+      "anon_bytes": 1159168,
+      "file_bytes": 0,
+      "swap_bytes": 93163520
+    },
+    {
+      "name": "gm-zones-production-2e687bec010a-application-1",
+      "charged_bytes": 12296192,
+      "anon_bytes": 10887168,
+      "file_bytes": 40960,
+      "swap_bytes": 107794432
+    },
+    {
+      "name": "greenminddb-retention-worker-1",
+      "charged_bytes": 921600,
+      "anon_bytes": 0,
+      "file_bytes": 0,
+      "swap_bytes": 65785856
+    }
+  ],
+  "source_candidate_evidence": "No declared Nginx destination for the three older backend ports in the freshly unchanged complete disk configuration. No explicit HTTP environment edge to these candidates was found in running containers. Retention worker has RETENTION_ENABLED=false and RETENTION_DRY_RUN=true.",
+  "source_candidate_qualification": "Candidates for a reversible staged pause, not conclusively unused. All indirect callers, cron jobs and in-memory Nginx configuration are not independently attested. Validate affected functions and resume on regression.",
+  "source_small_candidate_charged_sum_bytes": 17768448,
+  "source_small_candidate_swap_sum_bytes": 359768064,
+  "source_available_plus_all_small_candidate_charges_bytes_not_guaranteed": 935415808,
+  "temporary_processing_pause_options": [
+    {
+      "name": "greenminddb-feature-worker-1",
+      "charged_bytes": 48160768,
+      "anon_bytes": 40255488,
+      "file_bytes": 4505600,
+      "swap_bytes": 92995584
+    },
+    {
+      "name": "gm-reference-projection-thischat-20261012",
+      "charged_bytes": 80900096,
+      "anon_bytes": 79437824,
+      "file_bytes": 450560,
+      "swap_bytes": 66109440
+    }
+  ],
+  "temporary_processing_pause_charged_sum_bytes": 129060864,
+  "processing_pause_conditions": [
+    "These are required production processors, not duplicates.",
+    "Gracefully finish the current operation; prove durable pending work and replay before pausing.",
+    "Keep reception, source storage and archive/offload running.",
+    "Feature/dashboard updates pause; backlog grows. Resume and verify backlog recovery after the bounded test.",
+    "No pause has been performed or accepted by this assessment."
+  ],
+  "archive_old_frontend_candidates": [
+    {
+      "name": "gm-staging-frontend-1",
+      "charged_bytes": 70172672,
+      "anon_bytes": 66191360,
+      "file_bytes": 1232896,
+      "swap_bytes": 0
+    },
+    {
+      "name": "gm-release-staging-61cce4e17f45-dadc4c-frontend-1",
+      "charged_bytes": 51249152,
+      "anon_bytes": 48893952,
+      "file_bytes": 0,
+      "swap_bytes": 0
+    }
+  ],
+  "archive_candidate_charged_sum_bytes": 121421824,
+  "archive_effect_on_source_ram_bytes": 0,
+  "archive_conditions": "Older frontend destinations absent from the inspected Nginx configuration; internal/private/test callers and concurrent staging work still require checking. Production frontend and restore/staging database are excluded.",
+  "must_keep": [
+    "Source PostgreSQL/TimescaleDB and MinIO",
+    "Gateway receiver and HPK Biolingo field ingestion",
+    "Both production Direct APIs: pairing/device administration versus chunk ingestion",
+    "Direct assembler/offloader and required dashboard dependencies",
+    "Current production admin backend",
+    "Base backend: firmware hostname and declared Direct dashboard dependencies",
+    "Production frontend, archive API/broker, tunnels and PgBouncer"
+  ],
+  "interpretation": [
+    "Charged memory includes page cache and kernel charges. It is not an equal guaranteed increase in MemAvailable.",
+    "Swap bytes are not currently resident RAM and must not be added to immediate RAM savings.",
+    "PostgreSQL and MinIO are large but required stores; cache is not proof of waste.",
+    "No removal, restart-policy change or cache dropping is proposed.",
+    "RAM freed on the separate Archive machine does not help Source admission.",
+    "A passing RAM sample would not complete all remaining step 3 disk, throughput and restore proofs."
+  ],
+  "evidence": {
+    "source": "82a570961c5d88ddc8a35a0789bc9aeb5cb84e9ba2ff81d09e980fc871e5c791",
+    "archive": "ac0b5a1a0e5452ed1ca0d5177c6e0bf6233049250fcdd305e609086e95a86e2e",
+    "nginx": "45d67c5cdeefcab2d07f8141a0c958edc588c48c26cb829010dec0769a206fcd"
+  }
+}
