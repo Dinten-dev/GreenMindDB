@@ -74,7 +74,8 @@ def part_names(row):
 
 
 class ExportStore:
-    def __init__(self, path):
+    def __init__(self, path, *, total_limit=None, user_limit=None):
+        self.total_limit, self.user_limit = total_limit, user_limit
         self.path = Path(path)
         for key in ("RAW_ARCHIVE_STATE_DIR", "DIRECT_ARTIFACT_ROOT", "VISUAL_ARCHIVE_DIR"):
             value = os.getenv(key)
@@ -153,12 +154,14 @@ class ExportStore:
             os.close(fd)
             return None
 
-    def scratch_path(self, identity):
+    def scratch_path(self, identity, db):
         safe_job(identity)
         if self.scratch is None:
             self.scratch = self.directory(".scratch")
+        created = False
         try:
             os.mkdir(identity, 0o700, dir_fd=self.scratch)
+            created = True
         except FileExistsError:
             pass
         fd = os.open(identity, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.scratch)
@@ -166,6 +169,15 @@ class ExportStore:
         os.close(fd)
         if info.st_uid != os.getuid() or info.st_mode & 0o077:
             raise ExportStorageError("Unsafe export scratch")
+        if created:
+            with db:
+                db.execute(
+                    "INSERT OR REPLACE INTO export_dirs VALUES (?,?,?)",
+                    (identity, info.st_dev, info.st_ino),
+                )
+        row = db.execute("SELECT * FROM export_dirs WHERE job_id=?", (identity,)).fetchone()
+        if not row or (row["device"], row["inode"]) != (info.st_dev, info.st_ino):
+            raise ExportStorageError("Unattributed export scratch")
         return self.path / ".scratch" / identity
 
     def inventory(self):
@@ -211,25 +223,83 @@ class ExportStore:
     def budget(self, db, *, incoming=None, growing=None, additional=0):
         usage = self.inventory()
         users = {}
-        for row in db.execute("SELECT * FROM jobs"):
+        for row in db.execute(
+            "SELECT id,user_id,status,CASE WHEN status IN ('queued','working','cancelled') THEN items ELSE '[]' END AS items FROM jobs"
+        ):
             actual = usage.pop(row["id"], 0)
             if growing == row["id"]:
                 actual += additional
-            amount = (
-                max(actual, reservation(json.loads(row["items"])))
-                if row["status"] in {"queued", "working"}
-                else actual
-            )
+            reserved = row["status"] in {"queued", "working"}
+            if row["status"] == "cancelled":
+                lock = self.acquire_job(row["id"])
+                reserved = lock is None
+                if lock is not None:
+                    os.close(lock)
+            amount = max(actual, reservation(json.loads(row["items"]))) if reserved else actual
             users[row["user_id"]] = users.get(row["user_id"], 0) + amount
         if incoming:
             user, items = incoming
             users[user] = users.get(user, 0) + reservation(items)
-        if sum(users.values()) + sum(usage.values()) > GLOBAL_BYTES or any(
-            v > USER_BYTES for v in users.values()
+        if sum(users.values()) + sum(usage.values()) > (
+            GLOBAL_BYTES if self.total_limit is None else self.total_limit
+        ) or any(
+            v > (USER_BYTES if self.user_limit is None else self.user_limit) for v in users.values()
         ):
             raise ExportQuota("Retained export storage limit reached")
 
-    def unlink(self, name):
+    def register(self, db, name):
+        match = COPY.fullmatch(name)
+        if not match:
+            raise ExportStorageError("Invalid generated copy name")
+        info = os.stat(name, dir_fd=self.fd, follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise ExportStorageError("Unsafe generated copy")
+        with db:
+            db.execute(
+                "INSERT INTO export_files(name,job_id,device,inode) VALUES (?,?,?,?)",
+                (name, match[1], info.st_dev, info.st_ino),
+            )
+
+    def known_files(self, db, row):
+        # Persisted ZIP references are positive legacy provenance; an unrelated
+        # UUID-shaped filename by itself is never permission to unlink it.
+        names = part_names(row) if "parts" in row.keys() else set()
+        for item in db.execute("SELECT * FROM export_files WHERE job_id=?", (row["id"],)):
+            try:
+                info = os.stat(item["name"], dir_fd=self.fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (
+                item["device"],
+                item["inode"],
+            ):
+                raise ExportStorageError("Generated copy identity changed")
+            names.add(item["name"])
+        proofs = set()
+        for name in names:
+            try:
+                info = os.stat(name, dir_fd=self.fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                raise ExportStorageError("Unsafe retained export part")
+            proofs.add((info.st_dev, info.st_ino))
+        # A crash after link but before the name commit leaves another link to
+        # an already journaled generated inode, not an arbitrary foreign file.
+        for name in os.listdir(self.fd):
+            match = COPY.fullmatch(name)
+            if match and match[1] == row["id"]:
+                info = os.stat(name, dir_fd=self.fd, follow_symlinks=False)
+                if stat.S_ISREG(info.st_mode) and (info.st_dev, info.st_ino) in proofs:
+                    with db:
+                        db.execute(
+                            "INSERT OR IGNORE INTO export_files VALUES (?,?,?,?)",
+                            (name, row["id"], info.st_dev, info.st_ino),
+                        )
+                    names.add(name)
+        return names
+
+    def unlink(self, name, db):
         if not COPY.fullmatch(name):
             raise ExportStorageError("Only generated export copies may be removed")
         try:
@@ -238,10 +308,15 @@ class ExportStore:
             return 0
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
             raise ExportStorageError("Unsafe generated export copy")
+        row = db.execute("SELECT * FROM jobs WHERE id=?", (COPY.fullmatch(name)[1],)).fetchone()
+        if name not in self.known_files(db, row or {"id": COPY.fullmatch(name)[1]}):
+            raise ExportStorageError("Unattributed file must be reviewed, never guessed")
         os.unlink(name, dir_fd=self.fd)
+        with db:
+            db.execute("DELETE FROM export_files WHERE name=?", (name,))
         return 1
 
-    def clear_scratch(self, identity):
+    def clear_scratch(self, identity, db):
         safe_job(identity)
         try:
             parent = os.open(
@@ -275,53 +350,37 @@ class ExportStore:
             except FileNotFoundError:
                 return
             try:
+                row = db.execute("SELECT * FROM export_dirs WHERE job_id=?", (identity,)).fetchone()
+                info = os.fstat(fd)
+                if not row or (row["device"], row["inode"]) != (info.st_dev, info.st_ino):
+                    raise ExportStorageError("Unattributed scratch retained for review")
                 clear(fd)
             finally:
                 os.close(fd)
             os.rmdir(identity, dir_fd=parent)
+            with db:
+                db.execute("DELETE FROM export_dirs WHERE job_id=?", (identity,))
         finally:
             os.close(parent)
 
-    def clean_job(self, row, *, keep=()):
+    def clean_job(self, row, db, *, keep=()):
         identity = safe_job(row["id"])
         deleted = 0
-        for name in os.listdir(self.fd):
-            match = COPY.fullmatch(name)
-            if match and match[1] == identity and name not in keep:
-                deleted += self.unlink(name)
-        self.clear_scratch(identity)
+        for name in self.known_files(db, row):
+            if name not in keep:
+                deleted += self.unlink(name, db)
+        self.clear_scratch(identity, db)
         return deleted
 
     def reap(self, db, *, now=None):
         now = time.time() if now is None else now
         deleted = 0
-        rows = {row["id"]: row for row in db.execute("SELECT * FROM jobs")}
+        rows = {row["id"]: row for row in db.execute("SELECT id,created,status,parts FROM jobs")}
         identities = set(rows)
-        for name in os.listdir(self.fd):
-            match = COPY.fullmatch(name)
-            if (
-                match
-                and os.stat(name, dir_fd=self.fd, follow_symlinks=False).st_mtime
-                <= now - ORPHAN_SECONDS
-            ):
-                identities.add(match[1])
-        try:
-            scratch = os.open(
-                ".scratch", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.fd
-            )
-        except FileNotFoundError:
-            scratch = None
-        if scratch is not None:
-            try:
-                for name in os.listdir(scratch):
-                    if (
-                        re.fullmatch(UUID, name)
-                        and os.stat(name, dir_fd=scratch, follow_symlinks=False).st_mtime
-                        <= now - ORPHAN_SECONDS
-                    ):
-                        identities.add(name)
-            finally:
-                os.close(scratch)
+        for record in db.execute(
+            "SELECT job_id FROM export_files UNION SELECT job_id FROM export_dirs"
+        ):
+            identities.add(record[0])
         for identity in sorted(identities):
             safe_job(identity)
             lock = self.acquire_job(identity)
@@ -331,14 +390,14 @@ class ExportStore:
                 row = rows.get(identity)
                 expired = row is not None and row["created"] + EXPIRES <= now
                 if row is None or expired or row["status"] in {"failed", "cancelled", "expired"}:
-                    deleted += self.clean_job(row or {"id": identity})
+                    deleted += self.clean_job(row or {"id": identity}, db)
                     if row:
                         db.execute(
                             "UPDATE jobs SET status=?,parts='[]',completed=0 WHERE id=?",
                             ("expired" if expired else row["status"], identity),
                         )
                 else:
-                    deleted += self.clean_job(row, keep=part_names(row))
+                    deleted += self.clean_job(row, db, keep=part_names(row))
                     if row["status"] == "working":
                         db.execute("UPDATE jobs SET status='queued' WHERE id=?", (identity,))
             finally:
@@ -351,7 +410,7 @@ def reservation(items):
     # ZIP overhead + one raw spool and one verified archive-fallback copy.
     return (
         sum(i["size"] for i in items)
-        + 2 * max((i["size"] for i in items), default=0)
+        + 3 * max((i["size"] for i in items), default=0)
         + len(items) * 4096
         + 1024**2
     )

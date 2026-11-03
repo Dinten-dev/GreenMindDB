@@ -17,7 +17,7 @@ including the archive-host wrapper and Docker dispatcher. The existing timer
 can therefore clean expired ready jobs even when there is no new export.
 Expiration remains 24 hours after job creation. Failed/cancelled copies are
 eligible immediately; unreferenced UUID export copies without a job have a
-five-minute age guard. Unknown files, original WAV files and restoration proof
+positive provenance journal; a UUID filename alone never authorizes deletion. Unknown files, original WAV files and restoration proof
 JSON are preserved. Job history/schema are retained.
 
 ## Locks and downloads
@@ -43,21 +43,23 @@ merges; older checkpoint schemas remain compatible.
 Admission and writes count all files retained under the private export root,
 including ready/failed/cancelled copies, raw spools, ZIP metadata, unreferenced
 files and SQLite metadata. Hardlinks are counted conservatively. Queued/working
-jobs reserve output, ZIP overhead and up to two source-sized temporary copies.
+jobs reserve output, ZIP overhead and up to three source-sized temporary copies, including broker readback. A cancelled
+job retains its reservation while the worker still holds its lease.
 Limits are 8 GiB total and 4 GiB per user; the existing two-open-job and bounded
 input limits remain. All write checks and admission decisions share the lock.
 
 New archive-read fallback copies are scoped to `.scratch/{job-id}` inside the
-export root, counted in the same budget and cleaned with that job. Other archive
-readers retain their existing scratch behavior. Legacy/unattributed scratch
-outside the export root is never guessed or automatically removed: inventory it
+export root, counted in the same budget and cleaned with that job. Export reads use a separate private broker operation with its own tracked
+`export-copies` root, a 320 MiB budget and crash reaping at startup/next read.
+Other archive readers retain their existing scratch behavior. Legacy/unattributed scratch
+outside the tracked roots is never guessed or automatically removed: inventory it
 separately during the controlled cutover. No claim of production disk cleanup
 is made by this repository patch.
 
 The root must be an existing private, owned, canonical directory. It must not
 overlap configured original/Direct/visual archive storage. Cleanup uses directory
-descriptors and no-follow checks, only recognized generated UUID names and job
-scratch. Symlinks/special files fail closed. It never calls object deletion,
+descriptors and no-follow checks, persisted file/directory inode provenance and
+legacy persisted ZIP references. A matching filename alone never suffices. Symlinks/special files fail closed. It never calls object deletion,
 enables original retention, follows archive paths or removes unknown evidence.
 
 ## Controlled introduction
@@ -71,7 +73,9 @@ enables original retention, follows archive paths or removes unknown evidence.
    export feature disabled until private-directory/lock/ownership checks pass.
 5. Exercise Gateway and Direct ZIP verification, pause/resume, cancellation,
    expiry, Range/disconnect and quotas before enabling only the approved export
-   schedule. Original retention/deletion flags remain disabled.
+   schedule. Original retention/deletion flags remain disabled. The fixed root Docker
+   dispatcher delegates reaping to the actual state-directory UID/GID with a
+   minimal environment; it never creates root-owned worker metadata.
 
 Rollback requires stopping all new participants first. Do not run old workers
 alongside new cleanup. This task does not perform deployment, enable schedules,
@@ -85,3 +89,12 @@ active ASGI downloads/disconnects, Range and concurrent admission. Existing ZIP
 hash/resume, Gateway/Direct fallback, real broker socket and checkpoint tests
 remain. Entrypoint tests cover empty queues and compile deployment scripts
 without executing their privileged operations.
+
+Existing unregistered legacy partial copies require a reviewed inventory of
+exact filenames, byte sizes, SHA256 digests and `generated_export_copy: true`.
+`python -m app.visualization.archive_export_reap --state <private-root>
+--adopt-reviewed <inventory.json>` validates that proof before journal admission
+and cleanup. It is an explicit maintenance action, never automatic guessing.
+Without that proof, even old UUID-shaped foreign files remain unchanged and
+count toward the storage limit. The existing jobs table is unchanged; new
+private provenance tables track only generated file/directory inode identities.

@@ -56,3 +56,29 @@ def test_deployment_scripts_compile_without_executing_privileged_operations():
     ):
         path = root / name
         compile(path.read_text(), str(path), "exec")
+
+
+def test_root_dispatcher_delegates_cleanup_to_state_owner(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    from types import SimpleNamespace
+
+    script = (
+        Path(__file__).resolve().parents[3] / "deploy/raw-archive/acceptance/dispatch-export.py"
+    )
+    module = runpy.run_path(str(script))
+    calls = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+
+    class State:
+        def stat(self, **kwargs):
+            return SimpleNamespace(st_uid=996, st_gid=986)
+
+        def __str__(self):
+            return str(tmp_path)
+
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
+    module["reap_as_owner"](State())
+    assert calls[0][1]["user"] == 996 and calls[0][1]["group"] == 986
+    assert calls[0][1]["extra_groups"] == []
+    assert set(calls[0][1]["env"]) == {"PATH", "PYTHONPATH", "PYTHONDONTWRITEBYTECODE"}

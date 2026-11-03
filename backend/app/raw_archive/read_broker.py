@@ -8,6 +8,7 @@ import socket
 import socketserver
 import stat
 import struct
+from contextlib import nullcontext
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from threading import BoundedSemaphore
@@ -179,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(payload)
                 return
-            if self.path not in {"/available", "/read"}:
+            if self.path not in {"/available", "/read", "/read-export"}:
                 raise ArchiveBlocked("Unsupported operation")
             kind, bucket, keys = validate(data, listing=self.path == "/available")
             if self.path == "/available":
@@ -193,22 +194,30 @@ class Handler(BaseHTTPRequestHandler):
             if not acquired:
                 raise ArchiveBlocked("Read concurrency exhausted")
             self.server.health_check()
-            with archived_file(
-                self.server.config,
-                self.server.destination,
-                kind=kind,
-                bucket=bucket,
-                key=keys[0],
-                scratch=self.server.scratch,
-            ) as path:
-                self.server.health_check()
-                self.send_response(200)
-                self.send_header("Content-Length", str(path.stat().st_size))
-                self.send_header("X-Content-SHA256", checksum(path))
-                self.end_headers()
-                with path.open("rb") as source:
-                    while block := source.read(64 * 1024):
-                        self.wfile.write(block)
+            from .export_restore import managed_export_scratch
+
+            context = (
+                managed_export_scratch(self.server.scratch)
+                if self.path == "/read-export"
+                else nullcontext(self.server.scratch)
+            )
+            with context as export_folder:
+                with archived_file(
+                    self.server.config,
+                    self.server.destination,
+                    kind=kind,
+                    bucket=bucket,
+                    key=keys[0],
+                    scratch=export_folder,
+                ) as path:
+                    self.server.health_check()
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(path.stat().st_size))
+                    self.send_header("X-Content-SHA256", checksum(path))
+                    self.end_headers()
+                    with path.open("rb") as source:
+                        while block := source.read(64 * 1024):
+                            self.wfile.write(block)
         except Exception:
             # No exception text: downstream SSH/SQLite errors may contain private paths.
             try:
@@ -228,6 +237,9 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
         pass  # Do not log request identities or private storage exceptions.
 
     def __init__(self, path, config, destination, scratch, *, health_check=None):
+        from .export_restore import reap_broker_exports
+
+        reap_broker_exports(scratch)
         self.config, self.destination, self.scratch = config, destination, scratch
         self.health_check = health_check or healthy
         self.read_slot = BoundedSemaphore(1)

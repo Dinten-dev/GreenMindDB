@@ -41,4 +41,8 @@ def connect(path):
       sensor_id TEXT NOT NULL, created REAL NOT NULL, status TEXT NOT NULL,
       items TEXT NOT NULL, parts TEXT NOT NULL DEFAULT '[]',
       completed INTEGER NOT NULL DEFAULT 0, error TEXT)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS export_files (
+      name TEXT PRIMARY KEY, job_id TEXT NOT NULL, device INTEGER NOT NULL, inode INTEGER NOT NULL)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS export_dirs (
+      job_id TEXT PRIMARY KEY, device INTEGER NOT NULL, inode INTEGER NOT NULL)""")
     return db

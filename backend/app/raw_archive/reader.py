@@ -106,7 +106,14 @@ def restore_object(*, kind, bucket, key):
         if os.environ.get("RAW_ARCHIVE_READ_BROKER_SOCKET"):
             from .broker_client import restore
 
-            path = restore(resources, kind=kind, bucket=bucket, key=key, scratch=scratch)
+            path = restore(
+                resources,
+                kind=kind,
+                bucket=bucket,
+                key=key,
+                scratch=scratch,
+                export=_export_scratch.get() is not None,
+            )
         else:
             path = resources.enter_context(
                 archived_file(

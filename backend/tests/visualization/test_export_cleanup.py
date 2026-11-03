@@ -78,6 +78,7 @@ def test_ready_before_expiry_and_resumable_parts_survive(tmp_path):
     partial = tmp_path / (job["id"] + "-000.part")
     partial.write_bytes(b"incomplete")
     with ExportStore(tmp_path) as store, store.locked():
+        store.register(db, partial.name)
         store.reap(db)
     assert (tmp_path / name).read_bytes() == b"export copy"
     assert not partial.exists()
@@ -103,6 +104,10 @@ def test_orphan_copies_require_age_and_keep_unknown_files(tmp_path):
     unrelated.write_bytes(b"unattributed")
     os.utime(old, (time.time() - 1000,) * 2)
     with ExportStore(tmp_path) as store, store.locked():
+        assert store.reap(db) == 0
+        assert old.read_bytes() == b"old generated copy"
+        # Explicitly journal known generated provenance, not a name heuristic.
+        store.register(db, old.name)
         assert store.reap(db) == 1
     assert not old.exists() and fresh.exists()
     assert unrelated.read_bytes() == b"unattributed"
@@ -298,7 +303,7 @@ def test_snapshot_ignores_only_ephemeral_locks_and_scratch(tmp_path):
     db, job, name = recent_job(tmp_path)
     with ExportStore(tmp_path) as store, store.locked():
         lock = store.acquire_job(job["id"])
-        scratch = store.scratch_path(job["id"])
+        scratch = store.scratch_path(job["id"], db)
         (scratch / "verified.wav").write_bytes(b"incomplete export restore")
     import os
 
@@ -481,3 +486,147 @@ def test_failures_leave_no_raw_or_zip_copies(tmp_path, monkeypatch, point):
     )
     assert source_canary.read_bytes() == b"original never modified"
     db.close()
+
+
+def test_uuid_shaped_foreign_evidence_without_provenance_is_preserved(tmp_path):
+    import os
+    import uuid
+
+    from app.visualization.archive_export_storage import ExportStore
+    from app.visualization.archive_jobs import connect
+
+    db = connect(tmp_path)
+    path = tmp_path / f"{uuid.uuid4()}-000.zip"
+    path.write_bytes(b"unrelated preserved evidence")
+    os.utime(path, (0, 0))
+    with ExportStore(tmp_path) as store, store.locked():
+        assert store.reap(db) == 0
+    assert path.read_bytes() == b"unrelated preserved evidence"
+    db.close()
+
+
+def test_cancellation_keeps_active_worker_reservation(tmp_path, monkeypatch):
+    import json
+    import os
+
+    from app.visualization import archive_export_storage as storage
+
+    db, job, name = recent_job(tmp_path, status="cancelled")
+    with storage.ExportStore(tmp_path) as holder, holder.locked():
+        lock = holder.acquire_job(job["id"])
+    monkeypatch.setattr(storage, "USER_BYTES", storage.reservation(json.loads(job["items"])) - 1)
+    try:
+        with storage.ExportStore(tmp_path) as contender, contender.locked():
+            with pytest.raises(storage.ExportQuota):
+                contender.budget(db, incoming=("user", []))
+    finally:
+        os.close(lock)
+    db.close()
+
+
+def _broker_copy_crash(path):
+    import os
+
+    from app.raw_archive.export_restore import managed_export_scratch
+
+    with managed_export_scratch(path) as scratch:
+        (scratch / "verified.wav").write_bytes(b"interrupted broker export copy")
+        os._exit(0)
+
+
+def test_broker_crash_copies_are_reaped_without_touching_other_reader_scratch(tmp_path):
+    import multiprocessing
+
+    from app.raw_archive.export_restore import reap_broker_exports
+
+    scratch = tmp_path / "broker"
+    scratch.mkdir(mode=0o700)
+    legacy = scratch / "restore-unattributed"
+    legacy.mkdir()
+    (legacy / "verified.wav").write_bytes(b"preserve unrelated reader evidence")
+    process = multiprocessing.get_context("spawn").Process(
+        target=_broker_copy_crash, args=(scratch,)
+    )
+    process.start()
+    process.join(10)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+    assert process.exitcode == 0
+    assert list((scratch / "export-copies").glob("**/verified.wav"))
+    reap_broker_exports(scratch)
+    assert not list((scratch / "export-copies").glob("**/verified.wav"))
+    assert (legacy / "verified.wav").read_bytes() == b"preserve unrelated reader evidence"
+
+
+def test_reviewed_adoption_checks_exact_bytes_before_cleanup(tmp_path):
+    import hashlib
+    import json
+    import uuid
+
+    from app.visualization.archive_export_reap import adopt_reviewed
+    from app.visualization.archive_export_storage import ExportStorageError, ExportStore
+    from app.visualization.archive_jobs import connect
+
+    name = f"{uuid.uuid4()}-000.part"
+    (tmp_path / name).write_bytes(b"reviewed generated legacy export")
+    manifest = tmp_path / "approval.json"
+    proof = [
+        {
+            "name": name,
+            "size": (tmp_path / name).stat().st_size,
+            "sha256": "0" * 64,
+            "generated_export_copy": True,
+        }
+    ]
+    manifest.write_text(json.dumps(proof))
+    with ExportStore(tmp_path) as store, store.locked(), connect(tmp_path) as db:
+        with pytest.raises(ExportStorageError):
+            adopt_reviewed(store, db, manifest)
+        assert store.reap(db) == 0 and (tmp_path / name).exists()
+        proof[0]["sha256"] = hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+        manifest.write_text(json.dumps(proof))
+        adopt_reviewed(store, db, manifest)
+        assert store.reap(db) == 1 and not (tmp_path / name).exists()
+
+
+def test_new_checkpoint_rebinds_only_verified_copy_provenance(tmp_path, monkeypatch):
+    import json
+    import shutil
+    import sqlite3
+
+    from app.raw_archive.export_checkpoint import digest, restore
+    from app.visualization.archive_export_storage import ExportStore
+    from app.visualization.archive_jobs import EXPIRES, connect
+
+    original = tmp_path / "original"
+    original.mkdir(mode=0o700)
+    db, job = make_job(original, [b"source"])
+    configure(monkeypatch, {"wav/0": b"source"})
+    worker.make_parts(original, job, db)
+    names = json.loads(db.execute("SELECT parts FROM jobs").fetchone()[0])
+    snapshot = tmp_path / "checkpoint"
+    snapshot.mkdir(mode=0o700)
+    with sqlite3.connect(snapshot / "jobs.sqlite3") as backup:
+        db.backup(backup)
+    db.close()
+    for name in names:
+        shutil.copyfile(original / name, snapshot / name)
+    proof = {
+        "schema": 1,
+        "complete": True,
+        "originals_retained": True,
+        "deleted_files": 0,
+        "jobs": 1,
+        "files": {
+            p.name: {"bytes": p.stat().st_size, "sha256": digest(p)} for p in snapshot.iterdir()
+        },
+    }
+    manifest = snapshot / "manifest.json"
+    manifest.write_text(json.dumps(proof))
+    target = tmp_path / "restored"
+    restore(snapshot, target, digest(manifest))
+    with ExportStore(target) as store, store.locked(), connect(target) as db:
+        assert store.reap(db, now=EXPIRES + 2) == 1
+    assert all((original / name).exists() for name in names)
+    assert all((snapshot / name).exists() for name in names)

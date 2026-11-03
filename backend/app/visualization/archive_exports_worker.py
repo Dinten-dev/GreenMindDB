@@ -122,13 +122,14 @@ def _make_parts(path, job, db, store):
             check_cancelled(db, job["id"])
             os.link(active.name, finished.name, src_dir_fd=store.fd, dst_dir_fd=store.fd)
             os.fsync(store.fd)
+            store.register(db, finished.name)
             created.append(finished)
             with db:
                 db.execute(
                     "UPDATE jobs SET parts=?,completed=? WHERE id=?",
                     (json.dumps([p.name for p in created]), verified, job["id"]),
                 )
-            store.unlink(active.name)
+            store.unlink(active.name, db)
         active = None
         part += 1
         manifest = []
@@ -150,6 +151,8 @@ def _make_parts(path, job, db, store):
                 finish()
                 active = path / f"{job['id']}-{part:03d}-{uuid.uuid4().hex}.part"
                 output = active.open("xb", buffering=0)
+                with store.locked():
+                    store.register(db, active.name)
                 zipper = zipfile.ZipFile(
                     BudgetWriter(output, store, db, job["id"]),
                     "w",
@@ -164,9 +167,11 @@ def _make_parts(path, job, db, store):
             spool = path / f"{job['id']}-{uuid.uuid4().hex}.raw-part"
             body = None
             try:
-                with archive_reader.export_scratch(store.scratch_path(job["id"])):
+                with archive_reader.export_scratch(store.scratch_path(job["id"], db)):
                     body = source_for(item, gateway, direct)
                 with spool.open("xb", buffering=0) as raw:
+                    with store.locked():
+                        store.register(db, spool.name)
                     target = BudgetWriter(raw, store, db, job["id"])
                     while block := body.read(64 * 1024):
                         headroom(path)
@@ -198,8 +203,8 @@ def _make_parts(path, job, db, store):
                         body.close()
                 finally:
                     with store.locked():
-                        store.unlink(spool.name)
-                        store.clear_scratch(job["id"])
+                        store.unlink(spool.name, db)
+                        store.clear_scratch(job["id"], db)
             manifest.append({k: v for k, v in item.items() if k not in {"key", "bucket"}})
             in_part += count
             verified = index + 1
@@ -219,7 +224,7 @@ def _make_parts(path, job, db, store):
             with store.locked():
                 row = db.execute("SELECT * FROM jobs WHERE id=?", (job["id"],)).fetchone()
                 keep = part_names(row) if isinstance(error, CapacityPause) else ()
-                store.clean_job(row, keep=keep)
+                store.clean_job(row, db, keep=keep)
                 if not isinstance(error, CapacityPause):
                     with db:
                         db.execute(
@@ -297,12 +302,13 @@ def _run_once():
         lock = None
         with store.locked():
             rows = db.execute(
-                "SELECT * FROM jobs WHERE status='queued' AND created>? ORDER BY created",
+                "SELECT id FROM jobs WHERE status='queued' AND created>? ORDER BY created",
                 (time.time() - EXPIRES,),
             ).fetchall()
-            for job in rows:
-                lock = store.acquire_job(job["id"])
+            for candidate in rows:
+                lock = store.acquire_job(candidate["id"])
                 if lock is not None:
+                    job = db.execute("SELECT * FROM jobs WHERE id=?", (candidate["id"],)).fetchone()
                     break
             if lock is None:
                 return {"status": "idle"}
