@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.raw_archive import scientific_capture as capture
@@ -20,7 +21,12 @@ def metadata(tmp_path):
         ]
         for table_index, table in enumerate(capture.TABLES)
     }
-    source, proof, capture_sha = manifest(parent, native_rows)
+    _source, proof, _capture_sha = manifest(parent, native_rows)
+    finished = datetime.now(UTC) - timedelta(seconds=2)
+    proof["started_at"] = (finished - timedelta(seconds=1)).isoformat()
+    proof["finished_at"] = finished.isoformat()
+    capture_raw = (json.dumps(proof, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    capture_sha = hashlib.sha256(capture_raw).hexdigest()
     entries = []
     for table in capture.TABLES:
         offset = len(capture.HEADER)
@@ -51,6 +57,5 @@ def metadata(tmp_path):
         "parent_fk_closure_proven": False,
         "authenticated": False,
     }
-    capture_raw = (source / "capture.json").read_bytes()
     index_raw = (json.dumps(index, sort_keys=True, separators=(",", ":")) + "\n").encode()
     return capture_raw, index_raw
