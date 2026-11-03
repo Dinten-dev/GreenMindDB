@@ -1,5 +1,7 @@
 'use client';
 
+import { usePublicText } from '@/i18n/public-text';
+
 import { useState, useMemo } from 'react';
 import ScrollReveal from '@/components/ScrollReveal';
 import { RESEARCH_PAPERS, CATEGORY_OPTIONS, ResearchPaper } from '@/lib/research-data';
@@ -16,6 +18,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
 };
 
 export default function SciencePage() {
+  const tx = usePublicText();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -23,16 +26,16 @@ export default function SciencePage() {
   const filtered = useMemo(() => {
     return RESEARCH_PAPERS.filter((p: ResearchPaper) => {
       const matchesCategory = category === 'all' || p.category === category;
-      const q = search.toLowerCase();
+      const q = search.toLocaleLowerCase(tx.locale);
       const matchesSearch =
         !q ||
         p.title.toLowerCase().includes(q) ||
         p.authors.toLowerCase().includes(q) ||
         p.journal.toLowerCase().includes(q) ||
-        p.greenmindLink.toLowerCase().includes(q);
+        tx(p.greenmindLink).toLocaleLowerCase(tx.locale).includes(q);
       return matchesCategory && matchesSearch;
     });
-  }, [search, category]);
+  }, [search, category, tx]);
 
   return (
     <div className="min-h-screen">
@@ -40,10 +43,10 @@ export default function SciencePage() {
         {/* Hero */}
         <ScrollReveal>
           <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-            Science Center
+            {tx('Science Center')}
           </p>
           <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-            Die Forschung hinter
+            {tx('Die Forschung hinter')}
             <br />
             <span className="bg-gradient-to-r from-gm-green-600 to-gm-green-400 bg-clip-text text-transparent">
               GreenMind.
@@ -52,9 +55,9 @@ export default function SciencePage() {
         </ScrollReveal>
         <ScrollReveal delay={200}>
           <p className="text-xl text-apple-gray-500 max-w-2xl mb-10 md:mb-16 leading-relaxed">
-            Unsere Technologie basiert auf peer-reviewed Forschung in der
-            Pflanzenelektrophysiologie. Hier finden Sie die wissenschaftlichen Grundlagen — von
-            bioelektrischen Signalen bis zu datengestützter Stressklassifizierung.
+            {tx(
+              'Unsere Technologie basiert auf peer-reviewed Forschung in der Pflanzenelektrophysiologie. Hier finden Sie die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu datengestützter Stressklassifizierung.'
+            )}
           </p>
         </ScrollReveal>
 
@@ -78,7 +81,7 @@ export default function SciencePage() {
               </svg>
               <input
                 type="text"
-                placeholder="Paper durchsuchen…"
+                placeholder={tx('Paper durchsuchen…')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
@@ -97,7 +100,7 @@ export default function SciencePage() {
                       : 'bg-apple-gray-100 text-apple-gray-500 hover:bg-apple-gray-200'
                   }`}
                 >
-                  {cat.label}
+                  {tx(cat.label)}
                 </button>
               ))}
             </div>
@@ -105,16 +108,23 @@ export default function SciencePage() {
         </ScrollReveal>
 
         {/* Results Count */}
-        <p className="text-sm text-apple-gray-500 mb-6">{filtered.length} Paper gefunden</p>
+        <p className="text-sm text-apple-gray-500 mb-6">
+          {tx(
+            '{count, plural, one {# Veröffentlichung gefunden} other {# Veröffentlichungen gefunden}}',
+            { count: filtered.length }
+          )}
+        </p>
 
         {/* Paper Grid */}
         {filtered.length === 0 ? (
           <ScrollReveal>
             <div className="bg-apple-gray-100 rounded-apple-lg p-16 text-center">
               <div className="text-5xl mb-4">🔬</div>
-              <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">Keine Ergebnisse</h3>
+              <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">
+                {tx('Keine Ergebnisse')}
+              </h3>
               <p className="text-apple-gray-500">
-                Passe deine Suche oder Kategorie an, um Paper zu finden.
+                {tx('Passe deine Suche oder Kategorie an, um Paper zu finden.')}
               </p>
             </div>
           </ScrollReveal>
@@ -132,7 +142,7 @@ export default function SciencePage() {
                       <span
                         className={`inline-flex px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${colors.bg} ${colors.text} border ${colors.border}`}
                       >
-                        {paper.categoryLabel}
+                        {tx(paper.categoryLabel)}
                       </span>
                       <span className="text-sm text-apple-gray-500 font-mono">{paper.year}</span>
                     </div>
@@ -149,12 +159,12 @@ export default function SciencePage() {
                     {/* GreenMind Relevanz */}
                     <div className="bg-gm-green-50/60 rounded-apple p-4 border border-gm-green-100/50 mb-4 flex-1">
                       <p className="text-[11px] font-semibold text-gm-green-700 uppercase tracking-wider mb-1.5">
-                        🌱 GreenMind Relevanz
+                        {tx('🌱 GreenMind Relevanz')}
                       </p>
                       <p
                         className={`text-sm text-apple-gray-600 leading-relaxed ${!isExpanded ? 'line-clamp-3' : ''}`}
                       >
-                        {paper.greenmindLink}
+                        {tx(paper.greenmindLink)}
                       </p>
                     </div>
 
@@ -162,10 +172,10 @@ export default function SciencePage() {
                     {isExpanded && (
                       <div className="bg-apple-gray-50 rounded-apple p-4 border border-apple-gray-200/50 mb-4">
                         <p className="text-[11px] font-semibold text-apple-gray-500 uppercase tracking-wider mb-1.5">
-                          Abstract
+                          {tx('Abstract')}
                         </p>
                         <p className="text-sm text-apple-gray-600 leading-relaxed">
-                          {paper.abstract}
+                          {tx(paper.abstract)}
                         </p>
                       </div>
                     )}
@@ -178,19 +188,19 @@ export default function SciencePage() {
                         rel="noopener noreferrer"
                         className="flex-1 text-center px-4 py-2.5 bg-gm-green-500 text-white rounded-full text-sm font-medium hover:bg-gm-green-600 transition-colors duration-200 shadow-sm shadow-gm-green-500/20"
                       >
-                        Paper lesen →
+                        {tx('Paper lesen →')}
                       </a>
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : paper.id)}
                         className="px-4 py-2.5 bg-apple-gray-100 text-apple-gray-600 rounded-full text-sm font-medium hover:bg-apple-gray-200 transition-colors"
                       >
-                        {isExpanded ? 'Weniger' : 'Details'}
+                        {isExpanded ? tx('Weniger') : tx('Details')}
                       </button>
                     </div>
 
                     {/* DOI */}
                     <p className="text-[11px] text-apple-gray-400 mt-3 font-mono truncate">
-                      DOI: {paper.doi}
+                      {tx('DOI:')} {paper.doi}
                     </p>
                   </div>
                 </ScrollReveal>
@@ -203,9 +213,13 @@ export default function SciencePage() {
         <ScrollReveal>
           <div className="text-center py-16 mt-8">
             <p className="text-sm text-apple-gray-500">
-              Alle aufgeführten Paper sind peer-reviewed und bevorzugt Open Access.
+              {tx(
+                'Wissenschaftliche Veröffentlichungen und gekennzeichnete Preprints; nach Möglichkeit frei zugänglich.'
+              )}
             </p>
-            <p className="text-sm text-apple-gray-400 mt-1">Letzte Aktualisierung: Mai 2026</p>
+            <p className="text-sm text-apple-gray-400 mt-1">
+              {tx('Letzte Aktualisierung: Mai 2026')}
+            </p>
           </div>
         </ScrollReveal>
       </div>

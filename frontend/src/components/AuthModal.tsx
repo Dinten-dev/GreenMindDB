@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { loginErrorKey } from '@/lib/auth-errors';
 import Modal from './Modal';
 import { useAuth } from '@/contexts/AuthContext';
 interface AuthModalProps {
@@ -11,6 +12,7 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const { login } = useAuth();
   const locale = useLocale();
+  const t = useTranslations('Auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,13 +26,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setPassword('');
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen');
+      setError(t(`errors.${loginErrorKey(err)}`));
     } finally {
       setLoading(false);
     }
   }
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Login">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('title')}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <p role="alert" className="text-red-600">
@@ -38,7 +40,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </p>
         )}
         <label className="block">
-          E-Mail
+          {t('email')}
           <input
             type="email"
             required
@@ -49,7 +51,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           />
         </label>
         <label className="block">
-          Passwort
+          {t('password')}
           <input
             type="password"
             required
@@ -64,11 +66,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           disabled={loading || !email || !password}
           className="w-full py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50"
         >
-          {loading ? 'Anmeldung läuft …' : 'Anmelden'}
+          {loading ? t('submitting') : t('signIn')}
         </button>
         <p className="text-center text-sm">
           <Link href={`/${locale}/early-access`} onClick={onClose}>
-            Zugang anfragen
+            {t('requestAccess')}
           </Link>
         </p>
       </form>

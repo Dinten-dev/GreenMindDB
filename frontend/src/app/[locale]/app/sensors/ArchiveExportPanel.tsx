@@ -118,9 +118,15 @@ export default function ArchiveExportPanel({
         </div>
       )}
       {(error || job?.error) && (
-        <p role="alert" className="mt-2 text-amber-800">
-          {error || job?.error}
-        </p>
+        <div className="mt-2 text-amber-800">
+          <p role="alert">{error || tx('Export konnte nicht erstellt werden')}</p>
+          {job?.error && (
+            <details className="mt-1 text-xs">
+              <summary>{tx('Technische Details')}</summary>
+              <pre className="whitespace-pre-wrap break-words">{job.error}</pre>
+            </details>
+          )}
+        </div>
       )}
     </div>
   );

@@ -110,7 +110,11 @@ export default function SensorsPage() {
   const [sensorData, setSensorData] = useState<SensorDataResponse[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>(() => initialMeasurementMode('range'));
-  const [liveSeconds, setLiveSeconds] = useState<30 | 60 | 180>(30);
+  const [liveSeconds, setLiveSeconds] = useState<30 | 60 | 180>(() => {
+    if (initialMeasurementMode('range') !== 'live') return 30;
+    const window = readViewValue('liveWindow');
+    return window === '60' ? 60 : window === '180' ? 180 : 30;
+  });
   const [liveNow, setLiveNow] = useState(Date.now());
   const [pageVisible, setPageVisible] = useState(true);
   useEffect(() => {
@@ -213,8 +217,9 @@ export default function SensorsPage() {
       zone: selectedZone || null,
       sensor: selectedSensor,
       range: timeRange === '24h' ? null : timeRange,
+      liveWindow: timeRange === 'live' && liveSeconds !== 30 ? String(liveSeconds) : null,
     });
-  }, [selectedZone, selectedSensor, timeRange, loading]);
+  }, [selectedZone, selectedSensor, timeRange, liveSeconds, loading]);
 
   const loadSensorData = useCallback(async (sensorId: string, range: TimeRange, silent = false) => {
     const request = ++dataRequest.current;
