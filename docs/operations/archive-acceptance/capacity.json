@@ -1,0 +1,147 @@
+{
+  "format": "greenmind.public-step3-capacity.v1",
+  "accepted": false,
+  "updated_utc": "2026-11-03T19:06:30.166227+00:00",
+  "direct": {
+    "observed_utc": "2026-11-03T18:59:38.373072+00:00",
+    "quota_bytes": 12884901888,
+    "cache_observed_utc": "2026-11-03T18:59:57.454369+00:00",
+    "cache_last_update_utc": "2026-11-03T18:59:45.963968+00:00",
+    "cache_logical_bytes": 9389284808,
+    "quota_minus_cache_bytes_unverified": 3495617080,
+    "cache_exact_quota_usage_proven": false,
+    "versions_source": "historical_only"
+  },
+  "filesystems": {
+    "source": {
+      "observed_utc": "2026-11-03T18:59:07.360757+00:00",
+      "total_bytes": 210779168768,
+      "available_bytes": 33089015808,
+      "direct_contract_reserve_bytes": 10737418240,
+      "restore_gate_including_workset_bytes": 11075829351,
+      "joint_minimum_gate_plus_512mib_bytes": 11274289152,
+      "additional_restore_peak_bytes": null,
+      "joint_gate_including_user_assumed_additional_peak_bytes": null,
+      "minimum_gate_is_not_full_restore_peak": true,
+      "headroom_above_minimum_gate_bytes": 21814726656,
+      "later_selected_path_available_bytes": 33079111680,
+      "later_selected_path_observation_utc_approx": "2026-11-03T19:01:24.653740+00:00"
+    },
+    "archive": {
+      "observed_utc": "2026-11-03T18:59:07.614490+00:00",
+      "total_bytes": 39956590592,
+      "available_bytes": 2833502208,
+      "staging_5pct_or_2gib_reserve_bytes": 2147483648,
+      "science_reserve_bytes": 2499805184,
+      "science_additional_workset_bytes": 100663296,
+      "science_gate_total_bytes": 2600468480,
+      "headroom_staging_gate_bytes": 686018560,
+      "headroom_science_gate_bytes": 233033728,
+      "later_selected_path_available_bytes": 2827198464,
+      "later_selected_path_observation_utc_approx": "2026-11-03T19:01:26.071935+00:00",
+      "later_science_gate_margin_bytes": 226729984
+    }
+  },
+  "storage_box": {
+    "utc": "2026-11-03T19:02:05.354854+00:00",
+    "capacity_bytes": 1099511627776,
+    "usage_bytes": {
+      "size": 140086607872,
+      "size_data": 140064587776,
+      "size_snapshots": 22020096
+    },
+    "stats_observation_time_provider_not_supplied": true,
+    "manual_snapshot_count": 6,
+    "manual_slots_free": 4
+  },
+  "growth_scenarios": {
+    "physical_source_whole_volume_step1_to_step3": {
+      "start_utc": "2026-11-03T18:13:13.660082+00:00",
+      "end_utc": "2026-11-03T18:59:07.360757+00:00",
+      "interval_seconds": 2753.700675010681,
+      "start_bytes": -33145548800,
+      "end_bytes": -33089015808,
+      "delta_bytes": 56532992,
+      "net_bytes_per_day_linear": 1773776849.8680613,
+      "linear_7_days_bytes": 12416437949.07643,
+      "predictive_or_acceptance_evidence": false
+    },
+    "physical_archive_whole_volume_step1_to_step3": {
+      "start_utc": "2026-11-03T18:13:14.611337+00:00",
+      "end_utc": "2026-11-03T18:59:07.614490+00:00",
+      "interval_seconds": 2753.0031530857086,
+      "start_bytes": -2855243776,
+      "end_bytes": -2833502208,
+      "delta_bytes": 21741568,
+      "net_bytes_per_day_linear": 682335388.208514,
+      "linear_7_days_bytes": 4776347717.459598,
+      "predictive_or_acceptance_evidence": false
+    },
+    "physical_source_quota_checks_prior_to_step3": {
+      "start_utc": "2026-11-03T17:49:16.086873+00:00",
+      "end_utc": "2026-11-03T18:59:38.373072+00:00",
+      "interval_seconds": 4222.286198854446,
+      "start_bytes": -33197338624,
+      "end_bytes": -33088385024,
+      "delta_bytes": 108953600,
+      "net_bytes_per_day_linear": 2229500937.7985826,
+      "linear_7_days_bytes": 15606506564.590078,
+      "predictive_or_acceptance_evidence": false
+    },
+    "logical_cache_prior_window_to_step3": {
+      "start_utc": "2026-11-03T17:47:59.651490+00:00",
+      "end_utc": "2026-11-03T18:59:45.963968+00:00",
+      "interval_seconds": 4306.312477588654,
+      "start_bytes": 9372867224,
+      "end_bytes": 9389284808,
+      "delta_bytes": 16417584,
+      "net_bytes_per_day_linear": 329395338.8153305,
+      "linear_7_days_bytes": 2305767371.7073135,
+      "predictive_or_acceptance_evidence": false
+    },
+    "logical_cache_older_to_step3": {
+      "start_utc": "2026-11-02T02:31:55.166051+00:00",
+      "end_utc": "2026-11-03T18:59:45.963968+00:00",
+      "interval_seconds": 145670.79791665077,
+      "start_bytes": 8824184052,
+      "end_bytes": 9389284808,
+      "delta_bytes": 565100756,
+      "net_bytes_per_day_linear": 335171537.5811718,
+      "linear_7_days_bytes": 2346200763.0682025,
+      "predictive_or_acceptance_evidence": false
+    },
+    "note": "Physical signed net change includes all occupants and deletions on each filesystem; logical bucket cache bytes represent versions and are not additive with the same volume. Cache update is not proof of a complete scan. Each rate is a short-window linear scenario only."
+  },
+  "retention_capacity": {
+    "snapshot_complete_wait_days_input": null,
+    "required_horizon_days": "7 + unknown wait until first complete provider snapshot readback; may be extended by late-arrival rules",
+    "horizon_if_wait_days_given": null,
+    "parameterized_linear_scenarios": null,
+    "quota_scenario_formula": "quota >= current logical versions + logical net growth/day * (7 + snapshot_wait_days) + concurrent logical overhead; subject to validated version accounting",
+    "source_volume_scenario_formula": "available - required_source_gate >= whole-volume physical net growth/day * (7 + snapshot_wait_days) + independent future transient peak, including unknown additional restore peak beyond 512 MiB; do not add bucket or database growth already included in whole-volume growth",
+    "archive_volume_scenario_formula": "available - applicable archive gate >= whole-volume archive physical net growth/day * (7 + snapshot_wait_days) + independent future transient peak",
+    "not_a_production_acceptance": true
+  },
+  "backlog": {
+    "formula": "drain_days = backlog_bytes / (throughput_bytes_per_day - inflow_bytes_per_day), only if throughput > inflow; positive backlog cannot drain at zero/negative net rate",
+    "inputs": {
+      "backlog_bytes": null,
+      "inflow_bytes_per_day": null,
+      "archive_throughput_bytes_per_day": null,
+      "snapshot_wait_days": null,
+      "additional_restore_peak_bytes": null
+    },
+    "result": null,
+    "separate_constraints": "Throughput is not inferred from readback or quota. Ensure capacity during draining and throughout snapshot wait + seven days; historical deletion requires separate evidence and approval."
+  },
+  "blockers": [
+    "Fresh Direct version scans did not complete: request timeout, then Source host memory below the unchanged 704 MiB floor.",
+    "Gateway cache decoding did not pass; full bucket/cache/spool coverage remains unproven.",
+    "Restore attempts stopped before PostgreSQL creation: admission load, then the crypto-helper host-health guard. Administrative wait correction therefore has no native readiness/COPY acceptance.",
+    "No stable conservative startup window: none of ten samples provided three consecutive qualifying observations.",
+    "Full restore PGDATA/WAL/index/temporary-file peak and all planned active-operation windows remain unproven.",
+    "Sustainable archive net throughput, exact backlog and time until the first complete matching snapshot are unmeasured.",
+    "Short-window whole-volume growth scenarios do not establish the required seven-day reserve. Archive headroom above its Science gate is small."
+  ],
+  "no_double_counting": "Database, WAL, buckets and observed directories already occupy their filesystems. Logical cache growth is not additive with whole-volume growth."
+}
