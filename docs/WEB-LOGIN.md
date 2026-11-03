@@ -12,15 +12,15 @@
 - Neuladen, Seitenwechsel und Tabaktivierung prüfen die Sitzung erneut.
 - Aktive Sitzungen werden zusätzlich minütlich bei sichtbarem Tab geprüft.
 - Veraltete Antworten ändern keine neuere Anmeldung oder Abmeldung.
-- Geschützte 401-Antworten beenden die aktuelle angezeigte Sitzung.
+- Geschützte 401-Antworten im gemeinsamen Client beenden die Sitzungsanzeige.
 - Rollenfehler 403 sowie öffentliche Loginfehler lösen keinen Logout aus.
 - Netzwerk-/Dienstfehler bleiben wiederholbar, ohne behauptete ungültige Zugangsdaten.
 - Verbindungsfehler beim Abmelden behalten den bisherigen Benutzerstatus.
 
 ## Oberfläche und Weiterleitungen
 
-- Bestehende Sprachen Deutsch, Englisch und Französisch erhalten Loginmeldungen.
-- Italienisch und vollständige Übersetzung gehören weiterhin zu Schritt 12.
+- Deutsch, Englisch, Französisch und Italienisch erhalten Loginmeldungen.
+- Angemeldete Anwendung ebenfalls übersetzt: [I18N-APPLICATION.md](I18N-APPLICATION.md).
 - Rücksprungziele erlauben ausschliesslich lokalisierte interne App-Pfade.
 - Fremde Ursprünge, fremde Sprachen und Login-Schleifen werden verworfen.
 - Sprachwechsel lokalisiert auch das geprüfte Rücksprungziel.

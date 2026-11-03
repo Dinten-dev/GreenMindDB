@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState } from 'react';
 import {
   apiListMemberZones,
@@ -9,6 +11,8 @@ import {
 } from '@/lib/api';
 
 export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
+  const tx = useAppText();
+
   const [members, setMembers] = useState<MemberZoneAccess[]>([]);
   const [selected, setSelected] = useState('');
   const [grants, setGrants] = useState<string[]>([]);
@@ -23,7 +27,7 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
         if (active) setMembers(data);
       })
       .catch(() => {
-        if (active) setError('Zugänge konnten nicht geladen werden. Bitte erneut öffnen.');
+        if (active) setError(tx('Zugänge konnten nicht geladen werden. Bitte erneut öffnen.'));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -31,7 +35,7 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [tx]);
   const member = members.find((item) => item.id === selected);
   const choose = (id: string) => {
     setSelected(id);
@@ -48,9 +52,9 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
       const updated = await apiUpdateMemberZones(member.id, grants);
       setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setGrants(updated.zone_ids);
-      setMessage('Zonenzugänge gespeichert.');
+      setMessage(tx('Zonenzugänge gespeichert.'));
     } catch {
-      setError('Zugänge konnten nicht gespeichert werden. Bitte erneut versuchen.');
+      setError(tx('Zugänge konnten nicht gespeichert werden. Bitte erneut versuchen.'));
     } finally {
       setSaving(false);
     }
@@ -58,25 +62,26 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
   return (
     <section aria-labelledby="zone-access-heading" className="glass-card p-6 space-y-4">
       <h2 id="zone-access-heading" className="text-lg font-semibold text-gray-800">
-        Zugänge zu Zonen
+        {tx('Zugänge zu Zonen')}
       </h2>
       <p className="text-sm text-gray-500">
-        Mitglieder sehen nur ausgewählte Zonen samt Sensoren, Messungen und Aufnahmen. Eigentümer
-        und Administratoren sehen alle Zonen.
+        {tx(
+          'Mitglieder sehen nur ausgewählte Zonen samt Sensoren, Messungen und Aufnahmen. Eigentümer und Administratoren sehen alle Zonen.'
+        )}
       </p>
       {loading ? (
-        <p role="status">Zugänge werden geladen …</p>
+        <p role="status">{tx('Zugänge werden geladen …')}</p>
       ) : (
         <>
           <label className="block text-sm font-medium text-gray-700">
-            Person
+            {tx('Person')}
             <select
               value={selected}
               disabled={saving}
               onChange={(event) => choose(event.target.value)}
               className="mt-2 block w-full rounded-xl border border-gray-200 bg-white p-3"
             >
-              <option value="">Person auswählen</option>
+              <option value="">{tx('Person auswählen')}</option>
               {members.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name || item.email}
@@ -88,13 +93,13 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
           {member &&
             (member.all_zones ? (
               <p className="text-sm text-emerald-800">
-                Diese Person hat durch ihre Rolle Zugriff auf alle Zonen.
+                {tx('Diese Person hat durch ihre Rolle Zugriff auf alle Zonen.')}
               </p>
             ) : (
               <>
                 <fieldset disabled={saving} className="space-y-2">
                   <legend className="mb-2 text-sm font-medium text-gray-700">
-                    Freigegebene Zonen
+                    {tx('Freigegebene Zonen')}
                   </legend>
                   {zones.map((zone) => (
                     <label
@@ -120,7 +125,7 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
                 </fieldset>
                 {grants.length === 0 && (
                   <p className="text-sm text-gray-500">
-                    Ohne Auswahl sieht diese Person keine Zonen oder Sensordaten.
+                    {tx('Ohne Auswahl sieht diese Person keine Zonen oder Sensordaten.')}
                   </p>
                 )}
                 <button
@@ -129,7 +134,7 @@ export default function ZoneAccessPanel({ zones }: { zones: Zone[] }) {
                   onClick={save}
                   className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
-                  {saving ? 'Wird gespeichert …' : 'Zugänge speichern'}
+                  {saving ? tx('Wird gespeichert …') : tx('Zugänge speichern')}
                 </button>
               </>
             ))}

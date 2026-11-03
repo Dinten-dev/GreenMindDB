@@ -1,8 +1,8 @@
-const locales = ['de', 'en', 'fr'];
+import { locales } from '@/i18n/locales';
 
 export function localePath(locale: string, path: string) {
-  const prefix = locales.includes(locale) ? locale : 'de';
-  const stripped = path.replace(/^\/(de|en|fr)(?=\/|$)/, '');
+  const prefix = locales.some((supported) => supported === locale) ? locale : 'de';
+  const stripped = path.replace(/^\/(de|en|fr|it)(?=\/|$)/, '');
   return `/${prefix}${stripped.startsWith('/') ? stripped : `/${stripped}`}`;
 }
 

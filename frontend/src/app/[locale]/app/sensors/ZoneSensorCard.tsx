@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useId, useState, type ReactNode } from 'react';
 
 export default function ZoneSensorCard({
@@ -19,6 +21,8 @@ export default function ZoneSensorCard({
   onCollapse: () => void;
   children: ReactNode;
 }) {
+  const tx = useAppText();
+
   const [expanded, setExpanded] = useState(reveal);
   const id = useId();
   useEffect(() => {
@@ -62,7 +66,7 @@ export default function ZoneSensorCard({
             )}
           </span>
           <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
-            {count} {count === 1 ? 'Sensor' : 'Sensoren'}
+            {count} {count === 1 ? tx('Sensor') : tx('Sensoren')}
           </span>
         </button>
       </h2>

@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +10,8 @@ import { apiGetPlant, apiGetObservationAccess } from '@/lib/plants-api';
 import { Plant, ObservationAccess } from '@/types';
 
 export default function PrintQRPage() {
+  const tx = useAppText();
+
   const params = useParams() as { plantId: string };
   const plantId = params.plantId;
 
@@ -39,17 +43,18 @@ export default function PrintQRPage() {
     loadData();
   }, [loadData]);
 
-  if (loading) return <div className="p-8 text-gray-500">Lade QR Code...</div>;
-  if (!plant) return <div className="p-8 text-red-500">Fehler beim Laden.</div>;
+  if (loading) return <div className="p-8 text-gray-500">{tx('Lade QR Code...')}</div>;
+  if (!plant) return <div className="p-8 text-red-500">{tx('Fehler beim Laden.')}</div>;
   if (accessError) {
     return (
       <div className="p-8 space-y-4" role="alert">
         <p>
-          Zugangsstatus konnte nicht geladen werden. Öffentliche Zugänge können weiterhin aktiv
-          sein.
+          {tx(
+            'Zugangsstatus konnte nicht geladen werden. Öffentliche Zugänge können weiterhin aktiv sein.'
+          )}
         </p>
         <Link href={`/app/plants/${plant.id}`} className="underline">
-          Zur Pflanze
+          {tx('Zur Pflanze')}
         </Link>
       </div>
     );
@@ -58,10 +63,12 @@ export default function PrintQRPage() {
     return (
       <div className="p-8 space-y-4">
         <p>
-          Kein aktiver öffentlicher Zugang. Stellen Sie ihn auf der Pflanzenseite bewusst neu aus.
+          {tx(
+            'Kein aktiver öffentlicher Zugang. Stellen Sie ihn auf der Pflanzenseite bewusst neu aus.'
+          )}
         </p>
         <Link href={`/app/plants/${plant.id}`} className="underline">
-          Zur Pflanze
+          {tx('Zur Pflanze')}
         </Link>
       </div>
     );
@@ -80,7 +87,9 @@ export default function PrintQRPage() {
           ←
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">QR Code für {plant.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {tx('QR Code für')} {plant.name}
+          </h1>
         </div>
       </div>
 
@@ -89,11 +98,16 @@ export default function PrintQRPage() {
         {plant.plant_code && <p className="text-gray-500 mb-8">{plant.plant_code}</p>}
 
         <div className="p-4 border-2 border-emerald-500 rounded-2xl bg-white">
-          <QRCode value={fullUrl} title={`QR Code für ${plant.name}`} level="M" size={256} />
+          <QRCode
+            value={fullUrl}
+            title={tx('QR Code für {value0}', { value0: plant.name })}
+            level="M"
+            size={256}
+          />
         </div>
 
         <p className="mt-8 text-sm text-gray-600 max-w-sm">
-          Scannen Sie diesen Code, um eine biologische Feldbewertung ohne Login abzugeben.
+          {tx('Scannen Sie diesen Code, um eine biologische Feldbewertung ohne Login abzugeben.')}
         </p>
 
         <div className="mt-8 pt-8 border-t border-gray-100 w-full print:hidden">
@@ -101,7 +115,7 @@ export default function PrintQRPage() {
             onClick={() => window.print()}
             className="px-6 py-3 bg-gray-900 text-white rounded-full font-medium shadow-lg hover:bg-black transition-colors"
           >
-            QR Code Drucken
+            {tx('QR Code Drucken')}
           </button>
           <p className="mt-4 text-xs text-gray-400 font-mono break-all">{fullUrl}</p>
         </div>

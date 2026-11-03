@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
@@ -15,6 +17,8 @@ const FIRMWARE_TABS = [
 ];
 
 export default function FirmwareLayout({ children }: { children: React.ReactNode }) {
+  const tx = useAppText();
+
   const { user, loading } = useAuth();
   const locale = useLocale();
   const router = useRouter();
@@ -44,9 +48,11 @@ export default function FirmwareLayout({ children }: { children: React.ReactNode
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Firmware Management</h1>
+        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
+          {tx('Firmware Management')}
+        </h1>
         <p className="text-sm text-gray-400 mt-1">
-          OTA Updates, Rollouts und Audit für ESP32 Devices
+          {tx('OTA Updates, Rollouts und Audit für ESP32 Devices')}
         </p>
       </div>
 
@@ -65,7 +71,7 @@ export default function FirmwareLayout({ children }: { children: React.ReactNode
                 isActive ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab.label}
+              {tx(tab.label)}
             </Link>
           );
         })}

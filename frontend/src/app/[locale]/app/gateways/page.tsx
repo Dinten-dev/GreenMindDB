@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect } from 'react';
 import {
   apiListGateways,
@@ -13,6 +15,8 @@ import {
 } from '@/lib/api';
 
 export default function GatewaysPage() {
+  const tx = useAppText();
+
   const [gateways, setGateways] = useState<GatewayInfo[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,8 +87,8 @@ export default function GatewaysPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Gateways</h1>
-          <p className="text-sm text-gray-400 mt-1">Raspberry Pi Gateways verwalten</p>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{tx('Gateways')}</h1>
+          <p className="text-sm text-gray-400 mt-1">{tx('Raspberry Pi Gateways verwalten')}</p>
         </div>
         <button
           onClick={() => {
@@ -94,7 +98,7 @@ export default function GatewaysPage() {
           disabled={zones.length === 0}
           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
-          + Gateway pairen
+          {tx('+ Gateway pairen')}
         </button>
       </div>
 
@@ -102,18 +106,20 @@ export default function GatewaysPage() {
       {showPairing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
           <div className="glass-card p-8 w-full max-w-md mx-4 shadow-xl">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Gateway pairen</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">{tx('Gateway pairen')}</h2>
 
             {!pairingCode ? (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">Zone</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                    {tx('Zone')}
+                  </label>
                   <select
                     value={selectedZone}
                     onChange={(e) => setSelectedZone(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 backdrop-blur-sm"
                   >
-                    <option value="">Zone wählen…</option>
+                    <option value="">{tx('Zone wählen…')}</option>
                     {zones.map((z) => (
                       <option key={z.id} value={z.id}>
                         {z.name}
@@ -127,28 +133,31 @@ export default function GatewaysPage() {
                     onClick={() => setShowPairing(false)}
                     className="flex-1 py-2.5 bg-black/[0.04] text-gray-600 rounded-xl text-sm font-medium hover:bg-black/[0.06] transition-colors"
                   >
-                    Abbrechen
+                    {tx('Abbrechen')}
                   </button>
                   <button
                     onClick={handleGenerateCode}
                     disabled={!selectedZone || generating}
                     className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 shadow-sm"
                   >
-                    {generating ? 'Generiere…' : 'Code erzeugen'}
+                    {generating ? tx('Generiere…') : tx('Code erzeugen')}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="text-center space-y-4">
-                <p className="text-sm text-gray-400">Gib diesen Code auf dem Raspberry Pi ein:</p>
+                <p className="text-sm text-gray-400">
+                  {tx('Gib diesen Code auf dem Raspberry Pi ein:')}
+                </p>
                 <div className="bg-white/40 rounded-2xl py-6 px-4 border border-black/[0.04] backdrop-blur-sm">
                   <p className="text-4xl font-mono font-bold text-gray-800 tracking-[0.3em]">
                     {pairingCode.code}
                   </p>
                 </div>
                 <p className="text-xs text-gray-400">
-                  Gültig bis {new Date(pairingCode.expires_at).toLocaleTimeString('de-CH')} (10
-                  Minuten)
+                  {tx('Gültig bis')}
+                  {new Date(pairingCode.expires_at).toLocaleTimeString(tx.locale)}{' '}
+                  {tx('(10 Minuten)')}
                 </p>
                 <button
                   onClick={() => {
@@ -157,7 +166,7 @@ export default function GatewaysPage() {
                   }}
                   className="w-full py-2.5 bg-black/[0.04] text-gray-600 rounded-xl text-sm font-medium hover:bg-black/[0.06] transition-colors"
                 >
-                  Schliessen
+                  {tx('Schliessen')}
                 </button>
               </div>
             )}
@@ -169,9 +178,9 @@ export default function GatewaysPage() {
       {gateways.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-4xl mb-4">🖥</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Keine Gateways</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">{tx('Keine Gateways')}</h3>
           <p className="text-sm text-gray-400 mb-4">
-            Verbinde dein erstes Raspberry Pi Gateway mit einer Zone.
+            {tx('Verbinde dein erstes Raspberry Pi Gateway mit einer Zone.')}
           </p>
         </div>
       ) : (
@@ -197,7 +206,7 @@ export default function GatewaysPage() {
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${gw.status !== 'online' ? 'bg-gray-300' : gatewayHasWavIssue(gw) ? 'bg-amber-500' : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'}`}
                   />
-                  {gw.status}
+                  {tx.status(gw.status)}
                 </span>
                 <button
                   onClick={(e) => {
@@ -205,7 +214,7 @@ export default function GatewaysPage() {
                     setDeletingGatewayId(gw.id);
                   }}
                   className="ml-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
-                  title="Gateway entfernen"
+                  title={tx('Gateway entfernen')}
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -220,24 +229,25 @@ export default function GatewaysPage() {
 
               {gatewayHasWavIssue(gw) && (
                 <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  WAV-Rückstau: {gw.wav_pending_files ?? 0} Dateien
+                  {tx('WAV-Rückstau:')}
+                  {gw.wav_pending_files ?? 0} {tx('Dateien')}
                   {gw.wav_last_error_code ? ` · ${gw.wav_last_error_code}` : ''}
                 </div>
               )}
 
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div className="bg-white/40 rounded-xl px-2.5 py-1.5 border border-black/[0.03]">
-                  <p className="text-gray-400 text-xs">Sensoren</p>
+                  <p className="text-gray-400 text-xs">{tx('Sensoren')}</p>
                   <p className="font-semibold text-gray-800">{gw.sensor_count}</p>
                 </div>
                 <div className="bg-white/40 rounded-xl px-2.5 py-1.5 border border-black/[0.03]">
-                  <p className="text-gray-400 text-xs">IP</p>
+                  <p className="text-gray-400 text-xs">{tx('IP')}</p>
                   <p className="font-semibold text-gray-800 text-xs font-mono truncate">
                     {gw.local_ip || '–'}
                   </p>
                 </div>
                 <div className="bg-white/40 rounded-xl px-2.5 py-1.5 border border-black/[0.03]">
-                  <p className="text-gray-400 text-xs">Zone</p>
+                  <p className="text-gray-400 text-xs">{tx('Zone')}</p>
                   <p className="font-semibold text-gray-800 text-xs truncate">
                     {gw.zone_name || '–'}
                   </p>
@@ -246,7 +256,8 @@ export default function GatewaysPage() {
 
               {gw.last_seen && (
                 <p className="text-xs text-gray-400 mt-3">
-                  Zuletzt gesehen: {new Date(gw.last_seen).toLocaleString('de-CH')}
+                  {tx('Zuletzt gesehen:')}
+                  {new Date(gw.last_seen).toLocaleString(tx.locale)}
                 </p>
               )}
             </div>
@@ -273,25 +284,26 @@ export default function GatewaysPage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
-              Gateway entfernen?
+              {tx('Gateway entfernen?')}
             </h3>
             <p className="text-sm text-center text-gray-500 mb-6">
-              Damit wird auch die Verbindung aller zugehörigen Sensoren getrennt. Die Sensordaten
-              werden ebenfalls gelöscht.
+              {tx(
+                'Damit wird auch die Verbindung aller zugehörigen Sensoren getrennt. Die Sensordaten werden ebenfalls gelöscht.'
+              )}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingGatewayId(null)}
                 className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
               >
-                Abbrechen
+                {tx('Abbrechen')}
               </button>
               <button
                 onClick={confirmDeleteGateway}
                 disabled={isDeleting}
                 className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? 'Lösche…' : 'Löschen'}
+                {isDeleting ? tx('Lösche…') : tx('Löschen')}
               </button>
             </div>
           </div>

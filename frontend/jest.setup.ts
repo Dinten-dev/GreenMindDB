@@ -42,7 +42,15 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 // Mock next-intl
-jest.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
-  useLocale: () => 'de',
-}));
+jest.mock('next-intl', () => {
+  const app = jest.requireActual('next-intl').createTranslator({
+    locale: 'de',
+    messages: jest.requireActual('./messages/de.json'),
+    namespace: 'App',
+  });
+  const identity = (key: string) => key;
+  return {
+    useTranslations: (namespace?: string) => (namespace === 'App' ? app : identity),
+    useLocale: () => 'de',
+  };
+});

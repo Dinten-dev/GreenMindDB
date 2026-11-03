@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState, useCallback } from 'react';
 import {
   getFleetOverview,
@@ -10,6 +12,8 @@ import {
 } from '@/lib/gateway-admin-api';
 
 function StatusBadge({ status }: { status: string }) {
+  const tx = useAppText();
+
   const styles: Record<string, string> = {
     online: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     offline: 'bg-gray-50 text-gray-500 border-gray-200',
@@ -21,12 +25,14 @@ function StatusBadge({ status }: { status: string }) {
       <span
         className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-emerald-500' : 'bg-gray-400'}`}
       />
-      {status}
+      {tx.status(status)}
     </span>
   );
 }
 
 function DiskBadge({ status }: { status: string | null }) {
+  const tx = useAppText();
+
   if (!status) return <span className="text-xs text-gray-300">—</span>;
   const styles: Record<string, string> = {
     ok: 'text-emerald-600 bg-emerald-50',
@@ -35,12 +41,14 @@ function DiskBadge({ status }: { status: string | null }) {
   };
   return (
     <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${styles[status] || ''}`}>
-      {status}
+      {tx.status(status)}
     </span>
   );
 }
 
 function SignatureBadge({ status }: { status: string | null }) {
+  const tx = useAppText();
+
   if (!status) return <span className="text-xs text-gray-300">—</span>;
   const map: Record<string, { icon: string; cls: string }> = {
     signed: { icon: '✓', cls: 'text-emerald-600' },
@@ -50,12 +58,14 @@ function SignatureBadge({ status }: { status: string | null }) {
   const s = map[status] || map.unsigned;
   return (
     <span className={`text-xs font-medium ${s.cls}`}>
-      {s.icon} {status}
+      {s.icon} {tx.status(status)}
     </span>
   );
 }
 
 function UpdateStatusBadge({ download, apply }: { download: string | null; apply: string | null }) {
+  const tx = useAppText();
+
   const effective =
     apply && apply !== 'none' ? apply : download && download !== 'none' ? download : null;
   if (!effective) return <span className="text-xs text-gray-300">—</span>;
@@ -74,12 +84,14 @@ function UpdateStatusBadge({ download, apply }: { download: string | null; apply
     <span
       className={`px-2 py-0.5 rounded-md text-xs font-medium ${styles[effective] || 'text-gray-500 bg-gray-50'}`}
     >
-      {effective.replace(/_/g, ' ')}
+      {tx.status(effective)}
     </span>
   );
 }
 
 export default function FleetOverviewPage() {
+  const tx = useAppText();
+
   const [fleet, setFleet] = useState<GatewayFleetItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -98,11 +110,11 @@ export default function FleetOverviewPage() {
       setTotal(data.total);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load fleet');
+      setError(tx.error(err));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [tx, statusFilter]);
 
   useEffect(() => {
     loadFleet();
@@ -114,7 +126,7 @@ export default function FleetOverviewPage() {
       setActionGw(null);
       loadFleet();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Command failed');
+      alert(tx.error(err));
     }
   };
 
@@ -123,7 +135,7 @@ export default function FleetOverviewPage() {
       await toggleMaintenance(gatewayId, enabled);
       loadFleet();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed');
+      alert(tx.error(err));
     }
   };
 
@@ -132,7 +144,7 @@ export default function FleetOverviewPage() {
       await toggleBlock(gatewayId, blocked);
       loadFleet();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed');
+      alert(tx.error(err));
     }
   };
 
@@ -154,7 +166,7 @@ export default function FleetOverviewPage() {
           },
         ].map((stat) => (
           <div key={stat.label} className="glass-card rounded-2xl p-4">
-            <p className="text-xs text-gray-400 uppercase tracking-wider">{stat.label}</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wider">{tx(stat.label)}</p>
             <p className={`text-2xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
           </div>
         ))}
@@ -168,15 +180,15 @@ export default function FleetOverviewPage() {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-2 rounded-xl border border-black/[0.08] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
         >
-          <option value="">Alle Status</option>
-          <option value="online">Online</option>
-          <option value="offline">Offline</option>
+          <option value="">{tx('Alle Status')}</option>
+          <option value="online">{tx('Online')}</option>
+          <option value="offline">{tx('Offline')}</option>
         </select>
         <button
           onClick={loadFleet}
           className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-black/[0.04] transition-colors"
         >
-          ↻ Refresh
+          {tx('↻ Refresh')}
         </button>
       </div>
 
@@ -210,7 +222,7 @@ export default function FleetOverviewPage() {
                     key={h}
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider"
                   >
-                    {h}
+                    {tx(h)}
                   </th>
                 ))}
               </tr>
@@ -219,13 +231,13 @@ export default function FleetOverviewPage() {
               {loading ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
-                    Lade Fleet-Daten…
+                    {tx('Lade Fleet-Daten…')}
                   </td>
                 </tr>
               ) : fleet.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
-                    Keine Gateways gefunden
+                    {tx('Keine Gateways gefunden')}
                   </td>
                 </tr>
               ) : (
@@ -238,9 +250,11 @@ export default function FleetOverviewPage() {
                     <td className="px-4 py-3">
                       <StatusBadge status={gw.status} />
                       {gw.maintenance_mode && (
-                        <span className="ml-1 text-xs text-amber-500">⚙ maint</span>
+                        <span className="ml-1 text-xs text-amber-500">{tx('⚙ maint')}</span>
                       )}
-                      {gw.blocked && <span className="ml-1 text-xs text-red-500">⊘ blocked</span>}
+                      {gw.blocked && (
+                        <span className="ml-1 text-xs text-red-500">{tx('⊘ blocked')}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs">
                       <span className="font-mono">{gw.app_version || '—'}</span>
@@ -253,7 +267,7 @@ export default function FleetOverviewPage() {
                     <td className="px-4 py-3 text-xs font-mono">{gw.config_version || '—'}</td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-50 text-gray-600">
-                        {gw.rollout_ring || 'stable'}
+                        {gw.rollout_ring || tx('stable')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -266,7 +280,7 @@ export default function FleetOverviewPage() {
                       <DiskBadge status={gw.disk_status} />
                       {gw.disk_free_mb !== null && (
                         <span className="block text-[10px] text-gray-400 mt-0.5">
-                          {gw.disk_free_mb} MB
+                          {gw.disk_free_mb} {tx('MB')}
                         </span>
                       )}
                     </td>
@@ -274,11 +288,11 @@ export default function FleetOverviewPage() {
                       <SignatureBadge status={gw.signature_status} />
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
-                      {gw.update_window || 'anytime'}
+                      {gw.update_window || tx('anytime')}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
                       {gw.last_seen
-                        ? new Date(gw.last_seen).toLocaleString('de-CH', {
+                        ? new Date(gw.last_seen).toLocaleString(tx.locale, {
                             hour: '2-digit',
                             minute: '2-digit',
                             day: '2-digit',
@@ -300,32 +314,34 @@ export default function FleetOverviewPage() {
                             onClick={() => handleCommand(gw.id, 'restart_gateway_service')}
                             className="w-full px-4 py-2 text-left text-xs hover:bg-black/[0.03] transition-colors"
                           >
-                            🔄 Restart Service
+                            {tx('🔄 Restart Service')}
                           </button>
                           <button
                             onClick={() => handleCommand(gw.id, 'reload_gateway_config')}
                             className="w-full px-4 py-2 text-left text-xs hover:bg-black/[0.03] transition-colors"
                           >
-                            ⚙ Reload Config
+                            {tx('⚙ Reload Config')}
                           </button>
                           <button
                             onClick={() => handleMaintenance(gw.id, !gw.maintenance_mode)}
                             className="w-full px-4 py-2 text-left text-xs hover:bg-black/[0.03] transition-colors"
                           >
-                            {gw.maintenance_mode ? '▶ Exit Maintenance' : '⏸ Enter Maintenance'}
+                            {gw.maintenance_mode
+                              ? tx('▶ Exit Maintenance')
+                              : tx('⏸ Enter Maintenance')}
                           </button>
                           <button
                             onClick={() => handleBlock(gw.id, !gw.blocked)}
                             className="w-full px-4 py-2 text-left text-xs hover:bg-black/[0.03] transition-colors"
                           >
-                            {gw.blocked ? '🔓 Unblock' : '🔒 Block Updates'}
+                            {gw.blocked ? tx('🔓 Unblock') : tx('🔒 Block Updates')}
                           </button>
                           <hr className="my-1 border-black/[0.06]" />
                           <button
                             onClick={() => handleCommand(gw.id, 'controlled_reboot')}
                             className="w-full px-4 py-2 text-left text-xs text-red-500 hover:bg-red-50/60 transition-colors"
                           >
-                            ⚡ Reboot
+                            {tx('⚡ Reboot')}
                           </button>
                         </div>
                       )}

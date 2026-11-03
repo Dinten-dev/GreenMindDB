@@ -1,7 +1,10 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import BrandLogo from '@/components/BrandLogo';
 import AdministrationLink from '@/components/AdministrationLink';
+import AppLocaleSwitcher from '@/components/AppLocaleSwitcher';
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
@@ -32,6 +35,8 @@ const NAV_GROUPS = [
 ];
 
 function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const tx = useAppText();
+
   const { user, logout } = useAuth();
   const locale = useLocale();
   const localPath = pathname.replace(new RegExp(`^/${locale}(?=/|$)`), '');
@@ -54,14 +59,19 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
           onClick={onNavigate}
         >
           <BrandLogo size={40} />
-          <span className="font-semibold text-[15px] text-gray-800 tracking-tight">GreenMind</span>
+          <span className="font-semibold text-[15px] text-gray-800 tracking-tight">
+            {tx('GreenMind')}
+          </span>
         </Link>
       </div>
 
-      <nav aria-label="Hauptnavigation" className="flex-1 overflow-y-auto px-3 py-5 space-y-7">
+      <nav
+        aria-label={tx('Hauptnavigation')}
+        className="flex-1 overflow-y-auto px-3 py-5 space-y-7"
+      >
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
-            <p className="px-3 mb-2 text-xs font-medium text-gray-500">{group.label}</p>
+            <p className="px-3 mb-2 text-xs font-medium text-gray-500">{tx(group.label)}</p>
             <div className="space-y-1">
               {group.links
                 .filter((link) => !('roles' in link) || (user && link.roles?.includes(user.role)))
@@ -82,7 +92,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
                       <span aria-hidden="true" className="w-5 text-center text-lg leading-none">
                         {link.icon}
                       </span>
-                      <span>{link.label}</span>
+                      <span>{tx(link.label)}</span>
                     </Link>
                   );
                 })}
@@ -97,6 +107,9 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
         ))}
       </nav>
 
+      <div className="px-6 py-3">
+        <AppLocaleSwitcher />
+      </div>
       {/* User */}
       <div className="px-3 py-4 border-t border-black/[0.04]">
         <div className="px-3 py-2">
@@ -107,7 +120,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
           onClick={handleLogout}
           className="w-full mt-2 px-3 py-2 text-sm text-gray-400 hover:text-red-500 hover:bg-red-50/60 rounded-xl transition-all duration-200 text-left"
         >
-          Abmelden
+          {tx('Abmelden')}
         </button>
       </div>
     </>
@@ -125,6 +138,8 @@ function AppSidebar() {
 }
 
 function MobileDrawer() {
+  const tx = useAppText();
+
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -160,14 +175,14 @@ function MobileDrawer() {
           aria-controls="app-mobile-navigation"
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
         >
-          <span aria-hidden="true">☰</span> Menü
+          <span aria-hidden="true">☰</span> {tx('Menü')}
         </button>
-        <span className="ml-auto text-sm font-semibold text-emerald-700">GreenMind</span>
+        <span className="ml-auto text-sm font-semibold text-emerald-700">{tx('GreenMind')}</span>
       </div>
       <dialog
         ref={dialogRef}
         id="app-mobile-navigation"
-        aria-label="Navigation"
+        aria-label={tx('Navigation')}
         className="app-navigation-dialog"
         onClose={() => setOpen(false)}
         onCancel={() => setOpen(false)}
@@ -180,7 +195,7 @@ function MobileDrawer() {
             onClick={() => setOpen(false)}
             className="self-end mx-4 mt-3 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-50"
           >
-            Menü schliessen ×
+            {tx('Menü schliessen ×')}
           </button>
           <SidebarContent pathname={pathname} onNavigate={() => setOpen(false)} />
         </div>

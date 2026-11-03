@@ -1,4 +1,6 @@
 'use client';
+
+import { useAppText } from '@/i18n/app-text';
 import { useEffect, useState } from 'react';
 import {
   adminArchiveStatus,
@@ -6,15 +8,15 @@ import {
   type ArchiveOverview as ArchiveOverviewData,
 } from '@/lib/administration-api';
 
-const formatBytes = (value: number | null, decimals = 1) =>
+const formatBytes = (value: number | null, locale: string, decimals = 1) =>
   value === null
     ? '–'
-    : `${(value / 1024 ** 3).toLocaleString('de-CH', { maximumFractionDigits: decimals })} GB`;
+    : `${(value / 1024 ** 3).toLocaleString(locale, { maximumFractionDigits: decimals })} GB`;
 
-const formatRate = (value: number | null) =>
+const formatRate = (value: number | null, locale: string) =>
   value === null
     ? '–'
-    : `${(value / 1024 ** 2).toLocaleString('de-CH', { maximumFractionDigits: 2 })} MB/s`;
+    : `${(value / 1024 ** 2).toLocaleString(locale, { maximumFractionDigits: 2 })} MB/s`;
 
 function ArchiveIcon({ kind }: { kind: 'files' | 'pending' | 'speed' | 'memory' | 'box' }) {
   const paths = {
@@ -102,6 +104,8 @@ function MetricCard({
 }
 
 export default function ArchiveOverview() {
+  const tx = useAppText();
+
   const [data, setData] = useState<ArchiveOverviewData | null>(null);
   const [error, setError] = useState(false);
   const [requesting, setRequesting] = useState(false);
@@ -136,7 +140,9 @@ export default function ArchiveOverview() {
   const requestCopy = async () => {
     if (!data?.manual_copy_available || requesting) return;
     if (
-      !window.confirm('WAV-Dateien zur Storage Box kopieren? Lokale Originale bleiben erhalten.')
+      !window.confirm(
+        tx('WAV-Dateien zur Storage Box kopieren? Lokale Originale bleiben erhalten.')
+      )
     ) {
       return;
     }
@@ -144,9 +150,9 @@ export default function ArchiveOverview() {
     setNotice('');
     try {
       await adminRequestArchiveCopy();
-      setNotice('Kopierauftrag wurde an den Dienst übergeben.');
+      setNotice(tx('Kopierauftrag wurde an den Dienst übergeben.'));
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : 'Kopierauftrag fehlgeschlagen.');
+      setNotice(tx.error(cause));
     } finally {
       setRequesting(false);
     }
@@ -156,37 +162,37 @@ export default function ArchiveOverview() {
   const ram =
     data?.worker_memory_bytes === null || data?.worker_memory_bytes === undefined
       ? '–'
-      : `${formatBytes(data.worker_memory_bytes)} / ${formatBytes(data.worker_memory_limit_bytes)}`;
+      : `${formatBytes(data.worker_memory_bytes, tx.locale)} / ${formatBytes(data.worker_memory_limit_bytes, tx.locale)}`;
   const reserve =
     data?.worker_memory_reserve_bytes == null
-      ? 'Keine Live-Messung verfügbar'
-      : `${formatBytes(data.worker_memory_reserve_bytes)} Sicherheitsreserve`;
+      ? tx('Keine Live-Messung verfügbar')
+      : `${formatBytes(data.worker_memory_reserve_bytes, tx.locale)} ${tx('Sicherheitsreserve')}`;
   const stampedAt = data?.sampled_at
-    ? `Stand ${new Date(data.sampled_at).toLocaleTimeString('de-CH')}`
-    : 'Wartet auf Verbindung zum Kopierdienst';
+    ? tx('Stand {value0}', { value0: new Date(data.sampled_at).toLocaleTimeString(tx.locale) })
+    : tx('Wartet auf Verbindung zum Kopierdienst');
 
   return (
     <section className="glass-card space-y-5 p-5 sm:p-6" aria-labelledby="archive-overview-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="archive-overview-title" className="text-lg font-semibold text-gray-800">
-            WAV-Archiv
+            {tx('WAV-Archiv')}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Kopierstatus, Arbeitsspeicher und Storage Box.
+            {tx('Kopierstatus, Arbeitsspeicher und Storage Box.')}
           </p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
           <span className="h-2 w-2 rounded-full bg-slate-400" />
           {data?.state === 'running'
-            ? 'Aktiver Transfer'
+            ? tx('Aktiver Transfer')
             : data?.state === 'paused'
-              ? 'Pausiert'
+              ? tx('Pausiert')
               : data?.state === 'failed'
-                ? 'Fehler'
+                ? tx('Fehler')
                 : data?.state === 'idle'
-                  ? 'Bereit'
-                  : 'Nicht verbunden'}
+                  ? tx('Bereit')
+                  : tx('Nicht verbunden')}
         </span>
       </div>
 
@@ -195,42 +201,48 @@ export default function ArchiveOverview() {
           role="status"
           className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
         >
-          Archivstatus nicht erreichbar. Es werden keine Werte erfunden oder als 0 bewertet.
+          {tx('Archivstatus nicht erreichbar. Es werden keine Werte erfunden oder als 0 bewertet.')}
         </p>
       ) : unavailable || data?.message ? (
         <p
           role="status"
           className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-900"
         >
-          {data?.message ?? 'Archivstatus wird geladen …'}
+          {data?.environment === 'staging'
+            ? tx(
+                'Kopieren ist in Staging deaktiviert und wird erst nach Production-Rollout freigeschaltet.'
+              )
+            : tx(
+                'Archivstatus nicht erreichbar. Es werden keine Werte erfunden oder als 0 bewertet.'
+              )}
         </p>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon="files"
-          title="Verifiziert kopiert"
-          value={data?.files_copied == null ? '–' : data.files_copied.toLocaleString('de-CH')}
-          detail="Nur vollständig geprüfte WAV-Dateien"
+          title={tx('Verifiziert kopiert')}
+          value={data?.files_copied == null ? '–' : data.files_copied.toLocaleString(tx.locale)}
+          detail={tx('Nur vollständig geprüfte WAV-Dateien')}
           tone="green"
         />
         <MetricCard
           icon="pending"
-          title="Noch ausstehend"
-          value={formatBytes(data?.pending_bytes ?? null)}
-          detail="– bedeutet: Gesamtgrösse noch nicht bestimmt"
+          title={tx('Noch ausstehend')}
+          value={formatBytes(data?.pending_bytes ?? null, tx.locale)}
+          detail={tx('– bedeutet: Gesamtgrösse noch nicht bestimmt')}
           tone="amber"
         />
         <MetricCard
           icon="speed"
-          title="Geprüfte Kopierrate"
-          value={formatRate(data?.transfer_bytes_per_second ?? null)}
+          title={tx('Geprüfte Kopierrate')}
+          value={formatRate(data?.transfer_bytes_per_second ?? null, tx.locale)}
           detail={stampedAt}
           tone="slate"
         />
         <MetricCard
           icon="memory"
-          title="RAM Kopierdienst"
+          title={tx('RAM Kopierdienst')}
           value={ram}
           detail={reserve}
           tone="slate"
@@ -244,22 +256,27 @@ export default function ArchiveOverview() {
               <ArchiveIcon kind="box" />
             </span>
             <div>
-              <h3 className="font-semibold text-gray-800">Storage Box</h3>
-              <p className="mt-0.5 text-sm text-gray-500">Belegung und manueller Kopierstart</p>
+              <h3 className="font-semibold text-gray-800">{tx('Storage Box')}</h3>
+              <p className="mt-0.5 text-sm text-gray-500">
+                {tx('Belegung und manueller Kopierstart')}
+              </p>
             </div>
           </div>
           <p className="text-sm font-medium text-gray-600">
             {data?.storage_box_used_bytes != null && data.storage_box_total_bytes != null
-              ? `${formatBytes(data.storage_box_used_bytes)} von ${formatBytes(data.storage_box_total_bytes)} belegt`
-              : 'Belegung nicht verfügbar'}
+              ? tx('{value0} von {value1} belegt', {
+                  value0: formatBytes(data.storage_box_used_bytes, tx.locale),
+                  value1: formatBytes(data.storage_box_total_bytes, tx.locale),
+                })
+              : tx('Belegung nicht verfügbar')}
           </p>
         </div>
         <div
           className="mt-4 h-3 overflow-hidden rounded-full bg-gray-100"
           aria-label={
             data?.storage_box_used_bytes != null
-              ? 'Storage-Box-Belegung'
-              : 'Storage-Box-Belegung nicht verfügbar'
+              ? tx('Storage-Box-Belegung')
+              : tx('Storage-Box-Belegung nicht verfügbar')
           }
           role="img"
         >
@@ -282,15 +299,19 @@ export default function ArchiveOverview() {
             disabled={!data?.manual_copy_available || requesting}
             className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
           >
-            {requesting ? 'Wird gestartet …' : 'WAV-Dateien jetzt kopieren'}
+            {requesting ? tx('Wird gestartet …') : tx('WAV-Dateien jetzt kopieren')}
           </button>
         </div>
         <p className="mt-2 text-xs text-gray-500">
           {data?.manual_copy_available
-            ? 'Es werden nur Kopien erstellt; lokale Originale bleiben erhalten.'
+            ? tx('Es werden nur Kopien erstellt; lokale Originale bleiben erhalten.')
             : data?.environment === 'production' || data?.environment === 'prod'
-              ? 'Manueller Start ist gesperrt, bis der sichere Production-Dienst angebunden ist.'
-              : 'Kopieren ist in Staging deaktiviert und wird erst nach Production-Rollout freigeschaltet.'}
+              ? tx(
+                  'Manueller Start ist gesperrt, bis der sichere Production-Dienst angebunden ist.'
+                )
+              : tx(
+                  'Kopieren ist in Staging deaktiviert und wird erst nach Production-Rollout freigeschaltet.'
+                )}
         </p>
         {notice && (
           <p role="status" className="mt-3 text-sm text-gray-700">
