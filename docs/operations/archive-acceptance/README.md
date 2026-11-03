@@ -22,6 +22,10 @@ Private inventories and raw evidence remain with the operator. [`status.json`](s
 
 Specification completed. All 57 production relations and 16 data categories have an explicit treatment. Seven proposed SQL datasets remain on HOLD; 50 relations are preserved. Existing archive paths, account separation and encryption bindings are retained. Unknown provenance, active processing and quarantine block affected deletion. See [step 2](step-2.md), the [versioned lifecycle policy](lifecycle-policy.json) and [table treatments](table-policy.json). A policy entry or local adapter does not enable production deletion.
 
+## Step 3 — resource acceptance remains open
+
+Fresh capacity measurements and bounded native attempts are recorded in [step 3](step-3.md), [capacity calculations](capacity.json) and [separate resource profiles](resource-limits.json). The Direct quota is 12 GiB. Current resource/startup and complete seven-day/backlog proofs did not pass. Step 3 remains PARTIAL; dependent work stays on hold.
+
 ## Production state
 
-No production configuration, deployment, schema, original data or existing snapshot was changed by these inventory steps. The overall archive lifecycle remains unaccepted; new WAV deletion and SQL retention remain disabled.
+No production configuration, deployment, schema, original data or existing snapshot was changed by these acceptance steps. The overall archive lifecycle remains unaccepted; new WAV deletion and SQL retention remain disabled.
