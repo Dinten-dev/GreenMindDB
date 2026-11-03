@@ -52,7 +52,9 @@
 - Lokale Referenz: bereitgestellter Ordner greenmind-live-main/
 - Diese Kopie enthält Dashboard und SQL-Abgriff, aber kein electrode-live/.
 - GmLive.h fehlt ebenfalls; neuer Live-Abgriff bleibt gesondert abzugleichen.
-- Der verfügbare GitHub-Zugriff liefert derzeit HTTP 404.
+- Beim Planstand 02.11. lieferte der GitHub-Zugriff HTTP 404.
+- Am 03.11. wurde electrode-live/ über den vorhandenen Zugang abgeglichen.
+- Quellstand und Grenzen sind in DIRECT-RAW400.md dokumentiert.
 - Code und README müssen vor Übernahme gezielt abgeglichen werden.
 - Folgende Übergangsdetails stammen aus Peters Mitteilung, nicht eigener Laufzeitprüfung.
 - GmLive.h wird nur mit GREENMIND_GMLIVE=1 eingebunden.
@@ -167,6 +169,9 @@
 - Bestehende Gateway-Firmware bleibt zunächst kompatibel unterstützt.
 - Auf 8-MB-Boxen freien Heap und längste Blockierzeiten prüfen.
 - Büroboxen bis zur freigegebenen Ersatzversion vom OTA ausschliessen.
+
+- Softwarekandidat und Prüfvertrag: [DIRECT-RAW400.md](DIRECT-RAW400.md).
+- Hardware-Abnahme, 24-h-Test und Verteilung bleiben offen.
 
 ### 9. Live bei Bedarf einschalten
 
