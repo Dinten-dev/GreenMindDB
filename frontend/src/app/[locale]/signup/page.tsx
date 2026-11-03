@@ -1,5 +1,7 @@
 'use client';
 
+import { useLocale } from 'next-intl';
+
 import BrandLogo from '@/components/BrandLogo';
 
 import { useState } from 'react';
@@ -7,6 +9,7 @@ import Link from 'next/link';
 import { apiSignup } from '@/lib/api';
 
 export default function SignupPage() {
+  const locale = useLocale();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -105,7 +108,7 @@ export default function SignupPage() {
         <p className="text-center text-sm text-apple-gray-400 mt-6">
           Bereits ein Konto?{' '}
           <Link
-            href="/login"
+            href={`/${locale}/login`}
             className="text-gm-green-500 font-medium hover:text-gm-green-600 transition-colors"
           >
             Anmelden

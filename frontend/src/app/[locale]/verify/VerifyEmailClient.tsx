@@ -1,5 +1,7 @@
 'use client';
 
+import { useLocale } from 'next-intl';
+
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { apiVerifyEmail } from '@/lib/api';
@@ -7,6 +9,7 @@ import { apiVerifyEmail } from '@/lib/api';
 type VerificationState = 'invalid' | 'pending' | 'success' | 'error';
 
 export default function VerifyEmailClient({ token }: { token: string }) {
+  const locale = useLocale();
   const validToken = /^[a-f0-9]{32}$/.test(token);
   const [state, setState] = useState<VerificationState>(validToken ? 'pending' : 'invalid');
   const [message, setMessage] = useState(
@@ -58,7 +61,7 @@ export default function VerifyEmailClient({ token }: { token: string }) {
         <p className="mt-3 text-sm text-apple-gray-500">{message}</p>
         {state !== 'pending' && (
           <Link
-            href="/login"
+            href={`/${locale}/login`}
             className="mt-6 inline-flex rounded-apple bg-gm-green-500 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gm-green-600"
           >
             Zur Anmeldung

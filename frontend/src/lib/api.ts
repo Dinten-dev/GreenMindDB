@@ -1,3 +1,5 @@
+import { reportUnauthorized, sessionEpoch } from './auth-session';
+
 const API_BASE =
   typeof window === 'undefined'
     ? `${process.env.INTERNAL_API_URL || 'http://localhost:8000'}/api/v1`
@@ -5,6 +7,23 @@ const API_BASE =
 
 export interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
+}
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string
+  ) {
+    super(detail);
+    this.name = 'ApiError';
+  }
+}
+
+export class ApiConnectionError extends Error {
+  constructor() {
+    super('Connection unavailable');
+    this.name = 'ApiConnectionError';
+  }
 }
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
@@ -16,18 +35,29 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     url += `?${searchParams.toString()}`;
   }
 
-  const res = await fetch(url, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...fetchOpts.headers,
-    },
-    ...fetchOpts,
-  });
+  const requestEpoch = sessionEpoch();
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...fetchOpts.headers,
+      },
+      ...fetchOpts,
+    });
+  } catch {
+    if (fetchOpts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    throw new ApiConnectionError();
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `API error ${res.status}`);
+    const detail = typeof body.detail === 'string' ? body.detail : `API error ${res.status}`;
+    if (res.status === 401 && !path.startsWith('/auth/') && !path.startsWith('/public/')) {
+      reportUnauthorized(requestEpoch);
+    }
+    throw new ApiError(res.status, detail);
   }
 
   if (res.status === 204) return {} as T;
@@ -80,8 +110,8 @@ export async function apiLogout(): Promise<void> {
   await apiFetch('/auth/logout', { method: 'POST' });
 }
 
-export async function apiGetMe(): Promise<AuthUser> {
-  return apiFetch<AuthUser>('/auth/me');
+export async function apiGetMe(signal?: AbortSignal): Promise<AuthUser> {
+  return apiFetch<AuthUser>('/auth/me', { cache: 'no-store', signal });
 }
 
 export async function apiUpdateMe(data: {

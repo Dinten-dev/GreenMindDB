@@ -129,6 +129,8 @@
 - Sitzungsablauf, Netzwerkfehler und falsche Zugangsdaten unterscheiden.
 - Ladezustand, Passwortanzeige und verständliche Fehlermeldungen ergänzen.
 - Bestehende Sitzungsschutzfunktionen erhalten.
+- Umsetzung und Prüfgrenzen: [WEB-LOGIN.md](WEB-LOGIN.md).
+- Lokal geprüft; Produktionsfreigabe und OTA bleiben separat.
 
 ### 7. Gateway-Entfernung reparieren
 

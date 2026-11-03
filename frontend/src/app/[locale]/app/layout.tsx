@@ -5,9 +5,10 @@ import AdministrationLink from '@/components/AdministrationLink';
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { signInPath } from '@/lib/auth-routing';
 
 const NAV_GROUPS = [
   {
@@ -34,11 +35,13 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
   const { user, logout } = useAuth();
   const locale = useLocale();
   const localPath = pathname.replace(new RegExp(`^/${locale}(?=/|$)`), '');
-  const router = useRouter();
 
   const handleLogout = async () => {
-    await logout();
-    router.push(`/${locale}`);
+    try {
+      await logout();
+    } catch {
+      // Shared state presents the connection error and retry action.
+    }
   };
 
   return (
@@ -187,15 +190,21 @@ function MobileDrawer() {
 }
 
 function AppGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, status, issue, refresh } = useAuth();
   const locale = useLocale();
+  const t = useTranslations('Auth');
+  const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push(`/${locale}/login`);
+    if (!loading && !user && status !== 'unavailable') {
+      router.replace(
+        status === 'signed-out'
+          ? `/${locale}`
+          : signInPath(locale, pathname + window.location.search, issue === 'expired')
+      );
     }
-  }, [user, loading, router, locale]);
+  }, [user, loading, status, issue, router, locale, pathname]);
 
   if (loading) {
     return (
@@ -203,11 +212,27 @@ function AppGuard({ children }: { children: React.ReactNode }) {
         className="min-h-screen flex items-center justify-center"
         style={{ background: 'var(--dash-bg)' }}
       >
-        <div className="text-gray-400 text-sm">Dein Gewächshaus wird geladen…</div>
+        <div className="text-gray-400 text-sm">{t('checking')}</div>
       </div>
     );
   }
 
+  if (status === 'unavailable') {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-4 p-6"
+        role="alert"
+      >
+        <p>{t(`errors.${issue === 'network' ? 'network' : 'service'}`)}</p>
+        <button
+          onClick={() => void refresh()}
+          className="rounded-apple bg-gm-green-500 px-5 py-2 text-white"
+        >
+          {t('retry')}
+        </button>
+      </div>
+    );
+  }
   if (!user) return null;
 
   return (
@@ -222,9 +247,5 @@ function AppGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <AuthProvider>
-      <AppGuard>{children}</AppGuard>
-    </AuthProvider>
-  );
+  return <AppGuard>{children}</AppGuard>;
 }
