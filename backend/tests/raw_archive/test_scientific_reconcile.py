@@ -1,6 +1,7 @@
 """Recovery verifies each fake remote object independently; no real service access."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -54,7 +55,9 @@ def make_restored(tmp_path, monkeypatch):
         Path(path).chmod(0o600)
 
     monkeypatch.setattr(verifier, "download", download)
-    monkeypatch.setattr(recovery.os, "geteuid", lambda: 0)
+    # Simulate only the reconciler root precondition. Other modules retain
+    # the real file owner for Linux page-cache safety checks.
+    monkeypatch.setattr(recovery, "os", SimpleNamespace(geteuid=lambda: 0))
     monkeypatch.setattr(scientific_v3, "_directory", lambda p: Path(p))
     monkeypatch.setattr(recovery.control, "_authority", lambda *_args: ("8" * 32, {}))
     monkeypatch.setattr(recovery.control, "validate_lease_handoff", lambda *_args: None)
