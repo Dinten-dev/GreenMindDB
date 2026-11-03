@@ -109,6 +109,8 @@
 - Bestehende Mehrfachzugänge sperren und kontrolliert neu ausstellen.
 - Widerruf deaktiviert sämtliche zugehörigen Zugänge und Sitzungen.
 - Jede Sitzungsprüfung berücksichtigt zusätzlich den übergeordneten Zugang.
+- Umsetzung und Einführung: [PUBLIC-ACCESS-REVOCATION.md](PUBLIC-ACCESS-REVOCATION.md).
+- Laden und Drucken bleiben lesend; Neuausstellung benötigt Bestätigung.
 
 ### 5. Exportbereinigung ergänzen: S7
 

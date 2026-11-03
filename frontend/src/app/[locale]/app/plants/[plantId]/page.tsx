@@ -8,6 +8,7 @@ import {
   apiAssignSensor,
   apiGetSensorHistory,
   apiCreateObservationAccess,
+  apiGetObservationAccess,
   apiRevokeObservationAccess,
   apiDeletePlant,
 } from '@/lib/plants-api';
@@ -23,6 +24,7 @@ export default function PlantDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [availableSensors, setAvailableSensors] = useState<any[]>([]);
   const [access, setAccess] = useState<ObservationAccess | null>(null);
+  const [accessError, setAccessError] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Assign form
@@ -46,11 +48,12 @@ export default function PlantDetailPage() {
 
       // Try to load access
       try {
-        const a = await apiCreateObservationAccess(plantId);
+        const a = await apiGetObservationAccess(plantId);
         setAccess(a);
+        setAccessError(false);
       } catch {
-        // Ignore if creating fails or already revoked
-        // Currently get_or_create logic in backend handles it.
+        setAccess(null);
+        setAccessError(true);
       }
     } catch (err) {
       console.error(err);
@@ -80,20 +83,25 @@ export default function PlantDetailPage() {
   };
 
   const handleRevokeQR = async () => {
-    if (!confirm('Zugang widerrufen? Alter QR-Code wird ungültig.')) return;
+    if (!confirm('Alle öffentlichen Zugänge und laufenden Sitzungen widerrufen?')) return;
     try {
       const newAccess = await apiRevokeObservationAccess(plantId);
       setAccess(newAccess);
+      setAccessError(false);
     } catch (err) {
+      setAccessError(true);
       console.error(err);
     }
   };
 
   const handleGenerateQR = async () => {
+    if (!confirm('Öffentlichen Zugang für diese Pflanze neu ausstellen?')) return;
     try {
-      const a = await apiCreateObservationAccess(plantId);
+      const a = await apiCreateObservationAccess(plantId, true);
       setAccess(a);
+      setAccessError(false);
     } catch (err) {
+      setAccessError(true);
       console.error(err);
     }
   };
@@ -189,7 +197,23 @@ export default function PlantDetailPage() {
 
         <div className="glass-card p-6">
           <h2 className="text-lg font-semibold mb-4">QR / Observation Access</h2>
-          {access && access.is_active ? (
+          {accessError ? (
+            <div className="space-y-3" role="alert">
+              <p>
+                Zugangsstatus konnte nicht geladen werden. Öffentliche Zugänge können weiterhin
+                aktiv sein.
+              </p>
+              <button
+                onClick={handleRevokeQR}
+                className="px-4 py-2 bg-red-50 text-red-600 rounded-xl"
+              >
+                Öffentliche Zugänge widerrufen
+              </button>
+              <button onClick={loadData} className="px-4 py-2 underline">
+                Erneut laden
+              </button>
+            </div>
+          ) : access && access.is_active ? (
             <div className="space-y-4">
               <div className="bg-white/60 p-4 rounded-xl border border-black/[0.04] text-sm">
                 <p className="text-gray-500 mb-1">Public ID</p>
