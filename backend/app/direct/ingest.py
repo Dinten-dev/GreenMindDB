@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import struct
 import time
 
 from sqlalchemy import update
@@ -29,6 +30,11 @@ def accept_chunk(engine, settings, token, meta, payload, *, now=None):
         raise DirectError(413, "payload_limit")
     if hashlib.sha256(payload).hexdigest() != meta.payload_sha256:
         raise DirectError(422, "checksum_mismatch")
+
+    if meta.signal_profile == "ad8232-raw400-v1" and any(
+        value[0] < 0 for value in struct.iter_unpack("<h", payload)
+    ):
+        raise DirectError(422, "raw_profile_pcm_out_of_range")
 
     with transaction(engine) as db:
         device = authenticate(db, token, lock=True)

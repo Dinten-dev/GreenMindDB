@@ -34,9 +34,17 @@ class ChunkMetadata(BaseModel):
     calibration_version: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
     firmware_version: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
     payload_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    signal_profile: Literal["ad8232-raw400-v1"] | None = None
 
     @model_validator(mode="after")
     def validate_shape(self):
+        if self.signal_profile == "ad8232-raw400-v1" and (
+            self.sample_rate != 400
+            or self.channels != 1
+            or self.sample_bits != 16
+            or self.calibration_version != "unsigned-mv-linear-int16-v1"
+        ):
+            raise ValueError("Raw 400 Hz profile requires mono nominal GreenMind PCM16 at 400 Hz")
         if self.calibration_version == "unsigned-mv-linear-int16-v1" and (
             self.sample_bits != 16 or self.channels != 1
         ):
@@ -61,14 +69,20 @@ class ChunkMetadata(BaseModel):
     def frame_bytes(self):
         return self.channels * (self.sample_bits // 8)
 
+    def _metadata_dict(self, exclude=()):
+        fields = set(exclude)
+        # Preserve existing session configurations and duplicate identity hashes.
+        # Do not use exclude_none globally: V2 timing intentionally retains null uncertainty.
+        if self.signal_profile is None:
+            fields.add("signal_profile")
+        return self.model_dump(mode="json", exclude=fields)
+
     def session_config(self):
-        return self.model_dump(
-            mode="json", exclude={"sequence", "first_frame", "frame_count", "payload_sha256"}
-        )
+        return self._metadata_dict({"sequence", "first_frame", "frame_count", "payload_sha256"})
 
     def digest(self):
         return hashlib.sha256(
-            json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+            json.dumps(self._metadata_dict(), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
 
     def pieces(self):
