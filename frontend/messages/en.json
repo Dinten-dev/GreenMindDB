@@ -112,5 +112,30 @@
     "rights": "All rights reserved.",
     "dashboard": "Dashboard",
     "language": "Language"
+  },
+  "Auth": {
+    "title": "Sign in to GreenMind",
+    "intro": "Enter your account details.",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "checking": "Checking session…",
+    "retry": "Try again",
+    "retrySession": "Check session again",
+    "noAccount": "No account yet?",
+    "requestAccess": "Request access",
+    "errors": {
+      "credentials": "The email address or password is incorrect. Please check your details.",
+      "network": "Cannot connect to the server. Check your connection and try again.",
+      "service": "Sign-in is temporarily unavailable. Please try again.",
+      "expired": "Your session has expired. Please sign in again.",
+      "unverified": "Please verify your email address first.",
+      "disabled": "This account is disabled. Please contact your administrator.",
+      "rateLimited": "Too many sign-in attempts. Please try again later.",
+      "confirmation": "Your session could not be confirmed. Reload the page and sign in again."
+    }
   }
 }

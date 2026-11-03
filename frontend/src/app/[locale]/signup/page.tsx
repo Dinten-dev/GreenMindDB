@@ -111,7 +111,7 @@ export default function SignupPage() {
         <p className="text-center text-sm text-apple-gray-400 mt-6">
           Bereits ein Konto?{' '}
           <Link
-            href="/login"
+            href={`/${locale}/login`}
             className="text-gm-green-500 font-medium hover:text-gm-green-600 transition-colors"
           >
             Anmelden

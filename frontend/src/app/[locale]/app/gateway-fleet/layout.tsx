@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useLocale } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect } from 'react';
@@ -16,14 +17,15 @@ const GATEWAY_TABS = [
 
 export default function GatewayFleetLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && user && user.role !== 'admin') {
-      router.push('/app/dashboard');
+      router.replace(`/${locale}/app/dashboard`);
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, locale]);
 
   if (loading) {
     return (
@@ -51,13 +53,14 @@ export default function GatewayFleetLayout({ children }: { children: React.React
 
       <nav className="flex gap-1 p-1 bg-black/[0.03] rounded-2xl w-fit">
         {GATEWAY_TABS.map((tab) => {
+          const href = `/${locale}${tab.href}`;
           const isActive =
-            pathname === tab.href ||
-            (tab.href !== '/app/gateway-fleet/overview' && pathname.startsWith(tab.href));
+            pathname === href ||
+            (tab.href !== '/app/gateway-fleet/overview' && pathname.startsWith(href));
           return (
             <Link
               key={tab.href}
-              href={tab.href}
+              href={href}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}

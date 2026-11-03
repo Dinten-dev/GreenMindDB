@@ -30,6 +30,9 @@ describe('VerifyEmailClient', () => {
     await waitFor(() => expect(mockedVerify).toHaveBeenCalledWith(token));
     expect(window.location.search).toBe('');
     expect(await screen.findByText('Email successfully verified')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Zur Anmeldung' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Zur Anmeldung' })).toHaveAttribute(
+      'href',
+      '/de/login'
+    );
   });
 });
