@@ -48,6 +48,7 @@ def fixture(tmp_path, monkeypatch):
           raw_deleted_at timestamptz,timing_status text,coverage_ratio double precision,s3_key text,sample_rate integer,pcm_scale_mv double precision,pcm_offset_mv double precision);
         CREATE TABLE IF NOT EXISTS wav_feature(wav_file_id uuid PRIMARY KEY,source_sha256 text);""")
         )
+        db.execute(text("ALTER TABLE wav_file ADD COLUMN IF NOT EXISTS content_sha256 text"))
     worker.initialize(engine)
     with engine.begin() as db:
         db.execute(
@@ -680,16 +681,20 @@ def test_future_migration_autogeneration_preserves_visual_tables(fixture):
     assert "sensor" in dropped  # The filter does not hide ordinary application tables.
 
 
-def test_release_readiness_uses_authenticated_real_api_and_database(fixture, monkeypatch):
+def test_release_readiness_uses_authenticated_real_api_and_database(fixture, monkeypatch, tmp_path):
     import json
     import time
     import urllib.error
     from urllib.parse import urlsplit
 
+    from fastapi import FastAPI
     from sqlalchemy.orm import Session
 
+    from app.auth import COOKIE_NAME, get_password_hash
     from app.direct.models import Base as DirectBase
+    from app.models.access import AuthSession
     from app.models.user import Role, User
+    from app.routers.auth import router as auth_router
     from app.services import wav_service
     from app.visualization import direct, release_check
 
@@ -701,6 +706,7 @@ def test_release_readiness_uses_authenticated_real_api_and_database(fixture, mon
             )
         )
     User.__table__.create(engine, checkfirst=True)
+    AuthSession.__table__.create(engine, checkfirst=True)
     DirectBase.metadata.create_all(engine)
     direct.initialize(engine)
     with engine.begin() as db:
@@ -718,8 +724,8 @@ def test_release_readiness_uses_authenticated_real_api_and_database(fixture, mon
     with Session(engine) as db, db.begin():
         db.add(
             User(
-                email="release-local@example.invalid",
-                password_hash="unused",
+                email="release-local@example.com",
+                password_hash=get_password_hash("Synthetic-release-test-123"),
                 role=Role.ADMIN,
                 organization_id=ids["org"],
                 is_active=True,
@@ -777,6 +783,24 @@ def test_release_readiness_uses_authenticated_real_api_and_database(fixture, mon
             yield db
 
     app.dependency_overrides[get_db] = database
+    login_app = FastAPI()
+    login_app.include_router(auth_router)
+    login_app.dependency_overrides[get_db] = database
+    with TestClient(login_app, base_url="https://testserver") as login_client:
+        login = login_client.post(
+            "/auth/login",
+            json={
+                "email": "release-local@example.com",
+                "password": "Synthetic-release-test-123",
+            },
+        )
+        assert login.status_code == 200, login.text
+        tokens = tmp_path / "validation-tokens.json"
+        tokens.write_text(
+            json.dumps({login.json()["user"]["id"]: login_client.cookies[COOKIE_NAME]})
+        )
+        tokens.chmod(0o600)
+    monkeypatch.setenv("GREENMIND_VALIDATION_TOKENS_FILE", str(tokens))
     client = TestClient(app)
     statuses = []
     stale_route = [False]

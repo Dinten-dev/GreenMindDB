@@ -96,7 +96,7 @@ def test_four_dashboard_reads_share_one_sql_connection_and_one_archive_worker(
             return result
 
     try:
-        with TemporaryDirectory(prefix="gm-parallel-", dir="/private/tmp") as folder:
+        with TemporaryDirectory(prefix="gm-parallel-", dir="/tmp") as folder:
             path = Path(folder) / "read.sock"
             monkeypatch.setenv("TIERED_ARCHIVE_READ_BROKER_SOCKET", str(path))
             with Server(str(path), None, None, tmp_path, health_check=lambda: None) as server:

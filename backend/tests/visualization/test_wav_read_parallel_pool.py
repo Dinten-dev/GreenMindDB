@@ -47,7 +47,7 @@ class SQLiteReadSession(Session):
     def execute(self, statement, *args, **kwargs):
         # Supply PostgreSQL's native text-query types; retain real SQL and checkout.
         if isinstance(statement, TextClause):
-            if "SELECT r.manifest FROM direct_revision" in statement.text:
+            if "SELECT r.manifest,r.manifest_sha256 FROM direct_revision" in statement.text:
                 statement = statement.columns(manifest=JSON())
             elif "SELECT w.*,coalesce(f.source_sha256" in statement.text:
                 statement = statement.bindparams(
@@ -118,7 +118,13 @@ def bounded_readers(tmp_path, monkeypatch):
     cfg = dict(
         sample_bits=16, channels=1, sample_rate=4, session_start_us=int(started.timestamp() * 1e6)
     )
-    run = dict(key=key, sha256=digest, first_frame=0, frame_count=4)
+    run = dict(
+        key=key,
+        sha256=digest,
+        first_frame=0,
+        frame_count=4,
+        started_at_us=cfg["session_start_us"],
+    )
     manifest = dict(device_id=device_id, session_id=session_id, revision=1, config=cfg, runs=[run])
     with Session(gateway_engine) as db, db.begin():
         db.add_all(

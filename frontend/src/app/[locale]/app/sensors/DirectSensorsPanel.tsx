@@ -1,6 +1,10 @@
 'use client';
 import { readViewValue, replaceViewValues } from '@/lib/view-state';
 
+import { RecordingTimeDetails } from './CaptureTimeSummary';
+import { captureTimeZone, formatCaptureTime } from '@/lib/capture-time';
+import type { CaptureTimeInfo } from '@/lib/api';
+
 import { useAppText } from '@/i18n/app-text';
 
 import RecordingCompletenessBadge from './RecordingCompletenessBadge';
@@ -27,6 +31,7 @@ type Recording = {
   revision: number;
   run: number;
   started_at: string;
+  time_info?: CaptureTimeInfo;
   duration_seconds: number;
   completeness?: RecordingCompleteness;
   sample_rate: number;
@@ -243,7 +248,7 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
           {latest && (
             <p className="mb-3 text-xs text-gray-500">
               {tx('Letzter Messpunkt:')}
-              {new Date(latest.timestamp).toLocaleString(tx.locale)}
+              {formatCaptureTime(latest.timestamp, tx.locale)}
             </p>
           )}
           {series.map((item) => (
@@ -318,13 +323,15 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
                 key={`${file.segment_id}-${file.revision}-${file.run}`}
                 className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
               >
-                <span>
-                  {new Date(file.started_at).toLocaleString(tx.locale)}{' '}
+                <div>
+                  {formatCaptureTime(file.started_at, tx.locale)}{' '}
                   <span className="text-gray-500">
-                    · {Math.round(file.duration_seconds)} {tx('s ·')} {file.sample_rate} {tx('Hz')}
+                    · {captureTimeZone()} · {Math.round(file.duration_seconds)} {tx('s ·')}{' '}
+                    {file.sample_rate} {tx('Hz')}
                     <RecordingCompletenessBadge completeness={nominalCompleteness(file, true)} />
                   </span>
-                </span>
+                  <RecordingTimeDetails time={file.time_info} />
+                </div>
                 <a
                   className="font-medium text-emerald-800 underline"
                   href={`${base}/wav/${file.segment_id}/${file.revision}/${file.run}`}
