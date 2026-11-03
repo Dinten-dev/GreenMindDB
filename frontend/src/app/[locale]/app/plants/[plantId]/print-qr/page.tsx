@@ -53,7 +53,7 @@ export default function PrintQRPage() {
             'Zugangsstatus konnte nicht geladen werden. Öffentliche Zugänge können weiterhin aktiv sein.'
           )}
         </p>
-        <Link href={`/app/plants/${plant.id}`} className="underline">
+        <Link href={`/${tx.locale}/app/plants/${plant.id}`} className="underline">
           {tx('Zur Pflanze')}
         </Link>
       </div>
@@ -67,21 +67,21 @@ export default function PrintQRPage() {
             'Kein aktiver öffentlicher Zugang. Stellen Sie ihn auf der Pflanzenseite bewusst neu aus.'
           )}
         </p>
-        <Link href={`/app/plants/${plant.id}`} className="underline">
+        <Link href={`/${tx.locale}/app/plants/${plant.id}`} className="underline">
           {tx('Zur Pflanze')}
         </Link>
       </div>
     );
   }
 
-  const observePath = `/observe/${access.public_id}`;
+  const observePath = `/${tx.locale}/observe/${access.public_id}`;
   const fullUrl = `${baseUrl}${observePath}`;
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center gap-4 print:hidden">
         <Link
-          href={`/app/plants/${plant.id}`}
+          href={`/${tx.locale}/app/plants/${plant.id}`}
           className="p-2 bg-white/40 rounded-xl hover:bg-white/60"
         >
           ←

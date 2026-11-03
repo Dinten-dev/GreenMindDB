@@ -243,6 +243,16 @@ it('keeps fixed application text and visible static labels registered for transl
       if (ts.isJsxText(node) && /[A-Za-zÄäÖöÜü]/.test(node.text))
         failures.push(`${filename}: untranslated JSX text`);
       if (
+        ts.isJsxAttribute(node) &&
+        ['title', 'aria-label', 'alt', 'placeholder'].includes(node.name.getText(source)) &&
+        node.initializer &&
+        ts.isStringLiteral(node.initializer)
+      ) {
+        const label = node.initializer.text;
+        if (/[A-Za-zÀ-ž]/.test(label) && label !== 'GreenMind' && !keys[label])
+          failures.push(`${filename}: untranslated attribute ${label}`);
+      }
+      if (
         ts.isCallExpression(node) &&
         node.expression.getText(source) === 'tx' &&
         node.arguments[0] &&

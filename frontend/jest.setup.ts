@@ -50,7 +50,16 @@ jest.mock('next-intl', () => {
   });
   const identity = (key: string) => key;
   return {
-    useTranslations: (namespace?: string) => (namespace === 'App' ? app : identity),
+    useTranslations: (namespace?: string) =>
+      namespace === 'App'
+        ? app
+        : namespace === 'Public'
+          ? jest.requireActual('next-intl').createTranslator({
+              locale: 'de',
+              messages: jest.requireActual('./messages/de.json'),
+              namespace: 'Public',
+            })
+          : identity,
     useLocale: () => 'de',
   };
 });

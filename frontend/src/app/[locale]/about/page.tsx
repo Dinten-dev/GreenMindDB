@@ -1,5 +1,7 @@
 'use client';
 
+import { usePublicText } from '@/i18n/public-text';
+
 import Image from 'next/image';
 import ScrollReveal from '@/components/ScrollReveal';
 
@@ -31,20 +33,21 @@ function LinkedInIcon() {
 }
 
 export default function AboutPage() {
+  const tx = usePublicText();
   return (
     <div className="min-h-screen">
       <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
         <ScrollReveal>
           <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-            Über uns
+            {tx('Über uns')}
           </p>
           <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-            Über GreenMind.
+            {tx('Über GreenMind.')}
           </h1>
         </ScrollReveal>
         <ScrollReveal delay={200}>
           <p className="text-xl text-apple-gray-500 max-w-2xl mb-12 md:mb-20 leading-relaxed">
-            Bioelektrische Pflanzensignale verstehen, um den Anbau gezielt zu verbessern.
+            {tx('Bioelektrische Pflanzensignale verstehen, um den Anbau gezielt zu verbessern.')}
           </p>
         </ScrollReveal>
 
@@ -52,14 +55,12 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">
-                Unsere Mission
+                {tx('Unsere Mission')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
-                Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber
-                nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein
-                System, das bioelektrische Pflanzensignale erfasst und für bessere
-                Anbauentscheidungen nutzbar macht. Ein Projekt der Galaxyadvisors AG in
-                Zusammenarbeit mit der FHNW.
+                {tx(
+                  'Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein System, das bioelektrische Pflanzensignale erfasst und für bessere Anbauentscheidungen nutzbar macht. Ein Projekt der Galaxyadvisors AG in Zusammenarbeit mit der FHNW.'
+                )}
               </p>
             </section>
           </ScrollReveal>
@@ -67,14 +68,12 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">
-                Warum es wichtig ist
+                {tx('Warum es wichtig ist')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
-                Der weltweite Nahrungsmittelbedarf steigt. Wasser und Anbauflächen stehen unter
-                Druck. Klimatische Schwankungen machen konventionelle Anbaumethoden weniger
-                vorhersehbar. Pflanzen senden dabei ständig elektrische Signale, die auf Stress
-                hinweisen — oft bevor äussere Schäden sichtbar werden. GreenMind untersucht, ob
-                diese Signale als Grundlage für bessere Entscheidungen im Anbau dienen können.
+                {tx(
+                  'Der weltweite Nahrungsmittelbedarf steigt. Wasser und Anbauflächen stehen unter Druck. Klimatische Schwankungen machen konventionelle Anbaumethoden weniger vorhersehbar. Pflanzen senden dabei ständig elektrische Signale, die auf Stress hinweisen — oft bevor äussere Schäden sichtbar werden. GreenMind untersucht, ob diese Signale als Grundlage für bessere Entscheidungen im Anbau dienen können.'
+                )}
               </p>
             </section>
           </ScrollReveal>
@@ -83,7 +82,7 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-8">
-                Das Team
+                {tx('Das Team')}
               </h2>
               <div className="space-y-10">
                 {team.map((member, i) => (
@@ -109,13 +108,17 @@ export default function AboutPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-apple-gray-400 hover:text-[#0A66C2] transition-colors"
-                            aria-label={`${member.name} auf LinkedIn`}
+                            aria-label={tx('{name} auf LinkedIn', { name: member.name })}
                           >
                             <LinkedInIcon />
                           </a>
                         </div>
-                        <p className="text-sm font-medium text-gm-green-600 mb-3">{member.role}</p>
-                        <p className="text-sm text-apple-gray-500 leading-relaxed">{member.bio}</p>
+                        <p className="text-sm font-medium text-gm-green-600 mb-3">
+                          {tx(member.role)}
+                        </p>
+                        <p className="text-sm text-apple-gray-500 leading-relaxed">
+                          {tx(member.bio)}
+                        </p>
                       </div>
                     </div>
                   </ScrollReveal>
@@ -127,13 +130,12 @@ export default function AboutPage() {
           <ScrollReveal>
             <section>
               <h2 className="text-2xl md:text-3xl font-semibold text-apple-gray-800 mb-4">
-                Wie wir arbeiten
+                {tx('Wie wir arbeiten')}
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
-                Jede Komponente wird unter realen Anbaubedingungen getestet — in Gewächshäusern und
-                im Freiland, gemeinsam mit der FHNW und landwirtschaftlichen Partnerbetrieben.
-                Unsere Ergebnisse dokumentieren wir im Science Center und gleichen sie mit aktueller
-                wissenschaftlicher Literatur ab.
+                {tx(
+                  'Jede Komponente wird unter realen Anbaubedingungen getestet — in Gewächshäusern und im Freiland, gemeinsam mit der FHNW und landwirtschaftlichen Partnerbetrieben. Unsere Ergebnisse dokumentieren wir im Science Center und gleichen sie mit aktueller wissenschaftlicher Literatur ab.'
+                )}
               </p>
             </section>
           </ScrollReveal>

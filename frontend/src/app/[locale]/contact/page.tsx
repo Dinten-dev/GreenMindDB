@@ -1,10 +1,13 @@
 'use client';
 
+import { usePublicText } from '@/i18n/public-text';
+
 import { useState } from 'react';
 import ScrollReveal from '@/components/ScrollReveal';
 import { apiSubmitContact } from '@/lib/api';
 
 export default function ContactPage() {
+  const tx = usePublicText();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,9 +30,7 @@ export default function ContactPage() {
       setFormData({ name: '', email: '', company: '', message: '', website: '' });
     } catch (err: unknown) {
       setStatus('error');
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Ein unerwarteter Fehler ist aufgetreten.'
-      );
+      setErrorMessage(tx.error(err));
     }
   };
 
@@ -44,24 +45,24 @@ export default function ContactPage() {
           <div className="flex-1 max-w-2xl">
             <ScrollReveal>
               <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-                Kontakt
+                {tx('Kontakt')}
               </p>
               <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-                Kontaktieren Sie uns.
+                {tx('Kontaktieren Sie uns.')}
               </h1>
             </ScrollReveal>
             <ScrollReveal delay={200}>
               <p className="text-xl text-apple-gray-500 mb-10 md:mb-16 leading-relaxed">
-                Sie forschen an bioelektrischen Pflanzensignalen oder betreiben eine Anbauumgebung,
-                die als Forschungsstandort in Frage kommt? Wir freuen uns auf den wissenschaftlichen
-                Austausch.
+                {tx(
+                  'Sie forschen an bioelektrischen Pflanzensignalen oder betreiben eine Anbauumgebung, die als Forschungsstandort in Frage kommt? Wir freuen uns auf den wissenschaftlichen Austausch.'
+                )}
               </p>
             </ScrollReveal>
 
             <ScrollReveal delay={350}>
               <div className="bg-apple-gray-100 rounded-apple-lg p-6 md:p-10 border border-apple-gray-200/50">
                 <h3 className="text-sm font-semibold text-apple-gray-500 uppercase tracking-wider mb-3">
-                  Trägerorganisation
+                  {tx('Trägerorganisation')}
                 </h3>
                 <p className="text-lg text-apple-gray-800 leading-relaxed">
                   GreenMind GmbH
@@ -104,16 +105,18 @@ export default function ContactPage() {
                       </svg>
                     </div>
                     <h3 className="text-2xl font-bold text-apple-gray-800 mb-4">
-                      Nachricht gesendet!
+                      {tx('Nachricht gesendet!')}
                     </h3>
                     <p className="text-apple-gray-500 mb-8">
-                      Vielen Dank für Ihre Nachricht. Wir werden uns in Kürze bei Ihnen melden.
+                      {tx(
+                        'Vielen Dank für Ihre Nachricht. Wir werden uns in Kürze bei Ihnen melden.'
+                      )}
                     </p>
                     <button
                       onClick={() => setStatus('idle')}
                       className="px-8 py-3 bg-apple-gray-100 text-apple-gray-800 rounded-full font-medium hover:bg-apple-gray-200 transition-colors"
                     >
-                      Weitere Nachricht senden
+                      {tx('Weitere Nachricht senden')}
                     </button>
                   </div>
                 ) : (
@@ -136,61 +139,77 @@ export default function ContactPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                          Name *
+                        <label
+                          htmlFor="contact-name"
+                          className="block text-sm font-medium text-apple-gray-600 mb-2"
+                        >
+                          {tx('Name *')}
                         </label>
                         <input
+                          id="contact-name"
                           required
                           type="text"
                           name="name"
                           value={formData.name}
                           onChange={handleChange}
                           className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                          placeholder="Ihr Name"
+                          placeholder={tx('Ihr Name')}
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                          Unternehmen
+                        <label
+                          htmlFor="contact-company"
+                          className="block text-sm font-medium text-apple-gray-600 mb-2"
+                        >
+                          {tx('Unternehmen')}
                         </label>
                         <input
+                          id="contact-company"
                           type="text"
                           name="company"
                           value={formData.company}
                           onChange={handleChange}
                           className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                          placeholder="Optional"
+                          placeholder={tx('Optional')}
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                        E-Mail *
+                      <label
+                        htmlFor="contact-email"
+                        className="block text-sm font-medium text-apple-gray-600 mb-2"
+                      >
+                        {tx('E-Mail *')}
                       </label>
                       <input
+                        id="contact-email"
                         required
                         type="email"
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
                         className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                        placeholder="sie@beispiel.com"
+                        placeholder={tx('sie@beispiel.com')}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                        Nachricht *
+                      <label
+                        htmlFor="contact-message"
+                        className="block text-sm font-medium text-apple-gray-600 mb-2"
+                      >
+                        {tx('Nachricht *')}
                       </label>
                       <textarea
+                        id="contact-message"
                         required
                         name="message"
                         value={formData.message}
                         onChange={handleChange}
                         rows={5}
                         className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm resize-none"
-                        placeholder="Wie können wir helfen?"
+                        placeholder={tx('Wie können wir helfen?')}
                       ></textarea>
                     </div>
 
@@ -221,7 +240,7 @@ export default function ContactPage() {
                           ></path>
                         </svg>
                       ) : (
-                        'Nachricht senden'
+                        tx('Nachricht senden')
                       )}
                     </button>
                   </form>

@@ -64,7 +64,9 @@ describe('EarlyAccessPage', () => {
     await user.click(screen.getByRole('button', { name: /zugang anfragen/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Network failure')).toBeInTheDocument();
+      expect(
+        screen.getByText('Senden fehlgeschlagen. Bitte später erneut versuchen.')
+      ).toBeInTheDocument();
     });
   });
 

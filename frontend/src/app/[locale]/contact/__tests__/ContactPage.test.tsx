@@ -64,7 +64,9 @@ describe('ContactPage', () => {
     await user.click(screen.getByText('Nachricht senden'));
 
     await waitFor(() => {
-      expect(screen.getByText('Server error')).toBeInTheDocument();
+      expect(
+        screen.getByText('Senden fehlgeschlagen. Bitte später erneut versuchen.')
+      ).toBeInTheDocument();
     });
   });
 

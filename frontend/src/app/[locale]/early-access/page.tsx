@@ -1,10 +1,13 @@
 'use client';
 
+import { usePublicText } from '@/i18n/public-text';
+
 import { useState } from 'react';
 import ScrollReveal from '@/components/ScrollReveal';
 import { apiSubmitEarlyAccess } from '@/lib/api';
 
 export default function EarlyAccessPage() {
+  const tx = usePublicText();
   const [formData, setFormData] = useState({
     name: '',
     company: '',
@@ -28,9 +31,7 @@ export default function EarlyAccessPage() {
       setFormData({ name: '', company: '', email: '', country: '', message: '', website: '' });
     } catch (err: unknown) {
       setStatus('error');
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Ein unerwarteter Fehler ist aufgetreten.'
-      );
+      setErrorMessage(tx.error(err));
     }
   };
 
@@ -65,13 +66,14 @@ export default function EarlyAccessPage() {
 
           <ScrollReveal delay={150}>
             <h1 className="text-4xl md:text-5xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-              Zugang anfragen
+              {tx('Zugang anfragen')}
             </h1>
           </ScrollReveal>
           <ScrollReveal delay={300}>
             <p className="text-xl text-apple-gray-500 leading-relaxed">
-              GreenMind befindet sich in Entwicklung. Sie möchten die Plattform testen oder Teil des
-              Projekts werden? Wir freuen uns auf Ihre Anfrage.
+              {tx(
+                'GreenMind befindet sich in Entwicklung. Sie möchten die Plattform testen oder Teil des Projekts werden? Wir freuen uns auf Ihre Anfrage.'
+              )}
             </p>
           </ScrollReveal>
         </div>
@@ -97,16 +99,16 @@ export default function EarlyAccessPage() {
                   </svg>
                 </div>
                 <h3 className="text-3xl font-bold text-apple-gray-800 mb-4">
-                  Anfrage eingegangen!
+                  {tx('Anfrage eingegangen!')}
                 </h3>
                 <p className="text-lg text-apple-gray-500 mb-8 max-w-md mx-auto">
-                  Vielen Dank für Ihr Interesse. Wir melden uns in Kürze bei Ihnen.
+                  {tx('Vielen Dank für Ihr Interesse. Wir melden uns in Kürze bei Ihnen.')}
                 </p>
                 <button
                   onClick={() => setStatus('idle')}
                   className="px-8 py-3 bg-apple-gray-100 text-apple-gray-800 rounded-full font-medium hover:bg-apple-gray-200 transition-colors"
                 >
-                  Weitere Anfrage stellen
+                  {tx('Weitere Anfrage stellen')}
                 </button>
               </div>
             ) : (
@@ -129,55 +131,71 @@ export default function EarlyAccessPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      Name *
+                    <label
+                      htmlFor="early-access-name"
+                      className="block text-sm font-medium text-apple-gray-600 mb-2"
+                    >
+                      {tx('Name *')}
                     </label>
                     <input
+                      id="early-access-name"
                       required
                       type="text"
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                      placeholder="Ihr Name"
+                      placeholder={tx('Ihr Name')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      E-Mail *
+                    <label
+                      htmlFor="early-access-email"
+                      className="block text-sm font-medium text-apple-gray-600 mb-2"
+                    >
+                      {tx('E-Mail *')}
                     </label>
                     <input
+                      id="early-access-email"
                       required
                       type="email"
                       name="email"
                       value={formData.email}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                      placeholder="sie@beispiel.com"
+                      placeholder={tx('sie@beispiel.com')}
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      Organisation / Betrieb *
+                    <label
+                      htmlFor="early-access-company"
+                      className="block text-sm font-medium text-apple-gray-600 mb-2"
+                    >
+                      {tx('Organisation / Betrieb *')}
                     </label>
                     <input
+                      id="early-access-company"
                       required
                       type="text"
                       name="company"
                       value={formData.company}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
-                      placeholder="Unternehmen oder Betrieb"
+                      placeholder={tx('Unternehmen oder Betrieb')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                      Land *
+                    <label
+                      htmlFor="early-access-country"
+                      className="block text-sm font-medium text-apple-gray-600 mb-2"
+                    >
+                      {tx('Land *')}
                     </label>
                     <select
+                      id="early-access-country"
                       required
                       name="country"
                       value={formData.country}
@@ -185,27 +203,31 @@ export default function EarlyAccessPage() {
                       className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm appearance-none"
                     >
                       <option value="" disabled>
-                        Bitte wählen...
+                        {tx('Bitte wählen...')}
                       </option>
-                      <option value="Schweiz">Schweiz</option>
-                      <option value="Deutschland">Deutschland</option>
-                      <option value="Österreich">Österreich</option>
-                      <option value="Andere">Andere</option>
+                      <option value="Schweiz">{tx('Schweiz')}</option>
+                      <option value="Deutschland">{tx('Deutschland')}</option>
+                      <option value="Österreich">{tx('Österreich')}</option>
+                      <option value="Andere">{tx('Andere')}</option>
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-apple-gray-600 mb-2">
-                    Was interessiert Sie?
+                  <label
+                    htmlFor="early-access-message"
+                    className="block text-sm font-medium text-apple-gray-600 mb-2"
+                  >
+                    {tx('Was interessiert Sie?')}
                   </label>
                   <textarea
+                    id="early-access-message"
                     name="message"
                     value={formData.message}
                     onChange={handleChange}
                     rows={4}
                     className="w-full px-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm resize-none"
-                    placeholder="Was bauen Sie an? Wie möchten Sie GreenMind einsetzen?"
+                    placeholder={tx('Was bauen Sie an? Wie möchten Sie GreenMind einsetzen?')}
                   ></textarea>
                 </div>
 
@@ -237,7 +259,7 @@ export default function EarlyAccessPage() {
                         ></path>
                       </svg>
                     ) : (
-                      'Zugang anfragen'
+                      tx('Zugang anfragen')
                     )}
                   </button>
                 </div>

@@ -1,4 +1,11 @@
-type ViewKey = 'sensor' | 'zone' | 'range' | 'direct' | 'directRange' | 'directLiveWindow';
+type ViewKey =
+  | 'sensor'
+  | 'zone'
+  | 'range'
+  | 'direct'
+  | 'directRange'
+  | 'directLiveWindow'
+  | 'liveWindow';
 
 export function readViewValue(key: ViewKey): string | null {
   if (typeof window === 'undefined') return null;
