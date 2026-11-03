@@ -4,7 +4,6 @@ import hashlib
 import json
 from dataclasses import replace
 from datetime import timedelta
-from pathlib import Path
 
 import pytest
 
@@ -13,12 +12,8 @@ from app.tiered_archive import backup, registry_backup, registry_v5
 from app.tiered_archive import scientific_registry_import as subject
 from app.tiered_archive.ledger import Ledger, initialize_snapshot_pins
 from app.tiered_archive.pipeline import publish
+from tests.fixtures.science_registry import metadata as synthetic_metadata
 from tests.test_tiered_archive import AT, bundle  # noqa: F401
-
-META = (
-    Path(__file__).resolve().parents[4]
-    / "outputs/greenmind-approved-science-native-capture-20261101/metadata"
-)
 
 
 @pytest.fixture
@@ -50,10 +45,7 @@ def import_case(bundle, tmp_path, monkeypatch):  # noqa: F811
     source.db.execute("INSERT INTO science_v3_scope VALUES(1,'current')")
     for table in subject.TABLES:
         source.db.execute(registry_v5.DDL[table])
-    capture_raw, index_raw = (
-        (META / "capture.json").read_bytes(),
-        (META / "index.json").read_bytes(),
-    )
+    capture_raw, index_raw = synthetic_metadata(tmp_path)
     capture, index = json.loads(capture_raw), json.loads(index_raw)
     capture_sha, index_sha = (
         hashlib.sha256(capture_raw).hexdigest(),

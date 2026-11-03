@@ -51,7 +51,7 @@ jobs:
         run: python -m ruff format --check app/ tests/
 
       - name: Verify portable independent archive fixtures
-        run: python -m pytest tests/raw_archive/test_scientific_reconcile.py tests/test_direct_original_context.py tests/test_snapshot_handoff_waiting.py -v --tb=short
+        run: env TMPDIR="$RUNNER_TEMP" python -m pytest tests/raw_archive/test_scientific_reconcile.py tests/test_direct_original_context.py tests/test_snapshot_handoff_waiting.py tests/test_scientific_registry_import.py tests/raw_archive/test_tiered_read_view.py -v --tb=short
         env:
           SKIP_DOCKER_TESTS: "1"
           JWT_SECRET_KEY: "ci-test-secret-key-that-is-at-least-32-chars"
@@ -61,7 +61,7 @@ jobs:
         timeout-minutes: 15
         run: |
           set -o pipefail
-          python -u -m pytest tests/ -v --tb=short -m "not integration" -o faulthandler_timeout=60 --durations=10 --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60 2>&1 | tee pytest.log
+          env TMPDIR="$RUNNER_TEMP" python -u -m pytest tests/ -v --tb=short -m "not integration" -o faulthandler_timeout=60 --durations=10 --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60 2>&1 | tee pytest.log
         env:
           SKIP_DOCKER_TESTS: "1"
           JWT_SECRET_KEY: "ci-test-secret-key-that-is-at-least-32-chars"

@@ -98,7 +98,7 @@ def original_url_broker(read_view, monkeypatch):
     monkeypatch.setenv("TIERED_ARCHIVE_RAW_READS_ENABLED", "true")
     monkeypatch.setenv("TIERED_ARCHIVE_STATE_DIR", str(state))
     monkeypatch.setenv("RAW_ARCHIVE_DIRECT_S3_BUCKET", records[1].bucket)
-    with TemporaryDirectory(prefix="gm-wav-view-", dir="/private/tmp") as folder:
+    with TemporaryDirectory(prefix="gm-wav-view-", dir="/tmp") as folder:
         path = Path(folder) / "read.sock"
         monkeypatch.setenv("RAW_ARCHIVE_READ_BROKER_SOCKET", str(path))
         missing_writer = replace(config, root=state / "not-a-readable-writer-directory")
