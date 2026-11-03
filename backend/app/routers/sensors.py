@@ -94,7 +94,7 @@ async def list_sensors(
                 mac_address=sensor.mac_address,
                 name=sensor.name,
                 sensor_type=sensor.sensor_type,
-                status="online" if is_online else "offline",
+                status="disconnected" if not gw.is_active else "online" if is_online else "offline",
                 last_seen=last_seen.isoformat() if last_seen else None,
                 claimed_at=claimed_at.isoformat() if claimed_at else None,
                 gateway_name=gw.name,
@@ -203,7 +203,7 @@ async def update_sensor(
         mac_address=sensor.mac_address,
         name=sensor.name,
         sensor_type=sensor.sensor_type,
-        status="online" if is_online else "offline",
+        status="disconnected" if not gw.is_active else "online" if is_online else "offline",
         last_seen=sensor.last_seen.isoformat() if sensor.last_seen else None,
         claimed_at=sensor.claimed_at.isoformat() if sensor.claimed_at else None,
         gateway_name=gw.name,
@@ -245,7 +245,10 @@ async def move_sensor(
         .filter(
             Gateway.id == data.target_gateway_id,
             Gateway.zone_id == current_gw.zone_id,
+            Gateway.is_active.is_(True),
         )
+        .populate_existing()
+        .with_for_update(of=Gateway)
         .first()
     )
     if not target_gw:

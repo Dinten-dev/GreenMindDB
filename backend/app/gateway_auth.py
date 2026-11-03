@@ -213,7 +213,7 @@ def authenticate_gateway_api_key(
 def _authenticate_uncached(db, api_key, match, peer, gateway_id, hardware_id):
     if match:
         gateway_id = uuid.UUID(hex=match.group(1))
-        gateway = db.query(Gateway).filter(Gateway.id == gateway_id).first()
+        gateway = db.query(Gateway).populate_existing().filter(Gateway.id == gateway_id).first()
         if not gateway or not gateway.api_key_hash:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
         verified = verify_gateway_api_key(gateway, api_key, peer)

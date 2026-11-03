@@ -2,11 +2,13 @@
 
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_role
+from app.auth import COOKIE_NAME, get_current_user, require_role
+from app.config import settings
 from app.database import get_db
 from app.gateway_auth import get_current_gateway
 from app.models.master import Gateway
@@ -93,13 +95,20 @@ async def handle_heartbeat(
     return {"status": "ok"}
 
 
+@router.post("/{gateway_id}/remove", status_code=204)
 @router.delete("/{gateway_id}", status_code=204)
-async def handle_delete_gateway(
+def handle_delete_gateway(
     gateway_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
-    """Delete a gateway and invalidate its API key."""
+    """Remove a gateway from active use, preserving sensors and historical data."""
+    scheme, _, bearer = request.headers.get("authorization", "").partition(" ")
+    if request.cookies.get(COOKIE_NAME) and not (scheme.lower() == "bearer" and bearer.strip()):
+        frontend = urlsplit(settings.frontend_url)
+        if request.headers.get("origin") != f"{frontend.scheme}://{frontend.netloc}":
+            raise HTTPException(403, "Unexpected request origin")
     delete_gateway(db, current_user, gateway_id)
 
 

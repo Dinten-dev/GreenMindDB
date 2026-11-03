@@ -74,7 +74,7 @@ function formatBytes(bytes: number): string {
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 function isSensorArchived(s: SensorInfo): boolean {
-  if (s.status === 'online') return false;
+  if (s.status === 'online' || s.status === 'disconnected') return false;
 
   if (s.last_seen) {
     const lastSeenTime = new Date(s.last_seen).getTime();
@@ -964,11 +964,13 @@ export default function SensorsPage() {
           name={sensor.name || sensor.mac_address}
           connection={`${tx('Gateway')}${sensor.gateway_name ? ` · ${sensor.gateway_name}` : ''} · ${sensor.mac_address}`}
           status={
-            archived
-              ? 'Inaktiv (>3 Tage)'
-              : sensor.status === 'online'
-                ? tx('Empfängt Daten')
-                : tx('Offline')
+            sensor.status === 'disconnected'
+              ? tx('Getrennt')
+              : archived
+                ? 'Inaktiv (>3 Tage)'
+                : sensor.status === 'online'
+                  ? tx('Empfängt Daten')
+                  : tx('Offline')
           }
           online={sensor.status === 'online'}
           lastSeen={sensor.last_seen}

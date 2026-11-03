@@ -1,8 +1,10 @@
 'use client';
 
 import { useAppText } from '@/i18n/app-text';
+import { useGatewayRemoval } from '@/hooks/useGatewayRemoval';
+import RemoveGatewayDialog, { GatewayRemovalNotice } from '@/components/RemoveGatewayDialog';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,7 +12,6 @@ import {
   apiListZones,
   apiListGateways,
   apiListSensors,
-  apiDeleteGateway,
   apiUpdateSensor,
   gatewayHasWavIssue,
   Zone,
@@ -21,6 +22,7 @@ import PairSensorDialog from '../sensors/PairSensorDialog';
 
 export default function DashboardPage() {
   const tx = useAppText();
+  const removedIds = useRef(new Set<string>());
 
   const locale = useLocale();
   const [loadError, setLoadError] = useState(false);
@@ -34,9 +36,6 @@ export default function DashboardPage() {
   const [orgName, setOrgName] = useState('');
   const [creatingOrg, setCreatingOrg] = useState(false);
 
-  // Deletion states
-  const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isPairDialogOpen, setIsPairDialogOpen] = useState(false);
   const [updatingSmsSensorId, setUpdatingSmsSensorId] = useState<string | null>(null);
 
@@ -46,8 +45,12 @@ export default function DashboardPage() {
     try {
       const [z, gw, sen] = await Promise.all([apiListZones(), apiListGateways(), apiListSensors()]);
       setZones(z);
-      setGateways(gw);
-      setSensors(sen);
+      setGateways(gw.filter((gateway) => !removedIds.current.has(gateway.id)));
+      setSensors(
+        sen.map((sensor) =>
+          removedIds.current.has(sensor.gateway_id) ? { ...sensor, status: 'disconnected' } : sensor
+        )
+      );
       setUpdatedAt(new Date());
     } catch (err) {
       console.error('Dashboard load error:', err);
@@ -77,26 +80,43 @@ export default function DashboardPage() {
     }
   };
 
-  const confirmDelete = async () => {
-    if (!deletingGatewayId) return;
-    setIsDeleting(true);
-    setActionError(null);
-    try {
-      await apiDeleteGateway(deletingGatewayId);
-      setGateways((prev) => prev.filter((g) => g.id !== deletingGatewayId));
-      // Reload sensors to reflect cascade delete
-      const sen = await apiListSensors();
-      setSensors(sen);
-      setDeletingGatewayId(null);
-    } catch (err) {
-      console.error('Failed to delete gateway:', err);
-      setActionError(
-        tx('Das Gateway konnte nicht vollständig entfernt werden. Bitte erneut laden.')
+  const canManage = user?.role === 'owner' || user?.role === 'admin';
+  const removal = useGatewayRemoval({
+    onRemoved: (id) => {
+      removedIds.current.add(id);
+      setGateways((previous) => previous.filter((gateway) => gateway.id !== id));
+      setSensors((previous) =>
+        previous.map((sensor) =>
+          sensor.gateway_id === id ? { ...sensor, status: 'disconnected' } : sensor
+        )
       );
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+      setZones((previous) =>
+        previous.map((zone) => ({
+          ...zone,
+          gateway_count: Math.max(
+            0,
+            zone.gateway_count -
+              (gateways.find((gateway) => gateway.id === id)?.zone_id === zone.id ? 1 : 0)
+          ),
+        }))
+      );
+    },
+    refresh: async () => {
+      const [nextZones, nextGateways, nextSensors] = await Promise.all([
+        apiListZones(),
+        apiListGateways(),
+        apiListSensors(),
+      ]);
+      setZones(nextZones);
+      setGateways(nextGateways.filter((gateway) => !removedIds.current.has(gateway.id)));
+      setSensors(
+        nextSensors.map((sensor) =>
+          removedIds.current.has(sensor.gateway_id) ? { ...sensor, status: 'disconnected' } : sensor
+        )
+      );
+      setUpdatedAt(new Date());
+    },
+  });
 
   const toggleSmsAlerts = async (sensor: SensorInfo) => {
     setUpdatingSmsSensorId(sensor.id);
@@ -263,6 +283,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      <GatewayRemovalNotice notice={removal.notice} busy={removal.busy} onRetry={removal.retry} />
       {/* Stat Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard label={tx('Zonen')} value={zones.length} />
@@ -300,7 +321,7 @@ export default function DashboardPage() {
               return (
                 <div
                   key={gw.id}
-                  className={`group flex items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border transition-colors hover:bg-white/60 relative ${wavIssue ? 'border-amber-300' : 'border-black/[0.03]'}`}
+                  className={`group grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 bg-white/40 rounded-xl border transition-colors hover:bg-white/60 relative ${wavIssue ? 'border-amber-300' : 'border-black/[0.03]'}`}
                 >
                   <span
                     className={`w-2.5 h-2.5 shrink-0 rounded-full ${gw.status !== 'online' ? 'bg-gray-300' : wavIssue ? 'bg-amber-500' : 'bg-emerald-500'}`}
@@ -329,10 +350,15 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <button
-                    onClick={() => setDeletingGatewayId(gw.id)}
-                    className="shrink-0 p-2.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    aria-label={tx('{value0} entfernen', { value0: gw.name || gw.hardware_id })}
-                    title={tx('Gateway entfernen')}
+                    onClick={() => removal.begin(gw)}
+                    disabled={!canManage || removal.busy}
+                    className="col-span-2 sm:col-span-1 flex items-center justify-self-start gap-1 p-2.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={tx('Gateway entfernen')}
+                    title={
+                      canManage
+                        ? tx('Gateway entfernen')
+                        : tx('Keine Berechtigung für diesen Vorgang.')
+                    }
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path
@@ -342,6 +368,7 @@ export default function DashboardPage() {
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                       />
                     </svg>
+                    <span>{tx('Gateway entfernen')}</span>
                   </button>
                 </div>
               );
@@ -384,8 +411,12 @@ export default function DashboardPage() {
                       {sensor.name || sensor.mac_address}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
-                      {sensor.status === 'online' ? tx('Online') : tx('Offline')} ·{' '}
-                      {sensor.mac_address}
+                      {sensor.status === 'disconnected'
+                        ? tx('Getrennt')
+                        : sensor.status === 'online'
+                          ? tx('Online')
+                          : tx('Offline')}{' '}
+                      · {sensor.mac_address}
                     </p>
                   </div>
                 </div>
@@ -416,56 +447,17 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deletingGatewayId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-            onClick={() => setDeletingGatewayId(null)}
-          />
-          <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full animate-in fade-in zoom-in duration-200">
-            <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
-              {tx('Gateway entfernen?')}
-            </h3>
-            <p className="text-sm text-center text-gray-500 mb-6">
-              {tx(
-                'Bist du sicher, dass du dieses Gateway löschen möchtest? Alle zugehörigen Sensoren und Daten werden ebenfalls entfernt. Dies kann nicht rückgängig gemacht werden.'
-              )}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeletingGatewayId(null)}
-                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-              >
-                {tx('Abbrechen')}
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={isDeleting}
-                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? tx('Lösche...') : tx('Löschen')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pair Sensor Dialog */}
       <PairSensorDialog
         isOpen={isPairDialogOpen}
         onClose={() => setIsPairDialogOpen(false)}
         onSuccess={() => loadData()}
+      />
+      <RemoveGatewayDialog
+        gateway={removal.target}
+        busy={removal.busy}
+        error={removal.error}
+        onCancel={removal.cancel}
+        onConfirm={removal.confirm}
       />
     </div>
   );

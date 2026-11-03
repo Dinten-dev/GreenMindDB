@@ -25,7 +25,11 @@ def list_zones(db: Session, user: User) -> list[ZoneResponse]:
     zones = db.query(Zone).filter(zone_access_filter(user)).all()
     results = []
     for z in zones:
-        gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
+        gateway_count = (
+            db.query(func.count(Gateway.id))
+            .filter(Gateway.zone_id == z.id, Gateway.is_active.is_(True))
+            .scalar()
+        )
         sensor_count = (
             db.query(func.count(Sensor.id))
             .join(Gateway, Gateway.id == Sensor.gateway_id)
@@ -77,7 +81,11 @@ def get_zone(db: Session, user: User, zone_id: uuid.UUID | str) -> ZoneResponse:
     z = db.query(Zone).filter(Zone.id == zone_id, zone_access_filter(user)).first()
     if not z:
         raise HTTPException(status_code=404, detail="Zone not found")
-    gateway_count = db.query(func.count(Gateway.id)).filter(Gateway.zone_id == z.id).scalar()
+    gateway_count = (
+        db.query(func.count(Gateway.id))
+        .filter(Gateway.zone_id == z.id, Gateway.is_active.is_(True))
+        .scalar()
+    )
     sensor_count = (
         db.query(func.count(Sensor.id))
         .join(Gateway, Gateway.id == Sensor.gateway_id)
@@ -123,13 +131,13 @@ def get_zone_overview(db: Session, user: User, zone_id: uuid.UUID | str) -> Zone
             .scalar()
         )
 
-    online_count = sum(1 for g in gateways if g.status == "online")
+    online_count = sum(1 for g in gateways if g.is_active and g.status == "online")
 
     return ZoneOverview(
         id=str(z.id),
         name=z.name,
         zone_type=z.zone_type,
-        total_gateways=len(gateways),
+        total_gateways=sum(1 for g in gateways if g.is_active),
         online_gateways=online_count,
         total_sensors=total_sensors,
         readings_24h=readings_24h,
