@@ -1,0 +1,109 @@
+{
+  "format": "greenmind.public-archive-acceptance.v1",
+  "updated_utc": "2026-11-03T18:32:24.277414+00:00",
+  "steps": {
+    "1": {
+      "status": "inventory_complete",
+      "criteria_passed": 7,
+      "running_containers": 29,
+      "database_state_fingerprints": 9,
+      "native_evidence_sets": 14,
+      "private_manifest_sha256": "781ef0a8fdbfb4c3c3d27491a0f6b42b88b0183302180f147f1b98cd7f50babe",
+      "functional_acceptance": false
+    },
+    "2": {
+      "status": "in_progress"
+    }
+  },
+  "production_ready": false,
+  "deletion_authorized": false,
+  "deployment_performed": false,
+  "source_originals_deleted": 0,
+  "evidence": [
+    {
+      "id": "source-inventory",
+      "input_sha256": "894be50e4dd9f8e64ea35f74dae719d020c0b8f52feb04e50789a8fa5896e6ae",
+      "output_sha256": "8930a234bb69267dfcafca00773bccc05f8abd78770ccc14f7f4ba54b4d6a5e3",
+      "exit": 0
+    },
+    {
+      "id": "archive-inventory",
+      "input_sha256": "894be50e4dd9f8e64ea35f74dae719d020c0b8f52feb04e50789a8fa5896e6ae",
+      "output_sha256": "d038efe43750ff17a5e1cc3f7bfa837066fc45b7ce3bf2987eba7d9f856d10fb",
+      "exit": 0
+    },
+    {
+      "id": "source-detail",
+      "input_sha256": "50d3c105871213cf47ebd0a9e7a11838e080dfedb946dbc1b25e99e389241055",
+      "output_sha256": "ebcf2ea0d3297ca411a60ee28f307e1c144c0bcf1259401b7fb7d1a3005d4658",
+      "exit": 0
+    },
+    {
+      "id": "archive-detail",
+      "input_sha256": "50d3c105871213cf47ebd0a9e7a11838e080dfedb946dbc1b25e99e389241055",
+      "output_sha256": "84379b011821c9dcc57fa4f47c436524551dfcbabbf282d5d485e38d46051553",
+      "exit": 0
+    },
+    {
+      "id": "source-links-v2",
+      "input_sha256": "051cf02cf2a76043362cd975824d7150eb7cb60de7f5a72c639bb0186f93146a",
+      "output_sha256": "05c34de868a6e51ffc6b232df09fd3cd551d808232128f052fb62c5f49c290d1",
+      "exit": 0
+    },
+    {
+      "id": "archive-links-v3",
+      "input_sha256": "c4bdeb78d93250237cd853f2b7710cd34da54ac0a435f2ebbe85a9f568f1a155",
+      "output_sha256": "29108aa14a6a9dfb77b6a50865fbfe8cd58378cd5c803463c838ee444158569f",
+      "exit": 0
+    },
+    {
+      "id": "archive-databases-v2",
+      "input_sha256": "91769f830aa7b8f5c6e1535bd9bee6fb9adc3b7eda925a4ed46aed41efe6767d",
+      "output_sha256": "5928bfaa03ff6131d1a1ea67714a2f8e8d45cc5e99e5ea4d756b2dcad6573222",
+      "exit": 0
+    },
+    {
+      "id": "frontend-target",
+      "input_sha256": "4c5b59d18988ddc37411214bcd78a9c98ab076533e099d6986b00edcb89e36b6",
+      "output_sha256": "95e31d3417f72e6ab68fc1c34d852f9ebb80ef99c61787069bdbc47e0a612daf",
+      "exit": 0
+    },
+    {
+      "id": "provider-inventory",
+      "input_sha256": "1d48ad4de033cd9c174f0292aca3a2da4f6fb4f37667def2ffe05f4e711bd3bb",
+      "output_sha256": "39876951974af26f6e552a9758e54d389ef0ba4b76dbbf4375e5eec569b53970",
+      "exit": 0
+    },
+    {
+      "id": "source-databases-admitted-01",
+      "input_sha256": "91769f830aa7b8f5c6e1535bd9bee6fb9adc3b7eda925a4ed46aed41efe6767d",
+      "output_sha256": "10c9d3ea748cf7ff8c0193f794076fdf0935053e9bc71215fb95386985717877",
+      "exit": 0
+    },
+    {
+      "id": "source-interfaces",
+      "input_sha256": "c8ff52f17f70846927c3bb68966ce2bc4dffa24bf04add8adb0b0505b0a6f57c",
+      "output_sha256": "a0b6ba3d0083a4759c1e886b592eab2d73b7e0207b1505a240fca5017429844a",
+      "exit": 0
+    },
+    {
+      "id": "archive-interfaces",
+      "input_sha256": "c8ff52f17f70846927c3bb68966ce2bc4dffa24bf04add8adb0b0505b0a6f57c",
+      "output_sha256": "02b9f4b6be7b651f16fc70b1463be0255df0a9100d707e87ba1314d0a0830ca5",
+      "exit": 0
+    },
+    {
+      "id": "nginx-full-config",
+      "input_sha256": "056b29a03f53cc12053f7049609654b6ae9f29b46381df90ceea3f3ec9bed455",
+      "output_sha256": "7142360ab719ee8a2b165543c106f8d54de4806c6175812676f4d48a93d3eaa2",
+      "exit": 0
+    },
+    {
+      "id": "own-window-end",
+      "input_sha256": "cbbac3f7df24ea726ee052a86a5d3a117d0034bcc8ba0601747157d95a414ba6",
+      "output_sha256": "3cc3ac9b0c478b53aec3ab65f89bba6019619f0ab3e34d172b61e25f6c5750e4",
+      "exit": 0
+    }
+  ],
+  "publication_scope": "Sanitized findings and evidence digests; private host inventories, credentials and raw captures remain with the operator."
+}
