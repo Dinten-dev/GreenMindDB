@@ -26,6 +26,7 @@ from app.database import get_db
 from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.rate_limit import limiter
+from app.services.recording_time import utc_filename, window_time
 from app.transaction_pool import attach_read_guards
 from app.visualization.resolution import display_step
 from app.zone_access import is_platform_admin, zone_access_filter
@@ -325,7 +326,10 @@ def data(
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return query_series(db, sensor_id, start, end, step)
+    result = query_series(db, sensor_id, start, end, step)
+    for item in result:
+        item["time_info"] = window_time(item["data"], start, end)
+    return result
 
 
 def safe_text(value):
@@ -443,7 +447,9 @@ def export(
     return Response(
         target.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="sensor-data.zip"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{utc_filename("sensor", sensor_id, start, end, "zip")}"'
+        },
     )
 
 

@@ -965,6 +965,25 @@
     "m0825": "Aperçu : 12,5 valeurs par seconde, mV nominaux. L’enregistrement original continue indépendamment.",
     "m0826": "Les repères sont visibles pendant trois minutes par les personnes autorisées. Sans export.",
     "m0827": "5 minutes",
-    "m0828": "mV"
+    "m0828": "mV",
+    "m0829": "Détails temporels et intégrité",
+    "m0830": "Heure d’enregistrement incertaine : ancrage temporel manquant ou incomplet.",
+    "m0831": "Ancrage temporel et fréquence d’échantillonnage nominale",
+    "m0832": "La précision temporelle n’a pas été vérifiée indépendamment.",
+    "m0833": "Session : {value0}",
+    "m0834": "Premier échantillon : {value0}",
+    "m0835": "SHA-256 : {value0}",
+    "m0836": "L’intégrité du fichier et la précision temporelle sont vérifiées séparément.",
+    "m0837": "Heure d’enregistrement et couverture des données",
+    "m0838": "Enregistrement : {value0} – {value1}",
+    "m0839": "Heure d’enregistrement indisponible",
+    "m0840": "Fuseau horaire : {value0}",
+    "m0841": "La période affichée est incomplète",
+    "m0842": "Périodes qui se chevauchent : couverture non vérifiée.",
+    "m0843": "Couverture des données de l’aperçu : {value0} %",
+    "m0844": "Couverture des données non vérifiée",
+    "m0845": "Périodes manquantes : {value0}",
+    "m0846": "La couverture de l’aperçu ne certifie pas un enregistrement brut complet.",
+    "m0847": "L’heure de réception figure séparément dans l’état de l’appareil."
   }
 }

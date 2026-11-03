@@ -965,6 +965,25 @@
     "m0825": "Vorschau: 12,5 Werte pro Sekunde, nominale mV. Originalaufnahmen laufen unabhängig weiter.",
     "m0826": "Markierungen sind für berechtigte Zuschauer drei Minuten sichtbar. Kein Export.",
     "m0827": "5 Minuten",
-    "m0828": "mV"
+    "m0828": "mV",
+    "m0829": "Zeit- und Integritätsdetails",
+    "m0830": "Aufnahmezeit ungesichert: Zeitanker fehlt oder ist unvollständig.",
+    "m0831": "Zeitanker und nominelle Abtastrate",
+    "m0832": "Zeitgenauigkeit nicht unabhängig geprüft.",
+    "m0833": "Sitzung: {value0}",
+    "m0834": "Erstes Sample: {value0}",
+    "m0835": "SHA-256: {value0}",
+    "m0836": "Dateiintegrität und Zeitgenauigkeit sind getrennte Prüfungen.",
+    "m0837": "Aufnahmezeit und Datenabdeckung",
+    "m0838": "Aufnahmezeit: {value0} – {value1}",
+    "m0839": "Aufnahmezeit nicht verfügbar",
+    "m0840": "Zeitzone: {value0}",
+    "m0841": "Angezeigtes Zeitfenster unvollständig",
+    "m0842": "Überlappende Zeitbereiche: Abdeckung ungeprüft.",
+    "m0843": "Datenabdeckung der Übersicht: {value0} %",
+    "m0844": "Datenabdeckung ungeprüft",
+    "m0845": "Fehlende Zeitbereiche: {value0}",
+    "m0846": "Die Abdeckung der Übersicht bestätigt keine vollständige Rohaufzeichnung.",
+    "m0847": "Empfangszeit steht separat im Gerätestatus."
   }
 }

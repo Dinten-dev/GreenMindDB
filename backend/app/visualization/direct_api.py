@@ -16,6 +16,13 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.rate_limit import limiter
+from app.services.recording_time import (
+    annotate_direct,
+    recording_time,
+    utc_filename,
+    verify_manifest,
+    window_bounds,
+)
 from app.services.wav_completeness import direct_completeness
 from app.visualization import direct
 from app.visualization.resolution import display_step
@@ -89,7 +96,14 @@ def get_series(db, device_id, range, *, resolution=None, from_dt=None, to_dt=Non
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     try:
-        return direct.query_series(db, str(device_id), start, end, step)
+        result = direct.query_series(db, str(device_id), start, end, step)
+        return annotate_direct(
+            db,
+            device_id,
+            result,
+            datetime.fromtimestamp(start, UTC),
+            datetime.fromtimestamp(end, UTC),
+        )
     except (OSError, TimeoutError) as exc:
         raise HTTPException(503, "Historical archive temporarily unavailable") from exc
     except RuntimeError as exc:
@@ -108,7 +122,7 @@ def recordings(db, device_id, start, end):
     # Latest verified revision only. Never send storage credentials or object keys.
     rows = (
         db.execute(
-            text(f"""SELECT s.id AS segment_id,s.sealed,r.revision,r.manifest FROM direct_segment s
+            text(f"""SELECT s.id AS segment_id,s.sealed,r.revision,r.manifest,r.manifest_sha256 FROM direct_segment s
         JOIN {relation()} r ON r.segment_id=s.id AND r.revision=s.published_revision
         WHERE s.device_id=:id AND (s.bucket+1)*600>:start AND s.bucket*600<:end
           ORDER BY s.bucket DESC LIMIT 101"""),
@@ -119,17 +133,26 @@ def recordings(db, device_id, start, end):
     )
     result = []
     for row in rows:
+        try:
+            verify_manifest(row["manifest"], row["manifest_sha256"], device_id)
+        except ValueError as exc:
+            raise HTTPException(503, "Aufnahme konnte nicht geprüft werden") from exc
         cfg = row["manifest"]["config"]
         for index, run in enumerate(row["manifest"]["runs"]):
             stamp = run["started_at_us"] / 1e6
             duration = run["frame_count"] / cfg["sample_rate"]
             if stamp < end and stamp + duration > start:
+                try:
+                    time_info = recording_time(row["manifest"], run)
+                except ValueError as exc:
+                    raise HTTPException(503, "Aufnahme konnte nicht geprüft werden") from exc
                 result.append(
                     {
                         "segment_id": row["segment_id"],
                         "revision": row["revision"],
                         "run": index,
                         "started_at": datetime.fromtimestamp(stamp, UTC).isoformat(),
+                        "time_info": time_info,
                         "duration_seconds": duration,
                         "completeness": direct_completeness(row["manifest"], row["sealed"]),
                         "sample_rate": cfg["sample_rate"],
@@ -181,6 +204,10 @@ def install(app):
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
+        try:
+            from_dt, to_dt = window_bounds(WINDOWS[range], from_dt, to_dt)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         series = get_series(
             db, device_id, range, resolution=resolution, from_dt=from_dt, to_dt=to_dt
         )
@@ -200,6 +227,9 @@ def install(app):
                 "sample_count",
                 "coverage_ratio",
                 "source",
+                "time_basis",
+                "anchor_status",
+                "physical_time_accuracy_verified",
             ]
         )
         for item in series:
@@ -218,6 +248,9 @@ def install(app):
                         p["reading_count"],
                         p["coverage_ratio"],
                         p["signal_source"],
+                        item["time_info"]["basis"],
+                        item["time_info"]["anchor_status"],
+                        "false",
                     ]
                 )
         payload = output.getvalue().encode()
@@ -227,7 +260,7 @@ def install(app):
             payload,
             media_type="text/csv; charset=utf-8",
             headers={
-                "Content-Disposition": f'attachment; filename="direct-{device_id}-{range}.csv"'
+                "Content-Disposition": f'attachment; filename="{utc_filename("direct", device_id, from_dt, to_dt)}"'
             },
         )
 
@@ -256,22 +289,31 @@ def install(app):
         db: Session = Depends(connection),
     ):
         authorize(db, legacy, user, device_id)
-        row = db.execute(
-            text("""SELECT r.manifest FROM direct_revision r JOIN direct_segment s ON s.id=r.segment_id
+        selected = (
+            db.execute(
+                text("""SELECT r.manifest,r.manifest_sha256 FROM direct_revision r JOIN direct_segment s ON s.id=r.segment_id
             WHERE s.id=:segment AND s.device_id=:device AND r.revision=:revision"""),
-            {"segment": str(segment_id), "device": str(device_id), "revision": revision},
-        ).scalar()
+                {"segment": str(segment_id), "device": str(device_id), "revision": revision},
+            )
+            .mappings()
+            .first()
+        )
+        row = selected["manifest"] if selected else None
+        manifest_hash = selected["manifest_sha256"] if selected else None
         if row is None:
             from app.tiered_archive.revisions import fetch
 
             archived = fetch(db, str(segment_id), revision)
             row = archived.manifest if archived else None
+            manifest_hash = archived.manifest_sha256 if archived else None
         if not row or not 0 <= run_index < len(row["runs"]):
             raise HTTPException(404, "Aufnahme nicht gefunden")
         from app.tiered_archive.client import release_read_connection
 
         release_read_connection(db)
         try:
+            verify_manifest(row, manifest_hash, device_id)
+            recording_time(row, row["runs"][run_index])
             payload, _ = direct.read_wav(
                 direct.resources()[1],
                 row["runs"][run_index],

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { readViewValue, replaceViewValues } from '@/lib/view-state';
 import { useDirectLive, type LiveSnapshot } from '@/hooks/useDirectLive';
+import { captureTimeZone, formatCaptureTime } from '@/lib/capture-time';
 import { useAppText } from '@/i18n/app-text';
 
 function LiveCurve({ data, seconds }: { data: LiveSnapshot; seconds: number }) {
@@ -23,7 +24,8 @@ function LiveCurve({ data, seconds }: { data: LiveSnapshot; seconds: number }) {
     const command = previous && point.frame - previous.frame === point.samples ? 'L' : 'M';
     path += `${command}${x(point.recorded_us).toFixed(2)},${y(point.mv).toFixed(2)} `;
   });
-  const format = (stamp: number) => new Date(stamp / 1000).toLocaleTimeString(tx.locale);
+  const format = (stamp: number) =>
+    new Date(stamp / 1000).toLocaleTimeString(tx.locale, { timeZoneName: 'shortOffset' });
   return (
     <svg
       role="img"
@@ -131,6 +133,26 @@ export default function DirectLiveView({
           </button>
         ))}
       </div>
+      {snapshot && snapshot.points.length > 0 && (
+        <div className="space-y-1 text-xs text-gray-600">
+          <p>
+            {tx('Aufnahmezeit: {value0} – {value1}', {
+              value0: formatCaptureTime(
+                new Date(snapshot.points[0].recorded_us / 1000).toISOString(),
+                tx.locale
+              ),
+              value1: formatCaptureTime(
+                new Date(
+                  snapshot.points[snapshot.points.length - 1].recorded_us / 1000
+                ).toISOString(),
+                tx.locale
+              ),
+            })}
+          </p>
+          <p>{tx('Zeitzone: {value0}', { value0: captureTimeZone() })}</p>
+          <p>{tx('Zeitgenauigkeit nicht unabhängig geprüft.')}</p>
+        </div>
+      )}
       {live.error && (
         <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           {live.error}{' '}

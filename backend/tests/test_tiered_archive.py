@@ -1337,7 +1337,9 @@ def test_http_chart_and_csv_share_hot_cold_values(bundle, tmp_path, monkeypatch,
     monkeypatch.setattr(direct_api, "authorize", authorize)
     monkeypatch.setattr(api.limiter, "enabled", False)
     result = SimpleNamespace(scalar_one=lambda: ORG, scalar=lambda: None)
-    result.mappings = lambda: SimpleNamespace(one=lambda: {"sensor": {}, "gateway": {}, "zone": {}})
+    result.mappings = lambda: SimpleNamespace(
+        one=lambda: {"sensor": {}, "gateway": {}, "zone": {}}, all=lambda: []
+    )
     db = SimpleNamespace(execute=lambda *_args, **_kwargs: result)
     overrides = dict(api.app.dependency_overrides)
     api.app.dependency_overrides[get_db] = lambda: db
