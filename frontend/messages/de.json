@@ -934,6 +934,11 @@
     "m0794": "E-Mail unbestätigt: kein Zugang.",
     "m0795": "Keine Firma zugeordnet: kein Zonenzugang.",
     "m0796": "Alle aktuellen und künftigen Zonen dieser Firma.",
-    "m0797": "Nur ausdrücklich freigegebene Zonen dieser Firma."
+    "m0797": "Nur ausdrücklich freigegebene Zonen dieser Firma.",
+    "m0798": "Getrennt",
+    "m0799": "Entferne…",
+    "m0800": "Das Gateway wird deaktiviert und sein Zugang widerrufen. Sensoren werden als getrennt angezeigt. Messdaten, Aufnahmen und Zuordnungen bleiben erhalten.",
+    "m0801": "Gateway entfernt. Messdaten und Zuordnungen bleiben erhalten.",
+    "m0802": "Gateway entfernt. Die Ansicht konnte nicht aktualisiert werden. Bitte erneut laden."
   }
 }

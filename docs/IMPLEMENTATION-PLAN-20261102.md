@@ -144,6 +144,9 @@
 - Aktive Listen aktualisieren; betroffene Sensoren als getrennt anzeigen.
 - Fehlende Berechtigungen verständlich melden.
 
+- Implementierung und Prüfvertrag: [GATEWAY-REMOVAL.md](GATEWAY-REMOVAL.md).
+- Code vorbereitet; Produktionsfreigabe und Einführung bleiben separat.
+
 ### 8. Direct-Firmware auf 400 Hz umstellen
 
 - HPK-Erfassungsreferenz und GmLive-Abgriff als unterschiedliche Quellen behandeln.

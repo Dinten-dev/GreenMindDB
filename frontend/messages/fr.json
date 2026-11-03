@@ -934,6 +934,11 @@
     "m0794": "E-mail non vérifié : aucun accès.",
     "m0795": "Aucune entreprise associée : aucun accès aux zones.",
     "m0796": "Toutes les zones actuelles et futures de cette entreprise.",
-    "m0797": "Uniquement les zones explicitement autorisées de cette entreprise."
+    "m0797": "Uniquement les zones explicitement autorisées de cette entreprise.",
+    "m0798": "Déconnecté",
+    "m0799": "Retrait…",
+    "m0800": "La passerelle sera désactivée et son accès révoqué. Les capteurs apparaîtront comme déconnectés. Les mesures, enregistrements et affectations seront conservés.",
+    "m0801": "Passerelle retirée. Les mesures et les affectations sont conservées.",
+    "m0802": "Passerelle retirée. Impossible d’actualiser la vue. Rechargez la page."
   }
 }

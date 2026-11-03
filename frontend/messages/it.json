@@ -934,6 +934,11 @@
     "m0794": "E-mail non verificata: accesso negato.",
     "m0795": "Nessuna azienda assegnata: nessun accesso alle zone.",
     "m0796": "Tutte le zone attuali e future di questa azienda.",
-    "m0797": "Solo le zone esplicitamente autorizzate di questa azienda."
+    "m0797": "Solo le zone esplicitamente autorizzate di questa azienda.",
+    "m0798": "Scollegato",
+    "m0799": "Rimozione…",
+    "m0800": "Il gateway verrà disattivato e il suo accesso revocato. I sensori verranno indicati come scollegati. Misurazioni, registrazioni e assegnazioni saranno conservate.",
+    "m0801": "Gateway rimosso. Misurazioni e assegnazioni sono state conservate.",
+    "m0802": "Gateway rimosso. Impossibile aggiornare la vista. Ricarica la pagina."
   }
 }

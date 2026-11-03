@@ -58,7 +58,7 @@ def list_gateways(
     if not z_ids:
         return []
 
-    query = db.query(Gateway).filter(Gateway.zone_id.in_(z_ids))
+    query = db.query(Gateway).filter(Gateway.zone_id.in_(z_ids), Gateway.is_active.is_(True))
     if zone_id:
         query = query.filter(Gateway.zone_id == zone_id)
 
@@ -256,19 +256,37 @@ def register_gateway(
 
 
 def delete_gateway(db: Session, user: User, gateway_id: uuid.UUID | str) -> None:
+    """Deactivate a retained gateway; never cascade into scientific records.
+
+    Lock the same row as registration so removal and credential rotation cannot
+    both succeed with an active credential. Existing inactive rows remain visible
+    to this operation, making repeat removal idempotent within the caller's zone.
+    """
     _require_org(user)
-
-    gateway = (
-        db.query(Gateway)
-        .join(Zone)
-        .filter(Gateway.id == gateway_id, zone_access_filter(user))
-        .first()
-    )
-    if not gateway:
-        raise HTTPException(status_code=404, detail="Gateway not found")
-
-    db.delete(gateway)
-    db.commit()
+    try:
+        gateway = (
+            db.query(Gateway)
+            .join(Zone)
+            .filter(Gateway.id == gateway_id, zone_access_filter(user))
+            .populate_existing()
+            .with_for_update(of=Gateway)
+            .first()
+        )
+        if not gateway:
+            raise HTTPException(status_code=404, detail="Gateway not found")
+        removed_id = gateway.id
+        gateway.is_active = False
+        gateway.api_key_hash = None
+        gateway.status = "offline"
+        # Keep identities, last contact timestamps and every historical link.
+        db.query(Sensor).filter(Sensor.gateway_id == gateway.id).update(
+            {Sensor.status: "disconnected"}, synchronize_session="fetch"
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    gateway_commands_cache.pop(str(removed_id), None)
 
 
 # --- Sensor Pairing Workflow ---
