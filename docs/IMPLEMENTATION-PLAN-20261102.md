@@ -268,6 +268,20 @@ Metadaten und verbleibende Sprachwechsel sind eingeschlossen. Visuelle Abnahme o
 - Livefenster, Rail-Hinweise und Mark-Knopf ebenfalls vollständig übersetzen.
 - Sprachwechsel erhält Gerät, Seite und gewählten Zeitraum.
 
+### 13. Gesamtabnahme und Einführung vorbereiten
+
+Auf Benutzerwunsch am 03.11.2026 ergänzt. Softwareprüfung und Einführungsvorbereitung;
+physische, visuelle und Staging-Gesamtabnahme bleiben offen.
+
+- Anforderungen aus allen zwölf Schritten anhand bestehender Tests zusammenführen.
+- Beide Kandidaten getrennt prüfen; aktuelle Receiver-Verträge erhalten.
+- Vorhandene Abnahmeunterlagen ohne Serverzugriff prüfbar machen.
+- Konkrete Hardware-, Vier-Sprachen- und Rückfallprüfungen dokumentieren.
+- Kurzen fehlgeschlagenen USB-Versuch nicht als Hardwareabnahme behandeln.
+- Freigabe des exakten Pakets und Ziels vor Einführung einholen.
+- Peters Büroboxen und GmLive bis zur abgestimmten Übergabe erhalten.
+- Nachweise und offene Punkte: [ACCEPTANCE-20261103.md](ACCEPTANCE-20261103.md).
+
 ## Schnittstellen
 
 Neue Direct-Schnittstellen unter `/api/v1/direct-ingest/devices/{id}`:

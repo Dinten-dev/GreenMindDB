@@ -118,6 +118,11 @@ to a local disk/hardware failure. They do not authorize a Production rollout.
 
 ## Acceptance and traffic switch
 
+For the Steps 1–13 candidate, also complete the detailed
+[acceptance matrix and physical/UI/Staging protocol](../../docs/ACCEPTANCE-20261103.md).
+The five summary fields below must only be true after the corresponding real
+checks pass; successful CI or the short USB attempt does not fill them in.
+
 Review `manifest.json`, `nginx.before.conf`, `nginx.proposed.conf`, `compose.json`
 and `validation.json`. Never attach or publish `runtime.env`.
 
@@ -144,6 +149,24 @@ Replace `checked_at` with the real Unix observation time and set a field to true
 only after its test passes. Include logs/device IDs alongside the record. Evidence
 expires after seven days and cannot be reused for different images or source.
 The supplied example intentionally does **not** authorize a Production rollout.
+
+Before transferring a package, check an already completed record locally:
+
+```sh
+python3 deploy/release/release.py check-acceptance \
+  --revision REVIEWED_FULL_COMMIT_SHA \
+  --backend-image sha256:REVIEWED_BACKEND_CONFIG_ID \
+  --frontend-image sha256:REVIEWED_FRONTEND_CONFIG_ID \
+  --acceptance /absolute/path/staging-acceptance.json
+```
+
+This uses the same commit, image, age and five-summary validation as Production
+activation, with no server access, sudo, Docker, proxy changes or release directory.
+Malformed, missing, expired or incomplete evidence returns nonzero. Success means
+only that the supplied acceptance metadata passes: it does not verify the truth
+of observations or the detailed physical protocol. Output always states
+`release_authorized: false`. Actual activation repeats validation and still needs
+the separately reviewed package, destination and user approval.
 
 ```sh
 sudo python3 deploy/release/release.py activate --directory /home/traver/greenmind-release-production/REVIEWED_COMMIT --acceptance /absolute/path/staging-acceptance.json
