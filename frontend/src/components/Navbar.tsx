@@ -5,23 +5,18 @@ import BrandLogo from '@/components/BrandLogo';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { apiGetMe, AuthUser } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { localePath, safeReturnTo } from '@/lib/auth-routing';
 import { useTranslations, useLocale } from 'next-intl';
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { user, loading, status, refresh } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations('Navigation');
+  const auth = useTranslations('Auth');
   const locale = useLocale();
-
-  // Check if user is logged in
-  useEffect(() => {
-    apiGetMe()
-      .then(setUser)
-      .catch(() => setUser(null));
-  }, [pathname]);
 
   // Close menu when route changes
   useEffect(() => {
@@ -49,8 +44,11 @@ export default function Navbar() {
   ];
 
   const switchLocale = (newLocale: string) => {
-    const newPath = pathname.replace(`/${locale}`, `/${newLocale}`);
-    router.push(newPath);
+    const query = new URLSearchParams(window.location.search);
+    if (query.has('next'))
+      query.set('next', localePath(newLocale, safeReturnTo(locale, query.get('next'))));
+    const suffix = query.toString();
+    router.push(`${localePath(newLocale, pathname)}${suffix ? `?${suffix}` : ''}`);
   };
 
   // Hide public navbar on dashboard routes (dashboard has its own sidebar)
@@ -82,7 +80,15 @@ export default function Navbar() {
 
           {/* Desktop CTAs */}
           <div className="hidden xl:flex shrink-0 items-center gap-3 whitespace-nowrap relative z-[110]">
-            {user ? (
+            {loading ? (
+              <span role="status" className="text-sm text-apple-gray-500">
+                {auth('checking')}
+              </span>
+            ) : status === 'unavailable' ? (
+              <button onClick={() => void refresh()} className="text-sm text-apple-gray-600">
+                {auth('retrySession')}
+              </button>
+            ) : user ? (
               <Link
                 href={`/${locale}/app/dashboard`}
                 className="flex items-center gap-2 text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
@@ -113,13 +119,13 @@ export default function Navbar() {
                   href={`/${locale}/login`}
                   className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 ml-2"
                 >
-                  Anmelden
+                  {auth('signIn')}
                 </Link>
                 <Link
                   href={`/${locale}/early-access`}
                   className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
                 >
-                  Zugang anfragen
+                  {auth('requestAccess')}
                 </Link>
               </>
             )}
@@ -183,7 +189,11 @@ export default function Navbar() {
         </div>
 
         <div className="mt-auto flex flex-col gap-4">
-          {user ? (
+          {loading ? (
+            <span role="status">{auth('checking')}</span>
+          ) : status === 'unavailable' ? (
+            <button onClick={() => void refresh()}>{auth('retrySession')}</button>
+          ) : user ? (
             <Link
               href={`/${locale}/app/dashboard`}
               className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
@@ -196,13 +206,13 @@ export default function Navbar() {
                 href={`/${locale}/login`}
                 className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
               >
-                Anmelden
+                {auth('signIn')}
               </Link>
               <Link
                 href={`/${locale}/early-access`}
                 className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
               >
-                Zugang anfragen
+                {auth('requestAccess')}
               </Link>
             </>
           )}

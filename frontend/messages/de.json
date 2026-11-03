@@ -112,5 +112,30 @@
     "rights": "Alle Rechte vorbehalten.",
     "dashboard": "Dashboard",
     "language": "Sprache"
+  },
+  "Auth": {
+    "title": "Bei GreenMind anmelden",
+    "intro": "Geben Sie Ihre Zugangsdaten ein.",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "signIn": "Anmelden",
+    "signingIn": "Anmeldung läuft…",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "checking": "Sitzung wird geprüft…",
+    "retry": "Erneut versuchen",
+    "retrySession": "Sitzung erneut prüfen",
+    "noAccount": "Noch kein Konto?",
+    "requestAccess": "Zugang anfragen",
+    "errors": {
+      "credentials": "E-Mail-Adresse oder Passwort ist falsch. Bitte prüfen Sie Ihre Eingaben.",
+      "network": "Keine Verbindung zum Server. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+      "service": "Der Anmeldedienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.",
+      "expired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+      "unverified": "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.",
+      "disabled": "Dieses Konto ist deaktiviert. Bitte wenden Sie sich an die Administration.",
+      "rateLimited": "Zu viele Anmeldeversuche. Bitte versuchen Sie es später erneut.",
+      "confirmation": "Die Sitzung konnte nicht bestätigt werden. Bitte laden Sie die Seite neu und melden Sie sich erneut an."
+    }
   }
 }
