@@ -18,10 +18,18 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPath,
   useSearchParams: () => new URLSearchParams(mockQuery),
 }));
-jest.mock('next-intl', () => ({
-  useLocale: () => mockLocale,
-  useTranslations: () => (key: string) => key,
-}));
+jest.mock('next-intl', () => {
+  const app = jest.requireActual('next-intl').createTranslator({
+    locale: 'de',
+    messages: jest.requireActual(process.cwd() + '/messages/de.json'),
+    namespace: 'App',
+  });
+  const identity = (key: string) => key;
+  return {
+    useLocale: () => mockLocale,
+    useTranslations: (namespace?: string) => (namespace === 'App' ? app : identity),
+  };
+});
 jest.mock('@/lib/api', () => ({
   ...jest.requireActual('@/lib/api'),
   apiGetMe: jest.fn(),
@@ -114,7 +122,7 @@ function fillAndSubmit(container: HTMLElement) {
   fireEvent.submit(container.querySelector('form')!);
 }
 
-it.each(['de', 'en', 'fr'])(
+it.each(['de', 'en', 'fr', 'it'])(
   'restores a protected destination in %s after cookie confirmation',
   async (locale) => {
     mockLocale = locale;

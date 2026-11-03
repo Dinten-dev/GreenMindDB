@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
@@ -18,6 +20,8 @@ import {
 import PairSensorDialog from '../sensors/PairSensorDialog';
 
 export default function DashboardPage() {
+  const tx = useAppText();
+
   const locale = useLocale();
   const [loadError, setLoadError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -66,7 +70,7 @@ export default function DashboardPage() {
       await createOrg(orgName);
       await refresh();
     } catch (err) {
-      setActionError('Die Organisation konnte nicht erstellt werden. Bitte erneut versuchen.');
+      setActionError(tx('Die Organisation konnte nicht erstellt werden. Bitte erneut versuchen.'));
       console.error(err);
     } finally {
       setCreatingOrg(false);
@@ -86,7 +90,9 @@ export default function DashboardPage() {
       setDeletingGatewayId(null);
     } catch (err) {
       console.error('Failed to delete gateway:', err);
-      setActionError('Das Gateway konnte nicht vollständig entfernt werden. Bitte erneut laden.');
+      setActionError(
+        tx('Das Gateway konnte nicht vollständig entfernt werden. Bitte erneut laden.')
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -100,7 +106,7 @@ export default function DashboardPage() {
       setSensors((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
     } catch (err) {
       console.error('Failed to update SMS alerts:', err);
-      alert('Fehler beim Aktualisieren der SMS-Einstellungen.');
+      alert(tx('Fehler beim Aktualisieren der SMS-Einstellungen.'));
     } finally {
       setUpdatingSmsSensorId(null);
     }
@@ -111,9 +117,11 @@ export default function DashboardPage() {
     return (
       <div className="max-w-md mx-auto mt-24">
         <div className="glass-card p-8 text-center">
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Willkommen bei GreenMind</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">
+            {tx('Willkommen bei GreenMind')}
+          </h2>
           <p className="text-sm text-gray-400 mb-6">
-            Eine Organisation gruppiert Zonen, Gateways und Teammitglieder.
+            {tx('Eine Organisation gruppiert Zonen, Gateways und Teammitglieder.')}
           </p>
           {actionError && (
             <p role="alert" className="text-sm text-red-700 mb-4">
@@ -121,7 +129,7 @@ export default function DashboardPage() {
             </p>
           )}
           <label htmlFor="organization-name" className="block text-left text-sm text-gray-600 mb-2">
-            Name deiner Organisation
+            {tx('Name deiner Organisation')}
           </label>
           <input
             id="organization-name"
@@ -129,14 +137,14 @@ export default function DashboardPage() {
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 backdrop-blur-sm mb-4"
-            placeholder="Name der Organisation"
+            placeholder={tx('Name der Organisation')}
           />
           <button
             onClick={handleCreateOrg}
             disabled={creatingOrg || !orgName.trim()}
             className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-medium text-sm hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 shadow-sm"
           >
-            {creatingOrg ? 'Erstelle…' : 'Organisation erstellen'}
+            {creatingOrg ? tx('Erstelle…') : tx('Organisation erstellen')}
           </button>
         </div>
       </div>
@@ -160,16 +168,17 @@ export default function DashboardPage() {
   if (loadError)
     return (
       <div className="glass-card p-8 max-w-xl">
-        <h1 className="text-2xl font-semibold text-gray-800">Überblick</h1>
+        <h1 className="text-2xl font-semibold text-gray-800">{tx('Überblick')}</h1>
         <p role="alert" className="mt-3 text-sm text-gray-600">
-          Deine Daten konnten nicht geladen werden. Bitte prüfe die Verbindung und versuche es
-          erneut.
+          {tx(
+            'Deine Daten konnten nicht geladen werden. Bitte prüfe die Verbindung und versuche es erneut.'
+          )}
         </p>
         <button
           onClick={loadData}
           className="mt-5 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium"
         >
-          Erneut laden
+          {tx('Erneut laden')}
         </button>
       </div>
     );
@@ -185,10 +194,10 @@ export default function DashboardPage() {
       <div className="dashboard-welcome border border-gray-200/70 rounded-2xl p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
-            Dein Gewächshaus im Blick
+            {tx('Dein Gewächshaus im Blick')}
           </h1>
           <p className="text-sm text-gray-500 mt-2">
-            {user?.organization_name || 'Deine Organisation'} – Überblick
+            {user?.organization_name || tx('Deine Organisation')} {tx('– Überblick')}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -196,7 +205,7 @@ export default function DashboardPage() {
             href={`/${locale}/app/sensors`}
             className="px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
           >
-            Messungen ansehen
+            {tx('Messungen ansehen')}
           </Link>
           <button
             onClick={() => setIsPairDialogOpen(true)}
@@ -210,7 +219,7 @@ export default function DashboardPage() {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Sensor verbinden
+            {tx('Sensor verbinden')}
           </button>
         </div>
       </div>
@@ -223,40 +232,50 @@ export default function DashboardPage() {
       <div className="flex flex-wrap justify-between items-center gap-3 text-sm text-gray-500">
         <p>
           {updatedAt
-            ? `Zuletzt geladen: ${updatedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-            : 'Noch nicht geladen'}
+            ? tx('Zuletzt geladen: {value0}', {
+                value0: updatedAt.toLocaleTimeString(locale, {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                }),
+              })
+            : tx('Noch nicht geladen')}
         </p>
         <button
           onClick={loadData}
           className="px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
         >
-          Aktualisieren
+          {tx('Aktualisieren')}
         </button>
       </div>
       {gateways.some((g) => g.status !== 'online' || gatewayHasWavIssue(g)) && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-          <p className="font-medium text-sm text-amber-900">Verbindungen prüfen</p>
+          <p className="font-medium text-sm text-amber-900">{tx('Verbindungen prüfen')}</p>
           <p className="text-sm text-amber-800 mt-1">
-            Mindestens ein Gateway ist offline oder meldet ausstehende Übertragungen.
+            {tx('Mindestens ein Gateway ist offline oder meldet ausstehende Übertragungen.')}
           </p>
           <Link
             href={`/${locale}/app/gateways`}
             className="inline-block mt-2 text-sm font-medium text-amber-900 underline underline-offset-4"
           >
-            Gateways ansehen →
+            {tx('Gateways ansehen →')}
           </Link>
         </div>
       )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Zonen" value={zones.length} />
-        <StatCard label="Gateways" value={gateways.length} sub={`${onlineGateways} online`} />
-        <StatCard label="Sensoren" value={sensors.length} />
+        <StatCard label={tx('Zonen')} value={zones.length} />
         <StatCard
-          label="Übertragung bereit"
+          label={tx('Gateways')}
+          value={gateways.length}
+          sub={tx('{count} online', { count: onlineGateways })}
+        />
+        <StatCard label={tx('Sensoren')} value={sensors.length} />
+        <StatCard
+          label={tx('Übertragung bereit')}
           value={healthyDataFlows}
-          sub={`von ${gateways.length} Gateways online, ohne WAV-Warnung`}
+          sub={tx('von {count} Gateways online, ohne WAV-Warnung', { count: gateways.length })}
           accent
         />
       </div>
@@ -266,11 +285,13 @@ export default function DashboardPage() {
         <div className="glass-card p-4 sm:p-6">
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-800">Verbindungen</h2>
-              <p className="text-sm text-gray-500 mt-1">Deine Gateways übertragen die Messungen.</p>
+              <h2 className="text-lg font-semibold text-gray-800">{tx('Verbindungen')}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {tx('Deine Gateways übertragen die Messungen.')}
+              </p>
             </div>
             <Link href={`/${locale}/app/gateways`} className="text-sm text-emerald-700 font-medium">
-              Alle Gateways →
+              {tx('Alle Gateways →')}
             </Link>
           </div>
           <div className="grid xl:grid-cols-2 gap-3">
@@ -289,26 +310,29 @@ export default function DashboardPage() {
                       {gw.name || gw.hardware_id}
                     </p>
                     <p className="text-xs text-gray-400">
-                      {gw.status === 'online' ? 'Online' : 'Offline'} · {gw.sensor_count} Sensoren ·{' '}
-                      {gw.zone_name}
+                      {gw.status === 'online' ? tx('Online') : tx('Offline')} · {gw.sensor_count}{' '}
+                      {tx('Sensoren ·')} {gw.zone_name}
                     </p>
                     {wavIssue && (
                       <p className="text-xs text-amber-600">
-                        Ausstehende WAV-Dateien: {gw.wav_pending_files ?? 0}
+                        {tx('Ausstehende WAV-Dateien:')}
+                        {gw.wav_pending_files ?? 0}
                         {gw.wav_last_error_code ? ` · ${gw.wav_last_error_code}` : ''}
                       </p>
                     )}
                     <p className="text-xs text-gray-500 mt-1">
                       {gw.last_seen
-                        ? `Letzter Kontakt ${timeAgo(gw.last_seen)}`
-                        : 'Noch kein Kontakt'}
+                        ? tx('Letzter Kontakt {value0}', {
+                            value0: timeAgo(gw.last_seen, tx.locale),
+                          })
+                        : tx('Noch kein Kontakt')}
                     </p>
                   </div>
                   <button
                     onClick={() => setDeletingGatewayId(gw.id)}
                     className="shrink-0 p-2.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    aria-label={`${gw.name || gw.hardware_id} entfernen`}
-                    title="Gateway entfernen"
+                    aria-label={tx('{value0} entfernen', { value0: gw.name || gw.hardware_id })}
+                    title={tx('Gateway entfernen')}
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path
@@ -326,15 +350,15 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="glass-card p-12 text-center">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Gateways</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">{tx('Noch keine Gateways')}</h3>
           <p className="text-sm text-gray-400">
-            Verbinde dein erstes Gateway, damit die Messungen deiner Sensoren hier ankommen.
+            {tx('Verbinde dein erstes Gateway, damit die Messungen deiner Sensoren hier ankommen.')}
           </p>
           <Link
             href={`/${locale}/app/${zones.length ? 'gateways' : 'zones'}`}
             className="inline-block mt-5 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium"
           >
-            {zones.length ? 'Gateway verbinden' : 'Erste Zone erstellen'}
+            {zones.length ? tx('Gateway verbinden') : tx('Erste Zone erstellen')}
           </Link>
         </div>
       )}
@@ -342,7 +366,9 @@ export default function DashboardPage() {
       {/* Sensor Status & SMS Alerts */}
       {sensors.length > 0 && (
         <div className="glass-card p-4 sm:p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Sensoren & SMS-Warnungen</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            {tx('Sensoren & SMS-Warnungen')}
+          </h2>
           <div className="grid xl:grid-cols-2 gap-3">
             {sensors.map((sensor) => (
               <div
@@ -358,7 +384,8 @@ export default function DashboardPage() {
                       {sensor.name || sensor.mac_address}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
-                      {sensor.status === 'online' ? 'Online' : 'Offline'} · {sensor.mac_address}
+                      {sensor.status === 'online' ? tx('Online') : tx('Offline')} ·{' '}
+                      {sensor.mac_address}
                     </p>
                   </div>
                 </div>
@@ -371,15 +398,17 @@ export default function DashboardPage() {
                       : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
                   }`}
                   aria-pressed={sensor.sms_alerts_enabled}
-                  aria-label={`SMS-Warnungen für ${sensor.name || sensor.mac_address}`}
-                  title="SMS Warnungen bei Elektroden-Abfall"
+                  aria-label={tx('SMS-Warnungen für {value0}', {
+                    value0: sensor.name || sensor.mac_address,
+                  })}
+                  title={tx('SMS Warnungen bei Elektroden-Abfall')}
                 >
                   <span className="text-sm">📱</span>
                   {updatingSmsSensorId === sensor.id
                     ? '...'
                     : sensor.sms_alerts_enabled
-                      ? 'SMS aktiv'
-                      : 'SMS stumm'}
+                      ? tx('SMS aktiv')
+                      : tx('SMS stumm')}
                 </button>
               </div>
             ))}
@@ -406,25 +435,26 @@ export default function DashboardPage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
-              Gateway entfernen?
+              {tx('Gateway entfernen?')}
             </h3>
             <p className="text-sm text-center text-gray-500 mb-6">
-              Bist du sicher, dass du dieses Gateway löschen möchtest? Alle zugehörigen Sensoren und
-              Daten werden ebenfalls entfernt. Dies kann nicht rückgängig gemacht werden.
+              {tx(
+                'Bist du sicher, dass du dieses Gateway löschen möchtest? Alle zugehörigen Sensoren und Daten werden ebenfalls entfernt. Dies kann nicht rückgängig gemacht werden.'
+              )}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingGatewayId(null)}
                 className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
               >
-                Abbrechen
+                {tx('Abbrechen')}
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={isDeleting}
                 className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? 'Lösche...' : 'Löschen'}
+                {isDeleting ? tx('Lösche...') : tx('Löschen')}
               </button>
             </div>
           </div>
@@ -452,28 +482,30 @@ function StatCard({
   sub?: string;
   accent?: boolean;
 }) {
+  const tx = useAppText();
+
   return (
     <div className={`glass-card min-w-0 p-4 sm:p-5 ${accent ? 'border-emerald-500/20' : ''}`}>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm text-gray-600 font-medium">{label}</span>
+        <span className="text-sm text-gray-600 font-medium">{tx(label)}</span>
       </div>
       <p
         className={`text-2xl font-bold tracking-tight ${accent ? 'text-emerald-600' : 'text-gray-800'}`}
       >
-        {value.toLocaleString()}
+        {value.toLocaleString(tx.locale)}
       </p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
   );
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `vor ${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `vor ${min}m`;
-  const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `vor ${hrs}h`;
-  return `vor ${Math.floor(hrs / 24)}d`;
+function timeAgo(iso: string, locale: string): string {
+  const seconds = Math.floor((new Date(iso).getTime() - Date.now()) / 1000);
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  if (Math.abs(seconds) < 60) return format.format(seconds, 'second');
+  const minutes = Math.trunc(seconds / 60);
+  if (Math.abs(minutes) < 60) return format.format(minutes, 'minute');
+  const hours = Math.trunc(minutes / 60);
+  if (Math.abs(hours) < 24) return format.format(hours, 'hour');
+  return format.format(Math.trunc(hours / 24), 'day');
 }

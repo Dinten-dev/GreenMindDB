@@ -114,6 +114,7 @@ export default function Navbar() {
                   <option value="de">DE</option>
                   <option value="en">EN</option>
                   <option value="fr">FR</option>
+                  <option value="it">IT</option>
                 </select>
                 <Link
                   href={`/${locale}/login`}
@@ -173,7 +174,7 @@ export default function Navbar() {
             </Link>
           ))}
           <div className="flex gap-4 pb-4 border-b border-apple-gray-100">
-            {['de', 'en', 'fr'].map((l) => (
+            {['de', 'en', 'fr', 'it'].map((l) => (
               <button
                 key={l}
                 onClick={() => {

@@ -2,6 +2,7 @@ import { localePath, safeReturnTo, signInPath } from '../auth-routing';
 import de from '../../../messages/de.json';
 import en from '../../../messages/en.json';
 import fr from '../../../messages/fr.json';
+import italian from '../../../messages/it.json';
 
 it.each([
   'https://example.invalid/en/app',
@@ -26,7 +27,7 @@ it('retains a local app path with query and fragment', () => {
   expect(localePath('fr', '/en/login')).toBe('/fr/login');
 });
 it('has complete sign-in messages in all existing languages', () => {
-  for (const messages of [en, fr]) {
+  for (const messages of [en, fr, italian]) {
     expect(Object.keys(messages.Auth).sort()).toEqual(Object.keys(de.Auth).sort());
     expect(Object.keys(messages.Auth.errors).sort()).toEqual(Object.keys(de.Auth.errors).sort());
     expect(Object.values(messages.Auth.errors).every((value) => value.length > 10)).toBe(true);

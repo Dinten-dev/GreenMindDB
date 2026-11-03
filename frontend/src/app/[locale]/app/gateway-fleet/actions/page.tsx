@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState, useCallback } from 'react';
 import {
   getFleetOverview,
@@ -37,6 +39,8 @@ const COMMAND_TYPES = [
 ];
 
 export default function GatewayActionsPage() {
+  const tx = useAppText();
+
   const [gateways, setGateways] = useState<GatewayFleetItem[]>([]);
   const [releases, setReleases] = useState<GatewayAppRelease[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,11 +75,11 @@ export default function GatewayActionsPage() {
       setReleases(rels.items);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      setError(tx.error(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tx]);
 
   useEffect(() => {
     loadData();
@@ -91,9 +95,9 @@ export default function GatewayActionsPage() {
     if (!selectedGw) return;
     try {
       await issueCommand(selectedGw, selectedCmd);
-      showSuccess(`Befehl "${selectedCmd}" an Gateway gesendet`);
+      showSuccess(tx('Befehl „{value0}“ an Gateway gesendet', { value0: selectedCmd }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Command failed');
+      setError(tx.error(err));
     }
   };
 
@@ -110,9 +114,9 @@ export default function GatewayActionsPage() {
       if (dsRing) updates.rollout_ring = dsRing;
 
       await setDesiredState(dsGateway, updates);
-      showSuccess('Desired State aktualisiert');
+      showSuccess(tx('Desired State aktualisiert'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Update failed');
+      setError(tx.error(err));
     }
   };
 
@@ -124,24 +128,30 @@ export default function GatewayActionsPage() {
         release_version: rolloutVersion,
         target_ring: rolloutRing,
       });
-      showSuccess(`Rollout gestartet: ${result.gateways_updated} Gateways`);
+      showSuccess(
+        tx('Rollout gestartet: {count, plural, one {# Gateway} other {# Gateways}}', {
+          count: result.gateways_updated,
+        })
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rollout failed');
+      setError(tx.error(err));
     }
   };
 
   const handleRollback = async (gatewayId: string) => {
-    if (!confirm('Rollback zum vorherigen Release?')) return;
+    if (!confirm(tx('Rollback zum vorherigen Release?'))) return;
     try {
       await initiateRollback(gatewayId);
-      showSuccess('Rollback initiiert');
+      showSuccess(tx('Rollback initiiert'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rollback failed');
+      setError(tx.error(err));
     }
   };
 
   if (loading) {
-    return <div className="glass-card rounded-2xl p-12 text-center text-gray-400">Lade…</div>;
+    return (
+      <div className="glass-card rounded-2xl p-12 text-center text-gray-400">{tx('Lade…')}</div>
+    );
   }
 
   return (
@@ -164,9 +174,9 @@ export default function GatewayActionsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Remote Command */}
         <form onSubmit={handleCommand} className="glass-card rounded-2xl p-6 space-y-4">
-          <h3 className="font-semibold text-gray-800">Remote Command</h3>
+          <h3 className="font-semibold text-gray-800">{tx('Remote Command')}</h3>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Gateway</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Gateway')}</label>
             <select
               value={selectedGw}
               onChange={(e) => setSelectedGw(e.target.value)}
@@ -174,16 +184,16 @@ export default function GatewayActionsPage() {
               required
               id="cmd-gateway-select"
             >
-              <option value="">Gateway wählen…</option>
+              <option value="">{tx('Gateway wählen…')}</option>
               {gateways.map((gw) => (
                 <option key={gw.id} value={gw.id}>
-                  {gw.name || gw.hardware_id} ({gw.status})
+                  {gw.name || gw.hardware_id} ({tx.status(gw.status)})
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Befehl</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Befehl')}</label>
             <select
               value={selectedCmd}
               onChange={(e) => setSelectedCmd(e.target.value)}
@@ -192,7 +202,7 @@ export default function GatewayActionsPage() {
             >
               {COMMAND_TYPES.map((cmd) => (
                 <option key={cmd.value} value={cmd.value}>
-                  {cmd.label} — {cmd.description}
+                  {tx(cmd.label)} — {tx(cmd.description)}
                 </option>
               ))}
             </select>
@@ -202,15 +212,15 @@ export default function GatewayActionsPage() {
             disabled={!selectedGw}
             className="px-6 py-2.5 rounded-xl text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors shadow-sm"
           >
-            Senden
+            {tx('Senden')}
           </button>
         </form>
 
         {/* Rollout */}
         <form onSubmit={handleRollout} className="glass-card rounded-2xl p-6 space-y-4">
-          <h3 className="font-semibold text-gray-800">Staged Rollout</h3>
+          <h3 className="font-semibold text-gray-800">{tx('Staged Rollout')}</h3>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Release</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Release')}</label>
             <select
               value={rolloutVersion}
               onChange={(e) => setRolloutVersion(e.target.value)}
@@ -218,7 +228,7 @@ export default function GatewayActionsPage() {
               required
               id="rollout-version-select"
             >
-              <option value="">Release wählen…</option>
+              <option value="">{tx('Release wählen…')}</option>
               {releases.map((r) => (
                 <option key={r.id} value={r.version}>
                   {r.version} ({r.channel})
@@ -227,17 +237,17 @@ export default function GatewayActionsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ziel-Ring</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Ziel-Ring')}</label>
             <select
               value={rolloutRing}
               onChange={(e) => setRolloutRing(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
               id="rollout-ring-select"
             >
-              <option value="canary">canary (Test-Gateways)</option>
-              <option value="early">early (Frühe Adoption)</option>
-              <option value="stable">stable (Alle)</option>
-              <option value="all">all (Alle erzwingen)</option>
+              <option value="canary">{tx('canary (Test-Gateways)')}</option>
+              <option value="early">{tx('early (Frühe Adoption)')}</option>
+              <option value="stable">{tx('stable (Alle)')}</option>
+              <option value="all">{tx('all (Alle erzwingen)')}</option>
             </select>
           </div>
           <button
@@ -245,17 +255,17 @@ export default function GatewayActionsPage() {
             disabled={!rolloutVersion}
             className="px-6 py-2.5 rounded-xl text-sm font-medium bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors shadow-sm"
           >
-            Rollout starten
+            {tx('Rollout starten')}
           </button>
         </form>
       </div>
 
       {/* Desired State */}
       <form onSubmit={handleDesiredState} className="glass-card rounded-2xl p-6 space-y-4">
-        <h3 className="font-semibold text-gray-800">Desired State setzen</h3>
+        <h3 className="font-semibold text-gray-800">{tx('Desired State setzen')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Gateway</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Gateway')}</label>
             <select
               value={dsGateway}
               onChange={(e) => setDsGateway(e.target.value)}
@@ -263,7 +273,7 @@ export default function GatewayActionsPage() {
               required
               id="ds-gateway-select"
             >
-              <option value="">Gateway wählen…</option>
+              <option value="">{tx('Gateway wählen…')}</option>
               {gateways.map((gw) => (
                 <option key={gw.id} value={gw.id}>
                   {gw.name || gw.hardware_id}
@@ -272,13 +282,13 @@ export default function GatewayActionsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">App Version</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('App Version')}</label>
             <select
               value={dsAppVersion}
               onChange={(e) => setDsAppVersion(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             >
-              <option value="">Nicht ändern</option>
+              <option value="">{tx('Nicht ändern')}</option>
               {releases.map((r) => (
                 <option key={r.id} value={r.version}>
                   {r.version}
@@ -287,31 +297,31 @@ export default function GatewayActionsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Config Version</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Config Version')}</label>
             <input
               type="text"
               value={dsConfigVersion}
               onChange={(e) => setDsConfigVersion(e.target.value)}
-              placeholder="v3"
+              placeholder={tx('v3')}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Rollout Ring</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Rollout Ring')}</label>
             <select
               value={dsRing}
               onChange={(e) => setDsRing(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             >
-              <option value="canary">canary</option>
-              <option value="early">early</option>
-              <option value="stable">stable</option>
+              <option value="canary">{tx('canary')}</option>
+              <option value="early">{tx('early')}</option>
+              <option value="stable">{tx('stable')}</option>
             </select>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Update Window Start</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Update Window Start')}</label>
             <input
               type="text"
               value={dsWindowStart}
@@ -321,7 +331,7 @@ export default function GatewayActionsPage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Update Window End</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Update Window End')}</label>
             <input
               type="text"
               value={dsWindowEnd}
@@ -331,15 +341,15 @@ export default function GatewayActionsPage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Timezone</label>
+            <label className="block text-xs text-gray-500 mb-1">{tx('Timezone')}</label>
             <select
               value={dsTimezone}
               onChange={(e) => setDsTimezone(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-black/[0.08] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             >
-              <option value="UTC">UTC</option>
-              <option value="Europe/Zurich">Europe/Zurich</option>
-              <option value="Europe/Berlin">Europe/Berlin</option>
+              <option value="UTC">{tx('UTC')}</option>
+              <option value="Europe/Zurich">{tx('Europe/Zurich')}</option>
+              <option value="Europe/Berlin">{tx('Europe/Berlin')}</option>
             </select>
           </div>
         </div>
@@ -348,15 +358,15 @@ export default function GatewayActionsPage() {
           disabled={!dsGateway}
           className="px-6 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors shadow-sm"
         >
-          Desired State setzen
+          {tx('Desired State setzen')}
         </button>
       </form>
 
       {/* Quick Rollback */}
       <div className="glass-card rounded-2xl p-6 space-y-4">
-        <h3 className="font-semibold text-gray-800">Quick Rollback</h3>
+        <h3 className="font-semibold text-gray-800">{tx('Quick Rollback')}</h3>
         <p className="text-xs text-gray-400">
-          Klicke auf ein Gateway, um sofort zur vorherigen Version zurückzukehren.
+          {tx('Klicke auf ein Gateway, um sofort zur vorherigen Version zurückzukehren.')}
         </p>
         <div className="flex flex-wrap gap-2">
           {gateways.map((gw) => (

@@ -1,4 +1,6 @@
 'use client';
+
+import { useAppText } from '@/i18n/app-text';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
@@ -22,6 +24,8 @@ const empty = {
   zone_ids: [] as string[],
 };
 export default function UserManagement() {
+  const tx = useAppText();
+
   const locale = useLocale();
   const [catalog, setCatalog] = useState<AdminCatalog>({ companies: [], zones: [] });
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -52,11 +56,11 @@ export default function UserManagement() {
       setConfirmation('');
       setShowForm(false);
       setForm(empty);
-      setMessage('Benutzerkonto gelöscht. Messdaten und Firmen bleiben erhalten.');
+      setMessage(tx('Benutzerkonto gelöscht. Messdaten und Firmen bleiben erhalten.'));
       setOffset(0);
       setReload((n) => n + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Löschen fehlgeschlagen.');
+      setError(tx.error(e));
     } finally {
       setSaving(false);
     }
@@ -75,7 +79,7 @@ export default function UserManagement() {
       })
       .catch(() => {
         if (active) {
-          setError('Benutzer konnten nicht geladen werden.');
+          setError(tx('Benutzer konnten nicht geladen werden.'));
           setUsers([]);
         }
       })
@@ -85,7 +89,7 @@ export default function UserManagement() {
     return () => {
       active = false;
     };
-  }, [query, offset, reload, companyFilter]);
+  }, [tx, query, offset, reload, companyFilter]);
   const edit = useCallback((user: ManagedUser | null) => {
     setDeleting(null);
     setConfirmation('');
@@ -128,10 +132,10 @@ export default function UserManagement() {
       setForm(empty);
       setShowForm(false);
       setEditing(null);
-      setMessage('Benutzer gespeichert.');
+      setMessage(tx('Benutzer gespeichert.'));
       setReload((n) => n + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen.');
+      setError(tx.error(e));
     } finally {
       setSaving(false);
     }
@@ -140,24 +144,24 @@ export default function UserManagement() {
   return (
     <div className="max-w-6xl space-y-6">
       <Link href={`/${locale}/app/administration`} className="text-sm text-emerald-700">
-        ← Administration
+        {tx('← Administration')}
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-800">Kunden &amp; Benutzer</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{tx('Kunden & Benutzer')}</h1>
         <button
           type="button"
           disabled={saving}
           onClick={() => edit(null)}
           className="rounded-xl bg-emerald-700 px-4 py-2 text-sm text-white"
         >
-          Benutzer erstellen
+          {tx('Benutzer erstellen')}
         </button>
       </div>
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}{' '}
           <button onClick={() => setReload((n) => n + 1)} className="underline">
-            Erneut laden
+            {tx('Erneut laden')}
           </button>
         </p>
       )}
@@ -167,28 +171,29 @@ export default function UserManagement() {
         </p>
       )}
       <p className="text-sm text-gray-600">
-        Kunden bearbeiten und genau prüfen, welche Zonen sie sehen.{' '}
+        {tx('Kunden bearbeiten und genau prüfen, welche Zonen sie sehen.')}{' '}
         <Link
           href={`/${locale}/app/administration/companies`}
           className="text-emerald-700 underline"
         >
-          Firmen bearbeiten
+          {tx('Firmen bearbeiten')}
         </Link>
       </p>
       {deleting && (
         <form
           onSubmit={remove}
           className="glass-card border border-red-200 p-6 space-y-4"
-          aria-label="Kontolöschung bestätigen"
+          aria-label={tx('Kontolöschung bestätigen')}
         >
-          <h2 className="text-lg font-semibold">Benutzerkonto dauerhaft löschen</h2>
+          <h2 className="text-lg font-semibold">{tx('Benutzerkonto dauerhaft löschen')}</h2>
           <p className="text-sm">
-            {deleting.name || deleting.email} ({deleting.email}) verliert den Zugang. Das Konto und
-            seine Zonenfreigaben werden gelöscht. Firmen, Sensoren und Messdaten bleiben erhalten.
-            Dieser Vorgang kann nicht rückgängig gemacht werden.
+            {deleting.name || deleting.email} ({deleting.email}
+            {tx(
+              ') verliert den Zugang. Das Konto und seine Zonenfreigaben werden gelöscht. Firmen, Sensoren und Messdaten bleiben erhalten. Dieser Vorgang kann nicht rückgängig gemacht werden.'
+            )}
           </p>
           <label className="block text-sm">
-            E-Mail zur Bestätigung
+            {tx('E-Mail zur Bestätigung')}
             <input
               type="email"
               required
@@ -206,7 +211,7 @@ export default function UserManagement() {
               }
               className="rounded-xl bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-40"
             >
-              Endgültig löschen
+              {tx('Endgültig löschen')}
             </button>
             <button
               type="button"
@@ -217,7 +222,7 @@ export default function UserManagement() {
               }}
               className="rounded-xl border px-4 py-2 text-sm"
             >
-              Abbrechen
+              {tx('Abbrechen')}
             </button>
           </div>
         </form>
@@ -225,11 +230,11 @@ export default function UserManagement() {
       {showForm && (
         <form onSubmit={save} className="glass-card p-6 space-y-4">
           <h2 className="text-lg font-semibold">
-            {editing ? 'Benutzer bearbeiten' : 'Neuer Benutzer'}
+            {editing ? tx('Benutzer bearbeiten') : tx('Neuer Benutzer')}
           </h2>
           <fieldset disabled={saving} className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm">
-              Name
+              {tx('Name')}
               <input
                 required
                 maxLength={200}
@@ -239,7 +244,7 @@ export default function UserManagement() {
               />
             </label>
             <label className="text-sm">
-              E-Mail
+              {tx('E-Mail')}
               <input
                 type="email"
                 required
@@ -252,7 +257,7 @@ export default function UserManagement() {
             </label>
             {!editing && (
               <label className="text-sm">
-                Startpasswort
+                {tx('Startpasswort')}
                 <input
                   type="password"
                   required
@@ -264,13 +269,13 @@ export default function UserManagement() {
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                 />
                 <span className="mt-1 block text-xs text-gray-500">
-                  Mindestens 12 Zeichen, Gross-/Kleinbuchstaben und eine Zahl.
+                  {tx('Mindestens 12 Zeichen, Gross-/Kleinbuchstaben und eine Zahl.')}
                 </span>
               </label>
             )}
             {editing && (
               <label className="text-sm">
-                Telefon
+                {tx('Telefon')}
                 <input
                   maxLength={50}
                   className={input}
@@ -280,7 +285,7 @@ export default function UserManagement() {
               </label>
             )}
             <label className="text-sm">
-              Firma
+              {tx('Firma')}
               <select
                 required
                 className={input}
@@ -289,7 +294,7 @@ export default function UserManagement() {
                   setForm({ ...form, organization_id: e.target.value, zone_ids: [] })
                 }
               >
-                <option value="">Firma auswählen</option>
+                <option value="">{tx('Firma auswählen')}</option>
                 {catalog.companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -298,7 +303,7 @@ export default function UserManagement() {
               </select>
             </label>
             <label className="text-sm">
-              Rolle
+              {tx('Rolle')}
               <select
                 className={input}
                 value={form.role}
@@ -306,9 +311,9 @@ export default function UserManagement() {
                   setForm({ ...form, role: e.target.value as ManagedUser['role'], zone_ids: [] })
                 }
               >
-                <option value="member">Mitglied – ausgewählte Zonen</option>
-                <option value="owner">Eigentümer – alle Firmenzonen</option>
-                <option value="admin">Administrator – bestehende Admin-Werkzeuge</option>
+                <option value="member">{tx('Mitglied – ausgewählte Zonen')}</option>
+                <option value="owner">{tx('Eigentümer – alle Firmenzonen')}</option>
+                <option value="admin">{tx('Administrator – bestehende Admin-Werkzeuge')}</option>
               </select>
             </label>
             {editing && (
@@ -318,15 +323,16 @@ export default function UserManagement() {
                   checked={form.is_active}
                   onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                 />
-                Konto aktiv
+                {tx('Konto aktiv')}
               </label>
             )}
             <fieldset className="space-y-2 sm:col-span-2">
-              <legend className="mb-2 text-sm font-medium">Zonenzugänge</legend>
+              <legend className="mb-2 text-sm font-medium">{tx('Zonenzugänge')}</legend>
               {form.role !== 'member' ? (
                 <p className="text-sm text-gray-500">
-                  Diese Rolle hat Zugriff auf alle Zonen der Firma. Die zentrale Administration wird
-                  separat freigegeben.
+                  {tx(
+                    'Diese Rolle hat Zugriff auf alle Zonen der Firma. Die zentrale Administration wird separat freigegeben.'
+                  )}
                 </p>
               ) : (
                 <>
@@ -354,8 +360,9 @@ export default function UserManagement() {
                       </label>
                     ))}
                   <p className="text-xs text-gray-500">
-                    Ohne Auswahl sind keine Zonen sichtbar. Ein Firmenwechsel entfernt bisherige
-                    Zonenzugänge.
+                    {tx(
+                      'Ohne Auswahl sind keine Zonen sichtbar. Ein Firmenwechsel entfernt bisherige Zonenzugänge.'
+                    )}
                   </p>
                 </>
               )}
@@ -363,8 +370,9 @@ export default function UserManagement() {
           </fieldset>
           {!editing && (
             <p className="text-xs text-gray-500">
-              Das administrativ angelegte Konto kann sich sofort anmelden. Es wird keine E-Mail
-              verschickt. Übermittle die Zugangsdaten persönlich und sicher.
+              {tx(
+                'Das administrativ angelegte Konto kann sich sofort anmelden. Es wird keine E-Mail verschickt. Übermittle die Zugangsdaten persönlich und sicher.'
+              )}
             </p>
           )}
           <div className="flex gap-3">
@@ -372,7 +380,7 @@ export default function UserManagement() {
               disabled={saving}
               className="rounded-xl bg-emerald-700 px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {saving ? 'Wird gespeichert …' : 'Speichern'}
+              {saving ? tx('Wird gespeichert …') : tx('Speichern')}
             </button>
             <button
               type="button"
@@ -383,7 +391,7 @@ export default function UserManagement() {
               }}
               className="rounded-xl border border-gray-200 px-4 py-2 text-sm"
             >
-              Abbrechen
+              {tx('Abbrechen')}
             </button>
           </div>
         </form>
@@ -397,21 +405,21 @@ export default function UserManagement() {
         }}
       >
         <label className="flex-1 text-sm">
-          Benutzer suchen
+          {tx('Benutzer suchen')}
           <input
             className={input}
             maxLength={200}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name oder E-Mail"
+            placeholder={tx('Name oder E-Mail')}
           />
         </label>
         <button className="self-end rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
-          Suchen
+          {tx('Suchen')}
         </button>
       </form>
       <label className="block text-sm">
-        Nach Firma filtern
+        {tx('Nach Firma filtern')}
         <select
           className={input}
           value={companyFilter}
@@ -420,7 +428,7 @@ export default function UserManagement() {
             setOffset(0);
           }}
         >
-          <option value="">Alle Firmen</option>
+          <option value="">{tx('Alle Firmen')}</option>
           {catalog.companies.map((company) => (
             <option key={company.id} value={company.id}>
               {company.name}
@@ -428,13 +436,13 @@ export default function UserManagement() {
           ))}
         </select>
       </label>
-      <section aria-label="Benutzer" className="glass-card divide-y divide-gray-100">
+      <section aria-label={tx('Benutzer')} className="glass-card divide-y divide-gray-100">
         {loading ? (
           <p role="status" className="p-6">
-            Benutzer werden geladen …
+            {tx('Benutzer werden geladen …')}
           </p>
         ) : users.length === 0 ? (
-          <p className="p-6 text-sm text-gray-500">Keine Benutzer gefunden.</p>
+          <p className="p-6 text-sm text-gray-500">{tx('Keine Benutzer gefunden.')}</p>
         ) : (
           users.map((u) => (
             <article key={u.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -442,21 +450,32 @@ export default function UserManagement() {
                 <h2 className="break-words font-medium text-gray-800">{u.name || u.email}</h2>
                 <p className="break-all text-sm text-gray-500">{u.email}</p>
                 <p className="mt-1 text-xs text-gray-500">
-                  {u.organization_name || 'Keine Firma'} ·{' '}
-                  {{ member: 'Mitglied', owner: 'Eigentümer', admin: 'Administrator' }[u.role]} ·{' '}
-                  {u.is_active ? 'Aktiv' : 'Deaktiviert'}
-                  {!u.is_verified ? ' · E-Mail unbestätigt' : ''}
+                  {u.organization_name || tx('Keine Firma')} · {tx.status(u.role)} ·{' '}
+                  {u.is_active ? tx('Aktiv') : tx('Deaktiviert')}
+                  {!u.is_verified ? tx(' · E-Mail unbestätigt') : ''}
                 </p>
-                <p className="mt-3 text-sm font-medium text-gray-700">Sichtbare Zonen</p>
+                <p className="mt-3 text-sm font-medium text-gray-700">{tx('Sichtbare Zonen')}</p>
                 <p className="mt-1 text-sm text-gray-600">
                   {u.visible_zones?.length
                     ? u.visible_zones.map((z) => z.name).join(' · ')
-                    : 'Keine Zonen sichtbar'}
+                    : tx('Keine Zonen sichtbar')}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">{u.access_note}</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {!u.is_active
+                    ? tx('Konto deaktiviert: kein Zugang.')
+                    : !u.is_verified
+                      ? tx('E-Mail unbestätigt: kein Zugang.')
+                      : !u.organization_id
+                        ? tx('Keine Firma zugeordnet: kein Zonenzugang.')
+                        : u.all_zones
+                          ? tx('Alle aktuellen und künftigen Zonen dieser Firma.')
+                          : tx('Nur ausdrücklich freigegebene Zonen dieser Firma.')}
+                </p>
               </div>
               {u.protected ? (
-                <span className="text-xs text-gray-500">Geschütztes Administrationskonto</span>
+                <span className="text-xs text-gray-500">
+                  {tx('Geschütztes Administrationskonto')}
+                </span>
               ) : (
                 <div className="flex gap-2">
                   <button
@@ -465,7 +484,7 @@ export default function UserManagement() {
                     onClick={() => edit(u)}
                     className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
                   >
-                    Bearbeiten
+                    {tx('Bearbeiten')}
                   </button>
                   <button
                     type="button"
@@ -480,7 +499,7 @@ export default function UserManagement() {
                     }}
                     className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700"
                   >
-                    Konto löschen
+                    {tx('Konto löschen')}
                   </button>
                 </div>
               )}
@@ -494,15 +513,17 @@ export default function UserManagement() {
           onClick={() => setOffset(Math.max(0, offset - 50))}
           className="disabled:opacity-40"
         >
-          ← Zurück
+          {tx('← Zurück')}
         </button>
-        <span>{total} Benutzer</span>
+        <span>
+          {total} {tx('Benutzer')}
+        </span>
         <button
           disabled={offset + 50 >= total || loading}
           onClick={() => setOffset(offset + 50)}
           className="disabled:opacity-40"
         >
-          Weiter →
+          {tx('Weiter →')}
         </button>
       </div>
     </div>

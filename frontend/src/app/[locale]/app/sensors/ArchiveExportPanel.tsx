@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState } from 'react';
 
 type Job = {
@@ -24,6 +26,8 @@ export default function ArchiveExportPanel({
   from: string;
   to: string;
 }) {
+  const tx = useAppText();
+
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState('');
   const jobId = job?.id;
@@ -38,18 +42,18 @@ export default function ArchiveExportPanel({
           credentials: 'include',
           cache: 'no-store',
         });
-        if (!response.ok) throw new Error('Exportstatus nicht verfügbar');
+        if (!response.ok) throw new Error(tx('Exportstatus nicht verfügbar'));
         const current = (await response.json()) as Job;
         if (active) setJob((previous) => ({ ...previous, ...current }));
       } catch {
-        if (active) setError('Exportstatus vorübergehend nicht erreichbar.');
+        if (active) setError(tx('Exportstatus vorübergehend nicht erreichbar.'));
       }
     }, 5000);
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [jobId, jobStatus]);
+  }, [tx, jobId, jobStatus]);
 
   if (process.env.NEXT_PUBLIC_ARCHIVE_EXPORTS_ENABLED !== 'true') return null;
 
@@ -67,15 +71,15 @@ export default function ArchiveExportPanel({
       }
       setJob((await response.json()) as Job);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Export fehlgeschlagen');
+      setError(tx.error(cause));
     }
   };
 
   return (
     <div className="rounded-xl border border-emerald-100 bg-[#f7faf5] p-3 text-sm">
-      <p className="font-medium text-emerald-900">Original-WAVs für Analysen</p>
+      <p className="font-medium text-emerald-900">{tx('Original-WAVs für Analysen')}</p>
       <p className="mt-1 text-xs text-gray-600">
-        Originaldateien und Prüfsummen für den ausgewählten Sensor und Zeitraum.
+        {tx('Originaldateien und Prüfsummen für den ausgewählten Sensor und Zeitraum.')}
       </p>
       <button
         type="button"
@@ -83,17 +87,20 @@ export default function ArchiveExportPanel({
         disabled={job?.status === 'queued' || job?.status === 'working'}
         className="mt-2 rounded-lg bg-emerald-700 px-3 py-2 font-medium text-white disabled:opacity-50"
       >
-        Download vorbereiten
+        {tx('Download vorbereiten')}
       </button>
       {job && (
         <p role="status" className="mt-2 text-xs text-gray-600">
           {job.status === 'ready'
-            ? 'Bereit'
+            ? tx('Bereit')
             : job.status === 'failed'
-              ? 'Fehlgeschlagen'
+              ? tx('Fehlgeschlagen')
               : job.status === 'working'
-                ? `Prüfen: ${job.completed ?? 0} von ${job.total ?? job.files ?? 0}`
-                : 'Wartet auf freie Kapazität'}
+                ? tx('Prüfen: {value0} von {value1}', {
+                    value0: job.completed ?? 0,
+                    value1: job.total ?? job.files ?? 0,
+                  })
+                : tx('Wartet auf freie Kapazität')}
         </p>
       )}
       {job?.status === 'ready' && (
@@ -104,7 +111,8 @@ export default function ArchiveExportPanel({
               href={`/api/v1/visualization/archive-exports/${job.id}/parts/${index}`}
               className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-emerald-800"
             >
-              ZIP-Teil {index + 1} herunterladen
+              {tx('ZIP-Teil')}
+              {index + 1} {tx('herunterladen')}
             </a>
           ))}
         </div>

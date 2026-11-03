@@ -2,7 +2,7 @@ name: Web login current receiver
 
 on:
   push:
-    branches: ["fix/web-login-current-20261103"]
+    branches: ["fix/web-login-current-20261103", "feat/app-four-languages-current-20261103"]
 
 permissions:
   contents: read

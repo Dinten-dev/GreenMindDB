@@ -1,4 +1,7 @@
 'use client';
+import { readViewValue, replaceViewValues } from '@/lib/view-state';
+
+import { useAppText } from '@/i18n/app-text';
 
 import { useLocale } from 'next-intl';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -93,6 +96,8 @@ function isSensorArchived(s: SensorInfo): boolean {
 type ExportStatus = 'idle' | 'loading' | 'zipping' | 'done' | 'error';
 
 export default function SensorsPage() {
+  const tx = useAppText();
+
   const locale = useLocale();
   const [listError, setListError] = useState(false);
   const [dataError, setDataError] = useState(false);
@@ -101,6 +106,7 @@ export default function SensorsPage() {
   const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZone, setSelectedZone] = useState('');
+  const selectionRestored = useRef(false);
   const directFeed = useDirectDevices();
 
   const activeSensors = useMemo(() => sensors.filter((s) => !isSensorArchived(s)), [sensors]);
@@ -161,14 +167,14 @@ export default function SensorsPage() {
           const zoneId = params.get('zone');
           if (zoneId && allowed.has(zoneId)) {
             setSelectedZone(zoneId);
-            window.history.replaceState({}, '', window.location.pathname);
           }
+          const selectedRange = readViewValue('range');
+          if (selectedRange && ['live', '1h', '24h', '7d', '30d'].includes(selectedRange))
+            setTimeRange(selectedRange as TimeRange);
+          selectionRestored.current = true;
           const sensorId = params.get('sensor');
           if (sensorId && data.some((s) => s.id === sensorId)) {
             setSelectedSensor(sensorId);
-            // Clean up the URL
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
           }
         }
       })
@@ -198,6 +204,15 @@ export default function SensorsPage() {
       setSensorData([]);
     }
   }, [sensors, selectedSensor]);
+
+  useEffect(() => {
+    if (!selectionRestored.current) return;
+    replaceViewValues({
+      zone: selectedZone || null,
+      sensor: selectedSensor,
+      range: timeRange === '24h' ? null : timeRange,
+    });
+  }, [selectedZone, selectedSensor, timeRange, loading]);
 
   const loadSensorData = useCallback(async (sensorId: string, range: TimeRange, silent = false) => {
     if (!silent) {
@@ -230,6 +245,10 @@ export default function SensorsPage() {
       if (!silent) setLoadingData(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (selectedSensor) void loadSensorData(selectedSensor, timeRange);
+  }, [selectedSensor, timeRange, loadSensorData]);
 
   // Background fetch to check electrode status for all sensors
   useEffect(() => {
@@ -272,7 +291,6 @@ export default function SensorsPage() {
       setSensorData([]);
     } else {
       setSelectedSensor(sensorId);
-      loadSensorData(sensorId, timeRange);
     }
     setBrushRanges({});
   };
@@ -280,24 +298,20 @@ export default function SensorsPage() {
   const handleRangeChange = (range: TimeRange) => {
     setTimeRange(range);
     setBrushRanges({});
-    if (selectedSensor) {
-      loadSensorData(selectedSensor, range);
-    }
   };
 
   const formatTime = (t: string) => {
-    const d = new Date(t);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
+    return new Intl.DateTimeFormat(tx.locale, { hour: '2-digit', minute: '2-digit' }).format(
+      new Date(t)
+    );
   };
 
   const formatTimeWithSeconds = (t: string) => {
-    const d = new Date(t);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    const s = d.getSeconds().toString().padStart(2, '0');
-    return `${h}:${m}:${s}`;
+    return new Intl.DateTimeFormat(tx.locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).format(new Date(t));
   };
 
   const formatDate = (t: string) => {
@@ -486,7 +500,7 @@ export default function SensorsPage() {
       setSensors((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
     } catch (err) {
       console.error('Failed to update SMS alerts:', err);
-      alert('Fehler beim Aktualisieren der SMS-Einstellungen.');
+      alert(tx('Fehler beim Aktualisieren der SMS-Einstellungen.'));
     } finally {
       setIsUpdatingSms(false);
     }
@@ -504,15 +518,15 @@ export default function SensorsPage() {
   if (listError)
     return (
       <div className="glass-card p-8">
-        <h1 className="text-2xl font-semibold text-gray-800">Messungen & Sensoren</h1>
+        <h1 className="text-2xl font-semibold text-gray-800">{tx('Messungen & Sensoren')}</h1>
         <p role="alert" className="mt-3 text-sm text-gray-600">
-          Deine Sensoren konnten nicht geladen werden.
+          {tx('Deine Sensoren konnten nicht geladen werden.')}
         </p>
         <button
           onClick={() => refreshSensors()}
           className="mt-4 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm"
         >
-          Erneut laden
+          {tx('Erneut laden')}
         </button>
       </div>
     );
@@ -547,20 +561,20 @@ export default function SensorsPage() {
                       : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
                   }`}
                   aria-pressed={selectedSensorInfo.sms_alerts_enabled}
-                  title="SMS Warnungen bei Elektroden-Abfall"
+                  title={tx('SMS Warnungen bei Elektroden-Abfall')}
                 >
                   <span className="text-sm">📱</span>
                   {isUpdatingSms
-                    ? 'Speichere...'
+                    ? tx('Speichere...')
                     : selectedSensorInfo.sms_alerts_enabled
-                      ? 'SMS aktiv'
-                      : 'SMS stumm'}
+                      ? tx('SMS aktiv')
+                      : tx('SMS stumm')}
                 </button>
 
                 {/* Time Range Segmented Control */}
                 <div
                   role="group"
-                  aria-label="Zeitraum"
+                  aria-label={tx('Zeitraum')}
                   className="flex flex-wrap bg-black/[0.03] rounded-xl p-0.5"
                 >
                   {(['live', '1h', '24h', '7d', '30d'] as TimeRange[]).map((range) => (
@@ -581,12 +595,17 @@ export default function SensorsPage() {
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${timeRange === 'live' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`}
                           />
-                          Live
+                          {tx('Live')}
                         </span>
                       ) : (
-                        { '1h': '1 Stunde', '24h': '24 Stunden', '7d': '7 Tage', '30d': '30 Tage' }[
-                          range
-                        ]
+                        tx(
+                          {
+                            '1h': '1 Stunde',
+                            '24h': '24 Stunden',
+                            '7d': '7 Tage',
+                            '30d': '30 Tage',
+                          }[range]
+                        )
                       )}
                     </button>
                   ))}
@@ -597,7 +616,7 @@ export default function SensorsPage() {
                   onClick={handleExport}
                   disabled={exportStatus !== 'idle'}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 border border-emerald-200/50"
-                  title="Sensordaten als ZIP exportieren"
+                  title={tx('Sensordaten als ZIP exportieren')}
                 >
                   {exportStatus === 'idle' && (
                     <>
@@ -615,13 +634,13 @@ export default function SensorsPage() {
                         <polyline points="7 10 12 15 17 10" />
                         <line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
-                      Daten herunterladen
+                      {tx('Daten herunterladen')}
                     </>
                   )}
                   {exportStatus === 'loading' && 'Lade…'}
-                  {exportStatus === 'zipping' && 'Wird gepackt…'}
-                  {exportStatus === 'done' && '✓ Fertig'}
-                  {exportStatus === 'error' && '✗ Fehler'}
+                  {exportStatus === 'zipping' && tx('Wird gepackt…')}
+                  {exportStatus === 'done' && tx('✓ Fertig')}
+                  {exportStatus === 'error' && tx('✗ Fehler')}
                 </button>
               </div>
             </div>
@@ -641,13 +660,14 @@ export default function SensorsPage() {
                 role="alert"
                 className="m-4 sm:m-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
               >
-                Messdaten konnten nicht aktualisiert werden. Bereits sichtbare Werte können älter
-                sein.
+                {tx(
+                  'Messdaten konnten nicht aktualisiert werden. Bereits sichtbare Werte können älter sein.'
+                )}
                 <button
                   onClick={() => loadSensorData(selectedSensor, timeRange)}
                   className="block mt-2 underline underline-offset-4 font-medium"
                 >
-                  Erneut versuchen
+                  {tx('Erneut versuchen')}
                 </button>
               </div>
             )}
@@ -662,8 +682,8 @@ export default function SensorsPage() {
               ) : sensorData.length === 0 ? (
                 <div className="py-16 text-center text-gray-400 text-sm">
                   {dataError
-                    ? 'Messdaten derzeit nicht verfügbar'
-                    : 'Keine Messdaten für diesen Zeitraum vorhanden'}
+                    ? tx('Messdaten derzeit nicht verfügbar')
+                    : tx('Keine Messdaten für diesen Zeitraum vorhanden')}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-6">
@@ -696,14 +716,14 @@ export default function SensorsPage() {
                               <span className="text-lg flex-shrink-0">⚠️</span>
                               <div>
                                 <p className="text-sm font-semibold text-amber-800">
-                                  Elektrode abgefallen?
+                                  {tx('Elektrode abgefallen?')}
                                 </p>
                                 <p className="text-xs text-amber-600 mt-0.5">
-                                  Signal konstant bei{' '}
+                                  {tx('Signal konstant bei')}{' '}
                                   {electrodeStatus === 'rail_high'
-                                    ? '~3300 mV (Sättigung)'
-                                    : '~0 mV (kein Kontakt)'}
-                                  . Bitte Elektroden prüfen.
+                                    ? tx('~3300 mV (Sättigung)')
+                                    : tx('~0 mV (kein Kontakt)')}
+                                  {tx('. Bitte Elektroden prüfen.')}
                                 </p>
                               </div>
                             </div>
@@ -718,7 +738,7 @@ export default function SensorsPage() {
                                 aria-hidden="true"
                               />
                               <span className="text-sm font-medium text-gray-700">
-                                {config.label}
+                                {tx(config.label)}
                               </span>
                             </div>
                             {latestValue !== null && (
@@ -729,7 +749,7 @@ export default function SensorsPage() {
                                 <span className="text-xs text-gray-500 ml-1">{displayUnit}</span>
                                 {latestTimestamp && (
                                   <p className="text-xs text-gray-500 mt-1">
-                                    Letzter Messwert ·{' '}
+                                    {tx('Letzter Messwert ·')}{' '}
                                     <time dateTime={latestTimestamp}>
                                       {new Date(latestTimestamp).toLocaleString(locale, {
                                         day: '2-digit',
@@ -762,7 +782,7 @@ export default function SensorsPage() {
                             />
                           ) : (
                             <div className="h-40 flex items-center justify-center text-gray-300 text-xs">
-                              Keine Daten
+                              {tx('Keine Daten')}
                             </div>
                           )}
                         </div>
@@ -778,7 +798,8 @@ export default function SensorsPage() {
                     <>
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                       <span className="text-emerald-600 font-medium">
-                        Echtzeit {wsConnected ? 'verbunden' : 'verbindet…'}
+                        {tx('Echtzeit')}
+                        {wsConnected ? tx('verbunden') : tx('verbindet…')}
                       </span>
                       <span className="font-mono text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">
                         {formatCountdown(realtimeRemaining)}
@@ -787,13 +808,13 @@ export default function SensorsPage() {
                         onClick={stopRealtime}
                         className="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium transition-colors border border-red-200/50"
                       >
-                        Beenden
+                        {tx('Beenden')}
                       </button>
                     </>
                   ) : (
                     <>
                       <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
-                      Abfrage alle 5 Sekunden
+                      {tx('Abfrage alle 5 Sekunden')}
                       <button
                         onClick={startRealtime}
                         className="ml-1 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-all duration-200 border border-emerald-200/50 hover:shadow-sm"
@@ -810,7 +831,7 @@ export default function SensorsPage() {
                         >
                           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                         </svg>
-                        Echtzeit starten
+                        {tx('Echtzeit starten')}
                       </button>
                     </>
                   )}
@@ -827,24 +848,24 @@ export default function SensorsPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">🎵</span>
                   <span className="text-sm font-medium text-gray-700">
-                    WAV-Dateien (380 Hz Rohdaten)
+                    {tx('WAV-Dateien (380 Hz Rohdaten)')}
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 mb-3">
-                  Rohdaten 90 Tage · verifizierte Merkmale mindestens zwei Jahre
+                  {tx('Rohdaten 90 Tage · verifizierte Merkmale mindestens zwei Jahre')}
                 </p>
 
                 {/* Date Range + Download */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl bg-black/[0.02] border border-black/[0.04]">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <label className="text-xs text-gray-500 font-medium">Von</label>
+                    <label className="text-xs text-gray-500 font-medium">{tx('Von')}</label>
                     <input
                       type="date"
                       value={wavFromDate}
                       onChange={(e) => setWavFromDate(e.target.value)}
                       className="px-3 py-1.5 rounded-lg bg-white/80 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                     />
-                    <label className="text-xs text-gray-500 font-medium">Bis</label>
+                    <label className="text-xs text-gray-500 font-medium">{tx('Bis')}</label>
                     <input
                       type="date"
                       value={wavToDate}
@@ -858,12 +879,14 @@ export default function SensorsPage() {
                     {wavLoading ? (
                       <span className="text-xs text-gray-400 flex items-center gap-1.5">
                         <span className="w-3 h-3 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
-                        Lade…
+                        {tx('Lade…')}
                       </span>
                     ) : wavCount && wavCount.count > 0 ? (
                       <>
                         <span className="text-xs text-gray-400">
-                          {wavCount.count.toLocaleString()} Datei{wavCount.count !== 1 ? 'en' : ''}
+                          {tx('{count, plural, one {# Datei} other {# Dateien}}', {
+                            count: wavCount.count,
+                          })}
                           {wavCount.total_bytes > 0 && <> · {formatBytes(wavCount.total_bytes)}</>}
                         </span>
                         {selectedSensor && (
@@ -886,7 +909,7 @@ export default function SensorsPage() {
                             {bundleLoading ? (
                               <span className="flex items-center gap-1">
                                 <span className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                                ZIP…
+                                {tx('ZIP…')}
                               </span>
                             ) : (
                               <>
@@ -904,7 +927,7 @@ export default function SensorsPage() {
                                   <polyline points="7 10 12 15 17 10" />
                                   <line x1="12" y1="15" x2="12" y2="3" />
                                 </svg>
-                                Als ZIP herunterladen
+                                {tx('Als ZIP herunterladen')}
                               </>
                             )}
                           </button>
@@ -912,7 +935,7 @@ export default function SensorsPage() {
                       </>
                     ) : (
                       <span className="text-xs text-gray-400">
-                        Keine Dateien im gewählten Zeitraum
+                        {tx('Keine Dateien im gewählten Zeitraum')}
                       </span>
                     )}
                   </div>
@@ -939,13 +962,13 @@ export default function SensorsPage() {
         <SensorCard
           key={sensor.id}
           name={sensor.name || sensor.mac_address}
-          connection={`Gateway${sensor.gateway_name ? ` · ${sensor.gateway_name}` : ''} · ${sensor.mac_address}`}
+          connection={`${tx('Gateway')}${sensor.gateway_name ? ` · ${sensor.gateway_name}` : ''} · ${sensor.mac_address}`}
           status={
             archived
               ? 'Inaktiv (>3 Tage)'
               : sensor.status === 'online'
-                ? 'Empfängt Daten'
-                : 'Offline'
+                ? tx('Empfängt Daten')
+                : tx('Offline')
           }
           online={sensor.status === 'online'}
           lastSeen={sensor.last_seen}
@@ -963,7 +986,7 @@ export default function SensorsPage() {
             onClick={() => setDeletingSensorId(sensor.id)}
             className="mt-3 rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600"
           >
-            Sensor entfernen
+            {tx('Sensor entfernen')}
           </button>
         </SensorCard>
       ))}
@@ -974,9 +997,11 @@ export default function SensorsPage() {
     <div className="space-y-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Messungen & Sensoren</h1>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
+            {tx('Messungen & Sensoren')}
+          </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Deine freigegebenen Zonen mit Sensoren, Messwerten und Originalaufnahmen.
+            {tx('Deine freigegebenen Zonen mit Sensoren, Messwerten und Originalaufnahmen.')}
           </p>
         </div>
         <button
@@ -986,13 +1011,13 @@ export default function SensorsPage() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Sensor verbinden
+          {tx('Sensor verbinden')}
         </button>
       </div>
 
       {zones.length > 1 && (
         <label className="block text-sm font-medium text-gray-700">
-          Zone
+          {tx('Zone')}
           <select
             value={selectedZone}
             onChange={(event) => {
@@ -1002,7 +1027,7 @@ export default function SensorsPage() {
             }}
             className="mt-2 block w-full max-w-sm rounded-xl border border-gray-200 bg-white px-3 py-2"
           >
-            <option value="">Alle freigegebenen Zonen</option>
+            <option value="">{tx('Alle freigegebenen Zonen')}</option>
             {zones.map((zone) => (
               <option key={zone.id} value={zone.id}>
                 {zone.name}
@@ -1013,14 +1038,16 @@ export default function SensorsPage() {
       )}
       {directFeed.error && (
         <p role="status" className="text-sm text-amber-800">
-          Direkt verbundene Sensoren konnten nicht aktualisiert werden.
+          {tx('Direkt verbundene Sensoren konnten nicht aktualisiert werden.')}
         </p>
       )}
       {zones.length === 0 ? (
         <div className="glass-card p-10 text-center">
-          <h2 className="font-semibold text-gray-800">Keine Zonen freigegeben</h2>
+          <h2 className="font-semibold text-gray-800">{tx('Keine Zonen freigegeben')}</h2>
           <p className="mt-2 text-sm text-gray-500">
-            Sobald du Zugang zu einer Zone hast, erscheinen ihre Sensoren und Messungen hier.
+            {tx(
+              'Sobald du Zugang zu einer Zone hast, erscheinen ihre Sensoren und Messungen hier.'
+            )}
           </p>
         </div>
       ) : (
@@ -1040,9 +1067,9 @@ export default function SensorsPage() {
                 connections={[
                   ...Array.from(
                     new Set(
-                      [...active, ...archived].map((sensor) => sensor.gateway_name || 'Gateway')
+                      [...active, ...archived].map((sensor) => sensor.gateway_name || tx('Gateway'))
                     )
-                  ).map((name) => (name === 'Gateway' ? name : `Gateway · ${name}`)),
+                  ).map((name) => (name === tx('Gateway') ? name : `${tx('Gateway')} · ${name}`)),
                   ...(devices.length ? ['Direct-to-Cloud'] : []),
                 ].join(' · ')}
                 reveal={
@@ -1061,17 +1088,20 @@ export default function SensorsPage() {
                 {archived.length > 0 && (
                   <details className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
                     <summary className="cursor-pointer text-sm font-medium text-gray-600">
-                      Inaktive Sensoren ({archived.length})
+                      {tx('Inaktive Sensoren (')}
+                      {archived.length})
                     </summary>
                     <p className="my-3 text-xs text-gray-500">
-                      Seit mehr als drei Tagen offline. Bisherige Messungen bleiben abrufbar.
+                      {tx(
+                        'Seit mehr als drei Tagen offline. Bisherige Messungen bleiben abrufbar.'
+                      )}
                     </p>
                     {renderSensorCards(archived, true)}
                   </details>
                 )}
                 {count === 0 && (
                   <p className="py-4 text-sm text-gray-500">
-                    In dieser Zone sind noch keine Sensoren registriert.
+                    {tx('In dieser Zone sind noch keine Sensoren registriert.')}
                   </p>
                 )}
               </ZoneSensorCard>
@@ -1098,24 +1128,24 @@ export default function SensorsPage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
-              Sensor entfernen?
+              {tx('Sensor entfernen?')}
             </h3>
             <p className="text-sm text-center text-gray-500 mb-6">
-              Alle Messdaten dieses Sensors werden unwiderruflich gelöscht.
+              {tx('Alle Messdaten dieses Sensors werden unwiderruflich gelöscht.')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingSensorId(null)}
                 className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
               >
-                Abbrechen
+                {tx('Abbrechen')}
               </button>
               <button
                 onClick={confirmDeleteSensor}
                 disabled={isDeleting}
                 className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? 'Lösche…' : 'Löschen'}
+                {isDeleting ? tx('Lösche…') : tx('Löschen')}
               </button>
             </div>
           </div>

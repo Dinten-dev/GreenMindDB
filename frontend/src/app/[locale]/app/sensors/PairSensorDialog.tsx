@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect } from 'react';
 import { apiListZones, Zone } from '@/lib/api';
 
@@ -10,6 +12,8 @@ interface PairSensorDialogProps {
 }
 
 export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSensorDialogProps) {
+  const tx = useAppText();
+
   const [directAvailable, setDirectAvailable] = useState(false);
   const [transport, setTransport] = useState<'GATEWAY' | 'DIRECT'>('GATEWAY');
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -42,7 +46,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
     setError('');
 
     if (!selectedZone) {
-      setError('Bitte wähle eine Zone.');
+      setError(tx('Bitte wähle eine Zone.'));
       return;
     }
 
@@ -69,9 +73,9 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
       setExpiresAt(data.expires_at);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        setError(tx.error(err));
       } else {
-        setError('Ein unbekannter Fehler ist aufgetreten');
+        setError(tx('Ein unbekannter Fehler ist aufgetreten'));
       }
     } finally {
       setLoading(false);
@@ -98,13 +102,13 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
         </div>
 
         <h3 className="text-2xl font-bold text-center text-gray-800 tracking-tight mb-2">
-          Sensor Hinzufügen
+          {tx('Sensor Hinzufügen')}
         </h3>
 
         {!pairingCode ? (
           <>
             <p className="text-sm text-center text-gray-500 mb-8 leading-relaxed">
-              Wähle die Ziel-Zone aus, um einen temporären Pairing-Code zu erstellen.
+              {tx('Wähle die Ziel-Zone aus, um einen temporären Pairing-Code zu erstellen.')}
             </p>
             <form onSubmit={handleGenerate} className="space-y-6">
               {directAvailable && (
@@ -113,7 +117,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                     htmlFor="sensor-transport"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    Verbindung
+                    {tx('Verbindung')}
                   </label>
                   <select
                     id="sensor-transport"
@@ -121,15 +125,15 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                     onChange={(e) => setTransport(e.target.value as 'GATEWAY' | 'DIRECT')}
                     className="w-full rounded-xl border border-gray-200 p-3"
                   >
-                    <option value="GATEWAY">Über ein Gateway</option>
-                    <option value="DIRECT">Direkt über WLAN (Direct-Firmware)</option>
+                    <option value="GATEWAY">{tx('Über ein Gateway')}</option>
+                    <option value="DIRECT">{tx('Direkt über WLAN (Direct-Firmware)')}</option>
                   </select>
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2 ml-1">
-                  Zone (Gewächshaus)
+                  {tx('Zone (Gewächshaus)')}
                 </label>
                 <select
                   value={selectedZone}
@@ -156,7 +160,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                   onClick={onClose}
                   className="flex-1 px-6 py-4 bg-white/40 border border-black/[0.04] text-gray-700 rounded-2xl font-medium hover:bg-white/60 transition-all hover:shadow-sm"
                 >
-                  Abbrechen
+                  {tx('Abbrechen')}
                 </button>
                 <button
                   type="submit"
@@ -164,7 +168,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                   className="flex-1 relative px-6 py-4 bg-emerald-500 text-white rounded-2xl font-medium hover:bg-emerald-600 transition-all shadow-[0_8px_16px_rgba(16,185,129,0.2)] hover:shadow-[0_8px_24px_rgba(16,185,129,0.3)] hover:-translate-y-0.5 disabled:opacity-50 overflow-hidden"
                 >
                   <div className="relative z-10 flex items-center justify-center gap-2">
-                    {loading ? <span>Laden…</span> : <span>Code Erstellen</span>}
+                    {loading ? <span>{tx('Laden…')}</span> : <span>{tx('Code Erstellen')}</span>}
                   </div>
                 </button>
               </div>
@@ -174,15 +178,16 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
           <div className="space-y-6 text-center animate-in fade-in zoom-in slide-in-from-bottom-2 duration-300">
             <div className="bg-emerald-50/50 border-2 border-emerald-100 rounded-2xl p-6">
               <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-2">
-                Dein Pairing Code
+                {tx('Dein Pairing Code')}
               </h4>
               <div className="text-4xl font-mono tracking-[0.2em] text-emerald-900 font-bold">
                 {pairingCode}
               </div>
               {expiresAt && (
                 <p className="mt-3 text-sm text-emerald-800">
-                  Gültig bis {new Date(expiresAt).toLocaleTimeString('de-CH')}. Nur einmal
-                  verwendbar.
+                  {tx('Gültig bis')}
+                  {new Date(expiresAt).toLocaleTimeString(tx.locale)}
+                  {tx('. Nur einmal verwendbar.')}
                 </p>
               )}
             </div>
@@ -193,23 +198,24 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
                   1
                 </span>
                 <span>
-                  Verbinde dein Smartphone mit dem WLAN{' '}
-                  <strong className="text-gray-900">GreenMind-Sensor-XXXX</strong>
+                  {tx('Verbinde dein Smartphone mit dem WLAN')}{' '}
+                  <strong className="text-gray-900">{tx('GreenMind-Sensor-XXXX')}</strong>
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="bg-white text-emerald-600 rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-sm shrink-0">
                   2
                 </span>
-                <span>Öffne das Anmeldefenster oder rufe http://192.168.4.1 auf.</span>
+                <span>{tx('Öffne das Anmeldefenster oder rufe http://192.168.4.1 auf.')}</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="bg-white text-emerald-600 rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-sm shrink-0">
                   3
                 </span>
                 <span>
-                  Trage dort deinen WLAN-Namen, das WLAN-Passwort und den Code oben ein. Verwende
-                  dein 2,4-GHz-WLAN.
+                  {tx(
+                    'Trage dort deinen WLAN-Namen, das WLAN-Passwort und den Code oben ein. Verwende dein 2,4-GHz-WLAN.'
+                  )}
                 </span>
               </li>
             </ul>
@@ -218,7 +224,7 @@ export default function PairSensorDialog({ isOpen, onClose, onSuccess }: PairSen
               onClick={onSuccess}
               className="w-full relative px-6 py-4 bg-gray-900 text-white rounded-2xl font-medium hover:bg-gray-800 transition-all shadow-md hover:-translate-y-0.5"
             >
-              Fertig, Code eingetragen!
+              {tx('Fertig, Code eingetragen!')}
             </button>
           </div>
         )}

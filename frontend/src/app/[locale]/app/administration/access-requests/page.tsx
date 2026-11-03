@@ -1,4 +1,6 @@
 'use client';
+
+import { useAppText } from '@/i18n/app-text';
 import { useCallback, useEffect, useState } from 'react';
 import {
   listAccessRequests,
@@ -21,6 +23,8 @@ function invitationStatus(item: AccessRequest) {
 }
 
 export default function AccessRequestsPage() {
+  const tx = useAppText();
+
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AccessRequestPage | null>(null);
   const [error, setError] = useState('');
@@ -29,9 +33,9 @@ export default function AccessRequestsPage() {
     try {
       setData(await listAccessRequests(page));
     } catch {
-      setError('Zugangsanfragen konnten nicht geladen werden.');
+      setError(tx('Zugangsanfragen konnten nicht geladen werden.'));
     }
-  }, [page]);
+  }, [tx, page]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -42,7 +46,7 @@ export default function AccessRequestsPage() {
       if (item.invitation) await resendInvitation(item.invitation.id);
       else await sendInvitation(item.id);
     } catch {
-      setError('Versand nicht bestätigt. Status prüfen und bei Bedarf erneut senden.');
+      setError(tx('Versand nicht bestätigt. Status prüfen und bei Bedarf erneut senden.'));
     } finally {
       await load();
       setBusy(null);
@@ -50,13 +54,13 @@ export default function AccessRequestsPage() {
   }
   return (
     <div className="max-w-5xl space-y-5">
-      <h1 className="text-2xl font-bold">Zugangsanfragen</h1>
+      <h1 className="text-2xl font-bold">{tx('Zugangsanfragen')}</h1>
       {error && (
         <p role="alert" className="text-red-700">
           {error}
         </p>
       )}
-      {!data && <p role="status">Anfragen werden geladen …</p>}
+      {!data && <p role="status">{tx('Anfragen werden geladen …')}</p>}
       {data?.items.map((item) => (
         <article key={item.id} className="glass-card p-5 space-y-2">
           <h2 className="font-semibold">
@@ -64,10 +68,11 @@ export default function AccessRequestsPage() {
           </h2>
           <p>{[item.company, item.country].filter(Boolean).join(' · ')}</p>
           {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
-          <p role="status">{invitationStatus(item)}</p>
+          <p role="status">{tx(invitationStatus(item))}</p>
           {item.invitation && (
             <p className="text-sm">
-              Gültig bis: {new Date(item.invitation.expires_at).toLocaleString()}
+              {tx('Gültig bis:')}
+              {new Date(item.invitation.expires_at).toLocaleString(tx.locale)}
             </p>
           )}
           <button
@@ -77,27 +82,28 @@ export default function AccessRequestsPage() {
             onClick={() => void invite(item)}
           >
             {busy === item.id
-              ? 'Versand läuft …'
+              ? tx('Versand läuft …')
               : item.invitation
-                ? 'Erneut einladen'
-                : 'Einladen'}
+                ? tx('Erneut einladen')
+                : tx('Einladen')}
           </button>
         </article>
       ))}
-      {data?.total === 0 && <p>Keine Zugangsanfragen vorhanden.</p>}
+      {data?.total === 0 && <p>{tx('Keine Zugangsanfragen vorhanden.')}</p>}
       <div className="flex gap-4 items-center">
         <button type="button" disabled={page <= 1 || !!busy} onClick={() => setPage(page - 1)}>
-          Zurück
+          {tx('Zurück')}
         </button>
         <span>
-          Seite {page} · {data?.total ?? 0} Anfragen
+          {tx('Seite')}
+          {page} · {data?.total ?? 0} {tx('Anfragen')}
         </span>
         <button
           type="button"
           disabled={!data || page * data.page_size >= data.total || !!busy}
           onClick={() => setPage(page + 1)}
         >
-          Weiter
+          {tx('Weiter')}
         </button>
       </div>
     </div>

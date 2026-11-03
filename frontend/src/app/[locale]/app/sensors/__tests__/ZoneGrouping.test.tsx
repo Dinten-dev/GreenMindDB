@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { apiGetSensorDataAdvanced } from '@/lib/api';
+import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import SensorsPage from '../page';
 
-jest.mock('next-intl', () => ({ useLocale: () => 'de' }));
 jest.mock('../SignalChart', () => ({ __esModule: true, default: () => null }));
 jest.mock('../PairSensorDialog', () => ({ __esModule: true, default: () => null }));
 jest.mock('../DirectSensorsPanel', () => ({
@@ -23,6 +23,7 @@ jest.mock('../DirectSensorsPanel', () => ({
   ),
 }));
 jest.mock('@/lib/api', () => ({
+  apiListWavFiles: jest.fn(async () => []),
   apiListZones: jest.fn(async () => [
     { id: 'peter', name: 'Peter Büro' },
     { id: 'rudi', name: 'Rudi Meier' },
@@ -55,6 +56,10 @@ jest.mock('@/lib/api', () => ({
   apiCountWavFiles: jest.fn(async () => ({ count: 0, total_size_bytes: 0 })),
 }));
 
+beforeEach(() => {
+  window.history.replaceState({}, '', '/de/app/sensors');
+});
+
 test('groups Gateway and Direct sensors under their permitted zone', async () => {
   render(<SensorsPage />);
   const peter = await screen.findByRole('region', { name: 'Peter Büro' });
@@ -75,4 +80,42 @@ test('groups Gateway and Direct sensors under their permitted zone', async () =>
   fireEvent.change(screen.getByRole('combobox', { name: 'Zone' }), { target: { value: 'rudi' } });
   expect(screen.queryByRole('region', { name: 'Peter Büro' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Rudi Meier' })).toBeInTheDocument();
+});
+
+test('restores permitted sensor, zone and time range after changing locale', async () => {
+  window.history.replaceState(
+    { router: 'preserved' },
+    '',
+    '/fr/app/sensors?zone=rudi&sensor=rudi-sensor&range=7d#chart'
+  );
+  render(<SensorsPage />);
+  await waitFor(() =>
+    expect(apiGetSensorDataAdvanced).toHaveBeenCalledWith(
+      'rudi-sensor',
+      expect.objectContaining({
+        range: '7d',
+        from_dt: expect.any(String),
+        to_dt: expect.any(String),
+      })
+    )
+  );
+  expect(screen.getByRole('combobox', { name: 'Zone' })).toHaveValue('rudi');
+  expect(screen.getByRole('button', { name: '7 Tage' })).toHaveAttribute('aria-pressed', 'true');
+  expect(new URLSearchParams(window.location.search).get('sensor')).toBe('rudi-sensor');
+  expect(new URLSearchParams(window.location.search).get('range')).toBe('7d');
+  expect(window.location.hash).toBe('#chart');
+});
+
+test('does not restore a sensor outside permitted zones', async () => {
+  window.history.replaceState(
+    {},
+    '',
+    '/it/app/sensors?zone=hidden&sensor=hidden-sensor&range=invalid'
+  );
+  render(<SensorsPage />);
+  await screen.findByRole('region', { name: 'Peter Büro' });
+  await waitFor(() => expect(new URLSearchParams(window.location.search).get('sensor')).toBeNull());
+  expect(new URLSearchParams(window.location.search).get('zone')).toBeNull();
+  expect(new URLSearchParams(window.location.search).get('range')).toBeNull();
+  expect(screen.queryByText('Geheimer Sensor')).not.toBeInTheDocument();
 });
