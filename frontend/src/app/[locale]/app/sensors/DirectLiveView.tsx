@@ -78,9 +78,11 @@ function LiveCurve({ data, seconds }: { data: LiveSnapshot; seconds: number }) {
 export default function DirectLiveView({
   deviceId,
   onHistory,
+  showHistoryButton = true,
 }: {
   deviceId: string;
   onHistory: () => void;
+  showHistoryButton?: boolean;
 }) {
   const tx = useAppText();
   const [seconds, setSeconds] = useState<30 | 60 | 180>(() => {
@@ -102,13 +104,15 @@ export default function DirectLiveView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-semibold text-gray-900">{tx('Live-Vorschau')}</h3>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onHistory}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-          >
-            {tx('24 Stunden')}
-          </button>
+          {showHistoryButton && (
+            <button
+              type="button"
+              onClick={onHistory}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            >
+              {tx('24 Stunden')}
+            </button>
+          )}
           <button
             type="button"
             disabled={live.stale || live.marking || live.paused}
@@ -133,26 +137,6 @@ export default function DirectLiveView({
           </button>
         ))}
       </div>
-      {snapshot && snapshot.points.length > 0 && (
-        <div className="space-y-1 text-xs text-gray-600">
-          <p>
-            {tx('Aufnahmezeit: {value0} – {value1}', {
-              value0: formatCaptureTime(
-                new Date(snapshot.points[0].recorded_us / 1000).toISOString(),
-                tx.locale
-              ),
-              value1: formatCaptureTime(
-                new Date(
-                  snapshot.points[snapshot.points.length - 1].recorded_us / 1000
-                ).toISOString(),
-                tx.locale
-              ),
-            })}
-          </p>
-          <p>{tx('Zeitzone: {value0}', { value0: captureTimeZone() })}</p>
-          <p>{tx('Zeitgenauigkeit nicht unabhängig geprüft.')}</p>
-        </div>
-      )}
       {live.error && (
         <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           {live.error}{' '}
@@ -196,6 +180,13 @@ export default function DirectLiveView({
             {live.railStale && <p>{tx('Rail-Messung veraltet')}</p>}
             {rail && (
               <p className="mt-1 text-xs">
+                {tx('Rail-Messung bis: {value0}', {
+                  value0: formatCaptureTime(new Date(rail.end_us / 1000).toISOString(), tx.locale),
+                })}
+              </p>
+            )}
+            {rail && (
+              <p className="mt-1 text-xs">
                 {tx('{value0} von {value1} Rohwerten', {
                   value0: rail.rail_samples,
                   value1: rail.raw_samples,
@@ -214,6 +205,9 @@ export default function DirectLiveView({
             {highRail && !live.railStale && (
               <p role="alert" className="mt-2 font-medium">
                 {tx('Hoher Rail-Anteil. Elektroden und Referenz prüfen.')}
+                <span className="mt-1 block text-xs font-normal">
+                  {tx('Übersteuerung ist ein Messproblem und keine Aussage über Pflanzenstress.')}
+                </span>
               </p>
             )}
           </div>
@@ -229,14 +223,37 @@ export default function DirectLiveView({
           {tx('Markierung gesetzt.')}
         </p>
       )}
-      <p className="text-xs leading-relaxed text-gray-500">
-        {tx(
-          'Vorschau: 12,5 Werte pro Sekunde, nominale mV. Originalaufnahmen laufen unabhängig weiter.'
+      <details className="text-xs text-gray-500">
+        <summary className="cursor-pointer">{tx('Technische Details')}</summary>
+        {snapshot && snapshot.points.length > 0 && (
+          <div className="space-y-1 text-xs text-gray-600">
+            <p>
+              {tx('Aufnahmezeit: {value0} – {value1}', {
+                value0: formatCaptureTime(
+                  new Date(snapshot.points[0].recorded_us / 1000).toISOString(),
+                  tx.locale
+                ),
+                value1: formatCaptureTime(
+                  new Date(
+                    snapshot.points[snapshot.points.length - 1].recorded_us / 1000
+                  ).toISOString(),
+                  tx.locale
+                ),
+              })}
+            </p>
+            <p>{tx('Zeitzone: {value0}', { value0: captureTimeZone() })}</p>
+            <p>{tx('Zeitgenauigkeit nicht unabhängig geprüft.')}</p>
+          </div>
         )}
-      </p>
-      <p className="text-xs leading-relaxed text-gray-500">
-        {tx('Markierungen sind für berechtigte Zuschauer drei Minuten sichtbar. Kein Export.')}
-      </p>
+        <p className="text-xs leading-relaxed text-gray-500">
+          {tx(
+            'Vorschau: 12,5 Werte pro Sekunde, nominale mV. Originalaufnahmen laufen unabhängig weiter.'
+          )}
+        </p>
+        <p className="text-xs leading-relaxed text-gray-500">
+          {tx('Markierungen sind für berechtigte Zuschauer drei Minuten sichtbar. Kein Export.')}
+        </p>{' '}
+      </details>
     </section>
   );
 }

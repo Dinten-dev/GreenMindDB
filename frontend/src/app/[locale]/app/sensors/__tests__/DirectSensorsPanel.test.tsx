@@ -1,13 +1,16 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import DirectSensorsPanel from '../DirectSensorsPanel';
+import { preserveMeasurementLocale } from '@/lib/measurement-view';
 
 jest.mock('../SignalChart', () => ({
   __esModule: true,
-  default: ({ series, showPeaks }: { series: { data: unknown[] }; showPeaks: boolean }) => (
-    <div data-testid="signal-chart" data-show-peaks={showPeaks}>
-      {series.data.length} Punkte
-    </div>
+  default: ({ series }: { series: { data: unknown[] } }) => (
+    <div data-testid="signal-chart">{series.data.length} Punkte</div>
   ),
+}));
+jest.mock('../DirectLiveView', () => ({
+  __esModule: true,
+  default: () => <div data-testid="direct-live">Live</div>,
 }));
 const device = {
   id: 'direct-a',
@@ -15,121 +18,68 @@ const device = {
   status: 'online',
   last_seen: '2026-09-19T14:50:00Z',
 };
-const points = [{ timestamp: '2026-09-19T14:49:00Z', value: 1000 }];
+const signal = [
+  {
+    sensor_id: device.id,
+    kind: 'bio_signal_ch1',
+    unit: 'mV',
+    data: [{ timestamp: '2026-09-19T14:49:00Z', value: 1000 }],
+  },
+];
 beforeEach(() => {
   window.history.replaceState({}, '', '/de/app/sensors');
+  sessionStorage.clear();
+  global.fetch = jest.fn(async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => (String(url).endsWith('/devices') ? [device] : signal),
+  })) as jest.Mock;
 });
-
 afterEach(() => {
   jest.restoreAllMocks();
   jest.useRealTimers();
 });
 
-test('loads Direct measurements only when expanded and exposes authenticated WAV/CSV paths', async () => {
-  global.fetch = jest.fn(async (url) => ({
-    ok: true,
-    json: async () =>
-      String(url).endsWith('/devices')
-        ? [device]
-        : String(url).includes('/recordings')
-          ? [
-              {
-                segment_id: 'segment-a',
-                revision: 4,
-                run: 0,
-                started_at: '2026-09-19T14:40:00Z',
-                duration_seconds: 600,
-                sample_rate: 380,
-              },
-            ]
-          : [
-              {
-                sensor_id: 'direct-a',
-                kind: 'bio_signal_ch1',
-                unit: 'mV',
-                source: 'direct',
-                data: points,
-              },
-            ],
-  })) as jest.Mock;
+test('loads only the curve on expansion and exposes exactly 24 hours and Live', async () => {
   render(<DirectSensorsPanel />);
   const toggle = await screen.findByRole('button', { name: /Biolingo/ });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(global.fetch).toHaveBeenCalledTimes(1);
   fireEvent.click(toggle);
   expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
-  const exportUrl = screen.getByRole('link', { name: 'CSV herunterladen' }).getAttribute('href');
-  expect(exportUrl).toContain('/api/v1/visualization/direct/direct-a/export?range=24h');
-  expect(new URL(exportUrl!, 'http://localhost').searchParams.get('from_dt')).toBeTruthy();
-  expect(new URL(exportUrl!, 'http://localhost').searchParams.get('to_dt')).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'WAV herunterladen', hidden: true })).toHaveAttribute(
-    'href',
-    '/api/v1/visualization/direct/direct-a/wav/segment-a/4/0'
-  );
-  fireEvent.click(screen.getByRole('button', { name: '5 Minuten' }));
-  await waitFor(() =>
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /^\/api\/v1\/visualization\/direct\/direct-a\/data\?range=5m&from_dt=.*&resolution=1$/
-      ),
-      expect.objectContaining({ cache: 'no-store' })
-    )
-  );
-  expect(await screen.findByTestId('signal-chart')).toHaveAttribute('data-show-peaks', 'true');
-  fireEvent.click(screen.getByRole('button', { name: '1 Stunde' }));
-  await waitFor(() =>
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /^\/api\/v1\/visualization\/direct\/direct-a\/data\?range=1h&from_dt=.*&resolution=1$/
-      ),
-      expect.objectContaining({ cache: 'no-store' })
-    )
-  );
-  expect(await screen.findByTestId('signal-chart')).toHaveAttribute('data-show-peaks', 'true');
-  expect(screen.getByRole('link', { name: 'CSV herunterladen' })).toHaveAttribute(
-    'href',
-    expect.stringMatching(
-      /^\/api\/v1\/visualization\/direct\/direct-a\/export\?range=1h&from_dt=.*&resolution=1$/
-    )
-  );
+  const modes = within(screen.getByRole('group', { name: 'Zeitraum' }));
+  expect(modes.getAllByRole('button')).toHaveLength(2);
+  expect(modes.getByRole('button', { name: '24 Stunden' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('link', { name: 'WAV herunterladen' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Exportieren' })).toBeInTheDocument();
+  expect(
+    (global.fetch as jest.Mock).mock.calls.some(([url]) => String(url).includes('/recordings'))
+  ).toBe(false);
+  fireEvent.click(modes.getByRole('button', { name: 'Live' }));
+  expect(screen.getByTestId('direct-live')).toBeInTheDocument();
   fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByTestId('signal-chart')).not.toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: 'CSV herunterladen' })).not.toBeInTheDocument();
+  fireEvent.click(toggle);
+  expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
+  expect(screen.queryByTestId('direct-live')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '24 Stunden' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
 });
-
-test('shows an explicit data error instead of hiding a device with failing chart requests', async () => {
+test('shows a data failure explicitly while keeping the selected device visible', async () => {
   global.fetch = jest.fn(async (url) => ({
     ok: String(url).endsWith('/devices'),
+    status: 503,
     json: async () => [device],
   })) as jest.Mock;
   render(<DirectSensorsPanel />);
   fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
-  expect(await screen.findByText(/Messdaten konnten nicht aktualisiert werden/)).toHaveAttribute(
-    'role',
-    'alert'
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Messdaten konnten nicht aktualisiert werden'
   );
-  expect(screen.queryByText(/In diesem Zeitraum sind noch keine/)).not.toBeInTheDocument();
   expect(screen.getByText('Empfängt Daten')).toBeInTheDocument();
 });
-
-const signal = [{ sensor_id: device.id, kind: 'bio_signal_ch1', unit: 'mV', data: points }];
-
-test('shows the curve when the recordings list fails', async () => {
-  global.fetch = jest.fn(async (url) => ({
-    ok: !String(url).includes('/recordings'),
-    status: String(url).includes('/recordings') ? 503 : 200,
-    json: async () => (String(url).endsWith('/devices') ? [device] : signal),
-  })) as jest.Mock;
-  render(<DirectSensorsPanel />);
-  fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
-  expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
-  expect(screen.getByRole('alert')).toHaveTextContent('Aufnahmeliste');
-  expect(screen.queryByText(/Noch keine abgeschlossene Aufnahme/)).not.toBeInTheDocument();
-});
-
-test('does not wait for a stalled recordings list before displaying the curve', async () => {
-  jest.useFakeTimers();
+test('does not load a recordings list in the measurement view', async () => {
   global.fetch = jest.fn((url) =>
     String(url).includes('/recordings')
       ? new Promise(() => {})
@@ -140,84 +90,66 @@ test('does not wait for a stalled recordings list before displaying the curve', 
   ) as jest.Mock;
   render(<DirectSensorsPanel />);
   fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
-  expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
-  await act(async () => jest.advanceTimersByTimeAsync(10000));
+  expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
   expect(
-    (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/data?'))
-  ).toHaveLength(2);
-  expect(
-    (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/recordings'))
-  ).toHaveLength(1);
+    (global.fetch as jest.Mock).mock.calls.some(([url]) => String(url).includes('/recordings'))
+  ).toBe(false);
 });
-
-test('retains the open curve when device status temporarily fails', async () => {
+test('retains the open curve when status is temporarily unavailable', async () => {
   jest.useFakeTimers();
   let statusFails = false;
   global.fetch = jest.fn(async (url) => ({
     ok: !(String(url).endsWith('/devices') && statusFails),
-    status: String(url).endsWith('/devices') && statusFails ? 503 : 200,
-    json: async () =>
-      String(url).endsWith('/devices')
-        ? [device]
-        : String(url).includes('/recordings')
-          ? []
-          : signal,
+    status: 503,
+    json: async () => (String(url).endsWith('/devices') ? [device] : signal),
   })) as jest.Mock;
   render(<DirectSensorsPanel />);
   fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
-  expect(await screen.findByTestId('signal-chart')).toHaveTextContent('1 Punkte');
+  await screen.findByTestId('signal-chart');
   statusFails = true;
   await act(async () => jest.advanceTimersByTimeAsync(10000));
-  expect(screen.getByTestId('signal-chart')).toHaveTextContent('1 Punkte');
+  expect(screen.getByTestId('signal-chart')).toBeInTheDocument();
   expect(screen.getByText('Status unklar')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /Biolingo/ })).toHaveAttribute('aria-expanded', 'true');
 });
-
-test('removes cached device data after authorization is rejected', async () => {
+test('clears the device and cached curve when access is rejected', async () => {
   jest.useFakeTimers();
-  let revoked = false;
+  let denied = false;
   global.fetch = jest.fn(async (url) => ({
-    ok: !revoked,
-    status: revoked ? 403 : 200,
-    json: async () =>
-      String(url).endsWith('/devices')
-        ? [device]
-        : String(url).includes('/recordings')
-          ? []
-          : signal,
+    ok: !denied,
+    status: denied ? 403 : 200,
+    json: async () => (String(url).endsWith('/devices') ? [device] : signal),
   })) as jest.Mock;
   render(<DirectSensorsPanel />);
   fireEvent.click(await screen.findByRole('button', { name: /Biolingo/ }));
-  expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
-  revoked = true;
+  await screen.findByTestId('signal-chart');
+  denied = true;
   await act(async () => jest.advanceTimersByTimeAsync(10000));
   expect(screen.queryByTestId('signal-chart')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Biolingo/ })).not.toBeInTheDocument();
 });
-
-test('restores the selected Direct sensor and time range without another click', async () => {
-  window.history.replaceState({}, '', '/it/app/sensors?direct=direct-a&directRange=7d');
-  global.fetch = jest.fn(async (url) => ({
-    ok: true,
-    json: async () =>
-      String(url).endsWith('/devices')
-        ? [device]
-        : String(url).includes('/recordings')
-          ? []
-          : [
-              {
-                sensor_id: device.id,
-                kind: 'bio_signal_ch1',
-                unit: 'mV',
-                source: 'direct',
-                data: points,
-              },
-            ],
-  })) as jest.Mock;
+test('a fresh URL restores the device but starts at 24 hours', async () => {
+  window.history.replaceState({}, '', '/it/app/sensors?direct=direct-a&directRange=live');
   render(<DirectSensorsPanel />);
   expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '7 Tage' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: /Biolingo/ })).toHaveAttribute('aria-expanded', 'true');
-  expect(new URLSearchParams(window.location.search).get('direct')).toBe('direct-a');
-  expect(new URLSearchParams(window.location.search).get('directRange')).toBe('7d');
+  expect(screen.queryByTestId('direct-live')).not.toBeInTheDocument();
+  expect(new URLSearchParams(window.location.search).get('directRange')).toBeNull();
+});
+test('a locale switch restores Live once and a later opening defaults to 24 hours', async () => {
+  window.history.replaceState(
+    {},
+    '',
+    '/de/app/sensors?direct=direct-a&directRange=live&directLiveWindow=180'
+  );
+  preserveMeasurementLocale('/it/app/sensors');
+  window.history.replaceState(
+    {},
+    '',
+    '/it/app/sensors?direct=direct-a&directRange=live&directLiveWindow=180'
+  );
+  const page = render(<DirectSensorsPanel />);
+  expect(await screen.findByTestId('direct-live')).toBeInTheDocument();
+  page.unmount();
+  render(<DirectSensorsPanel />);
+  expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
+  expect(screen.queryByTestId('direct-live')).not.toBeInTheDocument();
 });

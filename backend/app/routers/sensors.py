@@ -338,6 +338,8 @@ async def get_sensor_data(
     range: str = Query("24h", pattern="^(5m|1h|24h|7d|30d)$"),
     resolution: str | None = Query(None, pattern="^(raw|1m|5m|1h|1d)$"),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -379,6 +381,14 @@ async def get_sensor_data(
         end = datetime.now(UTC)
         start = end - td
 
+    from app.services.recording_time import window_bounds
+
+    if from_dt is not None or to_dt is not None:
+        try:
+            start, end = window_bounds(86400, from_dt, to_dt)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     # Auto-pick resolution if not specified
     if resolution is None:
         span = end - start
@@ -392,6 +402,13 @@ async def get_sensor_data(
             resolution = "1h"
         else:
             resolution = "1d"
+
+    if (from_dt is not None or to_dt is not None) and resolution != "raw":
+        seconds_per_point = {"1m": 60, "5m": 300, "1h": 3600, "1d": 86400}[resolution]
+        if (end - start).total_seconds() / seconds_per_point > 20000:
+            raise HTTPException(
+                413, "Time window contains too many points; choose a coarser resolution"
+            )
 
     # Get distinct kinds
     kinds = (
@@ -525,6 +542,8 @@ async def export_sensor_data(
     request: Request,
     sensor_id: uuid.UUID,
     range: str = Query("24h", pattern="^(1h|24h|7d|30d|all)$"),
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -547,12 +566,17 @@ async def export_sensor_data(
         raise HTTPException(status_code=404, detail="Sensor not found")
 
     sensor, gw, zone = result
-    td = EXPORT_RANGE_MAP[range]
-    cutoff = datetime.now(UTC) - td
+    from app.services.recording_time import window_bounds
+
+    try:
+        cutoff, export_end = window_bounds(EXPORT_RANGE_MAP[range].total_seconds(), from_dt, to_dt)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     reading_filter = (
         SensorReading.sensor_id == sensor_id,
         SensorReading.timestamp >= cutoff,
+        SensorReading.timestamp < export_end,
     )
     row_count = (
         db.query(func.count()).select_from(SensorReading).filter(*reading_filter).scalar() or 0
@@ -612,9 +636,8 @@ async def export_sensor_data(
                     SensorReading.unit,
                 )
                 .filter(
-                    SensorReading.sensor_id == sensor_id,
+                    *reading_filter,
                     SensorReading.kind == kind,
-                    SensorReading.timestamp >= cutoff,
                 )
                 .order_by(SensorReading.timestamp.asc())
                 .yield_per(2_000)
@@ -652,7 +675,7 @@ async def export_sensor_data(
     sensor_label = _safe_export_component(sensor.name or sensor.mac_address, "sensor")
     from app.services.recording_time import utc_filename
 
-    filename = utc_filename("greenmind", sensor_label, cutoff, extension="zip")
+    filename = utc_filename("greenmind", sensor_label, cutoff, export_end, extension="zip")
 
     return StreamingResponse(
         zip_buffer,
