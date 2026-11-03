@@ -1,3 +1,5 @@
+import { apiFetch, ApiError } from './api';
+
 /**
  * Firmware Admin API client.
  * Type-safe wrappers for all OTA management endpoints.
@@ -9,17 +11,7 @@ const API_BASE =
     : '/api/v1';
 
 async function fwFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}/firmware${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `API error ${res.status}`);
-  }
-  if (res.status === 204) return {} as T;
-  return res.json();
+  return apiFetch<T>(`/firmware${path}`, options);
 }
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -136,7 +128,10 @@ export async function uploadFirmware(formData: FormData): Promise<FirmwareReleas
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `Upload failed: ${res.status}`);
+    throw new ApiError(
+      res.status,
+      typeof body?.detail === 'string' ? body.detail : `API error ${res.status}`
+    );
   }
   return res.json();
 }

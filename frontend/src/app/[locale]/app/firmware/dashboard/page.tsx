@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect } from 'react';
 import { getDashboard, DashboardSummary, listReports, FirmwareReport } from '@/lib/firmware-api';
 
@@ -14,9 +16,11 @@ function StatCard({
   sub?: string;
   color: string;
 }) {
+  const tx = useAppText();
+
   return (
     <div className="glass-card p-5">
-      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</p>
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{tx(label)}</p>
       <p className={`text-3xl font-bold mt-1.5 ${color}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
@@ -24,6 +28,8 @@ function StatCard({
 }
 
 export default function FirmwareDashboardPage() {
+  const tx = useAppText();
+
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recentFailed, setRecentFailed] = useState<FirmwareReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,27 +68,31 @@ export default function FirmwareDashboardPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          label="Active Releases"
+          label={tx('Active Releases')}
           value={data.active_releases}
-          sub={`von ${data.total_releases} total`}
+          sub={tx('von {count} insgesamt', { count: data.total_releases })}
           color="text-emerald-600"
         />
         <StatCard
-          label="Gateways Online"
+          label={tx('Gateways Online')}
           value={data.online_gateways}
-          sub={`von ${data.total_gateways} total`}
+          sub={tx('von {count} insgesamt', { count: data.total_gateways })}
           color="text-blue-600"
         />
-        <StatCard label="Total Devices" value={data.total_devices} color="text-gray-800" />
-        <StatCard label="Active Rollouts" value={data.active_rollouts} color="text-indigo-600" />
+        <StatCard label={tx('Total Devices')} value={data.total_devices} color="text-gray-800" />
         <StatCard
-          label="Updates (24h)"
+          label={tx('Active Rollouts')}
+          value={data.active_rollouts}
+          color="text-indigo-600"
+        />
+        <StatCard
+          label={tx('Updates (24h)')}
           value={data.successful_updates_24h}
-          sub="erfolgreich"
+          sub={tx('erfolgreich')}
           color="text-emerald-600"
         />
         <StatCard
-          label="Fehlgeschlagen (24h)"
+          label={tx('Fehlgeschlagen (24h)')}
           value={data.failed_updates_24h}
           color={data.failed_updates_24h > 0 ? 'text-red-600' : 'text-gray-400'}
         />
@@ -92,17 +102,17 @@ export default function FirmwareDashboardPage() {
       {recentFailed.length > 0 && (
         <div className="glass-card p-6">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">
-            Letzte fehlgeschlagene Updates
+            {tx('Letzte fehlgeschlagene Updates')}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-400 uppercase tracking-wider">
-                  <th className="pb-3 pr-4">Gateway</th>
-                  <th className="pb-3 pr-4">Version</th>
-                  <th className="pb-3 pr-4">Status</th>
-                  <th className="pb-3 pr-4">Fehler</th>
-                  <th className="pb-3">Zeit</th>
+                  <th className="pb-3 pr-4">{tx('Gateway')}</th>
+                  <th className="pb-3 pr-4">{tx('Version')}</th>
+                  <th className="pb-3 pr-4">{tx('Status')}</th>
+                  <th className="pb-3 pr-4">{tx('Fehler')}</th>
+                  <th className="pb-3">{tx('Zeit')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/[0.04]">
@@ -116,14 +126,14 @@ export default function FirmwareDashboardPage() {
                     </td>
                     <td className="py-2.5 pr-4">
                       <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
-                        {r.status}
+                        {tx.status(r.status)}
                       </span>
                     </td>
                     <td className="py-2.5 pr-4 text-xs text-gray-500 max-w-[200px] truncate">
                       {r.error_message || '–'}
                     </td>
                     <td className="py-2.5 text-xs text-gray-400">
-                      {new Date(r.reported_at).toLocaleString('de-CH')}
+                      {new Date(r.reported_at).toLocaleString(tx.locale)}
                     </td>
                   </tr>
                 ))}

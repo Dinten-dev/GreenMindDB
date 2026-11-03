@@ -1,11 +1,15 @@
 'use client';
+
+import { useAppText } from '@/i18n/app-text';
 import { useEffect, useState } from 'react';
 import { adminStorage, type StorageStatus, type StorageVolume } from '@/lib/administration-api';
 
-const bytes = (value: number) =>
-  (value / 1_000_000_000).toLocaleString('de-CH', { maximumFractionDigits: 1 }) + ' GB';
+const bytes = (value: number, locale: string) =>
+  (value / 1_000_000_000).toLocaleString(locale, { maximumFractionDigits: 1 }) + ' GB';
 
 function Volume({ title, value }: { title: string; value: StorageVolume }) {
+  const tx = useAppText();
+
   return (
     <div className="space-y-3">
       <h3 className="font-semibold text-gray-800">{title}</h3>
@@ -14,21 +18,26 @@ function Volume({ title, value }: { title: string; value: StorageVolume }) {
           role="alert"
           className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
         >
-          <strong>{title}: Speicher wird knapp.</strong> Weniger als{' '}
-          {value.warning_threshold_percent} % frei.
+          <strong>
+            {title}
+            {tx(': Speicher wird knapp.')}
+          </strong>{' '}
+          {tx('Weniger als')} {value.warning_threshold_percent} {tx('% frei.')}
         </div>
       )}
       <div className="flex flex-wrap justify-between gap-3">
         <p className="text-2xl font-semibold text-gray-800">
-          {value.used_percent.toLocaleString('de-CH', { maximumFractionDigits: 1 })} % belegt
+          {value.used_percent.toLocaleString(tx.locale, { maximumFractionDigits: 1 })}{' '}
+          {tx('% belegt')}
         </p>
         <p className="text-sm text-gray-600">
-          {bytes(value.available_bytes)} von {bytes(value.total_bytes)} frei
+          {bytes(value.available_bytes, tx.locale)} {tx('von')}{' '}
+          {bytes(value.total_bytes, tx.locale)} {tx('frei')}
         </p>
       </div>
       <div
         role="meter"
-        aria-label={`Belegter Speicher: ${title}`}
+        aria-label={tx('Belegter Speicher: {value0}', { value0: title })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={value.used_percent}
@@ -40,14 +49,16 @@ function Volume({ title, value }: { title: string; value: StorageVolume }) {
         />
       </div>
       <p className="text-xs text-gray-500">
-        Für Dienste verfügbar:{' '}
-        {value.free_percent.toLocaleString('de-CH', { maximumFractionDigits: 2 })} %.
+        {tx('Für Dienste verfügbar:')}{' '}
+        {value.free_percent.toLocaleString(tx.locale, { maximumFractionDigits: 2 })} %.
       </p>
     </div>
   );
 }
 
 export default function StorageMonitor() {
+  const tx = useAppText();
+
   const [data, setData] = useState<StorageStatus | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -78,32 +89,35 @@ export default function StorageMonitor() {
   return (
     <section className="glass-card p-6 space-y-4" aria-labelledby="storage-title">
       <h2 id="storage-title" className="text-lg font-semibold text-gray-800">
-        Serverspeicher
+        {tx('Serverspeicher')}
       </h2>
       {error ? (
         <p role="status" className="text-sm text-gray-600">
-          Speicherstatus momentan nicht verfügbar. Die Anzeige wird automatisch erneut geladen.
+          {tx(
+            'Speicherstatus momentan nicht verfügbar. Die Anzeige wird automatisch erneut geladen.'
+          )}
         </p>
       ) : !data ? (
         <p role="status" className="text-sm text-gray-500">
-          Speicherstatus wird geladen …
+          {tx('Speicherstatus wird geladen …')}
         </p>
       ) : (
         <>
-          <Volume title="Systemlaufwerk" value={data} />
+          <Volume title={tx('Systemlaufwerk')} value={data} />
           {data.wav_storage ? (
-            <Volume title="WAV-Datenlaufwerk" value={data.wav_storage} />
+            <Volume title={tx('WAV-Datenlaufwerk')} value={data.wav_storage} />
           ) : (
             <p role="status" className="text-sm text-gray-600">
-              WAV-Datenlaufwerk{' '}
+              {tx('WAV-Datenlaufwerk')}{' '}
               {data.wav_storage_configured
-                ? 'momentan nicht verfügbar.'
-                : 'noch nicht zur Überwachung eingerichtet.'}
+                ? tx('momentan nicht verfügbar.')
+                : tx('noch nicht zur Überwachung eingerichtet.')}
             </p>
           )}
           <p className="text-xs text-gray-500">
-            Stand: {new Date(data.checked_at).toLocaleString('de-CH')}. Aktualisierung jede Minute.
-            GB sind dezimale Gigabyte.
+            {tx('Stand:')}
+            {new Date(data.checked_at).toLocaleString(tx.locale)}
+            {tx('. Aktualisierung jede Minute. GB sind dezimale Gigabyte.')}
           </p>
         </>
       )}

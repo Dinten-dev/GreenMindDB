@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
@@ -8,6 +10,8 @@ import { apiListZones } from '@/lib/api';
 import { Plant, Zone } from '@/types';
 
 export default function PlantsPage() {
+  const tx = useAppText();
+
   const locale = useLocale();
   const [loadError, setLoadError] = useState(false);
   const [createError, setCreateError] = useState(false);
@@ -80,15 +84,15 @@ export default function PlantsPage() {
   if (loadError)
     return (
       <div className="glass-card p-8">
-        <h1 className="text-2xl font-semibold text-gray-800">Pflanzen</h1>
+        <h1 className="text-2xl font-semibold text-gray-800">{tx('Pflanzen')}</h1>
         <p role="alert" className="text-sm text-gray-600 mt-3">
-          Deine Pflanzen konnten nicht geladen werden.
+          {tx('Deine Pflanzen konnten nicht geladen werden.')}
         </p>
         <button
           onClick={loadData}
           className="mt-4 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm"
         >
-          Erneut laden
+          {tx('Erneut laden')}
         </button>
       </div>
     );
@@ -97,16 +101,16 @@ export default function PlantsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Pflanzen</h1>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{tx('Pflanzen')}</h1>
           <p className="text-sm text-gray-400 mt-1">
-            Deine Pflanzen, ihre Standorte und zugeordneten Sensoren.
+            {tx('Deine Pflanzen, ihre Standorte und zugeordneten Sensoren.')}
           </p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
           className="px-4 py-2 bg-emerald-600 text-white rounded-full text-sm font-medium hover:bg-emerald-700 transition-all duration-200 shadow-sm whitespace-nowrap"
         >
-          + Neue Pflanze
+          {tx('+ Neue Pflanze')}
         </button>
       </div>
 
@@ -123,24 +127,24 @@ export default function PlantsPage() {
               onClick={() => setShowCreate(false)}
               className="block ml-auto mb-3 text-sm text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-50"
             >
-              Schliessen ×
+              {tx('Schliessen ×')}
             </button>
             <h2 id="create-plant-title" className="text-xl font-semibold text-gray-800 mb-6">
-              Pflanze erfassen
+              {tx('Pflanze erfassen')}
             </h2>
             {createError && (
               <p role="alert" className="mb-4 text-sm text-red-700">
-                Die Pflanze konnte nicht gespeichert werden. Bitte erneut versuchen.
+                {tx('Die Pflanze konnte nicht gespeichert werden. Bitte erneut versuchen.')}
               </p>
             )}
             {zones.length === 0 ? (
               <div className="text-sm text-gray-600 mb-4">
-                Ordne deine Pflanzen einem Standort zu.
+                {tx('Ordne deine Pflanzen einem Standort zu.')}
                 <Link
                   href={`/${locale}/app/zones`}
                   className="block mt-3 text-emerald-700 underline"
                 >
-                  Erste Zone erstellen →
+                  {tx('Erste Zone erstellen →')}
                 </Link>
               </div>
             ) : (
@@ -150,7 +154,7 @@ export default function PlantsPage() {
                     htmlFor="plant-zone"
                     className="block text-sm font-medium text-gray-600 mb-1.5"
                   >
-                    Zone
+                    {tx('Zone')}
                   </label>
                   <select
                     id="plant-zone"
@@ -170,7 +174,7 @@ export default function PlantsPage() {
                     htmlFor="plant-name"
                     className="block text-sm font-medium text-gray-600 mb-1.5"
                   >
-                    Name
+                    {tx('Name')}
                   </label>
                   <input
                     type="text"
@@ -179,7 +183,7 @@ export default function PlantsPage() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    placeholder="z.B. Tomate 01"
+                    placeholder={tx('z.B. Tomate 01')}
                   />
                 </div>
                 <div>
@@ -187,7 +191,7 @@ export default function PlantsPage() {
                     htmlFor="plant-code"
                     className="block text-sm font-medium text-gray-600 mb-1.5"
                   >
-                    Interne ID (Optional)
+                    {tx('Interne ID (Optional)')}
                   </label>
                   <input
                     type="text"
@@ -195,7 +199,7 @@ export default function PlantsPage() {
                     value={plantCode}
                     onChange={(e) => setPlantCode(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    placeholder="z.B. TOM-2026-A1"
+                    placeholder={tx('z.B. TOM-2026-A1')}
                   />
                 </div>
                 <div className="flex gap-3 pt-2">
@@ -204,14 +208,14 @@ export default function PlantsPage() {
                     onClick={() => setShowCreate(false)}
                     className="flex-1 py-2.5 bg-black/[0.04] text-gray-600 rounded-xl text-sm font-medium hover:bg-black/[0.06] transition-colors"
                   >
-                    Abbrechen
+                    {tx('Abbrechen')}
                   </button>
                   <button
                     type="submit"
                     disabled={creating}
                     className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-all duration-200 disabled:opacity-50 shadow-sm"
                   >
-                    {creating ? 'Speichere…' : 'Anlegen'}
+                    {creating ? tx('Speichere…') : tx('Anlegen')}
                   </button>
                 </div>
               </form>
@@ -224,9 +228,9 @@ export default function PlantsPage() {
       {plants.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-4xl mb-4 text-emerald-500">⍋</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Pflanzen</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">{tx('Noch keine Pflanzen')}</h3>
           <p className="text-sm text-gray-400 mb-4">
-            Erfasse deine erste Pflanze und ordne ihr anschliessend einen Sensor zu.
+            {tx('Erfasse deine erste Pflanze und ordne ihr anschliessend einen Sensor zu.')}
           </p>
         </div>
       ) : (
@@ -242,16 +246,20 @@ export default function PlantsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="break-words font-semibold text-gray-800">{p.name}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">{p.plant_code || 'Ohne Code'}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {p.plant_code || tx('Ohne Code')}
+                    </p>
                   </div>
                   {p.current_sensor_id && (
                     <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-600">
-                      Sensor zugeordnet
+                      {tx('Sensor zugeordnet')}
                     </span>
                   )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-black/[0.04] flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Zone: {zoneName}</span>
+                  <span className="text-gray-500">
+                    {tx('Zone:')} {zoneName}
+                  </span>
                   <span className="text-gray-400">→</span>
                 </div>
               </Link>

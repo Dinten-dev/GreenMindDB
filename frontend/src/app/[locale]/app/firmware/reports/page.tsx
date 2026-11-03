@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect, useCallback } from 'react';
 import { listReports, FirmwareReportList } from '@/lib/firmware-api';
 
@@ -12,6 +14,8 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const tx = useAppText();
+
   const [data, setData] = useState<FirmwareReportList | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -50,14 +54,18 @@ export default function ReportsPage() {
           }}
           className="px-3 py-2 rounded-xl bg-white/60 border border-black/[0.06] text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 backdrop-blur-sm"
         >
-          <option value="">Alle Status</option>
-          <option value="success">Erfolgreich</option>
-          <option value="failed">Fehlgeschlagen</option>
-          <option value="hash_mismatch">Hash Mismatch</option>
-          <option value="rollback">Rollback</option>
-          <option value="incompatible">Inkompatibel</option>
+          <option value="">{tx('Alle Status')}</option>
+          <option value="success">{tx('Erfolgreich')}</option>
+          <option value="failed">{tx('Fehlgeschlagen')}</option>
+          <option value="hash_mismatch">{tx('Hash Mismatch')}</option>
+          <option value="rollback">{tx('Rollback')}</option>
+          <option value="incompatible">{tx('Inkompatibel')}</option>
         </select>
-        {data && <span className="text-xs text-gray-400">{data.meta.total} Einträge</span>}
+        {data && (
+          <span className="text-xs text-gray-400">
+            {data.meta.total} {tx('Einträge')}
+          </span>
+        )}
       </div>
 
       {/* Table */}
@@ -66,11 +74,11 @@ export default function ReportsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-400 uppercase tracking-wider bg-black/[0.02]">
-                <th className="px-4 py-3">Zeitpunkt</th>
-                <th className="px-4 py-3">Gateway</th>
-                <th className="px-4 py-3">Version</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Fehler</th>
+                <th className="px-4 py-3">{tx('Zeitpunkt')}</th>
+                <th className="px-4 py-3">{tx('Gateway')}</th>
+                <th className="px-4 py-3">{tx('Version')}</th>
+                <th className="px-4 py-3">{tx('Status')}</th>
+                <th className="px-4 py-3">{tx('Fehler')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04]">
@@ -85,14 +93,14 @@ export default function ReportsPage() {
               ) : data?.items.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
-                    Keine Update-Reports vorhanden.
+                    {tx('Keine Update-Reports vorhanden.')}
                   </td>
                 </tr>
               ) : (
                 data?.items.map((r) => (
                   <tr key={r.id} className="hover:bg-black/[0.01] transition-colors">
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {new Date(r.reported_at).toLocaleString('de-CH')}
+                      {new Date(r.reported_at).toLocaleString(tx.locale)}
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-700">
                       {r.gateway_name || r.gateway_id.slice(0, 8)}
@@ -106,7 +114,7 @@ export default function ReportsPage() {
                           STATUS_STYLES[r.status] || 'bg-gray-100 text-gray-500'
                         }`}
                       >
-                        {r.status}
+                        {tx.status(r.status)}
                       </span>
                     </td>
                     <td
@@ -130,17 +138,18 @@ export default function ReportsPage() {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              ← Zurück
+              {tx('← Zurück')}
             </button>
             <span className="text-xs text-gray-400">
-              Seite {page + 1} von {Math.ceil(data.meta.total / limit)}
+              {tx('Seite')}
+              {page + 1} {tx('von')} {Math.ceil(data.meta.total / limit)}
             </span>
             <button
               disabled={(page + 1) * limit >= data.meta.total}
               onClick={() => setPage((p) => p + 1)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              Weiter →
+              {tx('Weiter →')}
             </button>
           </div>
         )}

@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useState, useEffect, useCallback } from 'react';
 import {
   listPolicies,
@@ -12,6 +14,8 @@ import {
 import { apiListZones, Zone } from '@/lib/api';
 
 export default function RolloutsPage() {
+  const tx = useAppText();
+
   const [policies, setPolicies] = useState<RolloutPolicy[]>([]);
   const [releases, setReleases] = useState<FirmwareRelease[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -95,13 +99,15 @@ export default function RolloutsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">{policies.length} Rollout-Policies definiert</p>
+        <p className="text-sm text-gray-500">
+          {policies.length} {tx('Rollout-Policies definiert')}
+        </p>
         <button
           onClick={() => setShowCreate(true)}
           disabled={releases.length === 0}
           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-sm disabled:opacity-50"
         >
-          + Policy erstellen
+          {tx('+ Policy erstellen')}
         </button>
       </div>
 
@@ -111,18 +117,18 @@ export default function RolloutsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-400 uppercase tracking-wider bg-black/[0.02]">
-                <th className="px-4 py-3">Release</th>
-                <th className="px-4 py-3">Zone</th>
-                <th className="px-4 py-3">Canary %</th>
-                <th className="px-4 py-3">Erstellt</th>
-                <th className="px-4 py-3 text-right">Aktion</th>
+                <th className="px-4 py-3">{tx('Release')}</th>
+                <th className="px-4 py-3">{tx('Zone')}</th>
+                <th className="px-4 py-3">{tx('Canary %')}</th>
+                <th className="px-4 py-3">{tx('Erstellt')}</th>
+                <th className="px-4 py-3 text-right">{tx('Aktion')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04]">
               {policies.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
-                    Keine Rollout-Policies. Erstelle eine, um Firmware gezielt auszurollen.
+                    {tx('Keine Rollout-Policies. Erstelle eine, um Firmware gezielt auszurollen.')}
                   </td>
                 </tr>
               ) : (
@@ -132,7 +138,9 @@ export default function RolloutsPage() {
                       {p.release_version || p.release_id.slice(0, 8)}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {p.zone_name || <span className="text-gray-400 italic">Alle Zonen</span>}
+                      {p.zone_name || (
+                        <span className="text-gray-400 italic">{tx('Alle Zonen')}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -146,14 +154,14 @@ export default function RolloutsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
-                      {new Date(p.created_at).toLocaleString('de-CH')}
+                      {new Date(p.created_at).toLocaleString(tx.locale)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => setDeletingId(p.id)}
                         className="px-2.5 py-1 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
                       >
-                        Entfernen
+                        {tx('Entfernen')}
                       </button>
                     </td>
                   </tr>
@@ -168,16 +176,20 @@ export default function RolloutsPage() {
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
           <div className="glass-card p-8 w-full max-w-md mx-4 shadow-xl">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Rollout Policy erstellen</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">
+              {tx('Rollout Policy erstellen')}
+            </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Release *</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  {tx('Release *')}
+                </label>
                 <select
                   value={selectedRelease}
                   onChange={(e) => setSelectedRelease(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-white/60 border border-black/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                 >
-                  <option value="">Release wählen…</option>
+                  <option value="">{tx('Release wählen…')}</option>
                   {releases.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.version} ({r.board_type})
@@ -187,14 +199,14 @@ export default function RolloutsPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Zone (optional)
+                  {tx('Zone (optional)')}
                 </label>
                 <select
                   value={selectedZone}
                   onChange={(e) => setSelectedZone(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-white/60 border border-black/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                 >
-                  <option value="">Alle Zonen</option>
+                  <option value="">{tx('Alle Zonen')}</option>
                   {zones.map((z) => (
                     <option key={z.id} value={z.id}>
                       {z.name}
@@ -204,7 +216,7 @@ export default function RolloutsPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Canary Percentage
+                  {tx('Canary Percentage')}
                 </label>
                 <input
                   type="number"
@@ -220,14 +232,14 @@ export default function RolloutsPage() {
                   onClick={() => setShowCreate(false)}
                   className="flex-1 py-2.5 bg-black/[0.04] text-gray-600 rounded-xl text-sm font-medium hover:bg-black/[0.06] transition-colors"
                 >
-                  Abbrechen
+                  {tx('Abbrechen')}
                 </button>
                 <button
                   onClick={handleCreate}
                   disabled={!selectedRelease || creating}
                   className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-emerald-700 transition-all disabled:opacity-50 shadow-sm"
                 >
-                  {creating ? 'Erstelle…' : 'Erstellen'}
+                  {creating ? tx('Erstelle…') : tx('Erstellen')}
                 </button>
               </div>
             </div>
@@ -244,24 +256,24 @@ export default function RolloutsPage() {
           />
           <div className="relative bg-white/80 rounded-2xl border border-white/50 shadow-2xl backdrop-blur-xl p-6 max-w-sm w-full">
             <h3 className="text-lg font-semibold text-center text-gray-800 mb-2">
-              Policy entfernen?
+              {tx('Policy entfernen?')}
             </h3>
             <p className="text-sm text-center text-gray-500 mb-6">
-              Die Rollout-Einschränkung wird sofort aufgehoben.
+              {tx('Die Rollout-Einschränkung wird sofort aufgehoben.')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingId(null)}
                 className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
               >
-                Abbrechen
+                {tx('Abbrechen')}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
                 className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {deleting ? 'Lösche…' : 'Entfernen'}
+                {deleting ? tx('Lösche…') : tx('Entfernen')}
               </button>
             </div>
           </div>

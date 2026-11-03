@@ -1,9 +1,13 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState, useCallback } from 'react';
 import { listUpdateLogs, type GatewayUpdateLog } from '@/lib/gateway-admin-api';
 
 function StatusBadge({ status }: { status: string }) {
+  const tx = useAppText();
+
   const styles: Record<string, string> = {
     apply_success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     apply_failed: 'bg-red-50 text-red-600 border-red-200',
@@ -20,12 +24,14 @@ function StatusBadge({ status }: { status: string }) {
         styles[status] || 'bg-gray-50 text-gray-500 border-gray-200'
       }`}
     >
-      {status.replace(/_/g, ' ')}
+      {tx.status(status)}
     </span>
   );
 }
 
 export default function GatewayLogsPage() {
+  const tx = useAppText();
+
   const [logs, setLogs] = useState<GatewayUpdateLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -46,11 +52,11 @@ export default function GatewayLogsPage() {
       setTotal(data.total);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load logs');
+      setError(tx.error(err));
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, page]);
+  }, [tx, typeFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -62,8 +68,10 @@ export default function GatewayLogsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Update Logs</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{total} Einträge</p>
+          <h2 className="text-lg font-semibold text-gray-800">{tx('Update Logs')}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {total} {tx('Einträge')}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -75,15 +83,15 @@ export default function GatewayLogsPage() {
             className="px-3 py-2 rounded-xl border border-black/[0.08] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             id="log-type-filter"
           >
-            <option value="">Alle Typen</option>
-            <option value="app">App Updates</option>
-            <option value="config">Config Updates</option>
+            <option value="">{tx('Alle Typen')}</option>
+            <option value="app">{tx('App Updates')}</option>
+            <option value="config">{tx('Config Updates')}</option>
           </select>
           <button
             onClick={loadLogs}
             className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-black/[0.04] transition-colors"
           >
-            ↻ Refresh
+            {tx('↻ Refresh')}
           </button>
         </div>
       </div>
@@ -105,7 +113,7 @@ export default function GatewayLogsPage() {
                       key={h}
                       className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider"
                     >
-                      {h}
+                      {tx(h)}
                     </th>
                   )
                 )}
@@ -115,13 +123,13 @@ export default function GatewayLogsPage() {
               {loading ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                    Lade Logs…
+                    {tx('Lade Logs…')}
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                    Keine Update Logs gefunden
+                    {tx('Keine Update Logs gefunden')}
                   </td>
                 </tr>
               ) : (
@@ -152,7 +160,7 @@ export default function GatewayLogsPage() {
                       {log.error_message || '—'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
-                      {new Date(log.started_at).toLocaleString('de-CH', {
+                      {new Date(log.started_at).toLocaleString(tx.locale, {
                         day: '2-digit',
                         month: '2-digit',
                         hour: '2-digit',
@@ -161,7 +169,7 @@ export default function GatewayLogsPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
                       {log.completed_at
-                        ? new Date(log.completed_at).toLocaleString('de-CH', {
+                        ? new Date(log.completed_at).toLocaleString(tx.locale, {
                             day: '2-digit',
                             month: '2-digit',
                             hour: '2-digit',
@@ -184,17 +192,18 @@ export default function GatewayLogsPage() {
               disabled={page === 0}
               className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              ← Zurück
+              {tx('← Zurück')}
             </button>
             <span className="text-xs text-gray-400">
-              Seite {page + 1} von {totalPages}
+              {tx('Seite')}
+              {page + 1} {tx('von')} {totalPages}
             </span>
             <button
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page >= totalPages - 1}
               className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              Weiter →
+              {tx('Weiter →')}
             </button>
           </div>
         )}

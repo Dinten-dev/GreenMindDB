@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
@@ -27,6 +29,8 @@ export default function SignalChart({
   formatTick: (timestamp: string) => string;
   showPeaks?: boolean;
 }) {
+  const tx = useAppText();
+
   const [metric, setMetric] = useState<'value' | 'rms'>('value');
   const [selectedAt, setSelectedAt] = useState<string | null>(null);
   const [waveform, setWaveform] = useState<Awaited<ReturnType<typeof apiGetSensorWaveform>> | null>(
@@ -66,9 +70,7 @@ export default function SignalChart({
       if (requestGeneration === generation.current) setWaveform(result);
     } catch (failure) {
       if (requestGeneration !== generation.current) return;
-      setError(
-        failure instanceof Error ? failure.message : 'Originalsignal derzeit nicht verfügbar.'
-      );
+      setError(tx.error(failure));
     } finally {
       if (requestGeneration === generation.current) setLoading(false);
     }
@@ -77,9 +79,11 @@ export default function SignalChart({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-        <span>Zeitfenster: {resolutionLabel(series.data)}</span>
+        <span>
+          {tx('Zeitfenster:')} {tx(resolutionLabel(series.data))}
+        </span>
         {availableRms && (
-          <div className="flex rounded-lg bg-[#f3f6f0] p-1" aria-label="Darstellung">
+          <div className="flex rounded-lg bg-[#f3f6f0] p-1" aria-label={tx('Darstellung')}>
             {(['value', 'rms'] as const).map((choice) => (
               <button
                 key={choice}
@@ -88,7 +92,7 @@ export default function SignalChart({
                 className={`rounded-md px-3 py-1.5 ${metric === choice ? 'bg-white text-[#236b46] shadow-sm' : ''}`}
                 onClick={() => setMetric(choice)}
               >
-                {choice === 'value' ? 'Verlauf' : 'Signalstärke (RMS)'}
+                {choice === 'value' ? tx('Verlauf') : tx('Signalstärke (RMS)')}
               </button>
             ))}
           </div>
@@ -129,23 +133,28 @@ export default function SignalChart({
               return (
                 <div className="rounded-xl border border-gray-100 bg-white p-3 text-xs shadow-lg">
                   <p className="mb-1 text-gray-500">
-                    {new Date(point.timestamp).toLocaleString('de-CH')}
+                    {new Date(point.timestamp).toLocaleString(tx.locale)}
                   </p>
                   <p>
-                    {metric === 'value' ? 'Mittelwert' : 'Signalstärke'}:{' '}
+                    {metric === 'value' ? tx('Mittelwert') : tx('Signalstärke')}:{' '}
                     {point.plotted?.toFixed(2) ?? '—'} {unit}
                   </p>
                   {point.envelope && (
                     <p>
-                      Ausschläge: {point.envelope[0].toFixed(2)}–{point.envelope[1].toFixed(2)}{' '}
-                      {unit}
+                      {tx('Ausschläge:')}
+                      {point.envelope[0].toFixed(2)}–{point.envelope[1].toFixed(2)} {unit}
                     </p>
                   )}
                   {point.coverage_ratio != null && (
-                    <p>Datenabdeckung: {(point.coverage_ratio * 100).toFixed(1)} %</p>
+                    <p>
+                      {tx('Datenabdeckung:')} {(point.coverage_ratio * 100).toFixed(1)} %
+                    </p>
                   )}
                   {point.timing_overlap_seconds > 0 && (
-                    <p>Zeitstempel-Überlappung: {point.timing_overlap_seconds.toFixed(1)} s</p>
+                    <p>
+                      {tx('Zeitstempel-Überlappung:')} {point.timing_overlap_seconds.toFixed(1)}{' '}
+                      {tx('s')}
+                    </p>
                   )}
                 </div>
               );
@@ -154,7 +163,7 @@ export default function SignalChart({
           <Area
             type="linear"
             dataKey="envelope"
-            name="Ausschlagsbereich"
+            name={tx('Ausschlagsbereich')}
             stroke="none"
             fill={color}
             fillOpacity={0.16}
@@ -191,17 +200,27 @@ export default function SignalChart({
       </ResponsiveContainer>
       <p className="mt-2 text-xs leading-relaxed text-gray-500">
         {summarized
-          ? 'Die Werte fassen vollständig geprüfte WAV-Aufnahmen zusammen. Mittelwerte sind nach Sampleanzahl gewichtet. Zeitstempel-Überlappungen werden ausgewiesen; deren Datenabdeckung bleibt unbekannt. '
+          ? tx(
+              'Die Werte fassen vollständig geprüfte WAV-Aufnahmen zusammen. Mittelwerte sind nach Sampleanzahl gewichtet. Zeitstempel-Überlappungen werden ausgewiesen; deren Datenabdeckung bleibt unbekannt. '
+            )
           : showPeaks && metric === 'value'
-            ? 'Die deutlichen Linien zeigen Minimum und Maximum jedes Zeitfensters, die dünne Linie den Mittelwert. Auch kurze Ausschläge bleiben sichtbar; ihre genaue Form zeigt das Originalsignal. '
+            ? tx(
+                'Die deutlichen Linien zeigen Minimum und Maximum jedes Zeitfensters, die dünne Linie den Mittelwert. Auch kurze Ausschläge bleiben sichtbar; ihre genaue Form zeigt das Originalsignal. '
+              )
             : metric === 'rms'
-              ? 'Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. '
+              ? tx('Die Linie zeigt den quadratischen Mittelwert der erfassten Signalwerte. ')
               : verified
-                ? 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
+                ? tx(
+                    'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Werte aus den geprüften WAV-Aufnahmen. '
+                  )
                 : series.original_signal_available
-                  ? 'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
-                  : 'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '}
-        Datenlücken werden nicht überbrückt.
+                  ? tx(
+                      'Die Linie zeigt die vorhandenen Messwerte. Original-Ausschläge erscheinen bei zeitlich zuordenbaren WAV-Aufnahmen nach deren Auswertung. '
+                    )
+                  : tx(
+                      'Die Linie zeigt den Mittelwert, das Band die kleinsten und größten Messwerte. '
+                    )}
+        {tx('Datenlücken werden nicht überbrückt.')}
       </p>
       {series.original_signal_available && (
         <div className="mt-4 border-t border-gray-100 pt-3">
@@ -212,15 +231,18 @@ export default function SignalChart({
               onClick={preview}
               className="rounded-lg bg-[#f3f6f0] px-3 py-2 text-xs font-medium text-[#236b46] disabled:opacity-50"
             >
-              {loading ? 'Originalsignal wird geladen …' : '10 Sekunden Originalsignal ansehen'}
+              {loading
+                ? tx('Originalsignal wird geladen …')
+                : tx('10 Sekunden Originalsignal ansehen')}
             </button>
             <span className="text-xs text-gray-500">
-              Zeitpunkt durch Anklicken im Diagramm wählen.
+              {tx('Zeitpunkt durch Anklicken im Diagramm wählen.')}
             </span>
           </div>
           {selected && (
             <p className="mt-2 text-xs text-gray-500">
-              Auswahl: {new Date(selected).toLocaleString('de-CH')}
+              {tx('Auswahl:')}
+              {new Date(selected).toLocaleString(tx.locale)}
             </p>
           )}
           {error && (
@@ -229,15 +251,16 @@ export default function SignalChart({
             </p>
           )}
           {waveform && (
-            <section aria-label="Originalsignal" className="mt-3 rounded-xl bg-[#f7f9f5] p-3">
+            <section aria-label={tx('Originalsignal')} className="mt-3 rounded-xl bg-[#f7f9f5] p-3">
               <p className="mb-2 text-xs text-[#236b46]">
-                Originalaufnahme · {waveform.sample_rate} Messungen pro Sekunde · {waveform.unit}
+                {tx('Originalaufnahme ·')}
+                {waveform.sample_rate} {tx('Messungen pro Sekunde ·')} {waveform.unit}
               </p>
               <ResponsiveContainer width="100%" height={180}>
                 <ComposedChart data={waveform.data}>
                   <XAxis
                     dataKey="timestamp"
-                    tickFormatter={(stamp) => new Date(stamp).toLocaleTimeString('de-CH')}
+                    tickFormatter={(stamp) => new Date(stamp).toLocaleTimeString(tx.locale)}
                     minTickGap={40}
                     tick={{ fontSize: 11 }}
                   />

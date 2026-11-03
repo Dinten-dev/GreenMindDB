@@ -1,4 +1,6 @@
 'use client';
+
+import { useAppText } from '@/i18n/app-text';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
@@ -12,6 +14,8 @@ export default function AdministrationLink({
   active: boolean;
   onNavigate?: () => void;
 }) {
+  const tx = useAppText();
+
   const { user } = useAuth();
   const locale = useLocale();
   const userId = user?.id;
@@ -40,7 +44,7 @@ export default function AdministrationLink({
       <span aria-hidden="true" className="w-5 text-center text-lg leading-none">
         ⚙
       </span>
-      <span>Administration</span>
+      <span>{tx('Administration')}</span>
     </Link>
   );
 }

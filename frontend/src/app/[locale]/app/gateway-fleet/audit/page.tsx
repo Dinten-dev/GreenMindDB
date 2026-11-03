@@ -1,9 +1,13 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useEffect, useState, useCallback } from 'react';
 import { listGatewayAuditLogs } from '@/lib/gateway-admin-api';
 
 export default function GatewayAuditPage() {
+  const tx = useAppText();
+
   const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -24,11 +28,11 @@ export default function GatewayAuditPage() {
       setTotal(data.total);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit logs');
+      setError(tx.error(err));
     } finally {
       setLoading(false);
     }
-  }, [actionFilter, page]);
+  }, [tx, actionFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -52,8 +56,10 @@ export default function GatewayAuditPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Audit Log</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{total} Einträge</p>
+          <h2 className="text-lg font-semibold text-gray-800">{tx('Audit Log')}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {total} {tx('Einträge')}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -65,21 +71,21 @@ export default function GatewayAuditPage() {
             className="px-3 py-2 rounded-xl border border-black/[0.08] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             id="audit-action-filter"
           >
-            <option value="">Alle Actions</option>
-            <option value="gateway_release.upload">Release Upload</option>
-            <option value="gateway_release.activate">Release Activate</option>
-            <option value="gateway_release.delete">Release Delete</option>
-            <option value="gateway_config.upload">Config Upload</option>
-            <option value="gateway_desired_state.update">Desired State Update</option>
-            <option value="gateway_command.issue">Command Issue</option>
-            <option value="gateway_rollout.start">Rollout Start</option>
-            <option value="gateway_rollback.initiate">Rollback</option>
+            <option value="">{tx('Alle Actions')}</option>
+            <option value="gateway_release.upload">{tx('Release Upload')}</option>
+            <option value="gateway_release.activate">{tx('Release Activate')}</option>
+            <option value="gateway_release.delete">{tx('Release Delete')}</option>
+            <option value="gateway_config.upload">{tx('Config Upload')}</option>
+            <option value="gateway_desired_state.update">{tx('Desired State Update')}</option>
+            <option value="gateway_command.issue">{tx('Command Issue')}</option>
+            <option value="gateway_rollout.start">{tx('Rollout Start')}</option>
+            <option value="gateway_rollback.initiate">{tx('Rollback')}</option>
           </select>
           <button
             onClick={loadLogs}
             className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-black/[0.04] transition-colors"
           >
-            ↻ Refresh
+            {tx('↻ Refresh')}
           </button>
         </div>
       </div>
@@ -100,7 +106,7 @@ export default function GatewayAuditPage() {
                     key={h}
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider"
                   >
-                    {h}
+                    {tx(h)}
                   </th>
                 ))}
               </tr>
@@ -109,13 +115,13 @@ export default function GatewayAuditPage() {
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
-                    Lade Audit Logs…
+                    {tx('Lade Audit Logs…')}
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
-                    Keine Audit Logs gefunden
+                    {tx('Keine Audit Logs gefunden')}
                   </td>
                 </tr>
               ) : (
@@ -123,7 +129,7 @@ export default function GatewayAuditPage() {
                   <tr key={String(log.id)} className="hover:bg-black/[0.015] transition-colors">
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {log.created_at
-                        ? new Date(String(log.created_at)).toLocaleString('de-CH', {
+                        ? new Date(String(log.created_at)).toLocaleString(tx.locale, {
                             day: '2-digit',
                             month: '2-digit',
                             year: '2-digit',
@@ -170,17 +176,18 @@ export default function GatewayAuditPage() {
               disabled={page === 0}
               className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              ← Zurück
+              {tx('← Zurück')}
             </button>
             <span className="text-xs text-gray-400">
-              Seite {page + 1} von {totalPages}
+              {tx('Seite')}
+              {page + 1} {tx('von')} {totalPages}
             </span>
             <button
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page >= totalPages - 1}
               className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-black/[0.04] disabled:opacity-30 transition-colors"
             >
-              Weiter →
+              {tx('Weiter →')}
             </button>
           </div>
         )}

@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppText } from '@/i18n/app-text';
+
 import { useId, type ReactNode } from 'react';
 
 /** One sensor layout for Gateway and Direct connections. */
@@ -24,6 +26,8 @@ export default function SensorCard({
   notice?: ReactNode;
   children: ReactNode;
 }) {
+  const tx = useAppText();
+
   const panelId = useId();
   return (
     <article className={`glass-card overflow-hidden ${expanded ? 'border-emerald-500/20' : ''}`}>
@@ -53,14 +57,16 @@ export default function SensorCard({
               <span
                 className={`h-1.5 w-1.5 rounded-full ${online ? 'bg-emerald-500' : 'bg-gray-400'}`}
               />
-              {status}
+              {tx(status)}
             </span>
           </span>
           <span className="mt-1 block text-xs text-gray-500">{connection}</span>
           <span className="mt-2 block text-xs text-gray-400">
             {lastSeen
-              ? `Letzter Empfang: ${new Date(lastSeen).toLocaleString('de-CH')}`
-              : 'Wartet auf erste Messdaten'}
+              ? tx('Letzter Empfang: {value0}', {
+                  value0: new Date(lastSeen).toLocaleString(tx.locale),
+                })
+              : tx('Wartet auf erste Messdaten')}
           </span>
           {notice && <span className="mt-2 block text-xs text-amber-700">{notice}</span>}
         </span>

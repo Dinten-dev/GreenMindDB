@@ -16,6 +16,10 @@ const device = {
   last_seen: '2026-09-19T14:50:00Z',
 };
 const points = [{ timestamp: '2026-09-19T14:49:00Z', value: 1000 }];
+beforeEach(() => {
+  window.history.replaceState({}, '', '/de/app/sensors');
+});
+
 afterEach(() => {
   jest.restoreAllMocks();
   jest.useRealTimers();
@@ -189,4 +193,31 @@ test('removes cached device data after authorization is rejected', async () => {
   await act(async () => jest.advanceTimersByTimeAsync(10000));
   expect(screen.queryByTestId('signal-chart')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Biolingo/ })).not.toBeInTheDocument();
+});
+
+test('restores the selected Direct sensor and time range without another click', async () => {
+  window.history.replaceState({}, '', '/it/app/sensors?direct=direct-a&directRange=7d');
+  global.fetch = jest.fn(async (url) => ({
+    ok: true,
+    json: async () =>
+      String(url).endsWith('/devices')
+        ? [device]
+        : String(url).includes('/recordings')
+          ? []
+          : [
+              {
+                sensor_id: device.id,
+                kind: 'bio_signal_ch1',
+                unit: 'mV',
+                source: 'direct',
+                data: points,
+              },
+            ],
+  })) as jest.Mock;
+  render(<DirectSensorsPanel />);
+  expect(await screen.findByTestId('signal-chart')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '7 Tage' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: /Biolingo/ })).toHaveAttribute('aria-expanded', 'true');
+  expect(new URLSearchParams(window.location.search).get('direct')).toBe('direct-a');
+  expect(new URLSearchParams(window.location.search).get('directRange')).toBe('7d');
 });
