@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.evaluation import PlantEvaluation
 from app.models.plant import Plant, PlantSensorAssignment
+from app.observation_access import observation_transaction
 from app.schemas.evaluation import (
     Anomaly,
     GrowthState,
@@ -121,83 +122,83 @@ def create_evaluation(
     user_agent: str,
 ) -> PlantEvaluationResponse:
     """Validate session, map scores, compute confidence, and persist evaluation."""
-    session = _get_valid_session(db, session_token)
-    plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
-    if not plant:
-        raise HTTPException(status_code=404, detail="Plant not found")
+    with observation_transaction(db):
+        session = _get_valid_session(db, session_token)
+        plant = db.query(Plant).filter(Plant.id == session.plant_id).first()
+        if not plant:
+            raise HTTPException(status_code=404, detail="Plant not found")
 
-    # Resolve active sensor assignment
-    active_assignment = (
-        db.query(PlantSensorAssignment)
-        .filter(
-            PlantSensorAssignment.plant_id == plant.id,
-            PlantSensorAssignment.is_active,
+        # Resolve active sensor assignment
+        active_assignment = (
+            db.query(PlantSensorAssignment)
+            .filter(
+                PlantSensorAssignment.plant_id == plant.id,
+                PlantSensorAssignment.is_active,
+            )
+            .first()
         )
-        .first()
-    )
-    sensor_id = active_assignment.sensor_id if active_assignment else None
+        sensor_id = active_assignment.sensor_id if active_assignment else None
 
-    # Map raw choices to numerical scores
-    color_score = map_color_score(data.color_raw)
-    structure_score = map_structure_score(data.structure_raw)
-    growth_score = map_growth_score(data.growth_raw)
-    water_score = map_water_score(data.water_raw)
-    anomalies_vector = encode_anomalies(data.anomalies_raw)
-    confidence = compute_confidence(
-        data.overall_score, color_score, structure_score, growth_score, water_score
-    )
+        # Map raw choices to numerical scores
+        color_score = map_color_score(data.color_raw)
+        structure_score = map_structure_score(data.structure_raw)
+        growth_score = map_growth_score(data.growth_raw)
+        water_score = map_water_score(data.water_raw)
+        anomalies_vector = encode_anomalies(data.anomalies_raw)
+        confidence = compute_confidence(
+            data.overall_score, color_score, structure_score, growth_score, water_score
+        )
 
-    evaluation = PlantEvaluation(
-        plant_id=plant.id,
-        sensor_id=sensor_id,
-        zone_id=plant.zone_id,
-        session_id=session.id,
-        overall_score=data.overall_score,
-        color_score=color_score,
-        structure_score=structure_score,
-        growth_score=growth_score,
-        water_score=water_score,
-        anomalies_vector=anomalies_vector,
-        color_raw=data.color_raw.value,
-        structure_raw=data.structure_raw.value,
-        growth_raw=data.growth_raw.value,
-        water_raw=data.water_raw.value,
-        anomalies_raw=",".join(a.value for a in data.anomalies_raw),
-        confidence_score=confidence,
-        detail_notes=data.detail_notes,
-        used_ip=ip,
-        user_agent=user_agent,
-    )
-    db.add(evaluation)
-    db.commit()
-    db.refresh(evaluation)
+        evaluation = PlantEvaluation(
+            plant_id=plant.id,
+            sensor_id=sensor_id,
+            zone_id=plant.zone_id,
+            session_id=session.id,
+            overall_score=data.overall_score,
+            color_score=color_score,
+            structure_score=structure_score,
+            growth_score=growth_score,
+            water_score=water_score,
+            anomalies_vector=anomalies_vector,
+            color_raw=data.color_raw.value,
+            structure_raw=data.structure_raw.value,
+            growth_raw=data.growth_raw.value,
+            water_raw=data.water_raw.value,
+            anomalies_raw=",".join(a.value for a in data.anomalies_raw),
+            confidence_score=confidence,
+            detail_notes=data.detail_notes,
+            used_ip=ip,
+            user_agent=user_agent,
+        )
+        db.add(evaluation)
+        db.flush()
 
-    logger.info(
-        "Plant evaluation created",
-        extra={
-            "plant_id": str(plant.id),
-            "overall_score": data.overall_score,
-            "confidence": confidence,
-        },
-    )
+        logger.info(
+            "Plant evaluation created",
+            extra={
+                "plant_id": str(plant.id),
+                "overall_score": data.overall_score,
+                "confidence": confidence,
+            },
+        )
 
-    return PlantEvaluationResponse(
-        id=str(evaluation.id),
-        plant_id=str(evaluation.plant_id),
-        sensor_id=str(evaluation.sensor_id) if evaluation.sensor_id else None,
-        zone_id=str(evaluation.zone_id),
-        evaluated_at=evaluation.evaluated_at.isoformat(),
-        overall_score=evaluation.overall_score,
-        color_score=evaluation.color_score,
-        structure_score=evaluation.structure_score,
-        growth_score=evaluation.growth_score,
-        water_score=evaluation.water_score,
-        anomalies_vector=evaluation.anomalies_vector,
-        color_raw=evaluation.color_raw,
-        structure_raw=evaluation.structure_raw,
-        growth_raw=evaluation.growth_raw,
-        water_raw=evaluation.water_raw,
-        anomalies_raw=evaluation.anomalies_raw,
-        confidence_score=evaluation.confidence_score,
-        created_at=evaluation.created_at.isoformat(),
-    )
+        return PlantEvaluationResponse(
+            id=str(evaluation.id),
+            plant_id=str(evaluation.plant_id),
+            sensor_id=str(evaluation.sensor_id) if evaluation.sensor_id else None,
+            zone_id=str(evaluation.zone_id),
+            evaluated_at=evaluation.evaluated_at.isoformat(),
+            overall_score=evaluation.overall_score,
+            color_score=evaluation.color_score,
+            structure_score=evaluation.structure_score,
+            growth_score=evaluation.growth_score,
+            water_score=evaluation.water_score,
+            anomalies_vector=evaluation.anomalies_vector,
+            color_raw=evaluation.color_raw,
+            structure_raw=evaluation.structure_raw,
+            growth_raw=evaluation.growth_raw,
+            water_raw=evaluation.water_raw,
+            anomalies_raw=evaluation.anomalies_raw,
+            confidence_score=evaluation.confidence_score,
+            created_at=evaluation.created_at.isoformat(),
+        )

@@ -10,6 +10,7 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.observation import PlantObservationAccess
 from app.models.plant import Plant, PlantSensorAssignment
 from app.models.user import User
+from app.observation_access import deactivate_plant_access, observation_transaction
 from app.schemas.observation import ObservationAccessResponse
 from app.schemas.plant import (
     AssignSensorRequest,
@@ -337,83 +338,95 @@ def get_sensor_history(
     ]
 
 
-def get_or_create_observation_access(
-    db: Session, user: User, plant_id: uuid.UUID | str
-) -> ObservationAccessResponse:
+def _access_plant(db: Session, user: User, plant_id):
     org_id = _require_org(user)
-    p = (
+    plant = (
         db.query(Plant)
         .filter(
             Plant.id == plant_id,
             Plant.organization_id == org_id,
             Plant.zone_id.in_(allowed_zone_ids(db, user)),
         )
+        .populate_existing()
+        .with_for_update(key_share=True)
         .first()
     )
-    if not p:
+    if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
+    return plant
 
-    access = (
-        db.query(PlantObservationAccess)
-        .filter(PlantObservationAccess.plant_id == p.id, PlantObservationAccess.is_active)
-        .first()
+
+def _access_response(access):
+    return ObservationAccessResponse(
+        id=str(access.id),
+        plant_id=str(access.plant_id),
+        public_id=str(access.public_id),
+        is_active=access.is_active,
+        usage_count=access.usage_count,
+        revoked_at=access.revoked_at.isoformat() if access.revoked_at else None,
     )
-    if not access:
+
+
+def _plant_accesses(db, plant_id):
+    return (
+        db.query(PlantObservationAccess)
+        .filter(PlantObservationAccess.plant_id == plant_id)
+        .order_by(PlantObservationAccess.created_at.desc(), PlantObservationAccess.id.desc())
+        .populate_existing()
+        .all()
+    )
+
+
+def get_observation_access(
+    db: Session, user: User, plant_id: uuid.UUID | str
+) -> ObservationAccessResponse | None:
+    """Read state without issuing a capability on page load or print."""
+    with observation_transaction(db):
+        plant = _access_plant(db, user, plant_id)
+        accesses = _plant_accesses(db, plant.id)
+        active = [access for access in accesses if access.is_active]
+        if len(active) > 1 or any(access.revoked_at for access in active):
+            raise HTTPException(status_code=409, detail="Public access requires controlled repair")
+        access = active[0] if active else (accesses[0] if accesses else None)
+        return _access_response(access) if access else None
+
+
+def get_or_create_observation_access(
+    db: Session, user: User, plant_id: uuid.UUID | str, *, reissue: bool = False
+) -> ObservationAccessResponse:
+    with observation_transaction(db):
+        plant = _access_plant(db, user, plant_id)
+        accesses = _plant_accesses(db, plant.id)
+        active = [access for access in accesses if access.is_active]
+        if len(active) > 1 or any(access.revoked_at for access in active):
+            raise HTTPException(status_code=409, detail="Public access requires controlled repair")
+        if active:
+            return _access_response(active[0])
+        if accesses and not reissue:
+            raise HTTPException(status_code=409, detail="Explicit public access reissue required")
         access = PlantObservationAccess(
-            plant_id=p.id,
+            plant_id=plant.id,
             public_id=uuid.uuid4(),
             created_by_user_id=user.id,
             is_active=True,
             usage_count=0,
         )
         db.add(access)
-        db.commit()
-        db.refresh(access)
-
-    return ObservationAccessResponse(
-        id=str(access.id),
-        plant_id=str(access.plant_id),
-        public_id=str(access.public_id),
-        is_active=access.is_active,
-        usage_count=access.usage_count,
-        revoked_at=access.revoked_at.isoformat() if access.revoked_at else None,
-    )
+        db.flush()
+        return _access_response(access)
 
 
 def revoke_observation_access(
     db: Session, user: User, plant_id: uuid.UUID | str
 ) -> ObservationAccessResponse:
-    org_id = _require_org(user)
-    p = (
-        db.query(Plant)
-        .filter(
-            Plant.id == plant_id,
-            Plant.organization_id == org_id,
-            Plant.zone_id.in_(allowed_zone_ids(db, user)),
-        )
-        .first()
-    )
-    if not p:
-        raise HTTPException(status_code=404, detail="Plant not found")
-
-    access = (
-        db.query(PlantObservationAccess)
-        .filter(PlantObservationAccess.plant_id == p.id, PlantObservationAccess.is_active)
-        .first()
-    )
-    if not access:
-        raise HTTPException(status_code=400, detail="No active observation access found")
-
-    access.is_active = False
-    access.revoked_at = datetime.now(UTC)
-    db.commit()
-    db.refresh(access)
-
-    return ObservationAccessResponse(
-        id=str(access.id),
-        plant_id=str(access.plant_id),
-        public_id=str(access.public_id),
-        is_active=access.is_active,
-        usage_count=access.usage_count,
-        revoked_at=access.revoked_at.isoformat() if access.revoked_at else None,
-    )
+    with observation_transaction(db):
+        plant = _access_plant(db, user, plant_id)
+        accesses = _plant_accesses(db, plant.id)
+        if not accesses:
+            raise HTTPException(status_code=400, detail="No observation access found")
+        # Include sessions of inactive historical grants and malformed rows that
+        # reference this plant or one of its grants. Preserve observations/photos.
+        deactivate_plant_access(db, plant.id, datetime.now(UTC))
+        db.flush()
+        db.refresh(accesses[0])
+        return _access_response(accesses[0])

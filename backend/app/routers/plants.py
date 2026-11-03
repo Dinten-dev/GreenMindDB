@@ -20,6 +20,7 @@ from app.services.plant_service import (
     assign_sensor,
     create_plant,
     delete_plant,
+    get_observation_access,
     get_or_create_observation_access,
     get_plant,
     get_sensor_history,
@@ -97,13 +98,23 @@ def handle_get_sensor_history(
     return get_sensor_history(db, current_user, plant_id)
 
 
-@router.post("/{plant_id}/observation-access", response_model=ObservationAccessResponse)
-def handle_create_observation_access(
+@router.get("/{plant_id}/observation-access", response_model=ObservationAccessResponse | None)
+def handle_get_observation_access(
     plant_id: uuid.UUID,
     current_user: User = Depends(_tenant_manager),
     db: Session = Depends(get_db),
 ):
-    return get_or_create_observation_access(db, current_user, plant_id)
+    return get_observation_access(db, current_user, plant_id)
+
+
+@router.post("/{plant_id}/observation-access", response_model=ObservationAccessResponse)
+def handle_create_observation_access(
+    plant_id: uuid.UUID,
+    reissue: bool = False,
+    current_user: User = Depends(_tenant_manager),
+    db: Session = Depends(get_db),
+):
+    return get_or_create_observation_access(db, current_user, plant_id, reissue=reissue)
 
 
 @router.delete("/{plant_id}/observation-access", response_model=ObservationAccessResponse)
