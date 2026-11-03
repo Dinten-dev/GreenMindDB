@@ -15,10 +15,11 @@ from app.raw_archive import read_broker, reader
 from app.raw_archive.policy import ArchiveBlocked
 from app.raw_archive.read_catalog import connect, publish
 from app.tiered_archive.read_service import ReadHandler
+from tests.raw_archive.test_daily import world as world
 
 
 @pytest.fixture
-def read_view(world, tmp_path, monkeypatch):
+def read_view(world, tmp_path, monkeypatch):  # noqa: F811 - imported pytest fixture
     config, _, source, destination, add, execute = world
     records = [add("gateway", 1), add("direct", 2)]
     execute()
