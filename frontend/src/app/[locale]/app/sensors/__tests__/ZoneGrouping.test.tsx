@@ -1,3 +1,4 @@
+import { preserveMeasurementLocale } from '@/lib/measurement-view';
 import { apiGetSensorDataAdvanced, apiListSensors } from '@/lib/api';
 import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import SensorsPage from '../page';
@@ -152,4 +153,25 @@ test('keeps a disconnected old sensor visible and its historical measurements ac
     )
   );
   expect(screen.getByRole('button', { name: '24 Stunden' })).toBeInTheDocument();
+});
+
+test('preserves the selected Gateway Live window during a locale switch', async () => {
+  window.history.replaceState(
+    {},
+    '',
+    '/de/app/sensors?zone=rudi&sensor=rudi-sensor&range=live&liveWindow=180'
+  );
+  preserveMeasurementLocale('/fr/app/sensors');
+  window.history.replaceState(
+    {},
+    '',
+    '/fr/app/sensors?zone=rudi&sensor=rudi-sensor&range=live&liveWindow=180'
+  );
+  render(<SensorsPage />);
+  expect(await screen.findByRole('button', { name: '3 Minuten' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  expect(screen.getByRole('button', { name: 'Live' })).toHaveAttribute('aria-pressed', 'true');
+  expect(new URLSearchParams(window.location.search).get('liveWindow')).toBe('180');
 });

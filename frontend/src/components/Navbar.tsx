@@ -48,11 +48,14 @@ export default function Navbar() {
     if (query.has('next'))
       query.set('next', localePath(newLocale, safeReturnTo(locale, query.get('next'))));
     const suffix = query.toString();
-    router.push(`${localePath(newLocale, pathname)}${suffix ? `?${suffix}` : ''}`);
+    router.push(
+      `${localePath(newLocale, pathname)}${suffix ? `?${suffix}` : ''}${window.location.hash}`
+    );
   };
 
   // Hide public navbar on dashboard routes (dashboard has its own sidebar)
-  if (pathname.startsWith(`/${locale}/app`)) return null;
+  if (pathname.startsWith(`/${locale}/app`) || pathname.startsWith(`/${locale}/observe/`))
+    return null;
 
   return (
     <>
@@ -80,6 +83,23 @@ export default function Navbar() {
 
           {/* Desktop CTAs */}
           <div className="hidden xl:flex shrink-0 items-center gap-3 whitespace-nowrap relative z-[110]">
+            <select
+              aria-label={t('language')}
+              value={locale}
+              onChange={(e) => switchLocale(e.target.value)}
+              className="bg-transparent text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
+              style={{
+                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right center',
+                backgroundSize: '1em',
+              }}
+            >
+              <option value="de">DE</option>
+              <option value="en">EN</option>
+              <option value="fr">FR</option>
+              <option value="it">IT</option>
+            </select>
             {loading ? (
               <span role="status" className="text-sm text-apple-gray-500">
                 {auth('checking')}
@@ -100,22 +120,6 @@ export default function Navbar() {
               </Link>
             ) : (
               <>
-                <select
-                  value={locale}
-                  onChange={(e) => switchLocale(e.target.value)}
-                  className="bg-transparent text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right center',
-                    backgroundSize: '1em',
-                  }}
-                >
-                  <option value="de">DE</option>
-                  <option value="en">EN</option>
-                  <option value="fr">FR</option>
-                  <option value="it">IT</option>
-                </select>
                 <Link
                   href={`/${locale}/login`}
                   className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 ml-2"
@@ -136,7 +140,7 @@ export default function Navbar() {
           <button
             className="xl:hidden p-3 -mr-3 relative z-[110] text-apple-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Menü umschalten"
+            aria-label={t('toggleMenu')}
             aria-expanded={isMenuOpen}
             aria-controls="public-mobile-menu"
           >
@@ -199,7 +203,7 @@ export default function Navbar() {
               href={`/${locale}/app/dashboard`}
               className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
             >
-              Dashboard · {user.name || user.email.split('@')[0]}
+              {t('dashboard')} · {user.name || user.email.split('@')[0]}
             </Link>
           ) : (
             <>

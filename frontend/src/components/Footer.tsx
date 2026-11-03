@@ -10,7 +10,8 @@ export default function Footer() {
   const locale = useLocale();
   const pathname = usePathname();
 
-  if (pathname?.startsWith(`/${locale}/app`)) return null;
+  if (pathname?.startsWith(`/${locale}/app`) || pathname?.startsWith(`/${locale}/observe/`))
+    return null;
 
   return (
     <footer className="w-full border-t border-apple-gray-200/50 bg-white/50 backdrop-blur-md py-8 mt-auto">

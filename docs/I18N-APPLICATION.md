@@ -1,57 +1,82 @@
 # Anwendung in vier Sprachen
 
-Deutsch, Englisch, Französisch und Italienisch gelten auch nach dem Login.
+Stand 03.11.2026: Schritt 12 vervollständigt Deutsch, Englisch, Französisch und
+Italienisch auf Basis von Schritt 11. Der angemeldete Bereich wurde bereits in
+Schritt 6 vorgezogen. Die getrennten Entwicklungsverläufe bleiben erhalten.
 
 ## Umfang
 
-- Navigation, Konto und Übersicht unterstützen alle vier Sprachen.
-- Pflanzen, Zonen, Sensoren und Gerätekopplung sind übersetzt.
-- Firmen, Benutzer, Zugangsverwaltung und Einladungen sind eingeschlossen.
-- Firmware, Gateway-Flotte, Aktionen, Tabellen und Prüfprotokolle sind eingeschlossen.
-- Diagrammtexte, Exportdialoge und Aufnahmeprüfungen sind eingeschlossen.
-- Bestätigungen, Erfolgsmeldungen und Fehler sind sprachabhängig.
-- Datumsanzeigen und relative Zeitangaben verwenden die gewählte Sprache.
-- Mehrzahlformen verwenden vollständige ICU-Nachrichten statt angehängter Buchstaben.
-- Aktuelle Receiver-Funktionen bleiben im eigenen Entwicklungsverlauf erhalten.
+Navigation, Anmeldung, Konten, Pflanzen, Messungen, Zonen und sämtliche vorhandenen
+Administrations-, Firmware- und Flottenwerkzeuge gehören zum Sprachumfang.
+Auch Exportdialog, Livefenster, Rail-Hinweise, Mark-Knopf und Aufnahmeprüfungen sind
+übersetzt. Warnungen, Fehler und Erfolgsmeldungen verwenden die gewählte Sprache.
+
+Die öffentlichen Seiten Über uns, Plattform, Technologie, Forschung, Kontakt,
+Zugangsanfrage und Impressum sind vollständig eingebunden. Personen- und Firmennamen,
+Adressen, Publikationstitel, Autoren, DOI, Links und eingegebene Daten bleiben Daten.
+Vorhandene Forschungszusammenfassungen und Kategorien sind übersetzt; Quellen und
+Studiendaten wurden dabei nicht neu validiert oder erweitert. Zusammenfassungen
+werden als solche bezeichnet. Die Forschungsübersicht unterscheidet Veröffentlichungen
+und gekennzeichnete Preprints. Formate, Mehrzahlformen und Zugänglichkeitsbeschriftungen
+werden ebenfalls geprüft. Englische Formulierungen und Navigationsbegriffe wurden
+vereinheitlicht. Rechtstexte sind Übersetzungen der bestehenden Inhalte.
+
+Seitentitel, Beschreibungen und Sprachkennungen folgen der Routen-Sprache.
+Auch angemeldete Besucher können auf öffentlichen Seiten die Sprache wechseln.
+Seite, Abfrageparameter und Sprunganker bleiben dabei erhalten.
+
+## QR-Bewertungen
+
+Die bestehende Pflanzenbewertung läuft unter /{locale}/observe/{publicId} in allen
+vier Sprachen. Alte /observe/{publicId}-Links bleiben gültig und werden auf eine
+unterstützte Sprache weitergeleitet; ohne Sprachhinweis ist dies Deutsch.
+Die Locale-Middleware lässt diese alten QR-Einstiege zur Weiterleitung durch.
+Neue QR-Druckansichten verwenden die gewählte Sprache. Vor Beginn einer Bewertung
+kann die Sprache gewählt werden. API-Routen, Sessionablauf, Bewertungsschlüssel,
+Enum-Werte und gespeicherte Benutzereingaben bleiben unverändert.
+Bewertungsseiten behalten noindex/nofollow und ihre reduzierte Oberfläche.
 
 ## Sprachwahl und Daten
 
-- Italienisch ist in Sprachkonfiguration, Routen und Login eingebunden.
-- Sprachwahl ist auch innerhalb der Anwendung erreichbar.
-- Wechsel erhält Seite, erlaubte Sensor-/Zonenauswahl und gewählten Zeitraum.
-- Direct-Auswahl und Direct-Zeitraum bleiben ebenfalls erhalten.
-- Diagrammanker und bestehende Abfrageparameter bleiben erhalten.
-- Zurückkehrende Auswahl wird gegen tatsächlich zugängliche Geräte geprüft.
-- Gerätekennungen und Zeitfenster sind Ansichtsparameter, keine Zugangstokens.
-- Benutzernamen, Pflanzennamen, Messwerte und Originaldiagnosen bleiben Daten.
-- Technische Protokollkennungen und Dateiinhalte werden nicht umgeschrieben.
-- Datenbankwerte, Berechtigungen, Aufnahmen und Exportinhalte bleiben unverändert.
+Jede neu geöffnete Messansicht startet weiterhin mit 24 Stunden. Ein gezielter
+Sprachwechsel erhält die laufende Live-Ansicht einmalig über den bestehenden
+kurz gültigen Tab-Vermerk. Sensor, freigegebene Zone und Direct-Auswahl bleiben
+Ansichtsparameter; auch die gewählten Livefenster für Gateway und Direct bleiben
+beim Sprachwechsel erhalten. Neue Öffnungen beginnen wieder mit 24 Stunden.
+Die wiederhergestellte Auswahl wird gegen tatsächlich zugängliche Geräte geprüft.
 
-## Pflege und Prüfung
+Unbekannte Serverprosa wird nicht als unübersetzte Benutzermeldung ausgegeben.
+Technische Originaldiagnosen bleiben im aktuellen Empfänger bei Bedarf eingeklappt
+zugänglich. Der aktuelle Anmeldedialog behält seinen Zugangsanfrage-Link und erhält
+keine freie Registrierungsfunktion oder neue Einschränkung bestehender Passwörter.
+Der gemeinsame API-Client und sämtliche serverseitigen Berechtigungen bleiben bestehen.
 
-- Sprachkataloge liegen in `frontend/messages/{de,en,fr,it}.json`.
-- `App` enthält die feststehenden Texte der angemeldeten Anwendung.
-- `app-message-keys.json` ordnet vorhandene Ausgangstexte stabilen IDs zu.
+## Pflege
+
+- Sprachkataloge: frontend/messages/{de,en,fr,it}.json.
+- App enthält die feststehenden Texte der angemeldeten Anwendung.
+- Public enthält die feststehenden öffentlichen Texte.
+- Metadata und ObservationMetadata enthalten sprachabhängige Seitentitel.
+- app-message-keys.json und public-message-keys.json halten stabile Zuordnungen.
 - Bestehende IDs nicht neu nummerieren oder anders belegen.
-- Neue Oberflächentexte benötigen Einträge in sämtlichen vier Katalogen.
-- `useAppText` übersetzt ausschliesslich feststehende Texte und bekannte Statuswerte.
-- Unbekannte Serverprosa erhält verständliche lokalisierte Fehlerhinweise.
-- Gemeinsamer API-Client unterscheidet Sitzungsablauf und fehlende Rollenberechtigung.
-- Unternehmenslöschung erklärt bestehende Zuordnungsblockaden weiterhin ausdrücklich.
-- Tests prüfen sämtliche Kataloge, Platzhalter und feststehende Anwendungstexte.
-- Integrationstests prüfen Kontoseite, Navigation, Fehler und Status in vier Sprachen.
-- Auswahlwiederherstellung prüft Geräteberechtigung und gespeicherten Zeitraum.
-- Zusätzliche Receiver-Tests prüfen übersetzte Aufnahmequalität und Zahlenformate.
-- Lokal bestanden: 108 Frontendtests der Veröffentlichungslinie.
-- Lokal bestanden: 128 Frontendtests des aktuellen Receivers.
-- Lint, Formatierung, Typprüfung und beide Produktionsbuilds bestanden.
-- Browserprüfung erfolgt lokal mit synthetischen Konten und Testdaten.
-- Beide Varianten bauen auf der geprüften Login-Korrektur auf.
+- Neue Texte benötigen Einträge in allen vier Katalogen.
+- useAppText und usePublicText nur für feststehende Texte verwenden.
+- Personen-, Pflanzen- und Firmennamen sowie Diagnosedaten nicht übersetzen.
 
-## Einführung
+## Prüfung und Einführung
 
-- Änderungen zuerst gemeinsam mit der Login-Korrektur auf Staging prüfen.
-- Sprachwechsel auch mit realen Berechtigungen und Geräten abnehmen.
-- Die übrigen öffentlichen Inhaltsseiten bleiben Teil von Schritt 12.
-- Kein Merge, Deployment, produktiver Löschlauf oder OTA enthalten.
-- Peters Büroboxen und GmLive bleiben unverändert.
+Automatische Tests prüfen Katalogvollständigkeit, ICU-Platzhalter, feste JSX-Texte,
+Zugänglichkeitsbeschriftungen und bekannte dynamische Textlisten. Komponententests
+prüfen öffentliche Seiten, Formulare, Forschungsbeschreibungen, Anmeldung und den
+vollständigen QR-Bewertungsablauf in vier Sprachen. Die übermittelten Enum-Werte und
+Benutzereingaben bleiben identisch. Messansichts-Tests prüfen den erhaltenen
+Gateway-/Direct-Zeitraum beim Sprachwechsel. Reale lokale HTTP-Prüfungen prüfen
+Sprachkennung, Seitentitel, noindex und alte QR-Weiterleitungen beider Builds.
+Nach dem Build prüft npm run test:routes zusätzlich je 20 reale Loopback-Anfragen
+auch in GitHub Actions. Der Testserver wird danach beendet.
+
+Eine visuelle Browserabnahme bleibt offen, solange Browsernutzung in den
+Work-Einstellungen deaktiviert ist. Komponenten-, HTTP- und Buildprüfungen ersetzen
+keine visuelle Abnahme. Vor Einführung auf Staging auch reale Berechtigungen und
+Geräte prüfen. Kein Merge, Deployment, Löschlauf oder OTA gehört zu diesem Schritt.
+Peters Büroboxen, gmlive und die Konfiguration des USB-Testgeräts bleiben unverändert.
