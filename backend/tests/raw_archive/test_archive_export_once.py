@@ -38,6 +38,7 @@ def test_pause_keeps_original_worker_resume_path_and_closes_probe(monkeypatch, r
             pass
 
     monkeypatch.setattr(export.worker, "connect", lambda _: DB())
+    monkeypatch.setattr(export.worker, "reap_exports", lambda _: 0)
 
     @contextmanager
     def lease(*args):

@@ -17,12 +17,15 @@ def main():
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--compose", type=Path, required=True)
     args = parser.parse_args()
+    from app.visualization.archive_export_storage import reap_exports
+
     source = args.state / "jobs.sqlite3"
     if source.is_symlink() or not args.state.is_absolute():
         raise RuntimeError("Private export state required")
     if not source.exists():
         print(json.dumps({"status": "idle"}))
         return 0
+    reap_exports(args.state)
     with sqlite3.connect(source.as_uri() + "?mode=ro", uri=True, timeout=2) as db:
         db.execute("PRAGMA query_only=ON")
         queued = db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','working') AND created>=? LIMIT 1", (time.time() - 86400,)).fetchone()

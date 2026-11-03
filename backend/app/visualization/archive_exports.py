@@ -3,10 +3,12 @@
 import hashlib
 import json
 import os
+import stat
+import sys
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -19,9 +21,50 @@ from app.models.master import Gateway, Sensor, Zone
 from app.models.user import User
 from app.models.wav_file import WavFile
 from app.rate_limit import limiter
+from app.visualization.archive_export_storage import ExportQuota, ExportStorageError, ExportStore
 from app.visualization.archive_jobs import EXPIRES, MAX_BYTES, MAX_FILES, connect, root
 from app.visualization.archive_jobs import PART_BYTES as PART_BYTES
 from app.zone_access import is_platform_admin, zone_access_filter
+
+
+@contextmanager
+def request_store(path):
+    try:
+        with ExportStore(path) as store:
+            yield store
+    except ExportQuota as error:
+        raise HTTPException(429, "Gespeicherte Exporte überschreiten das Speicherlimit") from error
+    except (ExportStorageError, OSError) as error:
+        raise HTTPException(503, "Exportbereich nicht sicher verfügbar") from error
+
+
+class DownloadResponse(FileResponse):
+    """Keep both the validated inode and shared job lease until ASGI completes."""
+
+    def __init__(self, body, lock, name):
+        self.export_body, self.export_lock = body, lock
+        descriptor_path = (
+            f"/proc/self/fd/{body}" if sys.platform.startswith("linux") else f"/dev/fd/{body}"
+        )
+        super().__init__(
+            descriptor_path, media_type="application/zip", filename=name, stat_result=os.fstat(body)
+        )
+
+    async def __call__(self, scope, receive, send):
+        # pathsend can defer opening the descriptor until after response return.
+        scope = dict(
+            scope,
+            extensions={
+                k: v
+                for k, v in scope.get("extensions", {}).items()
+                if k != "http.response.pathsend"
+            },
+        )
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            os.close(self.export_body)
+            os.close(self.export_lock)
 
 
 def authorize_gateway(db, user, sensor_id):
@@ -156,7 +199,7 @@ def checked_job(db, user, job_id, legacy):
     row = db.execute(
         "SELECT * FROM jobs WHERE id=? AND user_id=?", (str(job_id), str(user.id))
     ).fetchone()
-    if not row or row["created"] + EXPIRES < time.time():
+    if not row or row["created"] + EXPIRES <= time.time():
         raise HTTPException(404, "Export nicht gefunden")
     sensor_id = uuid.UUID(row["sensor_id"])
     if row["kind"] == "gateway":
@@ -200,7 +243,9 @@ def install(app):
             for item in items
         ):
             raise HTTPException(409, "Aufnahme ohne verifizierbare Prüfsumme")
-        with connect(path) as jobs:
+        with request_store(path) as store, store.locked(), connect(path) as jobs:
+            store.reap(jobs)
+            store.budget(jobs, incoming=(str(user.id), items))
             active = jobs.execute(
                 "SELECT count(*) FROM jobs WHERE user_id=? AND status IN ('queued','working')",
                 (str(user.id),),
@@ -252,34 +297,47 @@ def install(app):
         legacy: Session = Depends(get_db),
     ):
         path = root()
-        with connect(path) as jobs:
-            row = checked_job(jobs, user, job_id, legacy)
-            parts = json.loads(row["parts"])
-            if row["status"] != "ready" or not 0 <= part < len(parts):
-                raise HTTPException(404, "Exportteil nicht verfügbar")
-            name = parts[part]
-            if (
-                not isinstance(name, str)
-                or Path(name).name != name
-                or not (
+        lock = None
+        body = None
+        try:
+            with request_store(path) as store, store.locked(), connect(path) as jobs:
+                row = checked_job(jobs, user, job_id, legacy)
+                parts = json.loads(row["parts"])
+                if row["status"] != "ready" or not 0 <= part < len(parts):
+                    raise HTTPException(404, "Exportteil nicht verfügbar")
+                name = parts[part]
+                from app.visualization.archive_export_storage import part_names
+
+                part_names(row)
+                if not (
                     name == f"{row['id']}-{part:03d}.zip"
                     or name.startswith(f"{row['id']}-{part:03d}-")
-                )
-                or not name.endswith(".zip")
-            ):
-                raise HTTPException(503, "Ungültiger Exportteil")
-        target = path / name
-        if not target.is_file() or target.is_symlink():
-            raise HTTPException(503, "Exportteil fehlt")
-        return FileResponse(target, media_type="application/zip", filename=name)
+                ):
+                    raise HTTPException(503, "Ungültiger Exportteil")
+                lock = store.acquire_job(row["id"], shared=True)
+                if lock is None:
+                    raise HTTPException(409, "Exportteil ist beschäftigt")
+                body = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=store.fd)
+                if not stat.S_ISREG(os.fstat(body).st_mode):
+                    raise HTTPException(503, "Exportteil fehlt")
+                response = DownloadResponse(body, lock, name)
+            body, lock = None, None
+            return response
+        finally:
+            if body is not None:
+                os.close(body)
+            if lock is not None:
+                os.close(lock)
 
     @app.delete("/api/v1/visualization/archive-exports/{job_id}")
     def cancel(
         job_id: uuid.UUID, user: User = Depends(get_current_user), legacy: Session = Depends(get_db)
     ):
-        with connect(root()) as jobs:
-            checked_job(jobs, user, job_id, legacy)
-            jobs.execute(
-                "UPDATE jobs SET status='cancelled' WHERE id=? AND status='queued'", (str(job_id),)
-            )
-        return {"id": str(job_id)}
+        with request_store(root()) as store, store.locked(), connect(store.path) as jobs:
+            row = checked_job(jobs, user, job_id, legacy)
+            with jobs:
+                jobs.execute("UPDATE jobs SET status='cancelled' WHERE id=?", (row["id"],))
+            # Running workers observe cancellation; active downloads retain their
+            # shared lease. Neither loses its file underneath the current read.
+            store.reap(jobs)
+        return {"id": str(job_id), "status": "cancelled"}

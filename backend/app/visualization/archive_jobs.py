@@ -20,7 +20,7 @@ def root():
     if os.getenv("ARCHIVE_EXPORTS_ENABLED", "false").lower() != "true":
         unavailable("Archivexporte sind noch nicht aktiviert")
     path = Path(os.environ["ARCHIVE_EXPORT_STATE_DIR"])
-    if not path.is_absolute() or path.is_symlink() or not path.is_dir():
+    if not path.is_absolute() or path.resolve() != path or not path.is_dir():
         unavailable("Exportbereich nicht verfügbar")
     info = path.stat()
     if info.st_uid != os.getuid() or info.st_mode & 0o077:
@@ -29,7 +29,12 @@ def root():
 
 
 def connect(path):
-    db = sqlite3.connect(path / "jobs.sqlite3", timeout=3)
+    file = path / "jobs.sqlite3"
+    if file.is_symlink():
+        unavailable("Unsicherer Export-Auftragsspeicher")
+    if file.exists() and not file.is_file():
+        unavailable("Unsicherer Export-Auftragsspeicher")
+    db = sqlite3.connect(file, timeout=3)
     db.row_factory = sqlite3.Row
     db.execute("""CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL,

@@ -24,6 +24,28 @@ def digest(path):
     return value.hexdigest()
 
 
+def checkpoint_candidates(existing):
+    """Ephemeral locks/scratch are not durable checkpoint contents.
+
+    Callers quiesce writers or hold the export-directory lock. Never delete or
+    copy these coordination files into a different inode/lock namespace.
+    """
+    result = []
+    for path in existing.iterdir():
+        if path.name in {".locks", ".scratch"}:
+            if path.is_symlink() or not path.is_dir():
+                raise ArchiveBlocked("Unsafe export coordination directory")
+            continue
+        if (
+            path.name in {"restoration.json", "merge-restoration.json"}
+            or path.name == "jobs.sqlite3"
+            or path.name.startswith("jobs.sqlite3-")
+        ):
+            continue
+        result.append(path)
+    return result
+
+
 def verify(source, manifest_sha256):
     if source.is_symlink() or not source.is_dir():
         raise ArchiveBlocked("Private checkpoint directory required")
@@ -172,13 +194,7 @@ def merge_into_new(source, existing, output, manifest_sha256):
             if new.execute("SELECT * FROM jobs WHERE id=?", (row[identity],)).fetchone() != row:
                 raise ArchiveBlocked("Existing ownership or progress changed")
         names = {n for row in original for n in json.loads(row[parts_column])}
-        candidates = [
-            p
-            for p in existing.iterdir()
-            if p.name != "jobs.sqlite3"
-            and not p.name.startswith("jobs.sqlite3-")
-            and p.name != "restoration.json"
-        ]
+        candidates = checkpoint_candidates(existing)
         if (
             not names <= {p.name for p in candidates}
             or sum(p.stat().st_size for p in candidates) > MAX_BYTES

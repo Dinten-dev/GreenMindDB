@@ -105,7 +105,8 @@ def test_corrupt_source_never_publishes_part(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="Prüfsumme"):
         worker.make_parts(tmp_path, job, db)
     assert not list(tmp_path.glob("*.zip"))
-    assert list(tmp_path.glob("*.part"))  # Private failed evidence is retained.
+    assert not list(tmp_path.glob("*.part"))
+    assert not list(tmp_path.glob("*.raw-part"))
     assert db.execute("SELECT status FROM jobs").fetchone()[0] != "ready"
     db.close()
 
@@ -121,7 +122,7 @@ def test_resource_pause_keeps_export_queued(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "root", lambda: tmp_path)
     monkeypatch.setattr(worker, "headroom", lambda _: None)
 
-    def pause(*_):
+    def pause(*_, **kwargs):
         raise worker.CapacityPause("host priority")
 
     monkeypatch.setattr(worker, "make_parts", pause)

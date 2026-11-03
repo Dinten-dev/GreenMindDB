@@ -38,6 +38,7 @@ def guard():
 def run():
     guard()
     path = worker.root()
+    worker.reap_exports(path)
     with worker.connect(path) as db:
         pending = db.execute(
             "SELECT 1 FROM jobs WHERE status IN ('queued','working') AND created>=? LIMIT 1",

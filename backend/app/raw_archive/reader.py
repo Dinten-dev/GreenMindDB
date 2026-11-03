@@ -4,7 +4,8 @@ import hashlib
 import json
 import os
 import sqlite3
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import BoundedSemaphore
@@ -12,6 +13,16 @@ from threading import BoundedSemaphore
 from botocore.exceptions import ClientError
 
 _read_slots = BoundedSemaphore(2)
+_export_scratch = ContextVar("archive_export_scratch", default=None)
+
+
+@contextmanager
+def export_scratch(path):
+    token = _export_scratch.set(Path(path))
+    try:
+        yield
+    finally:
+        _export_scratch.reset(token)
 
 
 def verified_objects(kind, bucket, keys):
@@ -79,7 +90,7 @@ def restore_object(*, kind, bucket, key):
         if not _read_slots.acquire(blocking=False):
             raise ArchiveBlocked("Archive read concurrency limit reached; retry later")
         resources.callback(_read_slots.release)
-        scratch_setting = os.environ.get("RAW_ARCHIVE_READ_SCRATCH_DIR")
+        scratch_setting = _export_scratch.get() or os.environ.get("RAW_ARCHIVE_READ_SCRATCH_DIR")
         if scratch_setting:
             scratch = Path(scratch_setting)
             if (
