@@ -1,0 +1,1487 @@
+{
+  "format": "greenmind.public-table-treatment.v1",
+  "version": "2026-11-03-step2",
+  "table_count": 57,
+  "foreign_keys_checked": 62,
+  "logical_dependency_universe_complete": false,
+  "deletion_authorized": false,
+  "relations": [
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_budget",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_chunk",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_chunk_payload_ref",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_chunk_payload_ref_chunk_id_fkey",
+          "source_columns": [
+            "chunk_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_chunk",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_device",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_enrollment",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_enrollment_device_id_fkey",
+          "source_columns": [
+            "device_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_device",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_heartbeat",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_pairing",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_piece",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_piece_chunk_id_fkey",
+          "source_columns": [
+            "chunk_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_chunk",
+          "validated": true
+        },
+        {
+          "constraint": "direct_piece_segment_id_fkey",
+          "source_columns": [
+            "segment_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_segment",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_revision",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_revision_segment_id_fkey",
+          "source_columns": [
+            "segment_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_segment",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_segment",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_segment_device_id_fkey",
+          "source_columns": [
+            "device_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_device",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_session",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_session_device_id_fkey",
+          "source_columns": [
+            "device_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_device",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_visual_point",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": null,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 90,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_visual_point_segment_id_fkey",
+          "source_columns": [
+            "segment_id"
+          ],
+          "target_columns": [
+            "segment_id"
+          ],
+          "target_table": "direct_visual_segment",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_visual_segment",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "direct_visual_segment_segment_id_fkey",
+          "source_columns": [
+            "segment_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "direct_segment",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "greenmind_direct_production",
+      "table": "direct_visual_worker",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "alembic_version",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "audit_log",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "audit_log_user_id_fkey",
+          "source_columns": [
+            "user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "background_worker_heartbeat",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "bio_aggregate",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "bio_aggregate_session_id_fkey",
+          "source_columns": [
+            "session_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "bio_session",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "bio_session",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "bio_session_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "email_verification",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "email_verification_user_id_fkey",
+          "source_columns": [
+            "user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "firmware_release",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "firmware_report",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "firmware_report_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        },
+        {
+          "constraint": "firmware_report_release_id_fkey",
+          "source_columns": [
+            "release_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "firmware_release",
+          "validated": true
+        },
+        {
+          "constraint": "firmware_report_sensor_id_fkey",
+          "source_columns": [
+            "sensor_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "sensor",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "form_submission",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_greenhouse_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway_app_release",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_app_release_created_by_fkey",
+          "source_columns": [
+            "created_by"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway_command",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_command_created_by_fkey",
+          "source_columns": [
+            "created_by"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        },
+        {
+          "constraint": "gateway_command_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway_config_release",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_config_release_created_by_fkey",
+          "source_columns": [
+            "created_by"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway_desired_state",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_desired_state_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        },
+        {
+          "constraint": "gateway_desired_state_updated_by_fkey",
+          "source_columns": [
+            "updated_by"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway_state_report",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": 7,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 30,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_state_report_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "gateway_update_log",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "gateway_update_log_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "ingest_log",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": 7,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 30,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "ingest_log_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "organization",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "pairing_code",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "pairing_code_created_by_user_id_fkey",
+          "source_columns": [
+            "created_by_user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        },
+        {
+          "constraint": "pairing_code_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        },
+        {
+          "constraint": "pairing_code_greenhouse_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_organization_id_fkey",
+          "source_columns": [
+            "organization_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "organization",
+          "validated": true
+        },
+        {
+          "constraint": "plant_zone_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant_evaluation",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_evaluation_plant_id_fkey",
+          "source_columns": [
+            "plant_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant",
+          "validated": true
+        },
+        {
+          "constraint": "plant_evaluation_sensor_id_fkey",
+          "source_columns": [
+            "sensor_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "sensor",
+          "validated": true
+        },
+        {
+          "constraint": "plant_evaluation_session_id_fkey",
+          "source_columns": [
+            "session_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant_observation_session",
+          "validated": true
+        },
+        {
+          "constraint": "plant_evaluation_zone_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant_observation",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_observation_observation_session_id_fkey",
+          "source_columns": [
+            "observation_session_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant_observation_session",
+          "validated": true
+        },
+        {
+          "constraint": "plant_observation_observed_by_user_id_fkey",
+          "source_columns": [
+            "observed_by_user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        },
+        {
+          "constraint": "plant_observation_plant_id_fkey",
+          "source_columns": [
+            "plant_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant",
+          "validated": true
+        },
+        {
+          "constraint": "plant_observation_sensor_id_fkey",
+          "source_columns": [
+            "sensor_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "sensor",
+          "validated": true
+        },
+        {
+          "constraint": "plant_observation_zone_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant_observation_access",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_observation_access_created_by_user_id_fkey",
+          "source_columns": [
+            "created_by_user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        },
+        {
+          "constraint": "plant_observation_access_plant_id_fkey",
+          "source_columns": [
+            "plant_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant_observation_photo",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_observation_photo_observation_id_fkey",
+          "source_columns": [
+            "observation_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant_observation",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant_observation_session",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_observation_session_access_id_fkey",
+          "source_columns": [
+            "access_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant_observation_access",
+          "validated": true
+        },
+        {
+          "constraint": "plant_observation_session_plant_id_fkey",
+          "source_columns": [
+            "plant_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "plant_sensor_assignment",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "plant_sensor_assignment_assigned_by_user_id_fkey",
+          "source_columns": [
+            "assigned_by_user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        },
+        {
+          "constraint": "plant_sensor_assignment_plant_id_fkey",
+          "source_columns": [
+            "plant_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "plant",
+          "validated": true
+        },
+        {
+          "constraint": "plant_sensor_assignment_sensor_id_fkey",
+          "source_columns": [
+            "sensor_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "sensor",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "provisioning_jobs",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "retention_run",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "retention_run_item",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "retention_run_item_run_id_fkey",
+          "source_columns": [
+            "run_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "retention_run",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "rollout_policy",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "rollout_policy_release_id_fkey",
+          "source_columns": [
+            "release_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "firmware_release",
+          "validated": true
+        },
+        {
+          "constraint": "rollout_policy_zone_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "sensor",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "sensor_gateway_id_fkey",
+          "source_columns": [
+            "gateway_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "gateway",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "sensor_reading",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "users",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "users_organization_id_fkey",
+          "source_columns": [
+            "organization_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "organization",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "visual_chunk",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "visual_reading",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": null,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 90,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "visual_reading_sensor_id_fkey",
+          "source_columns": [
+            "sensor_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "sensor",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "visual_wav",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "visual_wav_wav_id_fkey",
+          "source_columns": [
+            "wav_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "wav_file",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "visual_wave",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": null,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 90,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "visual_wave_sensor_id_fkey",
+          "source_columns": [
+            "sensor_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "sensor",
+          "validated": true
+        },
+        {
+          "constraint": "visual_wave_wav_id_fkey",
+          "source_columns": [
+            "wav_id"
+          ],
+          "target_columns": [
+            "wav_id"
+          ],
+          "target_table": "visual_wav",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "visual_worker",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "wav_feature",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": null,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 90,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "wav_feature_wav_file_id_fkey",
+          "source_columns": [
+            "wav_file_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "wav_file",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "wav_feature_version",
+      "treatment": "PROPOSED_SQL_CANDIDATE_HOLD",
+      "retention": {
+        "additional_after_first_complete_confirmation_days": null,
+        "additional_evidence": "UNKNOWN: gesonderte Archiv-, Integritäts-, Wiederherstellungs- und Freigabenachweise",
+        "minimum_local_days": 90,
+        "semantics": "Alle Mindestbedingungen müssen gleichzeitig erfüllt sein; keine automatische Freigabe."
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "wav_feature_version_wav_file_id_fkey",
+          "source_columns": [
+            "wav_file_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "wav_file",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "wav_file",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": []
+    },
+    {
+      "database": "plantdb",
+      "table": "zone",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "greenhouse_organization_id_fkey",
+          "source_columns": [
+            "organization_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "organization",
+          "validated": true
+        }
+      ]
+    },
+    {
+      "database": "plantdb",
+      "table": "zone_access",
+      "treatment": "PRESERVE",
+      "retention": {
+        "meaning": "PRESERVE ohne festgelegten Löschzeitpunkt",
+        "minimum_local_days": null
+      },
+      "origin_live_status": "UNKNOWN",
+      "processing_live_status": "UNKNOWN",
+      "archive_acceptance": "UNKNOWN",
+      "foreign_keys": [
+        {
+          "constraint": "zone_access_user_id_fkey",
+          "source_columns": [
+            "user_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "users",
+          "validated": true
+        },
+        {
+          "constraint": "zone_access_zone_id_fkey",
+          "source_columns": [
+            "zone_id"
+          ],
+          "target_columns": [
+            "id"
+          ],
+          "target_table": "zone",
+          "validated": true
+        }
+      ]
+    }
+  ]
+}
