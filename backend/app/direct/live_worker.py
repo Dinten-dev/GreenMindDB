@@ -1,8 +1,9 @@
 """Private Unix-socket single-owner preview worker. No database or object store."""
 
+import asyncio
 import fcntl
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -14,6 +15,15 @@ from app.direct.protocol import DirectError
 
 
 def create_live_worker(store=None, socket_path=None):
+    live = store or LiveStore()
+
+    async def expire_idle_state():
+        # Expire RAM even when every device/viewer has disconnected.
+        while True:
+            await asyncio.sleep(1)
+            with live.lock:
+                live._prune()
+
     @asynccontextmanager
     async def lifespan(_):
         handle = None
@@ -30,14 +40,18 @@ def create_live_worker(store=None, socket_path=None):
             except BlockingIOError:
                 handle.close()
                 raise RuntimeError("A live-state owner already exists") from None
+        expiry = asyncio.create_task(expire_idle_state())
         try:
             yield
         finally:
+            expiry.cancel()
+            with suppress(asyncio.CancelledError):
+                await expiry
             if handle:
                 handle.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.state.live = store or LiveStore()
+    app.state.live = live
 
     @app.exception_handler(DirectError)
     async def domain_error(_, error):
