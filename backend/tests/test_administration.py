@@ -113,7 +113,10 @@ def test_archive_copy_fails_closed_outside_production(client, management, monkey
     monkeypatch.setattr(settings, "environment", "production")
     response = client.post("/api/v1/administration/archive/copy", headers=management)
     assert response.status_code == 503
-    assert "nicht mit dem Dienst verbunden" in response.json()["detail"]
+    assert (
+        response.json()["detail"]
+        == "Kopierstart derzeit nicht verfügbar. Originale bleiben erhalten."
+    )
 
 
 def test_archive_overview_rejects_non_admin(client, admin_token, monkeypatch):

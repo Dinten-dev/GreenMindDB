@@ -410,7 +410,8 @@ def test_runtime_publishes_actual_four_file_authenticated_v4(original, tmp_path,
     box = Box(tmp_path / "box")
 
     @contextmanager
-    def worker():
+    def worker(*, coordination_kind):
+        assert coordination_kind == "copy"
         yield ledger, box, lambda: None
 
     def dumped(database, source, folder, *, checkpoint, with_proof):

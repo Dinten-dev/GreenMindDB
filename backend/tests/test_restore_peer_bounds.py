@@ -125,6 +125,9 @@ class Rows:
     def __init__(self, value):
         self.value = value
 
+    def scalar_one(self):
+        return self.value
+
     def mappings(self):
         return self
 
@@ -147,6 +150,8 @@ class Inventory:
     def execute(self, statement, params=None):
         sql = str(statement)
         self.sql.append(sql)
+        if sql.startswith("SELECT to_regclass("):
+            return Rows(False)  # This fixture has no application journal tables.
         return Rows(self.metadata if "e.extversion" in sql else self.rows)
 
 
@@ -171,7 +176,7 @@ def test_unproved_timescale_catalog_is_not_exempted():
     db = Inventory(dict(oid=1, extversion="2.17.2", catalogs=1), [])
     with pytest.raises(ArchiveBlocked, match="provenance"):
         universe.relation_inventory(db)
-    assert len(db.sql) == 1
+    assert len([sql for sql in db.sql if not sql.startswith("SELECT to_regclass(")]) == 1
 
 
 def test_unknown_encoding_fails_before_any_master_read(monkeypatch):

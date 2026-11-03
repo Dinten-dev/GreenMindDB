@@ -71,9 +71,11 @@ def test_upgrade_preserves_old_data_and_accepts_compressed_history(client, monke
         ]
         for statement in statements:
             connection.execute(text(statement), params)
-    upgrade("head")
+    # The maintained Staging receiver uses 0024. Revision 0025 only
+    # acknowledges a separately prepared online feature-identity capability.
+    upgrade("0024")
     with engine.begin() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0023"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0024"
         assert connection.scalar(text("SELECT value FROM sensor_reading")) == 321.125
         wav = connection.execute(
             text("SELECT s3_key,raw_deleted_at,pcm_encoding_version FROM wav_file")

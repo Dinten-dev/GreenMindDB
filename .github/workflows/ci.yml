@@ -153,7 +153,7 @@ jobs:
       - name: Install existing backend test dependencies
         run: python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Test Direct transactions and Legacy migration compatibility
-        run: python -m pytest tests/direct/test_postgres.py tests/direct/test_ingest_locks.py tests/direct/test_payload_recovery.py tests/test_ingest_postgres.py tests/test_staging_migrations.py tests/test_gateway_key_migration_postgres.py tests/test_pairing_postgres.py tests/test_observation_access_postgres.py tests/test_public_observe.py -v
+        run: python -m pytest tests/direct/test_postgres.py tests/direct/test_raw400_postgres.py tests/direct/test_live_postgres.py tests/direct/test_live_socket.py tests/direct/test_ingest_locks.py tests/direct/test_payload_recovery.py tests/test_ingest_postgres.py tests/test_staging_migrations.py tests/test_gateway_key_migration_postgres.py tests/test_pairing_postgres.py tests/test_gateway_removal_postgres.py tests/test_observation_access_postgres.py tests/test_public_observe.py -v
         env:
           DIRECT_TEST_POSTGRES_URL: postgresql+psycopg2://direct_test:local-direct-test-only@127.0.0.1:5432/direct_test
           GATEWAY_TEST_POSTGRES_URL: postgresql+psycopg2://direct_test:local-direct-test-only@127.0.0.1:5432/direct_test

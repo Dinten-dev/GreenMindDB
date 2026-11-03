@@ -61,3 +61,7 @@ exclude_lines = [
     "if __name__ == .__main__.",
     "pass",
 ]
+
+# Reviewed collector bytes are pinned by managed_snapshot; preserve their identity.
+[tool.ruff.format]
+exclude = ["**/snapshot_roster_collector_v2.py"]

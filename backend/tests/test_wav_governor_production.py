@@ -615,6 +615,12 @@ def test_assignment_parent_and_revision_rows_share_the_delete_transaction(
             yield database
 
     source = WavSource(Sessions(), None, None, kind, "production", None, lambda: None)
+    scientific_checks = []
+    if kind == "direct":
+        # This unit isolates row locking; acceptance itself has dedicated tests.
+        monkeypatch.setattr(
+            source, "_verify_scientific_history", lambda: scientific_checks.append(True)
+        )
     source.expected = [
         {
             "body": {
@@ -625,6 +631,7 @@ def test_assignment_parent_and_revision_rows_share_the_delete_transaction(
     ]
     with source.exclusive(replace(candidate, source=kind, environment="production")):
         assert source.db is database and locked == expected
+        assert scientific_checks == ([True] if kind == "direct" else [])
     assert source.db is None
 
 
