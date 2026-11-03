@@ -112,5 +112,30 @@
     "rights": "Tous droits réservés.",
     "dashboard": "Tableau de bord",
     "language": "Langue"
+  },
+  "Auth": {
+    "title": "Se connecter à GreenMind",
+    "intro": "Saisissez vos identifiants.",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "signIn": "Se connecter",
+    "signingIn": "Connexion en cours…",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "checking": "Vérification de la session…",
+    "retry": "Réessayer",
+    "retrySession": "Vérifier à nouveau la session",
+    "noAccount": "Pas encore de compte ?",
+    "requestAccess": "Demander un accès",
+    "errors": {
+      "credentials": "L’adresse e-mail ou le mot de passe est incorrect. Vérifiez vos identifiants.",
+      "network": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+      "service": "La connexion est temporairement indisponible. Veuillez réessayer.",
+      "expired": "Votre session a expiré. Veuillez vous reconnecter.",
+      "unverified": "Veuillez d’abord confirmer votre adresse e-mail.",
+      "disabled": "Ce compte est désactivé. Contactez votre administrateur.",
+      "rateLimited": "Trop de tentatives de connexion. Veuillez réessayer plus tard.",
+      "confirmation": "Votre session n’a pas pu être confirmée. Rechargez la page et reconnectez-vous."
+    }
   }
 }
