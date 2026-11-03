@@ -1,21 +1,14 @@
 'use client';
 import { readViewValue, replaceViewValues } from '@/lib/view-state';
 
-import { RecordingTimeDetails } from './CaptureTimeSummary';
-import { captureTimeZone, formatCaptureTime } from '@/lib/capture-time';
-import type { CaptureTimeInfo } from '@/lib/api';
-
 import { useAppText } from '@/i18n/app-text';
-
-import RecordingCompletenessBadge from './RecordingCompletenessBadge';
-import { nominalCompleteness } from '@/lib/recordingCompleteness';
-import type { RecordingCompleteness } from '@/lib/api';
-
 import { useEffect, useState } from 'react';
 import type { SensorDataResponse } from '@/lib/api';
+import { initialMeasurementMode, finishMeasurementRestore } from '@/lib/measurement-view';
 import SignalChart from './SignalChart';
 import DirectLiveView from './DirectLiveView';
 import SensorCard from './SensorCard';
+import ExportButton from './ExportButton';
 
 export type DirectDevice = {
   id: string;
@@ -25,91 +18,89 @@ export type DirectDevice = {
   last_seen: string | null;
   spool_bytes: number;
 };
-type Recording = {
-  segment_id: string;
-  revision: number;
-  run: number;
-  started_at: string;
-  time_info?: CaptureTimeInfo;
-  duration_seconds: number;
-  completeness?: RecordingCompleteness;
-  sample_rate: number;
-};
-const ranges = [
-  ['5m', '5 Minuten'],
-  ['1h', '1 Stunde'],
-  ['24h', '24 Stunden'],
-  ['7d', '7 Tage'],
-  ['30d', '30 Tage'],
-] as const;
+class ReadError extends Error {
+  constructor(readonly status: number) {
+    super('Messdaten konnten nicht geladen werden. Bitte erneut versuchen.');
+  }
+}
+function shouldClearCachedData(error: unknown) {
+  return (
+    error instanceof ReadError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429
+  );
+}
 
 async function read<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { cache: 'no-store', signal });
-  if (!response.ok)
-    throw new Error('Messdaten konnten nicht geladen werden. Bitte erneut versuchen.');
+  if (!response.ok) throw new ReadError(response.status);
   return response.json();
 }
 
-function DirectMeasurements({ device }: { device: DirectDevice }) {
-  const [isLive, setIsLive] = useState(() => readViewValue('directRange') === 'live');
+function DirectMeasurements({
+  device,
+  devices,
+}: {
+  device: DirectDevice;
+  devices: DirectDevice[];
+}) {
   const tx = useAppText();
-
-  const [range, setRange] = useState(() => {
-    const value = readViewValue('directRange');
-    return value && ranges.some(([key]) => key === value) ? value : '24h';
-  });
-  useEffect(() => {
-    replaceViewValues({ directRange: isLive ? 'live' : range === '24h' ? null : range });
-  }, [range, isLive]);
+  const [isLive, setIsLive] = useState(() => initialMeasurementMode('directRange') === 'live');
   const [series, setSeries] = useState<SensorDataResponse[]>([]);
-  const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const [viewBounds, setViewBounds] = useState<{ from_dt: string; to_dt: string } | null>(null);
   const base = `/api/v1/visualization/direct/${device.id}`;
   useEffect(() => {
+    finishMeasurementRestore('directRange');
+  }, []);
+  useEffect(() => {
+    replaceViewValues({
+      directRange: isLive ? 'live' : null,
+      ...(isLive ? {} : { directLiveWindow: null }),
+    });
+  }, [isLive]);
+  useEffect(() => {
     if (isLive) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
-    let first = true;
     setLoading(true);
     setSeries([]);
-    setRecordings([]);
     setViewBounds(null);
     setError('');
     const refresh = async () => {
       try {
         const end = new Date();
-        const duration =
-          { '5m': 300, '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 }[range] ?? 86400;
         const bounds = {
-          from_dt: new Date(end.getTime() - duration * 1000).toISOString(),
+          from_dt: new Date(end.getTime() - 86400000).toISOString(),
           to_dt: end.toISOString(),
         };
-        const [data, files] = await Promise.all([
-          read<SensorDataResponse[]>(
-            `${base}/data?${new URLSearchParams({ range, ...bounds })}`,
-            controller.signal
-          ),
-          read<Recording[]>(`${base}/recordings?range=${range}`, controller.signal),
-        ]);
+        const data = await read<SensorDataResponse[]>(
+          `${base}/data?${new URLSearchParams({ range: '24h', ...bounds })}`,
+          controller.signal
+        );
         if (controller.signal.aborted) return;
         setSeries(data);
         setViewBounds(bounds);
-        setRecordings(files);
         setError('');
-      } catch {
-        if (!controller.signal.aborted)
+      } catch (failure) {
+        if (!controller.signal.aborted) {
+          if (shouldClearCachedData(failure)) {
+            setSeries([]);
+            setViewBounds(null);
+          }
           setError(
             tx(
               'Messdaten konnten nicht aktualisiert werden. Angezeigte Werte können veraltet sein.'
             )
           );
+        }
       } finally {
         if (!controller.signal.aborted) {
-          if (first) setLoading(false);
-          first = false;
+          setLoading(false);
           timer = setTimeout(refresh, 10000);
         }
       }
@@ -119,173 +110,101 @@ function DirectMeasurements({ device }: { device: DirectDevice }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [tx, base, range, retry, isLive]);
-  if (isLive)
-    return (
-      <DirectLiveView
-        deviceId={device.id}
-        onHistory={() => {
-          replaceViewValues({ directLiveWindow: null });
-          setIsLive(false);
-          setRange('24h');
-        }}
-      />
-    );
-  const points = series.reduce((sum, item) => sum + item.data.length, 0);
-  const latest = series
-    .flatMap((item) => item.data)
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    .at(-1);
+  }, [tx, base, retry, isLive]);
   return (
-    <div className="rounded-xl bg-[#fcfdfb] p-1 sm:p-2" aria-label={tx('Direct-Messdaten')}>
+    <div
+      className="space-y-4 rounded-xl bg-[#fcfdfb] p-1 sm:p-2"
+      aria-label={tx('Direct-Messdaten')}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-gray-900">
-            {tx('Pflanzensignal · Biolingo')}
-            {device.hardware_id?.slice(-5).replace(':', '')}
-          </h3>
-          <p className="mt-1 text-xs text-gray-500">
-            {tx('Aktualisiert sich alle zehn Sekunden.')}
-          </p>
+        <div role="group" aria-label={tx('Zeitraum')} className="flex gap-2">
+          {(['24h', 'live'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isLive === (value === 'live')}
+              onClick={() => setIsLive(value === 'live')}
+              className={`rounded-lg border px-4 py-2 text-sm ${isLive === (value === 'live') ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-gray-200 bg-white text-gray-600'}`}
+            >
+              {tx(value === '24h' ? '24 Stunden' : 'Live')}
+            </button>
+          ))}
         </div>
-        <a
-          href={`${base}/export?${new URLSearchParams({ range, ...(viewBounds ?? {}) })}`}
-          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-800"
-        >
-          {tx('CSV herunterladen')}
-        </a>
+        <ExportButton
+          devices={devices.map((d) => ({
+            id: d.id,
+            kind: 'direct',
+            name: `Biolingo ${d.hardware_id?.slice(-5).replace(':', '') || d.id.slice(0, 8)}`,
+          }))}
+          initialKey={`direct:${device.id}`}
+          initialBounds={viewBounds ?? undefined}
+        />
       </div>
-      <div className="my-4 flex flex-wrap gap-2" aria-label={tx('Zeitraum')}>
-        <button
-          type="button"
-          aria-pressed={false}
-          onClick={() => setIsLive(true)}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600"
-        >
-          {tx('Live')}
-        </button>
-        {ranges.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={range === value}
-            onClick={() => setRange(value)}
-            className={`rounded-lg px-3 py-2 text-sm ${range === value ? 'bg-emerald-700 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}
-          >
-            {tx(label)}
-          </button>
-        ))}
-      </div>
-      {error && (
-        <div role="alert" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          {error}
-          <button type="button" onClick={() => setRetry((n) => n + 1)} className="ml-2 underline">
-            {tx('Erneut laden')}
-          </button>
-        </div>
-      )}
-      {loading ? (
-        <p role="status" className="py-8 text-sm text-gray-500">
-          {tx('Messwerte werden geladen …')}
-        </p>
-      ) : points === 0 ? (
-        <p role="status" className="py-8 text-sm text-gray-500">
-          {device.last_seen
-            ? tx(
-                'In diesem Zeitraum sind noch keine aufbereiteten Messwerte vorhanden. Neue Daten erscheinen nach wenigen Sekunden; ältere Messungen findest du über einen längeren Zeitraum.'
-              )
-            : tx(
-                'Der Sensor ist verbunden. Sobald erste Messwerte eintreffen, erscheint hier der Verlauf.'
-              )}
-        </p>
+      {isLive ? (
+        <DirectLiveView
+          deviceId={device.id}
+          onHistory={() => setIsLive(false)}
+          showHistoryButton={false}
+        />
       ) : (
         <>
-          {latest && (
-            <p className="mb-3 text-xs text-gray-500">
-              {tx('Letzter Messpunkt:')}
-              {formatCaptureTime(latest.timestamp, tx.locale)}
-            </p>
+          {error && (
+            <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              {error}{' '}
+              <button type="button" onClick={() => setRetry((n) => n + 1)} className="underline">
+                {tx('Erneut laden')}
+              </button>
+            </div>
           )}
-          {series.map((item) => (
-            <section
-              key={item.kind}
-              className="mb-4"
-              aria-label={tx('Signal {value0}', { value0: item.kind })}
-            >
-              {series.length > 1 && (
-                <h4 className="mb-2 text-sm font-medium">
-                  {tx('Kanal')} {item.kind.split('ch')[1]}
-                </h4>
+          {loading ? (
+            <p role="status" className="py-8 text-sm text-gray-500">
+              {tx('Messwerte werden geladen …')}
+            </p>
+          ) : !series.some((item) => item.data.length) ? (
+            error ? null : (
+              <p role="status" className="py-8 text-sm text-gray-500">
+                {tx('Keine Messdaten für diesen Zeitraum vorhanden')}
+              </p>
+            )
+          ) : (
+            series.map((item) => (
+              <section key={item.kind} aria-label={tx('Signal {value0}', { value0: item.kind })}>
+                {series.length > 1 && (
+                  <h3 className="mb-2 text-sm font-medium">
+                    {tx('Kanal')} {item.kind.split('ch')[1]}
+                  </h3>
+                )}
+                {item.analytics_scope === 'comparison' && (
+                  <p className="text-xs text-amber-800">
+                    {tx('DUAL-Vergleichsmessung: separat von Gateway-Werten dargestellt.')}
+                  </p>
+                )}
+                <SignalChart
+                  series={item}
+                  color="#10b981"
+                  unit={item.unit}
+                  formatTick={(stamp) =>
+                    new Date(stamp).toLocaleTimeString(tx.locale, {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  }
+                />
+              </section>
+            ))
+          )}
+          <details className="text-xs text-gray-500">
+            <summary className="cursor-pointer">{tx('Technische Details')}</summary>
+            <p className="mt-2">{tx('Aktualisiert sich alle zehn Sekunden.')}</p>
+            <p>
+              {tx(
+                'Die angegebene Auflösung gilt für die Übersicht. Mittelwert, Ausschläge, RMS und Datenabdeckung bleiben bei der Verdichtung erhalten. Die Originalaufnahmen behalten sämtliche empfangenen Messwerte.'
               )}
-              {item.analytics_scope === 'comparison' && (
-                <p className="mb-2 text-xs text-amber-800">
-                  {tx('DUAL-Vergleichsmessung: separat von Gateway-Werten dargestellt.')}
-                </p>
-              )}
-              <SignalChart
-                series={item}
-                color="#10b981"
-                unit={item.unit}
-                formatTick={(stamp) =>
-                  new Date(stamp).toLocaleString(
-                    tx.locale,
-                    range === '5m' || range === '1h'
-                      ? { hour: '2-digit', minute: '2-digit' }
-                      : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
-                  )
-                }
-              />
-            </section>
-          ))}
-          <p className="text-xs leading-relaxed text-gray-500">
-            {tx(
-              'Die angegebene Auflösung gilt für die Übersicht. Mittelwert, Ausschläge, RMS und Datenabdeckung bleiben bei der Verdichtung erhalten. Die Originalaufnahmen behalten sämtliche empfangenen Messwerte.'
-            )}
-          </p>
+            </p>
+            <p>{tx('Ältere Messungen und Originalaufnahmen findest du unter Exportieren.')}</p>
+          </details>
         </>
       )}
-      <details className="mt-5 border-t border-emerald-100 pt-4">
-        <summary className="cursor-pointer text-sm font-medium text-emerald-800">
-          {tx('Originalaufnahmen · WAV (')}
-          {recordings.length}
-          {recordings.length === 100 ? '+' : ''})
-        </summary>
-        <p className="my-3 text-xs text-gray-500">
-          {tx(
-            'Aufnahmen entstehen automatisch nach Abschluss eines Zeitfensters. Bei laufender Übertragung dauert dies bis zu zehn Minuten. Angezeigt werden die neuesten 100 Dateien im gewählten Zeitraum.'
-          )}
-        </p>
-        {recordings.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            {tx('Noch keine abgeschlossene Aufnahme in diesem Zeitraum.')}
-          </p>
-        ) : (
-          <ul className="max-h-64 divide-y divide-gray-100 overflow-auto">
-            {recordings.map((file) => (
-              <li
-                key={`${file.segment_id}-${file.revision}-${file.run}`}
-                className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
-              >
-                <div>
-                  {formatCaptureTime(file.started_at, tx.locale)}{' '}
-                  <span className="text-gray-500">
-                    · {captureTimeZone()} · {Math.round(file.duration_seconds)} {tx('s ·')}{' '}
-                    {file.sample_rate} {tx('Hz')}
-                    <RecordingCompletenessBadge completeness={nominalCompleteness(file, true)} />
-                  </span>
-                  <RecordingTimeDetails time={file.time_info} />
-                </div>
-                <a
-                  className="font-medium text-emerald-800 underline"
-                  href={`${base}/wav/${file.segment_id}/${file.revision}/${file.run}`}
-                >
-                  {tx('WAV herunterladen')}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </details>
     </div>
   );
 }
@@ -309,9 +228,9 @@ export function useDirectDevices(enabled = true) {
           setAvailable(true);
           setError(false);
         }
-      } catch {
+      } catch (failure) {
         if (active) {
-          setDevices([]);
+          if (shouldClearCachedData(failure)) setDevices([]);
           setError(true);
         }
       } finally {
@@ -341,8 +260,10 @@ export default function DirectSensorsPanel({
     if (!available || error) return;
     const valid = selected && devices.some((device) => device.id === selected) ? selected : null;
     if (selected !== valid) setSelected(valid);
-    replaceViewValues({ direct: valid });
-  }, [available, error, devices, selected]);
+    if (!feed || valid || devices.some((device) => device.id === readViewValue('direct'))) {
+      replaceViewValues({ direct: valid });
+    }
+  }, [available, error, devices, selected, feed]);
   if (!available)
     return error ? (
       <p role="status" className="text-sm text-amber-800">
@@ -378,7 +299,7 @@ export default function DirectSensorsPanel({
             setSelected(selected === device.id ? null : device.id);
           }}
         >
-          <DirectMeasurements device={device} />
+          <DirectMeasurements device={device} devices={devices} />
         </SensorCard>
       ))}
     </div>

@@ -53,8 +53,6 @@ export default function CaptureTimeSummary({ series }: { series: SensorDataRespo
           {tx('Aufnahmezeit ungesichert: Zeitanker fehlt oder ist unvollständig.')}
         </p>
       )}
-      {qualified && <p>{tx('Zeitanker und nominelle Abtastrate')}</p>}
-      <p>{tx('Zeitgenauigkeit nicht unabhängig geprüft.')}</p>
       {time?.ongoing && <p role="status">{tx('Aufnahme läuft')}</p>}
       {time?.coverage_status === 'incomplete' && (
         <p role="status" className="text-amber-800">
@@ -66,20 +64,25 @@ export default function CaptureTimeSummary({ series }: { series: SensorDataRespo
           {tx('Überlappende Zeitbereiche: Abdeckung ungeprüft.')}
         </p>
       )}
-      {coverage !== undefined && coverage !== null ? (
-        <p>
-          {tx('Datenabdeckung der Übersicht: {value0} %', {
-            value0: (coverage * 100).toLocaleString(tx.locale, { maximumFractionDigits: 1 }),
-          })}
-        </p>
-      ) : (
-        <p>{tx('Datenabdeckung ungeprüft')}</p>
-      )}
-      {time?.gap_count !== undefined && time.gap_count > 0 && (
-        <p>{tx('Fehlende Zeitbereiche: {value0}', { value0: time.gap_count })}</p>
-      )}
-      <p>{tx('Die Abdeckung der Übersicht bestätigt keine vollständige Rohaufzeichnung.')}</p>
-      <p>{tx('Empfangszeit steht separat im Gerätestatus.')}</p>
+      <details className="text-xs text-gray-500">
+        <summary className="cursor-pointer">{tx('Technische Details')}</summary>
+        {qualified && <p>{tx('Zeitanker und nominelle Abtastrate')}</p>}
+        <p>{tx('Zeitgenauigkeit nicht unabhängig geprüft.')}</p>
+        {coverage !== undefined && coverage !== null ? (
+          <p>
+            {tx('Datenabdeckung der Übersicht: {value0} %', {
+              value0: (coverage * 100).toLocaleString(tx.locale, { maximumFractionDigits: 1 }),
+            })}
+          </p>
+        ) : (
+          <p>{tx('Datenabdeckung ungeprüft')}</p>
+        )}
+        {time?.gap_count !== undefined && time.gap_count > 0 && (
+          <p>{tx('Fehlende Zeitbereiche: {value0}', { value0: time.gap_count })}</p>
+        )}
+        <p>{tx('Die Abdeckung der Übersicht bestätigt keine vollständige Rohaufzeichnung.')}</p>
+        <p>{tx('Empfangszeit steht separat im Gerätestatus.')}</p>{' '}
+      </details>
     </section>
   );
 }
