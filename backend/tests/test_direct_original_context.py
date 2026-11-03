@@ -203,21 +203,12 @@ def test_capture_digest_change_fails_before_source_get(synthetic):
 
 def test_independent_detached_reconstruction_uses_only_three_archived_wavs(tmp_path, monkeypatch):
     import copy
-    import importlib.util
 
     from sqlalchemy import select
 
     from app.direct.models import Revision, Segment
-
-    project = Path(__file__).resolve().parents[4]
-    fixture_root = project / "outputs/greenmind-approved-direct-original-controller-20261101"
-    monkeypatch.syspath_prepend(str(fixture_root))
-    spec = importlib.util.spec_from_file_location(
-        "direct_native_fixture", fixture_root / "test_derived_reference.py"
-    )
-    fixture = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fixture)
-    import derived_reference
+    from tests.fixtures import direct_derived_reference as derived_reference
+    from tests.fixtures import direct_original_reference as fixture
 
     engine, db, source_rows, contexts, waves, _statements = fixture.fixture()
     try:
@@ -320,7 +311,6 @@ def test_independent_readback_authenticates_every_part_without_source_fallback(
     tmp_path, monkeypatch
 ):
     import copy
-    import importlib.util
     from types import SimpleNamespace
 
     from sqlalchemy import select
@@ -328,16 +318,8 @@ def test_independent_readback_authenticates_every_part_without_source_fallback(
     from app.direct.models import Revision, Segment
     from app.raw_archive.read_only_box import CatalogReadOnlyBox
     from app.tiered_archive import scientific_registry_import
-
-    project = Path(__file__).resolve().parents[4]
-    fixture_root = project / "outputs/greenmind-approved-direct-original-controller-20261101"
-    monkeypatch.syspath_prepend(str(fixture_root))
-    spec = importlib.util.spec_from_file_location(
-        "direct_readback_fixture", fixture_root / "test_derived_reference.py"
-    )
-    fixture = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fixture)
-    import derived_reference
+    from tests.fixtures import direct_derived_reference as derived_reference
+    from tests.fixtures import direct_original_reference as fixture
 
     engine, db, source_rows, contexts, waves, _statements = fixture.fixture()
     try:

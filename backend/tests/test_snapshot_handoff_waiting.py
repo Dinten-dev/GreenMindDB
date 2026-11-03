@@ -1,6 +1,7 @@
 """The worker announces readiness only under both live lease callbacks."""
 
 import json
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,15 @@ def test_ready_marker_is_pid_bound_and_existing_pointer_is_reusable(tmp_path, mo
         @property
         def st_uid(self):
             return 0
+
+        @property
+        def st_mode(self):
+            # Simulate the private root ancestry on Linux as well as macOS.
+            return (
+                self.inner.st_mode & ~0o022
+                if stat.S_ISDIR(self.inner.st_mode)
+                else self.inner.st_mode
+            )
 
         def __getattr__(self, name):
             return getattr(self.inner, name)

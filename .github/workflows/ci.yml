@@ -50,6 +50,12 @@ jobs:
       - name: Check Python formatting
         run: python -m ruff format --check app/ tests/
 
+      - name: Verify portable independent archive fixtures
+        run: python -m pytest tests/raw_archive/test_scientific_reconcile.py tests/test_direct_original_context.py tests/test_snapshot_handoff_waiting.py -v --tb=short
+        env:
+          SKIP_DOCKER_TESTS: "1"
+          JWT_SECRET_KEY: "ci-test-secret-key-that-is-at-least-32-chars"
+
       - name: Run tests with coverage
         # The maintained suite exceeds 2,800 tests; 10 minutes stopped at 85%.
         timeout-minutes: 15
