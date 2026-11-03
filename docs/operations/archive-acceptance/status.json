@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-archive-acceptance.v1",
-  "updated_utc": "2026-11-03T18:48:31.399367+00:00",
+  "updated_utc": "2026-11-03T19:06:30.166227+00:00",
   "steps": {
     "1": {
       "status": "inventory_complete",
@@ -23,6 +23,37 @@
       "private_matrix_sha256": "9a2a06dacd91159d285fc0c1881bbb6b778d3126b1bc48d06e214169596a60a2",
       "production_policy_changed": false,
       "effective_provider_permissions_retested": false
+    },
+    "3": {
+      "status": "partial_resource_acceptance_blocked",
+      "accepted": false,
+      "direct_quota_bytes": 12884901888,
+      "offline_restore_checks_passed": 40,
+      "native_restore_attempts": [
+        {
+          "attempt": 1,
+          "status": "known_source_admission_pause",
+          "passed": false,
+          "original_owned_wait": 2,
+          "all_owned_resource_cleanup_proven": true,
+          "result_sha256": "44cc7ac7ae2a11cd753a01285f97c126edccd7d49e901723e1f99346353d9150"
+        },
+        {
+          "attempt": 2,
+          "status": "known_bounded_prototype_failure",
+          "passed": false,
+          "original_owned_wait": 2,
+          "all_owned_resource_cleanup_proven": true,
+          "result_sha256": "025135ca408b3915e9db424dc5ced3fc81abd1c7865052fb99ab9e5b5079dfeb"
+        }
+      ],
+      "all_owned_resources_ended": true,
+      "fresh_versions_complete": false,
+      "seven_day_reserve_accepted": false,
+      "all_planned_jobs_fit_proven": false,
+      "private_acceptance_sha256": "032b01c549d2b9903a37f900cf47195f38ca11a5ec2e70ff0960fa995e92e482",
+      "private_capacity_model_sha256": "1fa6a8372a42733ac8e8f998500e45e8f0f4d4624c14fcb7326b5a7273d755d4",
+      "limits_changed": false
     }
   },
   "production_ready": false,
@@ -113,6 +144,118 @@
       "input_sha256": "cbbac3f7df24ea726ee052a86a5d3a117d0034bcc8ba0601747157d95a414ba6",
       "output_sha256": "3cc3ac9b0c478b53aec3ab65f89bba6019619f0ab3e34d172b61e25f6c5750e4",
       "exit": 0
+    },
+    {
+      "id": "step3-archive-capacity",
+      "input_sha256": "0f7a3b7f3ea990c79e27c7419f39640f9663b175c33753813f6775804355fd15",
+      "output_sha256": "0d377df630d4cf16d286e24844cae7a16b6c10eb2530a431c04b5a1dbb2311c0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-archive-inventory",
+      "input_sha256": "894be50e4dd9f8e64ea35f74dae719d020c0b8f52feb04e50789a8fa5896e6ae",
+      "output_sha256": "2f3d32065fbaef5fc44a9034b0b8994bae78b9775bc403015880143b28dbfb6b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-direct-quota",
+      "input_sha256": "53dec1b524ea861c3d041b7a9a32ceff39be549292bbe20f024a290961ca17f9",
+      "output_sha256": "aea12fa0204f578501dd685d542ee005fc2a5e5618370a22a5b94d56dd5fc751",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-direct-usage-cache",
+      "input_sha256": "27acc2196408bc70a4059b90af8724174ea1fabf057e6675b585f1bd35603894",
+      "output_sha256": "488cfd38554fe184802ab9673816767815c59d128e55451dd42c8a82859157dd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-direct-versions",
+      "input_sha256": "9b57f44d669df1fbebd4c02ea9c1f3c9f904cf413a0b2e088fb686f9aad07cf5",
+      "output_sha256": "288dea34601656e542aa2a560afa931b5c7a29a69ca8c04ccc0c56c619dd15cb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 2,
+      "accepted_as_success": false
+    },
+    {
+      "id": "step3-direct-versions-02",
+      "input_sha256": "9b57f44d669df1fbebd4c02ea9c1f3c9f904cf413a0b2e088fb686f9aad07cf5",
+      "output_sha256": "c456d4fc433765063ab2c1d0dad68045445c255be7d7298e2f3d34ae68b73c49",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 2,
+      "accepted_as_success": false
+    },
+    {
+      "id": "step3-gateway-usage-cache",
+      "input_sha256": "a6e53f7a1eccd85408cffbad1ddf78f4c33468a2d44852cfb2f7e9585870a44e",
+      "output_sha256": "810bab0a685d8e5ee188df0280adc66220e537712101d6ca47a3029f438e22f7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 2,
+      "accepted_as_success": false
+    },
+    {
+      "id": "step3-owned-probe-end",
+      "input_sha256": "77dfcdc972b68f1cd4dc19dbb383728b9533f0a75b9e1ca585a7baccdd4c3cd5",
+      "output_sha256": "120306965b10cb69d32c41c4a4c3d412fb33e67d4a03d7dbae01f601c753395e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-owned-probe-end-final",
+      "input_sha256": "5bbecdc3684eb7744e6fafe5e4628432c96789e03ba75f8c4ffa19ce1898b84b",
+      "output_sha256": "9a1c85f4dd3bae276feefb7ef23a1003f7ad9c49272507cd5fd5886d04683a4c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-provider-capacity",
+      "input_sha256": "37d3e5b16b1c91cf21100eb8fd8d465092b29b8f532a92e3ba2a0e010d8093c1",
+      "output_sha256": "17cb804dc648fe5a8a118535209eeca6f6f14b2f2c5bec308335daf55d93cfea",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-source-capacity",
+      "input_sha256": "0f7a3b7f3ea990c79e27c7419f39640f9663b175c33753813f6775804355fd15",
+      "output_sha256": "3c06c539adbccaca640c3ef797ff9be42ec22ac0015875d4050fbff5db734caa",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-source-inventory",
+      "input_sha256": "894be50e4dd9f8e64ea35f74dae719d020c0b8f52feb04e50789a8fa5896e6ae",
+      "output_sha256": "d926aa8623713957737de0cedc8db1c8e7ba2a369dd7cd4e2a6ea14a008d26fb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-source-pressure",
+      "input_sha256": "a422e2c67fe80587d6b9c87103f6b916a66dbcad4a3e9eea77045326473ee4a5",
+      "output_sha256": "d32f658685578ef49745692c43d2ea75895494f9617269b76f723e3e2e76794a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
+    },
+    {
+      "id": "step3-start-window",
+      "input_sha256": "fc66fa77d1a03ffc8bdf3f912174a8b9a04569e4e98b6262dafb8f5a69b2a273",
+      "output_sha256": "687a76f54eaf178eeaa775a32001d622b1d94434effcc6097dabe1de2bf6df01",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "accepted_as_success": true
     }
   ],
   "publication_scope": "Sanitized findings and evidence digests; private host inventories, credentials and raw captures remain with the operator."
