@@ -1015,7 +1015,13 @@
     "m0874": "Retrouvez les anciennes mesures et les enregistrements originaux sous Exporter.",
     "m0875": "La saturation est un problème de mesure et ne permet pas de conclure à un stress de la plante.",
     "m0876": "Mesure de saturation jusqu’à : {value0}",
-    "m0877": "Cette passerelle ne fournit ni pourcentage de saturation ni repères en direct. L’aperçu rapide est disponible sur les capteurs Direct compatibles."
+    "m0877": "Cette passerelle ne fournit ni pourcentage de saturation ni repères en direct. L’aperçu rapide est disponible sur les capteurs Direct compatibles.",
+    "m0878": "{amount} de réserve de sécurité",
+    "m0879": "État à {time}",
+    "m0880": "{used} utilisés sur {total}",
+    "m0881": "La copie sera disponible après le déploiement en production.",
+    "m0882": "Le service de copie en production n’est pas encore connecté à l’administration.",
+    "m0883": "Service connecté."
   },
   "Public": {
     "p0001": "À propos",

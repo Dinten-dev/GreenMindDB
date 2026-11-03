@@ -1015,7 +1015,13 @@
     "m0874": "Ältere Messungen und Originalaufnahmen findest du unter Exportieren.",
     "m0875": "Übersteuerung ist ein Messproblem und keine Aussage über Pflanzenstress.",
     "m0876": "Rail-Messung bis: {value0}",
-    "m0877": "Dieses Gateway liefert keine Rail-Prozentwerte oder Live-Markierungen. Die schnelle Vorschau ist bei geeigneten Direct-Sensoren verfügbar."
+    "m0877": "Dieses Gateway liefert keine Rail-Prozentwerte oder Live-Markierungen. Die schnelle Vorschau ist bei geeigneten Direct-Sensoren verfügbar.",
+    "m0878": "{amount} Sicherheitsreserve",
+    "m0879": "Stand {time}",
+    "m0880": "{used} von {total} belegt",
+    "m0881": "Kopieren wird erst nach dem Production-Rollout aktiviert.",
+    "m0882": "Der Kopierdienst ist auf Production noch nicht mit der Administration verbunden.",
+    "m0883": "Service verbunden."
   },
   "Public": {
     "p0001": "Über uns",

@@ -282,9 +282,15 @@ def test_staged_publication_preserves_frozen_cipher_until_final_typed(tmp_path, 
     events = []
     original_typed = science._typed
     original_put, original_get = args["publisher"].publish, args["verifier"].download
-    monkeypatch.setattr(science, "_typed", lambda *a: (events.append("typed"), original_typed(*a))[1])
-    monkeypatch.setattr(args["publisher"], "publish", lambda *a: (events.append("put"), original_put(*a))[1])
-    monkeypatch.setattr(args["verifier"], "download", lambda *a: (events.append("get"), original_get(*a))[1])
+    monkeypatch.setattr(
+        science, "_typed", lambda *a: (events.append("typed"), original_typed(*a))[1]
+    )
+    monkeypatch.setattr(
+        args["publisher"], "publish", lambda *a: (events.append("put"), original_put(*a))[1]
+    )
+    monkeypatch.setattr(
+        args["verifier"], "download", lambda *a: (events.append("get"), original_get(*a))[1]
+    )
     args["stage"] = "prepare"
     prepared = run(args)
     assert events == ["typed"] and not objects
@@ -297,11 +303,16 @@ def test_staged_publication_preserves_frozen_cipher_until_final_typed(tmp_path, 
     args["stage"] = "transfer"
     transferred = run(args)
     assert events == ["typed", "get", "put", "get"]
-    assert transferred["status"] == "CIPHERTEXT_READBACK_VERIFIED" and not transferred["typed_final_verified"]
+    assert (
+        transferred["status"] == "CIPHERTEXT_READBACK_VERIFIED"
+        and not transferred["typed_final_verified"]
+    )
     assert not transferred["writer_allowed"] and not transferred["archive_accepted"]
     assert db.execute("SELECT state,reference FROM science_v3_part").fetchone() == row
     assert sealed[0].read_bytes() == frozen and list(objects.values()) == [frozen]
-    assert not list(args["workdir"].glob("*.returned")) and not list(args["workdir"].glob("*.opened"))
+    assert not list(args["workdir"].glob("*.returned")) and not list(
+        args["workdir"].glob("*.opened")
+    )
     args["stage"] = "verify"
     verified = run(args)
     assert events == ["typed", "get", "put", "get", "get", "typed"]
@@ -321,7 +332,9 @@ def test_staged_unknown_transfer_reconciles_without_reencrypting(tmp_path):
         run(args)
     frozen = dict(objects)
     assert run(args)["reference"] == first["reference"] and objects == frozen
-    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == ("prepared",)
+    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == (
+        "prepared",
+    )
     args["stage"] = "verify"
     assert run(args)["reference"] == first["reference"]
 
@@ -334,14 +347,18 @@ def test_stages_never_publish_on_missing_or_tampered_cipher(tmp_path, monkeypatc
     args["stage"] = "prepare"
     run(args)
     args["stage"] = "verify"
-    monkeypatch.setattr(args["publisher"], "publish", lambda *a: pytest.fail("verify must not publish"))
+    monkeypatch.setattr(
+        args["publisher"], "publish", lambda *a: pytest.fail("verify must not publish")
+    )
     with pytest.raises(ArchiveBlocked, match="cannot publish"):
         run(args)
     assert not objects
     list(args["workdir"].glob("*.sealed"))[0].unlink()
     with pytest.raises(ArchiveBlocked, match="Frozen ciphertext"):
         run(args)
-    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == ("prepared",)
+    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == (
+        "prepared",
+    )
 
 
 def test_staged_final_type_or_wrong_key_stays_prepared(tmp_path, monkeypatch):
@@ -357,10 +374,14 @@ def test_staged_final_type_or_wrong_key_stays_prepared(tmp_path, monkeypatch):
     run(args)
     args["stage"] = "verify"
     original = science._typed
-    monkeypatch.setattr(science, "_typed", lambda *_: (_ for _ in ()).throw(ArchiveBlocked("typed failure")))
+    monkeypatch.setattr(
+        science, "_typed", lambda *_: (_ for _ in ()).throw(ArchiveBlocked("typed failure"))
+    )
     with pytest.raises(ArchiveBlocked, match="typed failure"):
         run(args)
-    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == ("prepared",)
+    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == (
+        "prepared",
+    )
     monkeypatch.setattr(science, "_typed", original)
     assert run(args)["typed_final_verified"]
 
@@ -374,11 +395,13 @@ def test_staged_scope_change_before_commit_rolls_back(tmp_path):
     args["stage"] = "verify"
     db = args["ledger"].db
     checks = [0]
+
     def change_scope():
         checks[0] += 1
         if checks[0] == 4:
             db.execute("UPDATE science_v3_scope SET state='needs_reconcile'")
             db.commit()
+
     args["checkpoint"] = change_scope
     with pytest.raises(ArchiveBlocked):
         run(args)
@@ -402,7 +425,11 @@ def test_staged_api_requires_real_bound_authority(tmp_path):
     args["stage"] = "prepare"
     with pytest.raises(ArchiveBlocked, match="Bound archive jobs lock required"):
         science.publish_part(**args)
-    assert not args["ledger"].db.execute("SELECT name FROM sqlite_master WHERE name='science_v3_part'").fetchone()
+    assert (
+        not args["ledger"]
+        .db.execute("SELECT name FROM sqlite_master WHERE name='science_v3_part'")
+        .fetchone()
+    )
 
 
 def test_invalid_stage_never_touches_journal(tmp_path):
@@ -427,10 +454,12 @@ def test_staged_part_limit_checked_before_copy_or_network(tmp_path, monkeypatch)
     args, objects = setup_job(tmp_path)
     args["stage"] = "prepare"
     real = parts.load_index
+
     def too_large(*a, **kw):
         proof, index = real(*a, **kw)
         index["parts"][0]["bytes"] = 16 * 1024**2 + 1
         return proof, index
+
     monkeypatch.setattr(parts, "load_index", too_large)
     with pytest.raises(ArchiveBlocked, match="16 MiB"):
         run(args)

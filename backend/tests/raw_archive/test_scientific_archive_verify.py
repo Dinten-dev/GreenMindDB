@@ -1,4 +1,5 @@
 """Bounded offline Science readback against actual AES and native row parsing."""
+
 import os
 import sqlite3
 from pathlib import Path
@@ -29,11 +30,22 @@ class ReadOnly:
 
 
 def setup(tmp_path, monkeypatch):
-    with patch.object(fixtures, "manifest", lambda path, _: manifest(path, {"wav_feature": [row(62, first=bytes(range(16)))]})):
+    with patch.object(
+        fixtures,
+        "manifest",
+        lambda path, _: manifest(path, {"wav_feature": [row(62, first=bytes(range(16)))]}),
+    ):
         source, objects = fixtures.setup_job(tmp_path)
     source["stage"] = "prepare"
-    with patch.object(science.storage, "disk_reserve"), patch.object(science, "_stage_authority"), \
-         patch.object(science.parts.shutil, "disk_usage", return_value=SimpleNamespace(free=20 * 1024**3, total=100 * 1024**3)):
+    with (
+        patch.object(science.storage, "disk_reserve"),
+        patch.object(science, "_stage_authority"),
+        patch.object(
+            science.parts.shutil,
+            "disk_usage",
+            return_value=SimpleNamespace(free=20 * 1024**3, total=100 * 1024**3),
+        ),
+    ):
         prepared = science.publish_part(**source)
         source["stage"] = "transfer"
         science.publish_part(**source)
@@ -53,14 +65,27 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(verify, "_resources", lambda *_: None)
     monkeypatch.setattr(verify, "_root_directory", lambda p: Path(p))
     monkeypatch.setattr(verify, "_root_file", lambda p, _modes: Path(p).lstat())
-    monkeypatch.setattr(verify.parts, "materialize_part", lambda *_a, **_k: pytest.fail("Source accessed"))
-    kwargs = dict(metadata=source["source"], capture_sha256=source["capture_sha256"],
-                  index_file=source["index_file"], index_sha256=source["index_sha256"], position=0,
-                  workdir=source["workdir"], key=source["key"], box=box,
-                  ledger=SimpleNamespace(root=root, db=db, read_only=False), key_prefix=source["key_prefix"],
-                  expected_identity="test-destination", expected_epoch="1" * 32,
-                  expected_frame_sha256="3" * 64,
-                  archive_machine_sha256="4" * 64, authority_root=root, enable_archive_only=True)
+    monkeypatch.setattr(
+        verify.parts, "materialize_part", lambda *_a, **_k: pytest.fail("Source accessed")
+    )
+    kwargs = dict(
+        metadata=source["source"],
+        capture_sha256=source["capture_sha256"],
+        index_file=source["index_file"],
+        index_sha256=source["index_sha256"],
+        position=0,
+        workdir=source["workdir"],
+        key=source["key"],
+        box=box,
+        ledger=SimpleNamespace(root=root, db=db, read_only=False),
+        key_prefix=source["key_prefix"],
+        expected_identity="test-destination",
+        expected_epoch="1" * 32,
+        expected_frame_sha256="3" * 64,
+        archive_machine_sha256="4" * 64,
+        authority_root=root,
+        enable_archive_only=True,
+    )
     return kwargs, prepared, objects
 
 
@@ -71,7 +96,10 @@ def test_exact_typed_readback_is_idempotent_and_source_independent(tmp_path, mon
     assert result["reference"] == old["reference"] and result["typed_final_verified"] is True
     assert result["archive_accepted"] is result["writer_allowed"] is False
     assert result["native_restore_verified"] is result["whole_inventory_authenticated"] is False
-    assert result["archive_only_verify"] is True and result["source_access"] is result["fresh_source_proof"] is False
+    assert (
+        result["archive_only_verify"] is True
+        and result["source_access"] is result["fresh_source_proof"] is False
+    )
     assert args["box"].reads == 1 and objects == before
     assert verify.verify(**args)["reference"] == result["reference"]
     with pytest.raises(ArchiveBlocked):
@@ -86,7 +114,21 @@ def test_archive_only_requires_explicit_switch(tmp_path, monkeypatch):
     assert args["box"].reads == 0
 
 
-@pytest.mark.parametrize("case", ["frame", "epoch", "destination", "scope", "lock", "cipher", "key", "metadata", "provider", "pause"])
+@pytest.mark.parametrize(
+    "case",
+    [
+        "frame",
+        "epoch",
+        "destination",
+        "scope",
+        "lock",
+        "cipher",
+        "key",
+        "metadata",
+        "provider",
+        "pause",
+    ],
+)
 def test_evidence_and_resource_fail_closed(tmp_path, monkeypatch, case):
     args, old, objects = setup(tmp_path, monkeypatch)
     if case == "frame":
@@ -99,7 +141,11 @@ def test_evidence_and_resource_fail_closed(tmp_path, monkeypatch, case):
         args["ledger"].db.execute("UPDATE science_v3_scope SET state='needs_reconcile'")
         args["ledger"].db.commit()
     elif case == "lock":
-        monkeypatch.setattr(verify.coordination, "bound_job_lock", lambda: (_ for _ in ()).throw(ArchiveBlocked("lock")))
+        monkeypatch.setattr(
+            verify.coordination,
+            "bound_job_lock",
+            lambda: (_ for _ in ()).throw(ArchiveBlocked("lock")),
+        )
     elif case == "cipher":
         key = old["reference"]["key"]
         objects[key] = b"x" * len(objects[key])
@@ -113,7 +159,9 @@ def test_evidence_and_resource_fail_closed(tmp_path, monkeypatch, case):
         args["box"] = object()
     with pytest.raises((ArchiveBlocked, ValueError)):
         verify.verify(**args)
-    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == ("prepared",)
+    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == (
+        "prepared",
+    )
 
 
 def test_no_hardlink_or_symlink_derivative(tmp_path):
@@ -131,14 +179,18 @@ def test_no_hardlink_or_symlink_derivative(tmp_path):
 def test_loss_of_archive_lock_during_commit_rolls_back(tmp_path, monkeypatch):
     args, _, _ = setup(tmp_path, monkeypatch)
     calls = []
+
     def lock():
         calls.append(True)
         if len(calls) == 5:
             raise ArchiveBlocked("archive lock lost")
+
     monkeypatch.setattr(verify.coordination, "bound_job_lock", lock)
     with pytest.raises(ArchiveBlocked, match="archive lock lost"):
         verify.verify(**args)
-    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == ("prepared",)
+    assert args["ledger"].db.execute("SELECT state FROM science_v3_part").fetchone() == (
+        "prepared",
+    )
 
 
 def test_real_resource_policy_requires_root_production_cgroup(tmp_path, monkeypatch):
@@ -146,11 +198,13 @@ def test_real_resource_policy_requires_root_production_cgroup(tmp_path, monkeypa
     import time
 
     machine = b"archive-test-machine\n"
+
     def write(path, value):
         target = tmp_path / path.lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(value if isinstance(value, bytes) else value.encode())
         return target
+
     write("/etc/machine-id", machine)
     unit = "gm-science-seal-123456789abc.service"
     write("/proc/self/cgroup", "0::/system.slice/" + unit)
@@ -194,13 +248,29 @@ def test_equivalent_to_existing_science_verify_kernel(tmp_path, monkeypatch):
     legacy_db = sqlite3.connect(":memory:")
     args["ledger"].db.backup(legacy_db)
     publisher, reader = fixtures.Store(objects), fixtures.Store(objects)
-    legacy = dict(source=args["metadata"], capture_sha256=args["capture_sha256"],
-                  index_file=args["index_file"], index_sha256=args["index_sha256"], position=0,
-                  workdir=legacy_work, key=args["key"], publisher=publisher, verifier=reader,
-                  ledger=SimpleNamespace(db=legacy_db, read_only=False), key_prefix=args["key_prefix"],
-                  checkpoint=lambda: None, received_part=tmp_path / "absent-source", stage="verify")
+    legacy = dict(
+        source=args["metadata"],
+        capture_sha256=args["capture_sha256"],
+        index_file=args["index_file"],
+        index_sha256=args["index_sha256"],
+        position=0,
+        workdir=legacy_work,
+        key=args["key"],
+        publisher=publisher,
+        verifier=reader,
+        ledger=SimpleNamespace(db=legacy_db, read_only=False),
+        key_prefix=args["key_prefix"],
+        checkpoint=lambda: None,
+        received_part=tmp_path / "absent-source",
+        stage="verify",
+    )
     with patch.object(science, "_stage_authority"):
         expected = science.publish_part(**legacy)
     actual = verify.verify(**args)
-    extra = {"archive_only_verify", "source_access", "fresh_source_proof", "historical_handoff_epoch"}
+    extra = {
+        "archive_only_verify",
+        "source_access",
+        "fresh_source_proof",
+        "historical_handoff_epoch",
+    }
     assert {key: value for key, value in actual.items() if key not in extra} == expected

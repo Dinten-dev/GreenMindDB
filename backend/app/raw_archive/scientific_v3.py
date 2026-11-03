@@ -191,6 +191,7 @@ def _stage_authority(stage):
     if stage != "complete":
         from .coordination import bound_job_lock
         from .remote_lease import require_bound_source_lease
+
         bound_job_lock()
         require_bound_source_lease()
 
@@ -219,7 +220,10 @@ def publish_part(
     A separately reviewed private bridge is required. Never treats this receipt as a
     native restore or a writer approval. Resume uses the exact frozen ciphertext.
     """
-    _need(type(stage) is str and stage in {"prepare", "transfer", "verify", "complete"}, "Invalid V3 publication stage")
+    _need(
+        type(stage) is str and stage in {"prepare", "transfer", "verify", "complete"},
+        "Invalid V3 publication stage",
+    )
     _stage_authority(stage)
     _need(callable(checkpoint) and publisher is not verifier, "Separate verifier required")
     _need(type(key) is bytes and len(key) in (16, 24, 32), "Valid AES key required")
@@ -285,14 +289,20 @@ def publish_part(
                 if entry.name in current:
                     continue
                 info = entry.lstat()
-                _need(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid() and info.st_nlink == 1,
-                      "Unknown V3 work directory entry")
+                _need(
+                    stat.S_ISREG(info.st_mode)
+                    and info.st_uid == os.geteuid()
+                    and info.st_nlink == 1,
+                    "Unknown V3 work directory entry",
+                )
                 other_bytes += info.st_size
                 _need(required + other_bytes <= 96 * 1024**2, "Staged V3 workset exceeds 96 MiB")
             _need(required + other_bytes <= 96 * 1024**2, "Staged V3 workset exceeds 96 MiB")
         storage.disk_reserve(workdir, required)
         if previous is None:
-            _need(stage in {"prepare", "complete"}, "Prepared V3 journal required before this stage")
+            _need(
+                stage in {"prepare", "complete"}, "Prepared V3 journal required before this stage"
+            )
             # No upload can occur before a prepared journal entry exists.
             for path, modes in (
                 (plain, (0o400, 0o600)),
@@ -326,8 +336,10 @@ def publish_part(
             # Prepared is committed before any upload, including uncertain outcomes.
             checkpoint()
             _stage_authority(stage)
-            _need(_archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
-                  "V3 scope changed before prepare commit")
+            _need(
+                _archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
+                "V3 scope changed before prepare commit",
+            )
             with db:
                 db.execute(
                     "INSERT INTO science_v3_part VALUES (?,?,?,?)",
@@ -351,15 +363,22 @@ def publish_part(
             )
             storage.validate_key(ref["key"])
         if stage != "complete":
-            _need(previous is None or previous[1] == "prepared", "Staged V3 part must remain prepared")
+            _need(
+                previous is None or previous[1] == "prepared", "Staged V3 part must remain prepared"
+            )
             try:
                 frozen_info = sealed.lstat()
             except FileNotFoundError:
                 raise ArchiveBlocked("Frozen ciphertext missing or changed") from None
-            _need(stat.S_ISREG(frozen_info.st_mode) and frozen_info.st_uid == os.geteuid()
-                  and frozen_info.st_nlink == 1 and stat.S_IMODE(frozen_info.st_mode) == 0o600
-                  and frozen_info.st_size == ref["bytes"] and checksum(sealed) == ref["sha256"],
-                  "Frozen ciphertext missing or changed")
+            _need(
+                stat.S_ISREG(frozen_info.st_mode)
+                and frozen_info.st_uid == os.geteuid()
+                and frozen_info.st_nlink == 1
+                and stat.S_IMODE(frozen_info.st_mode) == 0o600
+                and frozen_info.st_size == ref["bytes"]
+                and checksum(sealed) == ref["sha256"],
+                "Frozen ciphertext missing or changed",
+            )
             _discard_derivative(plain, (0o400, 0o600))
             _sync_dir(workdir)
         if stage == "transfer":
@@ -382,13 +401,23 @@ def publish_part(
                 _sync_dir(workdir)
             checkpoint()
             _stage_authority(stage)
-            _need(_archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
-                  "V3 scope changed during prepare")
-            return {"stage": "prepare", "status": "PREPARED", "binding": binding, "reference": ref,
-                    "ciphertext_readback_verified": False, "typed_final_verified": False,
-                    "archive_accepted": False, "native_restore_verified": False,
-                    "whole_inventory_authenticated": False, "writer_allowed": False,
-                    "parent_fk_closure_proven": False}
+            _need(
+                _archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
+                "V3 scope changed during prepare",
+            )
+            return {
+                "stage": "prepare",
+                "status": "PREPARED",
+                "binding": binding,
+                "reference": ref,
+                "ciphertext_readback_verified": False,
+                "typed_final_verified": False,
+                "archive_accepted": False,
+                "native_restore_verified": False,
+                "whole_inventory_authenticated": False,
+                "writer_allowed": False,
+                "parent_fk_closure_proven": False,
+            }
         checkpoint()
         # Always use read-only verifier to reconcile the exact content-addressed key.
         _discard_derivative(returned, (0o600, 0o644))
@@ -407,8 +436,10 @@ def publish_part(
             )
             checkpoint()
             _stage_authority(stage)
-            _need(_archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
-                  "V3 scope changed before publication")
+            _need(
+                _archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
+                "V3 scope changed before publication",
+            )
             publisher.publish(ref["key"], sealed)
             _drop_cache(sealed)
             checkpoint()
@@ -427,31 +458,52 @@ def publish_part(
             _sync_dir(workdir)
             checkpoint()
             _stage_authority(stage)
-            _need(_archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
-                  "V3 scope changed during transfer")
-            _need(db.execute("SELECT binding,state,reference FROM science_v3_part WHERE token=?", (token,)).fetchone()
-                  == (_canonical(binding), "prepared", _canonical(ref)), "Prepared V3 journal changed")
-            return {"stage": "transfer", "status": "CIPHERTEXT_READBACK_VERIFIED", "binding": binding,
-                    "reference": ref, "ciphertext_readback_verified": True, "typed_final_verified": False,
-                    "archive_accepted": False, "native_restore_verified": False,
-                    "whole_inventory_authenticated": False, "writer_allowed": False,
-                    "parent_fk_closure_proven": False}
+            _need(
+                _archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
+                "V3 scope changed during transfer",
+            )
+            _need(
+                db.execute(
+                    "SELECT binding,state,reference FROM science_v3_part WHERE token=?", (token,)
+                ).fetchone()
+                == (_canonical(binding), "prepared", _canonical(ref)),
+                "Prepared V3 journal changed",
+            )
+            return {
+                "stage": "transfer",
+                "status": "CIPHERTEXT_READBACK_VERIFIED",
+                "binding": binding,
+                "reference": ref,
+                "ciphertext_readback_verified": True,
+                "typed_final_verified": False,
+                "archive_accepted": False,
+                "native_restore_verified": False,
+                "whole_inventory_authenticated": False,
+                "writer_allowed": False,
+                "parent_fk_closure_proven": False,
+            }
         table = next(x for x in proof["files"] if x["table"] == part["table"])
         _typed(opened, table["columns"], part["rows"], checkpoint)
         _drop_cache(opened)
         checkpoint()
         _stage_authority(stage)
-        _need(_archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
-              "V3 scope changed before verification commit")
+        _need(
+            _archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
+            "V3 scope changed before verification commit",
+        )
         with db:
             expected_state = previous[1] if previous is not None else "prepared"
-            changed = db.execute("UPDATE science_v3_part SET state='verified' WHERE token=? AND binding=? AND state=? AND reference=?",
-                                 (token, _canonical(binding), expected_state, _canonical(ref))).rowcount
+            changed = db.execute(
+                "UPDATE science_v3_part SET state='verified' WHERE token=? AND binding=? AND state=? AND reference=?",
+                (token, _canonical(binding), expected_state, _canonical(ref)),
+            ).rowcount
             _need(changed == 1, "V3 journal changed before verification commit")
             checkpoint()
             _stage_authority(stage)
-            _need(_archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
-                  "V3 scope changed during verification commit")
+            _need(
+                _archive_scope(ledger, capture_sha256, index_sha256, proof["capture_id"]) == epoch,
+                "V3 scope changed during verification commit",
+            )
         # Remove only files created by this job and only after durable readback.
         for path in (plain, sealed, returned, opened):
             if path.exists():
@@ -468,7 +520,12 @@ def publish_part(
             "parent_fk_closure_proven": False,
         }
         if stage == "verify":
-            result.update(stage="verify", status="PART_VERIFIED", typed_final_verified=True, archive_accepted=False)
+            result.update(
+                stage="verify",
+                status="PART_VERIFIED",
+                typed_final_verified=True,
+                archive_accepted=False,
+            )
         return result
     except BlockingIOError as exc:
         raise ArchiveBlocked("V3 work directory busy") from exc

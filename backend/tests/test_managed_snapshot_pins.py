@@ -125,8 +125,12 @@ def test_root_operation_reconciliation_requires_durable_receipt_and_exact_journa
         with pytest.raises(ArchiveBlocked, match="receipt unavailable"):
             reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[empty, empty])
         receipt = {
-            "state": "active", "scope_epoch": EPOCH, "pin_id": PIN,
-            "snapshot_id": 22, "operation_sha256": digest, "owner": OWNER,
+            "state": "active",
+            "scope_epoch": EPOCH,
+            "pin_id": PIN,
+            "snapshot_id": 22,
+            "operation_sha256": digest,
+            "owner": OWNER,
         }
         encoded = json.dumps(receipt, sort_keys=True)
         with ledger.db:
@@ -135,23 +139,35 @@ def test_root_operation_reconciliation_requires_durable_receipt_and_exact_journa
                 (PIN, encoded, hashlib.sha256((encoded + "\n").encode()).hexdigest()),
             )
         operation = {
-            "pin_id": PIN, "snapshot_id": 22, "scope_epoch": EPOCH,
-            "operation_sha256": digest, "owner": OWNER, "state": "active",
+            "pin_id": PIN,
+            "snapshot_id": 22,
+            "scope_epoch": EPOCH,
+            "operation_sha256": digest,
+            "owner": OWNER,
+            "state": "active",
         }
         journal = {"path": "/root/operations", "device": 1, "inode": 2, "operations": [operation]}
-        projection = {k: operation[k] for k in ("pin_id", "snapshot_id", "operation_sha256", "owner", "state")} | {
-            "journal_path": journal["path"], "journal_device": 1, "journal_inode": 2,
+        projection = {
+            k: operation[k] for k in ("pin_id", "snapshot_id", "operation_sha256", "owner", "state")
+        } | {
+            "journal_path": journal["path"],
+            "journal_device": 1,
+            "journal_inode": 2,
         }
         roster = {"root_operation_journals": [journal], "root_operations": [projection]}
         reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
         with pytest.raises(ArchiveBlocked, match="unique issued pin"):
-            reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, roster])
+            reconcile_root_operations(
+                ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, roster]
+            )
         with pytest.raises(ArchiveBlocked, match="lacks matching root operation"):
             reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[empty, empty])
         operation["state"] = "complete"
         roster["root_operations"] = []
         with pytest.raises(ArchiveBlocked, match="lacks matching root operation"):
-            reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
+            reconcile_root_operations(
+                ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty]
+            )
         reconcile_root_operations(
             ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty], terminating_pin=PIN
         )
@@ -163,7 +179,9 @@ def test_root_operation_reconciliation_requires_durable_receipt_and_exact_journa
         operation["state"] = "active"
         roster["root_operations"] = []
         with pytest.raises(ArchiveBlocked, match="projection differs"):
-            reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
+            reconcile_root_operations(
+                ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty]
+            )
 
 
 def test_old_catalog_cannot_hide_newer_current_epoch_operations(subject):
@@ -171,8 +189,12 @@ def test_old_catalog_cannot_hide_newer_current_epoch_operations(subject):
 
     ledger, _, digest, _ = subject
     operation = {
-        "pin_id": PIN, "snapshot_id": 99, "scope_epoch": EPOCH,
-        "operation_sha256": digest, "owner": OWNER, "state": "active",
+        "pin_id": PIN,
+        "snapshot_id": 99,
+        "scope_epoch": EPOCH,
+        "operation_sha256": digest,
+        "owner": OWNER,
+        "state": "active",
     }
     journal = {"path": "/root/operations", "device": 1, "inode": 2, "operations": [operation]}
     roster = {"root_operation_journals": [journal], "root_operations": []}
@@ -181,7 +203,9 @@ def test_old_catalog_cannot_hide_newer_current_epoch_operations(subject):
         for state in ("active", "uncertain", "complete", "expired"):
             operation["state"] = state
             with pytest.raises(ArchiveBlocked, match="missing from snapshot inventory"):
-                reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
+                reconcile_root_operations(
+                    ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty]
+                )
         # Historical manual or other-epoch operations are not managed victims.
         operation["scope_epoch"] = "e" * 32
         reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
@@ -204,8 +228,12 @@ def test_completed_operation_for_proven_deleted_snapshot_is_historical(subject):
     ledger, _, digest, _ = subject
     old_intent = "e" * 32
     operation = {
-        "pin_id": PIN, "snapshot_id": 99, "scope_epoch": EPOCH,
-        "operation_sha256": digest, "owner": OWNER, "state": "complete",
+        "pin_id": PIN,
+        "snapshot_id": 99,
+        "scope_epoch": EPOCH,
+        "operation_sha256": digest,
+        "owner": OWNER,
+        "state": "complete",
     }
     journal = {"path": "/root/operations", "device": 1, "inode": 2, "operations": [operation]}
     roster = {"root_operation_journals": [journal], "root_operations": []}
@@ -218,14 +246,25 @@ def test_completed_operation_for_proven_deleted_snapshot_is_historical(subject):
         ledger.db.execute("INSERT INTO managed_snapshot_epoch VALUES(?,?)", (old_intent, EPOCH))
         ledger.db.execute(
             "INSERT INTO managed_snapshot_pin VALUES(?,?,?,?,?,?,'released',?,?,?)",
-            (PIN, old_intent, 99, "restoreinput", digest,
-             json.dumps(OWNER, sort_keys=True, separators=(",", ":")), AT.isoformat(), AT.isoformat(), "f" * 64),
+            (
+                PIN,
+                old_intent,
+                99,
+                "restoreinput",
+                digest,
+                json.dumps(OWNER, sort_keys=True, separators=(",", ":")),
+                AT.isoformat(),
+                AT.isoformat(),
+                "f" * 64,
+            ),
         )
     with lease("copy"):
         reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
         operation["state"] = "active"
         with pytest.raises(ArchiveBlocked, match="missing from snapshot inventory"):
-            reconcile_root_operations(ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty])
+            reconcile_root_operations(
+                ledger, epoch=EPOCH, current_ids=[22], rosters=[roster, empty]
+            )
 
 
 def test_roster_frame_binds_collected_runtime_and_format(subject, monkeypatch):
@@ -240,20 +279,38 @@ def test_roster_frame_binds_collected_runtime_and_format(subject, monkeypatch):
     machine = "3" * 64
     boot = "12345678-1234-1234-1234-123456789abc"
     plan = {
-        "format": "greenmind.managed-snapshot.root-roster-plan.v1", "role": "source",
-        "hostname": "source", "machine_sha256": machine, "boot_id": boot,
-        "scope_epoch": EPOCH, "collector_sha256": collector_sha,
-        "new_snapshot_ids": [22], "units": [], "journals": [],
+        "format": "greenmind.managed-snapshot.root-roster-plan.v1",
+        "role": "source",
+        "hostname": "source",
+        "machine_sha256": machine,
+        "boot_id": boot,
+        "scope_epoch": EPOCH,
+        "collector_sha256": collector_sha,
+        "new_snapshot_ids": [22],
+        "units": [],
+        "journals": [],
         "runtime": {"runtime_sha256": "4" * 64},
     }
     roster = {
-        "format": "greenmind.managed-snapshot.consumer-roster.v1", "status": "PASS",
-        "reasons": [], "unknown_units": [], "missing_units": [], "plan_sha256": "",
-        "scope_epoch": EPOCH, "role": "source", "hostname": "source",
-        "machine_sha256": machine, "boot_id": boot, "observed_at": datetime.now(UTC).isoformat(),
-        "collector_sha256": collector_sha, "runtime_sha256": "4" * 64,
-        "source_lease_profile": {"sha256": "5" * 64}, "units": [], "root_operations": [],
-        "root_operation_journals": [], "legacy_latest_snapshot_consumers": [],
+        "format": "greenmind.managed-snapshot.consumer-roster.v1",
+        "status": "PASS",
+        "reasons": [],
+        "unknown_units": [],
+        "missing_units": [],
+        "plan_sha256": "",
+        "scope_epoch": EPOCH,
+        "role": "source",
+        "hostname": "source",
+        "machine_sha256": machine,
+        "boot_id": boot,
+        "observed_at": datetime.now(UTC).isoformat(),
+        "collector_sha256": collector_sha,
+        "runtime_sha256": "4" * 64,
+        "source_lease_profile": {"sha256": "5" * 64},
+        "units": [],
+        "root_operations": [],
+        "root_operation_journals": [],
+        "legacy_latest_snapshot_consumers": [],
     }
     plan_path, roster_path = root / "plan.json", root / "roster.json"
 
@@ -266,10 +323,15 @@ def test_roster_frame_binds_collected_runtime_and_format(subject, monkeypatch):
     plan_sha = write_private(plan_path, plan)
     roster["plan_sha256"] = plan_sha
     binding = {
-        "roster_path": str(roster_path), "roster_sha256": write_private(roster_path, roster),
-        "plan_path": str(plan_path), "plan_sha256": plan_sha,
-        "collector_path": str(collector_path), "collector_sha256": collector_sha,
-        "hostname": "source", "machine_sha256": machine, "boot_id": boot,
+        "roster_path": str(roster_path),
+        "roster_sha256": write_private(roster_path, roster),
+        "plan_path": str(plan_path),
+        "plan_sha256": plan_sha,
+        "collector_path": str(collector_path),
+        "collector_sha256": collector_sha,
+        "hostname": "source",
+        "machine_sha256": machine,
+        "boot_id": boot,
     }
     source = {"host": "source", "machine_sha256": machine, "profile_sha256": "5" * 64}
 
@@ -294,45 +356,82 @@ def test_unit_exclusion_requires_exact_reviewed_execution_and_profile(subject):
     from app.tiered_archive.managed_snapshot import _json, validate_roster_attestations
 
     ledger, _, _, root = subject
-    unit_plan = {"name": "sensor.service", "execstart_sha256": "1" * 64, "modules": [],
-                 "environment_files": [{"sha256": "2" * 64}]}
+    unit_plan = {
+        "name": "sensor.service",
+        "execstart_sha256": "1" * 64,
+        "modules": [],
+        "environment_files": [{"sha256": "2" * 64}],
+    }
     digest = hashlib.sha256(_json(unit_plan).encode()).hexdigest()
-    review = {"format": "greenmind.managed-snapshot.unit-exclusion.v1", "scope_epoch": EPOCH,
-              "role": "source", "unit": "sensor.service", "unit_plan_sha256": digest,
-              "reason": "sensor-receiver-no-snapshot"}
+    review = {
+        "format": "greenmind.managed-snapshot.unit-exclusion.v1",
+        "scope_epoch": EPOCH,
+        "role": "source",
+        "unit": "sensor.service",
+        "unit_plan_sha256": digest,
+        "reason": "sensor-receiver-no-snapshot",
+    }
     review_path = root / "review.json"
     review_path.write_text(json.dumps(review))
     review_path.chmod(0o400)
-    policy = {"name": "sensor.service", "mode": "excluded", "plan_sha256": digest,
-              "review_path": str(review_path), "review_sha256": hashlib.sha256(review_path.read_bytes()).hexdigest()}
-    roster = {"scope_epoch": EPOCH, "role": "source", "units": [{"name": "sensor.service"}],
-              "reasons": ["loaded_module_binding_unproven"]}
+    policy = {
+        "name": "sensor.service",
+        "mode": "excluded",
+        "plan_sha256": digest,
+        "review_path": str(review_path),
+        "review_sha256": hashlib.sha256(review_path.read_bytes()).hexdigest(),
+    }
+    roster = {
+        "scope_epoch": EPOCH,
+        "role": "source",
+        "units": [{"name": "sensor.service"}],
+        "reasons": ["loaded_module_binding_unproven"],
+    }
     plan = {"units": [unit_plan]}
     validate_roster_attestations(ledger, roster=roster, plan=plan, policies=[policy], evidence=[])
     with pytest.raises(ArchiveBlocked, match="coverage differs"):
         validate_roster_attestations(ledger, roster=roster, plan=plan, policies=[], evidence=[])
     unit_plan["execstart_sha256"] = "3" * 64
     with pytest.raises(ArchiveBlocked, match="execution or profile differs"):
-        validate_roster_attestations(ledger, roster=roster, plan=plan, policies=[policy], evidence=[])
+        validate_roster_attestations(
+            ledger, roster=roster, plan=plan, policies=[policy], evidence=[]
+        )
 
 
 def test_inactive_pilot_requires_exact_reviewed_launcher(subject):
     from app.tiered_archive import managed_snapshot
 
     ledger, _, _, _ = subject
-    unit_plan = {"name": "pilot.service", "entrypoint": "/root/launcher.py", "modules": [
-        {"path": "/root/launcher.py", "sha256": managed_snapshot._REVIEWED_PILOT_LAUNCHER}
-    ]}
-    policy = {"name": "pilot.service", "mode": "live", "launcher_sha256": managed_snapshot._REVIEWED_PILOT_LAUNCHER,
-              "plan_sha256": hashlib.sha256(managed_snapshot._json(unit_plan).encode()).hexdigest()}
-    unit = {"name": "pilot.service", "active_state": "inactive", "main_pid": 0,
-            "main_start_ticks": 0, "invocation": ""}
+    unit_plan = {
+        "name": "pilot.service",
+        "entrypoint": "/root/launcher.py",
+        "modules": [
+            {"path": "/root/launcher.py", "sha256": managed_snapshot._REVIEWED_PILOT_LAUNCHER}
+        ],
+    }
+    policy = {
+        "name": "pilot.service",
+        "mode": "live",
+        "launcher_sha256": managed_snapshot._REVIEWED_PILOT_LAUNCHER,
+        "plan_sha256": hashlib.sha256(managed_snapshot._json(unit_plan).encode()).hexdigest(),
+    }
+    unit = {
+        "name": "pilot.service",
+        "active_state": "inactive",
+        "main_pid": 0,
+        "main_start_ticks": 0,
+        "invocation": "",
+    }
     roster = {"scope_epoch": EPOCH, "role": "source", "units": [unit], "reasons": []}
     plan = {"units": [unit_plan]}
-    managed_snapshot.validate_roster_attestations(ledger, roster=roster, plan=plan, policies=[policy], evidence=[])
+    managed_snapshot.validate_roster_attestations(
+        ledger, roster=roster, plan=plan, policies=[policy], evidence=[]
+    )
     unit["active_state"], unit["main_pid"] = "active", 123
     with pytest.raises(ArchiveBlocked, match="Inactive snapshot unit"):
-        managed_snapshot.validate_roster_attestations(ledger, roster=roster, plan=plan, policies=[policy], evidence=[])
+        managed_snapshot.validate_roster_attestations(
+            ledger, roster=roster, plan=plan, policies=[policy], evidence=[]
+        )
 
 
 def test_competing_acquire_cannot_overtake_jobs_lock(subject):
@@ -445,7 +544,13 @@ def test_matching_local_roster_does_not_forge_live_source_proof(subject, monkeyp
             managed_snapshot.validate_local_scope_bindings(contract, ledger, Provider())
 
 
-@pytest.mark.parametrize("executor", ["app.tiered_archive.database_restore.restore_backup", "app.raw_archive.recovery.restore_bundle"])
+@pytest.mark.parametrize(
+    "executor",
+    [
+        "app.tiered_archive.database_restore.restore_backup",
+        "app.raw_archive.recovery.restore_bundle",
+    ],
+)
 def test_frozen_release_requires_exact_read_only_complete_inputs(subject, monkeypatch, executor):
     from app.tiered_archive import runtime
 
@@ -735,8 +840,15 @@ def test_owned_termination_requires_pinned_exact_generation(subject, kind):
         operation_path.write_text(json.dumps(operation))
         digest = hashlib.sha256(operation_path.read_bytes()).hexdigest()
     with lease("copy"):
-        ledger.acquire_snapshot_pin(pin_id=PIN, snapshot_id=22, kind=kind,
-            operation_path=operation_path, operation_sha256=digest, owner=OWNER, provider=Provider())
+        ledger.acquire_snapshot_pin(
+            pin_id=PIN,
+            snapshot_id=22,
+            kind=kind,
+            operation_path=operation_path,
+            operation_sha256=digest,
+            owner=OWNER,
+            provider=Provider(),
+        )
 
     def write(name, value):
         path = root / name
@@ -875,24 +987,46 @@ def test_owned_termination_requires_pinned_exact_generation(subject, kind):
             producer_scope_path=producer_scope_path,
         )
     if kind == "raw_pilot":
+
         def replay_guard(pin, bound_operation, _manifest):
             return validate_owned_termination(
-                ledger=ledger, pin_id=pin, operation=bound_operation, binding=binding,
-                proof_path=proof_path, receipt_path=receipt_path, marker_path=marker_path,
-                startup_path=startup_path, producer_path=producer_path, producer_scope_path=producer_scope_path,
+                ledger=ledger,
+                pin_id=pin,
+                operation=bound_operation,
+                binding=binding,
+                proof_path=proof_path,
+                receipt_path=receipt_path,
+                marker_path=marker_path,
+                startup_path=startup_path,
+                producer_path=producer_path,
+                producer_scope_path=producer_scope_path,
             )
 
         with lease("copy"):
             with pytest.raises(ArchiveBlocked, match="consumer generation"):
-                ledger.release_completed_pilot_pin(pin_id=PIN, operation_path=operation_path,
-                    operation_sha256=digest, owner=OWNER, replay_guard=replay_guard)
-            assert ledger.db.execute("SELECT state FROM managed_snapshot_pin WHERE id=?", (PIN,)).fetchone() == ("active",)
+                ledger.release_completed_pilot_pin(
+                    pin_id=PIN,
+                    operation_path=operation_path,
+                    operation_sha256=digest,
+                    owner=OWNER,
+                    replay_guard=replay_guard,
+                )
+            assert ledger.db.execute(
+                "SELECT state FROM managed_snapshot_pin WHERE id=?", (PIN,)
+            ).fetchone() == ("active",)
             proof["consumer"]["start_ticks"] -= 1
             proof_path.chmod(0o600)
             proof_path, binding["proof_sha256"] = write("proof", proof)
-            ledger.release_completed_pilot_pin(pin_id=PIN, operation_path=operation_path,
-                operation_sha256=digest, owner=OWNER, replay_guard=replay_guard)
-            assert ledger.db.execute("SELECT state,completion_sha256 FROM managed_snapshot_pin WHERE id=?", (PIN,)).fetchone() == ("released", binding["proof_sha256"])
+            ledger.release_completed_pilot_pin(
+                pin_id=PIN,
+                operation_path=operation_path,
+                operation_sha256=digest,
+                owner=OWNER,
+                replay_guard=replay_guard,
+            )
+            assert ledger.db.execute(
+                "SELECT state,completion_sha256 FROM managed_snapshot_pin WHERE id=?", (PIN,)
+            ).fetchone() == ("released", binding["proof_sha256"])
 
 
 def test_root_receipt_is_persisted_and_identical_after_lost_response(subject, monkeypatch):

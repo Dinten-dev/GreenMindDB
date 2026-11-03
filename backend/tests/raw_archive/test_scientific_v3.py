@@ -395,6 +395,7 @@ def test_linux_native_hash_advises_each_bounded_eight_mib(tmp_path, monkeypatch)
 
 def test_source_hash_yields_between_eight_mib_without_changing_digest(tmp_path, monkeypatch):
     import time
+
     path = tmp_path / "native-file"
     body = b"x" * (17 * 1024**2)
     path.write_bytes(body)

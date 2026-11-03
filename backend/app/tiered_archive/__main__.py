@@ -69,7 +69,12 @@ def main():
     backup.add_argument("--source", choices=("gateway", "direct"), required=True)
     backup.add_argument(
         "--format",
-        choices=("schema-master-v2", "postgres-full-v1", "schema-master-provider-v1", "schema-master-provider-sql-audit-v3"),
+        choices=(
+            "schema-master-v2",
+            "postgres-full-v1",
+            "schema-master-provider-v1",
+            "schema-master-provider-sql-audit-v3",
+        ),
         default="schema-master-v2",
     )
     sql = sub.add_parser("archive-sql")
@@ -97,7 +102,15 @@ def main():
     audit_v3_plan.add_argument("--epoch", required=True)
     audit_v3_plan.add_argument("--genesis-sha256", required=True)
     sub.add_parser("sql-scope-prepare-registry")
-    for operation in ("sql-evict", "sql-evict-v3", "sql-source-approval-v3", "sql-scope-bootstrap", "sql-scope-reconcile", "sql-scope-bootstrap-v3", "sql-scope-reconcile-v3"):
+    for operation in (
+        "sql-evict",
+        "sql-evict-v3",
+        "sql-source-approval-v3",
+        "sql-scope-bootstrap",
+        "sql-scope-reconcile",
+        "sql-scope-bootstrap-v3",
+        "sql-scope-reconcile-v3",
+    ):
         sql_evict = sub.add_parser(operation)
         sql_evict.add_argument("--identity", required=True)
         for field in ("restore-profile", "proof", "authorization", "snapshot-token"):
@@ -291,7 +304,15 @@ def main():
                 return prepare_sql_registry()
 
         result = with_source_catalogue_lease(run_sql_registry)
-    elif args.operation in {"sql-evict", "sql-evict-v3", "sql-source-approval-v3", "sql-scope-bootstrap", "sql-scope-reconcile", "sql-scope-bootstrap-v3", "sql-scope-reconcile-v3"}:
+    elif args.operation in {
+        "sql-evict",
+        "sql-evict-v3",
+        "sql-source-approval-v3",
+        "sql-scope-bootstrap",
+        "sql-scope-reconcile",
+        "sql-scope-bootstrap-v3",
+        "sql-scope-reconcile-v3",
+    }:
         from .execution import bounded_job
         from .sql_runtime import evict as sql_evict_explicit
 
@@ -301,10 +322,16 @@ def main():
                 if args.operation == "sql-evict-v3":
                     extra = {"operation": "evict-v3"}
                 elif args.operation == "sql-source-approval-v3":
-                    extra = {"operation": "source-approval-v3", "binding_path": args.binding_file,
-                             "binding_sha256": args.binding_sha256, "dba_identity_path": args.dba_identity_file,
-                             "dba_identity_sha256": args.dba_identity_sha256, "producer_sha256": args.producer_sha256,
-                             "challenge_file": args.challenge_file, "frame_file": args.frame_file}
+                    extra = {
+                        "operation": "source-approval-v3",
+                        "binding_path": args.binding_file,
+                        "binding_sha256": args.binding_sha256,
+                        "dba_identity_path": args.dba_identity_file,
+                        "dba_identity_sha256": args.dba_identity_sha256,
+                        "producer_sha256": args.producer_sha256,
+                        "challenge_file": args.challenge_file,
+                        "frame_file": args.frame_file,
+                    }
                 elif args.operation != "sql-evict":
                     extra = {
                         "operation": args.operation.removeprefix("sql-"),

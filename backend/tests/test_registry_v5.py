@@ -122,7 +122,20 @@ def test_v5_roundtrip_keeps_all_journals_and_requires_reconciliation(bundle, tmp
     index = json.loads((box.root / reference["key"]).read_bytes())
     assert index["schema"] == 5
     assert all(
-        value["rows"] == (0 if name in {"science_v3_scope_history", "science_v3_import_provenance", "sql_audit_v3_backup", "sql_audit_v3_backup_history", "sql_audit_v3_scope", "sql_audit_v3_scope_proof"} else 1)
+        value["rows"]
+        == (
+            0
+            if name
+            in {
+                "science_v3_scope_history",
+                "science_v3_import_provenance",
+                "sql_audit_v3_backup",
+                "sql_audit_v3_backup_history",
+                "sql_audit_v3_scope",
+                "sql_audit_v3_scope_proof",
+            }
+            else 1
+        )
         for name, value in index["journal_v5"]["tables"].items()
     )
     recovered = Ledger(tmp_path / "new")
@@ -338,10 +351,19 @@ def test_old_v5_without_new_provenance_remains_readable(bundle, tmp_path):  # no
     box.publish(key, path)
     recovered = Ledger(tmp_path / "old-v5-restored")
     try:
-        registry_backup.restore({"key": key, "sha256": sha, "bytes": len(raw)}, recovered, box,
-                                checkpoint=lambda: None, expected_environment="staging")
-        assert recovered.db.execute("SELECT state FROM science_v3_scope").fetchone() == ("needs_reconcile",)
-        assert not recovered.db.execute("SELECT 1 FROM sqlite_master WHERE name='science_v3_import_provenance'").fetchone()
+        registry_backup.restore(
+            {"key": key, "sha256": sha, "bytes": len(raw)},
+            recovered,
+            box,
+            checkpoint=lambda: None,
+            expected_environment="staging",
+        )
+        assert recovered.db.execute("SELECT state FROM science_v3_scope").fetchone() == (
+            "needs_reconcile",
+        )
+        assert not recovered.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='science_v3_import_provenance'"
+        ).fetchone()
     finally:
         recovered.close()
 
@@ -352,20 +374,56 @@ def test_v3_audit_scope_roundtrip_forces_reconciliation(bundle, tmp_path):  # no
     from app.tiered_archive.pipeline import candidate_json
 
     old, _, _, ledger, box, _ = bundle
-    candidate = replace(old, dataset="database_backup", organization="00000000-0000-0000-0000-000000000000", kind="features")
+    candidate = replace(
+        old,
+        dataset="database_backup",
+        organization="00000000-0000-0000-0000-000000000000",
+        kind="features",
+    )
     epoch, genesis, manifest, cipher, plain = "1" * 32, "2" * 64, "3" * 64, "4" * 64, "5" * 64
-    files = [{"backup_format": "schema-master-provider-sql-audit-v3", "audit_v3_epoch": epoch, "audit_v3_genesis_sha256": genesis, "audit_v3_plaintext_sha256": plain}, {}, {}, {}, {}, {"sha256": cipher, "plaintext_sha256": plain}]
-    ledger.save(candidate, "published", {"source": candidate_json(candidate), "manifest": {"sha256": manifest}, "files": files, "destination": box.identity}, AT)
+    files = [
+        {
+            "backup_format": "schema-master-provider-sql-audit-v3",
+            "audit_v3_epoch": epoch,
+            "audit_v3_genesis_sha256": genesis,
+            "audit_v3_plaintext_sha256": plain,
+        },
+        {},
+        {},
+        {},
+        {},
+        {"sha256": cipher, "plaintext_sha256": plain},
+    ]
+    ledger.save(
+        candidate,
+        "published",
+        {
+            "source": candidate_json(candidate),
+            "manifest": {"sha256": manifest},
+            "files": files,
+            "destination": box.identity,
+        },
+        AT,
+    )
     ledger.db.execute(registry_v5.DDL["sql_audit_v3_backup"])
-    ledger.db.execute("INSERT INTO sql_audit_v3_backup VALUES(?,?,?,?,?)", (epoch, candidate.identity, manifest, cipher, plain))
+    ledger.db.execute(
+        "INSERT INTO sql_audit_v3_backup VALUES(?,?,?,?,?)",
+        (epoch, candidate.identity, manifest, cipher, plain),
+    )
     ledger.db.execute(registry_v5.DDL["sql_audit_v3_scope"])
     ledger.db.execute("INSERT INTO sql_audit_v3_scope VALUES(1,?,?,?)", (epoch, genesis, "current"))
     ledger.db.commit()
     reference = registry_backup.backup(ledger, box, checkpoint=lambda: None)
     recovered = Ledger(tmp_path / "v3-recovered")
     try:
-        registry_backup.restore(reference, recovered, box, checkpoint=lambda: None, expected_environment="staging")
-        assert recovered.db.execute("SELECT epoch,genesis_sha256,state FROM sql_audit_v3_scope").fetchone() == (epoch, genesis, "needs_reconcile")
-        assert recovered.db.execute("SELECT epoch,candidate FROM sql_audit_v3_backup").fetchone() == (epoch, candidate.identity)
+        registry_backup.restore(
+            reference, recovered, box, checkpoint=lambda: None, expected_environment="staging"
+        )
+        assert recovered.db.execute(
+            "SELECT epoch,genesis_sha256,state FROM sql_audit_v3_scope"
+        ).fetchone() == (epoch, genesis, "needs_reconcile")
+        assert recovered.db.execute(
+            "SELECT epoch,candidate FROM sql_audit_v3_backup"
+        ).fetchone() == (epoch, candidate.identity)
     finally:
         recovered.close()

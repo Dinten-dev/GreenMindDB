@@ -60,7 +60,9 @@ def test_worker_reuses_archive_fd_after_source_lease(setup, monkeypatch, job_kin
         @contextmanager
         def session(self, *_args, **_kwargs):
             path, info = coordination.bound_job_lock()
-            assert (path, info.st_dev, info.st_ino, coordination._BOUND_JOB_LOCK.get()[0]) == held[0]
+            assert (path, info.st_dev, info.st_ino, coordination._BOUND_JOB_LOCK.get()[0]) == held[
+                0
+            ]
             events.append("worker-enter")
             yield
             events.append("worker-exit")
@@ -98,7 +100,9 @@ def test_busy_archive_lock_prevents_source_connection(setup, monkeypatch, job_ki
         (setup / "jobs.lock").chmod(0o600)
         fcntl.flock(competitor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(SafetyPause, match="archive_job_busy"):
-            cli.with_source_catalogue_lease(lambda: pytest.fail("busy callback ran"), job_kind=job_kind)
+            cli.with_source_catalogue_lease(
+                lambda: pytest.fail("busy callback ran"), job_kind=job_kind
+            )
         fcntl.flock(competitor, fcntl.LOCK_UN)
     assert opened == []
 
@@ -176,6 +180,7 @@ def test_reuse_rejects_other_kind_changed_directory_and_dead_fd(setup, monkeypat
                     pass
         original = coordination.os.fstat
         with monkeypatch.context() as patch:
+
             def fail_for_held(fd):
                 if fd == descriptor:
                     raise OSError("closed")
@@ -211,7 +216,13 @@ def test_linux_requires_owned_full_file_flock(setup, monkeypatch):
         row = f"1: FLOCK ADVISORY WRITE {pid} {address} 0 EOF\n"
         with monkeypatch.context() as patch:
             patch.setattr(coordination.sys, "platform", "linux")
-            patch.setattr(Path, "read_text", lambda path, *a, **kw: row if str(path) == "/proc/locks" else original_read(path, *a, **kw))
+            patch.setattr(
+                Path,
+                "read_text",
+                lambda path, *a, **kw: row
+                if str(path) == "/proc/locks"
+                else original_read(path, *a, **kw),
+            )
             with coordination.reuse_or_lease("copy"):
                 pass
             row = f"1: FLOCK ADVISORY WRITE {pid + 1} {address} 0 EOF\n"
@@ -231,11 +242,14 @@ def test_borrowed_copy_lock_respects_new_higher_priority_request(setup):
 
 def test_catalogue_request_yields_copy_without_opening_source(setup, monkeypatch):
     import json
+
     opened = []
+
     @contextmanager
     def source():
         opened.append(True)
         yield lambda: None
+
     monkeypatch.setattr(remote_lease, "catalog_lease", source)
     with coordination.lease("copy"):
         # Another execution cannot borrow the owner's context.
@@ -246,7 +260,7 @@ def test_catalogue_request_yields_copy_without_opening_source(setup, monkeypatch
                     cli.with_source_catalogue_lease(lambda: None, job_kind="catalog")
             finally:
                 coordination._BOUND_JOB_LOCK.reset(token)
-        assert json.loads((setup/"catalog.request").read_text())["expires"] > time.time()
+        assert json.loads((setup / "catalog.request").read_text())["expires"] > time.time()
         with pytest.raises(SafetyPause, match="archive_job_yield"):
             with coordination.reuse_or_lease("copy"):
                 pass

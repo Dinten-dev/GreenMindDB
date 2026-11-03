@@ -587,9 +587,14 @@ def dump(
     if parent_capture is not None:
         from .parent_snapshot import ParentSnapshotCapture
 
-        if (type(parent_capture) is not ParentSnapshotCapture or provider_scope is None
-            or not with_proof or parent_capture.source != source
-            or parent_capture.output != Path(output) or os.geteuid() != 0):
+        if (
+            type(parent_capture) is not ParentSnapshotCapture
+            or provider_scope is None
+            or not with_proof
+            or parent_capture.source != source
+            or parent_capture.output != Path(output)
+            or os.geteuid() != 0
+        ):
             raise ArchiveBlocked("Exact Root same-snapshot parent hook required")
         parent_capture.require_scope(provider_scope)
     version = 4 if source == "gateway" else MASTER_PROOF_VERSION

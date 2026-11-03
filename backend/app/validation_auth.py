@@ -11,7 +11,9 @@ from app.auth import create_access_token, decode_token
 def validation_access_token(data, expires_delta: timedelta | None = None):
     path = Path(os.environ.get("GREENMIND_VALIDATION_TOKENS_FILE", ""))
     if not path.is_file() or path.is_symlink() or path.stat().st_mode & 0o077:
-        raise RuntimeError("A private validation-token file containing real login sessions is required")
+        raise RuntimeError(
+            "A private validation-token file containing real login sessions is required"
+        )
     if path.stat().st_size > 65536:
         raise RuntimeError("Validation-token file exceeds bound")
     tokens = json.loads(path.read_text())

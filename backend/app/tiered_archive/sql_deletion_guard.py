@@ -638,10 +638,50 @@ def _codepin():
                 "RegistryEvidence.__init__",
             ),
         ),
-        (sql_deletion_v3, ("activation", "approval_body", "native_approval", "verify_committed_rows", "verify_history", "require_native_restore_evidence", "make_source_permit", "stage_source_approval", "scope_transition", "_guard", "_budget", "evict")),
-        (sql_audit_v3, ("schema_sha256", "inspect_writer", "validate_operation_body", "check_lease_expiry", "provision")),
+        (
+            sql_deletion_v3,
+            (
+                "activation",
+                "approval_body",
+                "native_approval",
+                "verify_committed_rows",
+                "verify_history",
+                "require_native_restore_evidence",
+                "make_source_permit",
+                "stage_source_approval",
+                "scope_transition",
+                "_guard",
+                "_budget",
+                "evict",
+            ),
+        ),
+        (
+            sql_audit_v3,
+            (
+                "schema_sha256",
+                "inspect_writer",
+                "validate_operation_body",
+                "check_lease_expiry",
+                "provision",
+            ),
+        ),
         (sql_audit_v3_source, ("_Docker.connect", "_observe_container", "provision_source")),
-        (sql_audit_v3_backup, ("encode", "decode", "capture_structure", "validate", "history_binding", "AuditSnapshotCapture.__init__", "AuditSnapshotCapture.capture", "verify_remote", "verify_gateway_bundle", "record_gateway_readback", "verify_native_rows")),
+        (
+            sql_audit_v3_backup,
+            (
+                "encode",
+                "decode",
+                "capture_structure",
+                "validate",
+                "history_binding",
+                "AuditSnapshotCapture.__init__",
+                "AuditSnapshotCapture.capture",
+                "verify_remote",
+                "verify_gateway_bundle",
+                "record_gateway_readback",
+                "verify_native_rows",
+            ),
+        ),
         (registry_backup, ("restore",)),
         (registry_v5, ("schema", "validate", "canonical")),
         (runtime, ("runtime_sha256", "bindings_sha256")),
@@ -651,7 +691,15 @@ def _codepin():
         (ledger, ("Ledger.get", "Ledger.save", "Ledger.scope", "_private_read")),
         (codec, ("encode", "digest", "pack")),
         (coordination, ("bound_job_lock",)),
-        (read_only_box, ("ReadOnlyBox.__init__", "ReadOnlyBox.download_tiered", "configured_read_only_box", "configured_catalog_read_only_box")),
+        (
+            read_only_box,
+            (
+                "ReadOnlyBox.__init__",
+                "ReadOnlyBox.download_tiered",
+                "configured_read_only_box",
+                "configured_catalog_read_only_box",
+            ),
+        ),
         (scientific_registry_import, ("_transport", "_provider_proof", "_private_proof")),
         (database_restore, ("_provider_target_guard", "_provider_target_identity")),
         (recovery, ("restore_url",)),
@@ -936,7 +984,6 @@ class ProductionGuard:
 _TOKEN = object()
 
 
-
 class ProductionGuardV3(ProductionGuard):
     """V3 proof guard; no deletion until real Source audit restore attestation exists."""
 
@@ -945,10 +992,13 @@ class ProductionGuardV3(ProductionGuard):
     def prepare(self, candidate, receipt, now, permit):
         from .sql_deletion_v3 import require_native_restore_evidence
 
-        evidence = require_native_restore_evidence(self, candidate, checkpoint=getattr(self, "checkpoint", None))
+        evidence = require_native_restore_evidence(
+            self, candidate, checkpoint=getattr(self, "checkpoint", None)
+        )
         result = super().prepare(candidate, receipt, now, permit)
         self._v3_restore = evidence
         return result
+
 
 def build_guard(
     candidate,
@@ -1024,13 +1074,32 @@ def build_guard(
         "box_id",
     }
     if _audit_v3:
-        keys |= {"audit_v3_epoch", "audit_v3_genesis_sha256", "audit_v3_backup_candidate", "audit_v3_backup_manifest_sha256", "audit_v3_restore_evidence_path", "audit_v3_restore_evidence_sha256"}
-        need(type(config.get("audit_v3_epoch")) is str and re.fullmatch(r"[a-f0-9]{32}", config["audit_v3_epoch"])
-             and all(_sha(config.get(k)) for k in ("audit_v3_genesis_sha256", "audit_v3_backup_candidate", "audit_v3_backup_manifest_sha256", "audit_v3_restore_evidence_sha256")),
-             "Exact V3 audit backup and restore pins required")
+        keys |= {
+            "audit_v3_epoch",
+            "audit_v3_genesis_sha256",
+            "audit_v3_backup_candidate",
+            "audit_v3_backup_manifest_sha256",
+            "audit_v3_restore_evidence_path",
+            "audit_v3_restore_evidence_sha256",
+        }
+        need(
+            type(config.get("audit_v3_epoch")) is str
+            and re.fullmatch(r"[a-f0-9]{32}", config["audit_v3_epoch"])
+            and all(
+                _sha(config.get(k))
+                for k in (
+                    "audit_v3_genesis_sha256",
+                    "audit_v3_backup_candidate",
+                    "audit_v3_backup_manifest_sha256",
+                    "audit_v3_restore_evidence_sha256",
+                )
+            ),
+            "Exact V3 audit backup and restore pins required",
+        )
     need(
         set(config) == keys
-        and config["format"] == ("greenmind.sql-native-proof.v3" if _audit_v3 else "greenmind.sql-native-proof.v2")
+        and config["format"]
+        == ("greenmind.sql-native-proof.v3" if _audit_v3 else "greenmind.sql-native-proof.v2")
         and config["candidate"] == candidate.identity
         and config["destination"] == store.identity
         and type(config["box_id"]) is int
@@ -1091,12 +1160,32 @@ def build_guard(
     )
 
 
-
-def build_guard_v3(candidate, adapter, ledger, store, provider, restore_engine, *, evidence_path, evidence_sha256, checkpoint):
+def build_guard_v3(
+    candidate,
+    adapter,
+    ledger,
+    store,
+    provider,
+    restore_engine,
+    *,
+    evidence_path,
+    evidence_sha256,
+    checkpoint,
+):
     """Construct the separately versioned guard; missing native restore stays HOLD."""
-    return build_guard(candidate, adapter, ledger, store, provider, restore_engine,
-                       evidence_path=evidence_path, evidence_sha256=evidence_sha256,
-                       checkpoint=checkpoint, _audit_v3=True)
+    return build_guard(
+        candidate,
+        adapter,
+        ledger,
+        store,
+        provider,
+        restore_engine,
+        evidence_path=evidence_path,
+        evidence_sha256=evidence_sha256,
+        checkpoint=checkpoint,
+        _audit_v3=True,
+    )
+
 
 def source_audit_plan(writer_role):
     """Return reviewed additive SQL only; this function opens no connection."""

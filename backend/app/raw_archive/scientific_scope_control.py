@@ -109,7 +109,6 @@ def _private_json(path, expected, limit=1024 * 1024):
     return value
 
 
-
 def _publish_checked_frame(output, raw, check):
     """Publish only a fully fsynced frame after a fresh Source lease check."""
     pending = output.with_name(output.name + ".pending-" + uuid.uuid4().hex)
@@ -126,6 +125,7 @@ def _publish_checked_frame(output, raw, check):
     finally:
         if pending.exists():
             pending.unlink()
+
 
 def source_handoff(
     source,
@@ -174,7 +174,11 @@ def source_handoff(
         need(time.monotonic() < lease_deadline, "Source handoff lease expired")
 
     proof, index = parts.load_index(
-        source, capture_sha256, index_file, index_sha256, checkpoint=check,
+        source,
+        capture_sha256,
+        index_file,
+        index_sha256,
+        checkpoint=check,
         cooperative_pause=0.25,
     )
     machine = hashlib.sha256(Path("/etc/machine-id").read_bytes()).hexdigest()
@@ -254,9 +258,11 @@ def source_lease_handoff(output, *, lease_session, checkpoint):
         checkpoint()
         capture._cgroup_limits()
         need(time.monotonic() < deadline, "Source lease expired")
-        need(_source_lock(full=False) == {key: locked[key] for key in (
-            "device", "inode", "pid", "uid", "start_ticks"
-        )}, "Source lease process generation changed")
+        need(
+            _source_lock(full=False)
+            == {key: locked[key] for key in ("device", "inode", "pid", "uid", "start_ticks")},
+            "Source lease process generation changed",
+        )
         need(time.monotonic() < deadline, "Source lease expired")
 
     _publish_checked_frame(output, raw, check)

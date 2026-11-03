@@ -145,6 +145,7 @@ class Heartbeat(Base):
 
 class FeatureResult(Base):
     """Independent, append-only scientific result; never overwrites a manifest."""
+
     __tablename__ = "direct_feature_result"
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     segment_id = Column(String(36), nullable=False)

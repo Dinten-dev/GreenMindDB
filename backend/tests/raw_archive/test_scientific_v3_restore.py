@@ -127,9 +127,12 @@ def test_restore_controller_downloads_decrypts_copies_and_journals(tmp_path, int
         def execute(self, query, *_params):
             calls.append(str(query))
             if "DROP TABLE" in str(query):
-                assert args["ledger"].db.execute(
-                    "SELECT COUNT(*) FROM science_v3_restore"
-                ).fetchone()[0] == 1
+                assert (
+                    args["ledger"]
+                    .db.execute("SELECT COUNT(*) FROM science_v3_restore")
+                    .fetchone()[0]
+                    == 1
+                )
             if "FROM pg_attribute" in str(query):
                 columns = capture.roster()["wav_feature"]
                 return SimpleNamespace(

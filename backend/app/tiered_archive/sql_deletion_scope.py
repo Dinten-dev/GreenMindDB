@@ -83,12 +83,20 @@ class RegistryEvidence:
 def v3_inventory(ledger):
     """Exact V3 table presence and rows; restore intentionally normalizes scope state."""
     result = {}
-    for name in ("sql_audit_v3_backup", "sql_audit_v3_backup_history", "sql_audit_v3_scope", "sql_audit_v3_scope_proof"):
+    for name in (
+        "sql_audit_v3_backup",
+        "sql_audit_v3_backup_history",
+        "sql_audit_v3_scope",
+        "sql_audit_v3_scope_proof",
+    ):
         present = _table(ledger.db, name)
         rows = []
         if present:
             registry_v5.schema(ledger.db, name)
-            rows = [list(row) for row in ledger.db.execute("SELECT * FROM " + name + " ORDER BY 1 LIMIT 130")]
+            rows = [
+                list(row)
+                for row in ledger.db.execute("SELECT * FROM " + name + " ORDER BY 1 LIMIT 130")
+            ]
             need(len(rows) < 130, "V3 SQL journal inventory exceeds bound")
             for row in rows:
                 registry_v5.validate(name, row, "production", ledger)
@@ -184,7 +192,13 @@ def verify_registry_snapshot(ledger, verifier, reference, *, environment, checkp
     checkpoint()
     need(inventory(ledger) == before, "SQL ledger changed during independent registry restore")
     need(v3_inventory(ledger) == before_v3, "V3 SQL journal changed during registry restore")
-    return RegistryEvidence(_REGISTRY_TOKEN, ledger, codec.digest(before), codec.digest(reference), codec.digest(before_v3))
+    return RegistryEvidence(
+        _REGISTRY_TOKEN,
+        ledger,
+        codec.digest(before),
+        codec.digest(reference),
+        codec.digest(before_v3),
+    )
 
 
 def _registry_evidence(ledger, evidence):
@@ -199,8 +213,11 @@ def _registry_evidence(ledger, evidence):
 
 def v3_registry_evidence(ledger, evidence):
     _registry_evidence(ledger, evidence)
-    need(registry_v5.sha(evidence.v3_inventory_sha) and evidence.v3_inventory_sha == codec.digest(v3_inventory(ledger)),
-         "Fresh independent V3 SQL registry restore required")
+    need(
+        registry_v5.sha(evidence.v3_inventory_sha)
+        and evidence.v3_inventory_sha == codec.digest(v3_inventory(ledger)),
+        "Fresh independent V3 SQL registry restore required",
+    )
 
 
 def _preflight(

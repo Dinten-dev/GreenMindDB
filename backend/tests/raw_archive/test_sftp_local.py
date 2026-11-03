@@ -141,11 +141,16 @@ def test_size_limit_helper_isolated_from_cwd_and_hostile_pythonpath(tmp_path):
     hostile = tmp_path / "app"
     hostile.mkdir()
     sentinel = tmp_path / "untrusted-import"
-    (hostile / "__init__.py").write_text(f"from pathlib import Path; Path({str(sentinel)!r}).write_text('bad')")
+    (hostile / "__init__.py").write_text(
+        f"from pathlib import Path; Path({str(sentinel)!r}).write_text('bad')"
+    )
     helper = Path(storage.__file__).resolve().with_name("sftp_limit.py")
     result = subprocess.run(
         [sys.executable, "-I", "-B", str(helper), "64", "/usr/bin/true"],
-        cwd=tmp_path, env={"PYTHONPATH": str(tmp_path)}, capture_output=True, timeout=5,
+        cwd=tmp_path,
+        env={"PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        timeout=5,
     )
     assert result.returncode != 0
     assert result.stderr.strip() == b"Invalid bounded SFTP invocation"

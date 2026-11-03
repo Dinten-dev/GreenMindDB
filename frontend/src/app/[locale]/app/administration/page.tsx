@@ -4,6 +4,7 @@ import { useAppText } from '@/i18n/app-text';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import StorageMonitor from './StorageMonitor';
+import ArchiveOverview from './ArchiveOverview';
 export default function AdministrationPage() {
   const tx = useAppText();
 
@@ -23,6 +24,7 @@ export default function AdministrationPage() {
           {tx('Early-Access-Anfragen prüfen und Einladungen versenden.')}
         </p>
       </Link>
+      <ArchiveOverview />
       <Link
         href={`/${locale}/app/administration/users`}
         className="glass-card block p-6 transition-colors hover:border-emerald-300"

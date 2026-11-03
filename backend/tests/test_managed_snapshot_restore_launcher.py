@@ -17,17 +17,22 @@ def test_restore_launcher_seals_every_snapshot_input(tmp_path, monkeypatch):
         path = output / name
         path.write_bytes(body)
         path.chmod(0o600)
-    inventory = {"schema": 1, "files": [
-        {"sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body)}
-        for body in (b"manifest", b"part")
-    ]}
+    inventory = {
+        "schema": 1,
+        "files": [
+            {"sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body)}
+            for body in (b"manifest", b"part")
+        ],
+    }
     real_stat, real_fstat = Path.stat, os.fstat
 
     class RootStat:
         def __init__(self, info):
             self.info = info
             self.st_uid = 0
-            self.st_mode = info.st_mode & ~0o022 if (info.st_mode & 0o170000) == 0o040000 else info.st_mode
+            self.st_mode = (
+                info.st_mode & ~0o022 if (info.st_mode & 0o170000) == 0o040000 else info.st_mode
+            )
 
         def __getattr__(self, name):
             return getattr(self.info, name)
@@ -58,17 +63,35 @@ def test_archive_materialization_rechecks_transferred_bytes_and_inventory(tmp_pa
     part.write_bytes(content)
     part.chmod(0o400)
     inventory = tmp_path / "inventory.json"
-    inventory_sha = write(inventory, {"schema": 1, "files": [{"sha256": digest, "bytes": len(content)}]})
-    operation = {"kind": "restoreinput", "consumer_entrypoint": "wav-catalog", "pin_id": "a" * 32,
-                 "snapshot_id": 42, "target_sha256": "b" * 64, "restore_plan_sha256": "c" * 64,
-                 "input_manifest_path": str(inventory), "input_sha256": inventory_sha}
+    inventory_sha = write(
+        inventory, {"schema": 1, "files": [{"sha256": digest, "bytes": len(content)}]}
+    )
+    operation = {
+        "kind": "restoreinput",
+        "consumer_entrypoint": "wav-catalog",
+        "pin_id": "a" * 32,
+        "snapshot_id": 42,
+        "target_sha256": "b" * 64,
+        "restore_plan_sha256": "c" * 64,
+        "input_manifest_path": str(inventory),
+        "input_sha256": inventory_sha,
+    }
     operation_path = tmp_path / "operation.json"
     operation_sha = write(operation_path, operation)
-    source = {"schema": 1, "pin_id": operation["pin_id"], "snapshot_id": 42,
-              "operation_sha256": operation_sha, "local_only": True,
-              "files": [{"path": "/source/sealed/input-0000.bin", "sha256": digest, "bytes": len(content)}],
-              "target_sha256": operation["target_sha256"], "restore_plan_sha256": operation["restore_plan_sha256"],
-              "local_runtime_sha256": "d" * 64, "local_executor": "app.raw_archive.wav_catalog.restore_bundle"}
+    source = {
+        "schema": 1,
+        "pin_id": operation["pin_id"],
+        "snapshot_id": 42,
+        "operation_sha256": operation_sha,
+        "local_only": True,
+        "files": [
+            {"path": "/source/sealed/input-0000.bin", "sha256": digest, "bytes": len(content)}
+        ],
+        "target_sha256": operation["target_sha256"],
+        "restore_plan_sha256": operation["restore_plan_sha256"],
+        "local_runtime_sha256": "d" * 64,
+        "local_executor": "app.raw_archive.wav_catalog.restore_bundle",
+    }
     source_path = tmp_path / "source.json"
     source_sha = write(source_path, source)
     monkeypatch.setattr(os, "geteuid", lambda: 0)
@@ -78,15 +101,22 @@ def test_archive_materialization_rechecks_transferred_bytes_and_inventory(tmp_pa
     class RootStat:
         def __init__(self, info):
             self.info, self.st_uid = info, 0
-            self.st_mode = info.st_mode & ~0o022 if (info.st_mode & 0o170000) == 0o040000 else info.st_mode
+            self.st_mode = (
+                info.st_mode & ~0o022 if (info.st_mode & 0o170000) == 0o040000 else info.st_mode
+            )
 
         def __getattr__(self, name):
             return getattr(self.info, name)
 
     monkeypatch.setattr(Path, "stat", lambda path, *a, **k: RootStat(real_stat(path, *a, **k)))
-    result = archive.materialize(source_manifest=source_path, source_sha256=source_sha,
-        operation_path=operation_path, operation_sha256=operation_sha, files_dir=transferred,
-        output=tmp_path / "frozen.json")
+    result = archive.materialize(
+        source_manifest=source_path,
+        source_sha256=source_sha,
+        operation_path=operation_path,
+        operation_sha256=operation_sha,
+        files_dir=transferred,
+        output=tmp_path / "frozen.json",
+    )
     manifest = json.loads(Path(result["path"]).read_bytes())
     assert manifest["files"][0]["path"] == str(part)
     assert manifest["local_runtime_sha256"] == "e" * 64
@@ -94,6 +124,11 @@ def test_archive_materialization_rechecks_transferred_bytes_and_inventory(tmp_pa
     part.write_bytes(b"X" * len(content))
     part.chmod(0o400)
     with pytest.raises(ArchiveBlocked, match="digest differs"):
-        archive.materialize(source_manifest=source_path, source_sha256=source_sha,
-            operation_path=operation_path, operation_sha256=operation_sha, files_dir=transferred,
-            output=tmp_path / "bad.json")
+        archive.materialize(
+            source_manifest=source_path,
+            source_sha256=source_sha,
+            operation_path=operation_path,
+            operation_sha256=operation_sha,
+            files_dir=transferred,
+            output=tmp_path / "bad.json",
+        )

@@ -1015,7 +1015,13 @@
     "m0874": "Trovi le misurazioni precedenti e le registrazioni originali in Esporta.",
     "m0875": "La saturazione è un problema di misurazione e non indica stress della pianta.",
     "m0876": "Misurazione della saturazione fino a: {value0}",
-    "m0877": "Questo gateway non fornisce percentuali di saturazione o marcatori Live. L’anteprima rapida è disponibile sui sensori Direct compatibili."
+    "m0877": "Questo gateway non fornisce percentuali di saturazione o marcatori Live. L’anteprima rapida è disponibile sui sensori Direct compatibili.",
+    "m0878": "{amount} di riserva di sicurezza",
+    "m0879": "Aggiornato alle {time}",
+    "m0880": "{used} utilizzati su {total}",
+    "m0881": "La copia sarà disponibile dopo il rilascio in produzione.",
+    "m0882": "Il servizio di copia in produzione non è ancora connesso all’amministrazione.",
+    "m0883": "Servizio connesso."
   },
   "Public": {
     "p0001": "Chi siamo",

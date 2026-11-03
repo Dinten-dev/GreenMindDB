@@ -12,9 +12,14 @@ def test_health_failure_survives_durable_outcome_without_details(tmp_path, monke
     monkeypatch.setattr(execution, "monitored", lambda *_args, **_kwargs: nullcontext())
     with pytest.raises(SafetyPause):
         with execution.bounded_job(tmp_path, seconds=3, emit=False):
-            raise SafetyPause("receiver_or_archive_resources", {
-                "reason": reason, "url": "SECRET_URL", "token": "SECRET_TOKEN",
-            })
+            raise SafetyPause(
+                "receiver_or_archive_resources",
+                {
+                    "reason": reason,
+                    "url": "SECRET_URL",
+                    "token": "SECRET_TOKEN",
+                },
+            )
     raw = (tmp_path / "copy-last-run.json").read_text()
     value = json.loads(raw)
     assert value["state"] == "paused"

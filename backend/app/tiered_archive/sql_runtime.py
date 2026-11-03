@@ -101,12 +101,25 @@ def evict(
     from . import sql_deletion, sql_deletion_guard, sql_deletion_scope, sql_deletion_v3
 
     _need(
-        operation in {"evict", "evict-v3", "source-approval-v3", "scope-bootstrap", "scope-reconcile", "scope-bootstrap-v3", "scope-reconcile-v3"}, "Exact SQL operation required"
+        operation
+        in {
+            "evict",
+            "evict-v3",
+            "source-approval-v3",
+            "scope-bootstrap",
+            "scope-reconcile",
+            "scope-bootstrap-v3",
+            "scope-reconcile-v3",
+        },
+        "Exact SQL operation required",
     )
     enabled = (
-        "TIERED_ARCHIVE_SQL_V3_SCOPE_ENABLED" if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"}
-        else "TIERED_ARCHIVE_SQL_V3_CLI_ENABLED" if operation in {"evict-v3", "source-approval-v3"}
-        else "TIERED_ARCHIVE_SQL_CLI_ENABLED" if operation == "evict"
+        "TIERED_ARCHIVE_SQL_V3_SCOPE_ENABLED"
+        if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"}
+        else "TIERED_ARCHIVE_SQL_V3_CLI_ENABLED"
+        if operation in {"evict-v3", "source-approval-v3"}
+        else "TIERED_ARCHIVE_SQL_CLI_ENABLED"
+        if operation == "evict"
         else "TIERED_ARCHIVE_SQL_SCOPE_ENABLED"
     )
     _need(
@@ -182,7 +195,17 @@ def evict(
                         os.environ["RAW_ARCHIVE_SFTP_USER"],
                         os.environ["RAW_ARCHIVE_SFTP_HOST"],
                     )
-                    guard_factory = (sql_deletion_guard.build_guard_v3 if operation in {"evict-v3", "source-approval-v3", "scope-bootstrap-v3", "scope-reconcile-v3"} else sql_deletion_guard.build_guard)
+                    guard_factory = (
+                        sql_deletion_guard.build_guard_v3
+                        if operation
+                        in {
+                            "evict-v3",
+                            "source-approval-v3",
+                            "scope-bootstrap-v3",
+                            "scope-reconcile-v3",
+                        }
+                        else sql_deletion_guard.build_guard
+                    )
                     proof = guard_factory(
                         candidate,
                         adapter,
@@ -205,9 +228,15 @@ def evict(
                     }[operation]
                     extra = {}
                     if operation == "source-approval-v3":
-                        extra = {"binding_path": binding_path, "binding_sha256": binding_sha256,
-                                 "dba_identity_path": dba_identity_path, "dba_identity_sha256": dba_identity_sha256,
-                                 "producer_sha256": producer_sha256, "challenge_file": challenge_file, "frame_file": frame_file}
+                        extra = {
+                            "binding_path": binding_path,
+                            "binding_sha256": binding_sha256,
+                            "dba_identity_path": dba_identity_path,
+                            "dba_identity_sha256": dba_identity_sha256,
+                            "producer_sha256": producer_sha256,
+                            "challenge_file": challenge_file,
+                            "frame_file": frame_file,
+                        }
                     elif operation not in {"evict", "evict-v3"}:
                         import json
 
@@ -251,10 +280,26 @@ def evict(
                         **extra,
                     )
                     return {
-                        "status": result["state"] if operation in {"evict", "evict-v3"} else result["status"],
+                        "status": result["state"]
+                        if operation in {"evict", "evict-v3"}
+                        else result["status"],
                         "identity": candidate.identity,
-                        **({"epoch": result["epoch"]} if operation in {"scope-bootstrap", "scope-reconcile", "scope-bootstrap-v3", "scope-reconcile-v3"} else {}),
-                        **({"proof_sha256": result["proof_sha256"]} if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"} else {}),
+                        **(
+                            {"epoch": result["epoch"]}
+                            if operation
+                            in {
+                                "scope-bootstrap",
+                                "scope-reconcile",
+                                "scope-bootstrap-v3",
+                                "scope-reconcile-v3",
+                            }
+                            else {}
+                        ),
+                        **(
+                            {"proof_sha256": result["proof_sha256"]}
+                            if operation in {"scope-bootstrap-v3", "scope-reconcile-v3"}
+                            else {}
+                        ),
                     }
         finally:
             source_engine.dispose()
@@ -336,7 +381,9 @@ def prepare_sql_registry():
             readonly.close()
 
 
-def _await_source_frame(challenge_file, frame_file, action, payload, checkpoint, *, seconds=45, maximum=1024 * 1024):
+def _await_source_frame(
+    challenge_file, frame_file, action, payload, checkpoint, *, seconds=45, maximum=1024 * 1024
+):
     """Exchange a fresh lease challenge with an independently managed root bridge."""
     import json
     import stat

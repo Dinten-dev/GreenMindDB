@@ -68,7 +68,8 @@ def test_new_epoch_and_zero_pin_guard_with_independent_v2_handoffs(tmp_path, mon
         result = real_stat(path, *args, **kwargs)
         return (
             RootStat(result)
-            if path == tmp_path or path in tmp_path.parents
+            if path == tmp_path
+            or path in tmp_path.parents
             or path in {tmp_path / "handoff.json", tmp_path / "handoff-ready.json"}
             else result
         )
@@ -79,6 +80,7 @@ def test_new_epoch_and_zero_pin_guard_with_independent_v2_handoffs(tmp_path, mon
         "read_bytes",
         lambda path: b"archive-machine" if str(path) == "/etc/machine-id" else real_bytes(path),
     )
+
     def fake_text(path, *args, **kwargs):
         if str(path) == "/proc/sys/kernel/random/boot_id":
             return boot
@@ -160,7 +162,9 @@ def test_new_epoch_and_zero_pin_guard_with_independent_v2_handoffs(tmp_path, mon
             }
         ]
         if role == "archive":
-            policies[role] = [{"name": unit["name"], "mode": "archive_worker", "plan_sha256": unit_sha}]
+            policies[role] = [
+                {"name": unit["name"], "mode": "archive_worker", "plan_sha256": unit_sha}
+            ]
         plan = {
             "format": "greenmind.managed-snapshot.root-roster-plan.v2",
             "role": role,
@@ -198,10 +202,21 @@ def test_new_epoch_and_zero_pin_guard_with_independent_v2_handoffs(tmp_path, mon
             "dependency_matches": [],
         }
         if role == "archive":
-            roster["units"] = [unit | {"main_pid": os.getpid(), "main_start_ticks": 123,
-                "main_uid": 0, "active_state": "active", "cgroup": "/system.slice/archive.service",
-                "invocation": "f" * 32, "scope_environment": {
-                    "RAW_ARCHIVE_MANAGED_SCOPE_REQUIRED": "true", "RAW_ARCHIVE_MANAGED_SCOPE_EPOCH": epoch}}]
+            roster["units"] = [
+                unit
+                | {
+                    "main_pid": os.getpid(),
+                    "main_start_ticks": 123,
+                    "main_uid": 0,
+                    "active_state": "active",
+                    "cgroup": "/system.slice/archive.service",
+                    "invocation": "f" * 32,
+                    "scope_environment": {
+                        "RAW_ARCHIVE_MANAGED_SCOPE_REQUIRED": "true",
+                        "RAW_ARCHIVE_MANAGED_SCOPE_EPOCH": epoch,
+                    },
+                }
+            ]
         roster_parts[role] = (plan, roster)
 
     def handoff(ids):
@@ -266,8 +281,15 @@ def test_new_epoch_and_zero_pin_guard_with_independent_v2_handoffs(tmp_path, mon
         monkeypatch.setenv("TIERED_ARCHIVE_SNAPSHOT_DEPENDENCIES_SHA256", config_sha)
         handoff([])
         pointer = tmp_path / "handoff-ready.json"
-        write(pointer, {"schema": 1, "scope_epoch": epoch, "path": str(tmp_path / "handoff.json"),
-                        "sha256": os.environ["TIERED_ARCHIVE_SNAPSHOT_HANDOFF_SHA256"]})
+        write(
+            pointer,
+            {
+                "schema": 1,
+                "scope_epoch": epoch,
+                "path": str(tmp_path / "handoff.json"),
+                "sha256": os.environ["TIERED_ARCHIVE_SNAPSHOT_HANDOFF_SHA256"],
+            },
+        )
         monkeypatch.setenv("TIERED_ARCHIVE_SNAPSHOT_HANDOFF_READY", str(pointer))
         monkeypatch.delenv("TIERED_ARCHIVE_SNAPSHOT_HANDOFF_SHA256")
         subject.reconcile_scope(

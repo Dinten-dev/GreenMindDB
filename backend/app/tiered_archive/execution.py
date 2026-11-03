@@ -14,12 +14,24 @@ from app.raw_archive.health import SafetyPause
 
 from .resources import monitored
 
-HEALTH_REASONS = frozenset({
-    "memory", "source_space", "receiver_health", "receiver_health_body", "host_load",
-    "probe_error", "source_probe_unavailable", "source_probe_invalid", "source_identity",
-    "source_probe_stale", "source_memory", "source_load", "source_receiver_health",
-    "source_probe_error",
-})
+HEALTH_REASONS = frozenset(
+    {
+        "memory",
+        "source_space",
+        "receiver_health",
+        "receiver_health_body",
+        "host_load",
+        "probe_error",
+        "source_probe_unavailable",
+        "source_probe_invalid",
+        "source_identity",
+        "source_probe_stale",
+        "source_memory",
+        "source_load",
+        "source_receiver_health",
+        "source_probe_error",
+    }
+)
 
 
 def atomic_json(path, value):

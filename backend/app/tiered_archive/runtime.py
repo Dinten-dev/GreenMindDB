@@ -666,20 +666,32 @@ def managed_snapshot_scope(*, activate):
         raise ArchiveBlocked("Managed snapshot scope contract invalid") from None
     with worker() as (ledger, store, checkpoint):
         with httpx.Client(
-            headers={"Authorization": "Bearer " + private_token(Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE"]))},
-            timeout=httpx.Timeout(8, connect=3), trust_env=False,
+            headers={
+                "Authorization": "Bearer "
+                + private_token(Path(os.environ["TIERED_ARCHIVE_SNAPSHOT_TOKEN_FILE"]))
+            },
+            timeout=httpx.Timeout(8, connect=3),
+            trust_env=False,
         ) as client:
-            provider = SnapshotAPI(client, int(os.environ["TIERED_ARCHIVE_BOX_ID"]),
-                                   os.environ["RAW_ARCHIVE_SFTP_USER"], os.environ["RAW_ARCHIVE_SFTP_HOST"])
+            provider = SnapshotAPI(
+                client,
+                int(os.environ["TIERED_ARCHIVE_BOX_ID"]),
+                os.environ["RAW_ARCHIVE_SFTP_USER"],
+                os.environ["RAW_ARCHIVE_SFTP_HOST"],
+            )
             provider.validate_box()
-            reconcile_scope(ledger, provider, contract=contract, contract_sha256=expected, activate=activate)
+            reconcile_scope(
+                ledger, provider, contract=contract, contract_sha256=expected, activate=activate
+            )
             try:
                 reference = backup(ledger, store, checkpoint=checkpoint)
                 if reference.get("status") == "empty":
                     raise ArchiveBlocked("Managed scope catalogue backup is empty")
             except BaseException:
                 with ledger.db:
-                    ledger.db.execute("UPDATE managed_snapshot_scope SET recovery_state='needs_reconcile' WHERE id=1")
+                    ledger.db.execute(
+                        "UPDATE managed_snapshot_scope SET recovery_state='needs_reconcile' WHERE id=1"
+                    )
                 raise
     return {"status": "current", "epoch": contract["epoch"], "registry_reference": reference}
 
@@ -788,7 +800,9 @@ def managed_snapshot_pin(
                 raise ArchiveBlocked("Current pinned managed scope required for release")
             scope = json.loads(scope_raw)
             validate_local_scope_bindings(
-                scope, ledger, SimpleNamespace(box_id=int(os.environ["TIERED_ARCHIVE_BOX_ID"])),
+                scope,
+                ledger,
+                SimpleNamespace(box_id=int(os.environ["TIERED_ARCHIVE_BOX_ID"])),
                 terminating_pin=operation["pin_id"],
             )
             binding = termination["binding"]
@@ -822,13 +836,20 @@ def managed_snapshot_pin(
                 if frozen_path is not None or frozen_sha256 is not None:
                     raise ArchiveBlocked("Pilot completion does not accept restore inputs")
                 ledger.release_completed_pilot_pin(
-                    pin_id=pin_id, operation_path=operation_path,
-                    operation_sha256=operation_sha256, owner=operation["owner"], replay_guard=replay_guard,
+                    pin_id=pin_id,
+                    operation_path=operation_path,
+                    operation_sha256=operation_sha256,
+                    owner=operation["owner"],
+                    replay_guard=replay_guard,
                 )
             else:
                 ledger.release_frozen_snapshot_pin(
-                    pin_id=pin_id, operation_path=operation_path, operation_sha256=operation_sha256,
-                    owner=operation["owner"], frozen_manifest=frozen_path, manifest_sha256=frozen_sha256,
+                    pin_id=pin_id,
+                    operation_path=operation_path,
+                    operation_sha256=operation_sha256,
+                    owner=operation["owner"],
+                    frozen_manifest=frozen_path,
+                    manifest_sha256=frozen_sha256,
                     replay_guard=replay_guard,
                 )
             state = "released"
@@ -937,7 +958,12 @@ def backup(source, *, backup_format="schema-master-v2", coordination_kind="copy"
     parent_enabled = os.getenv("TIERED_ARCHIVE_PARENT_SNAPSHOT_ENABLED") == "true"
     if parent_enabled and backup_format != schema_provider.FORMAT:
         raise ArchiveBlocked("Parent snapshot requires the explicit provider backup format")
-    if backup_format not in {"schema-master-v2", "postgres-full-v1", schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
+    if backup_format not in {
+        "schema-master-v2",
+        "postgres-full-v1",
+        schema_provider.FORMAT,
+        schema_provider.AUDIT_V3_FORMAT,
+    }:
         raise ArchiveBlocked("Unknown database backup format")
     if backup_format in {schema_provider.FORMAT, schema_provider.AUDIT_V3_FORMAT}:
         if os.geteuid() != 0:
@@ -948,8 +974,11 @@ def backup(source, *, backup_format="schema-master-v2", coordination_kind="copy"
         )
         if provider_scope["environment"] != environment() or provider_scope["source"] != source:
             raise ArchiveBlocked("Provider authority belongs to another environment or source")
-        if backup_format == schema_provider.AUDIT_V3_FORMAT and (source != "gateway" or environment() != "production"
-                or os.getenv("TIERED_ARCHIVE_SQL_V3_SOURCE_SNAPSHOT_ENABLED") != "true"):
+        if backup_format == schema_provider.AUDIT_V3_FORMAT and (
+            source != "gateway"
+            or environment() != "production"
+            or os.getenv("TIERED_ARCHIVE_SQL_V3_SOURCE_SNAPSHOT_ENABLED") != "true"
+        ):
             raise ArchiveBlocked("Explicit production Gateway V3 Source snapshot required")
     if backup_format == "postgres-full-v1" and environment() != "staging":
         raise ArchiveBlocked("Native full backup is currently restricted to Staging")
@@ -1003,18 +1032,32 @@ def backup(source, *, backup_format="schema-master-v2", coordination_kind="copy"
                     from .parent_snapshot import root_snapshot_capture
 
                     options["parent_capture"] = root_snapshot_capture(
-                        folder, source, profile_path=os.environ["TIERED_ARCHIVE_PARENT_SNAPSHOT_PROFILE_FILE"],
-                        profile_sha256=os.environ["TIERED_ARCHIVE_PARENT_SNAPSHOT_PROFILE_SHA256"])
+                        folder,
+                        source,
+                        profile_path=os.environ["TIERED_ARCHIVE_PARENT_SNAPSHOT_PROFILE_FILE"],
+                        profile_sha256=os.environ["TIERED_ARCHIVE_PARENT_SNAPSHOT_PROFILE_SHA256"],
+                    )
                 if backup_format == schema_provider.AUDIT_V3_FORMAT:
                     from .sql_audit_v3_backup import root_snapshot_capture
 
                     options["audit_capture"] = root_snapshot_capture(
-                        folder, key, profile_path=os.environ["TIERED_ARCHIVE_SQL_V3_SNAPSHOT_PROFILE_FILE"],
-                        profile_sha256=os.environ["TIERED_ARCHIVE_SQL_V3_SNAPSHOT_PROFILE_SHA256"])
-                    options["schema_capture"] = options["audit_capture"].root_bridge.schema_capture(provider_scope, folder)
+                        folder,
+                        key,
+                        profile_path=os.environ["TIERED_ARCHIVE_SQL_V3_SNAPSHOT_PROFILE_FILE"],
+                        profile_sha256=os.environ["TIERED_ARCHIVE_SQL_V3_SNAPSHOT_PROFILE_SHA256"],
+                    )
+                    options["schema_capture"] = options["audit_capture"].root_bridge.schema_capture(
+                        provider_scope, folder
+                    )
                 try:
                     candidate, files = schema_provider.capture(
-                        database_url, source, folder, key, provider_scope, checkpoint=checkpoint, **options
+                        database_url,
+                        source,
+                        folder,
+                        key,
+                        provider_scope,
+                        checkpoint=checkpoint,
+                        **options,
                     )
                 finally:
                     if "audit_capture" in options:
@@ -1024,16 +1067,21 @@ def backup(source, *, backup_format="schema-master-v2", coordination_kind="copy"
                     parent = options["parent_capture"]
                     if not getattr(parent, "join", None):
                         raise ArchiveBlocked("Parent completion join missing")
-                    published = parent.record_publication(receipt, ledger=ledger, checkpoint=checkpoint)
-                    return {"backup_candidate": candidate.identity,
-                            "backup_manifest_sha256": receipt["manifest"]["sha256"],
-                            "parent_join_path": parent.join["path"],
-                            "parent_join_sha256": parent.join["sha256"],
-                            "parent_capture_sha256": parent.result["capture_sha256"],
-                            "parent_frame_sha256": parent.result["frame_sha256"],
-                            "parent_publication_join_path": published["path"],
-                            "parent_publication_join_sha256": published["sha256"],
-                            "native_restore_verified": False, "archive_accepted": False}
+                    published = parent.record_publication(
+                        receipt, ledger=ledger, checkpoint=checkpoint
+                    )
+                    return {
+                        "backup_candidate": candidate.identity,
+                        "backup_manifest_sha256": receipt["manifest"]["sha256"],
+                        "parent_join_path": parent.join["path"],
+                        "parent_join_sha256": parent.join["sha256"],
+                        "parent_capture_sha256": parent.result["capture_sha256"],
+                        "parent_frame_sha256": parent.result["frame_sha256"],
+                        "parent_publication_join_path": published["path"],
+                        "parent_publication_join_sha256": published["sha256"],
+                        "native_restore_verified": False,
+                        "archive_accepted": False,
+                    }
                 return receipt
             originals, proof = dump(
                 database_url,

@@ -437,9 +437,21 @@ def prepare_index(source, capture_sha256, output_file, *, checkpoint):
     return {"index": index, "index_sha256": hashlib.sha256(raw).hexdigest()}
 
 
-def load_index(source, capture_sha256, index_file, index_sha256, *, checkpoint, verify_files=True, cooperative_pause=0.0):
+def load_index(
+    source,
+    capture_sha256,
+    index_file,
+    index_sha256,
+    *,
+    checkpoint,
+    verify_files=True,
+    cooperative_pause=0.0,
+):
     proof = load_capture(
-        Path(source), capture_sha256, checkpoint=checkpoint, verify_files=verify_files,
+        Path(source),
+        capture_sha256,
+        checkpoint=checkpoint,
+        verify_files=verify_files,
         cooperative_pause=cooperative_pause,
     )
     raw = _bytes(Path(index_file), MAX_MANIFEST)

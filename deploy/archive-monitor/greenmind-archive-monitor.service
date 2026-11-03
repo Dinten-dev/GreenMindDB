@@ -1,0 +1,25 @@
+[Unit]
+Description=GreenMind private admin archive telemetry, copy-only trigger
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/greenmind/archive-monitor/bridge.py
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=greenmind-archive-monitor
+RuntimeDirectoryMode=0755
+UMask=0077
+MemoryMax=48M
+CPUQuota=10%
+Nice=19
+IOSchedulingClass=idle
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ReadWritePaths=/run/greenmind-archive-monitor
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

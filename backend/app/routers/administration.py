@@ -10,6 +10,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.archive_monitor import ArchiveBridgeUnavailable, archive_bridge
 from app.auth import get_current_user, get_password_hash
 from app.config import settings
 from app.database import Base, get_db
@@ -92,6 +93,60 @@ def _storage_stats(path: str) -> dict:
 
 def _storage_device(path: str) -> int:
     return os.stat(path).st_dev
+
+
+@router.get("/archive/status")
+def archive_status(response: Response, user: User = Depends(require_management_admin)):
+    """Return only archive telemetry available to the current environment.
+
+    The copy worker is host-managed; only Production may use its private socket.
+    Returning nulls is deliberate: never substitute Production data or zeros.
+    """
+    response.headers["Cache-Control"] = "private, no-store"
+    environment = settings.environment.strip().casefold()
+    production = environment in {"prod", "production"}
+    if production:
+        try:
+            return archive_bridge("GET", "/status")
+        except ArchiveBridgeUnavailable:
+            pass
+    return {
+        "environment": environment,
+        "state": "unavailable",
+        "configured": False,
+        "manual_copy_available": False,
+        "files_copied": None,
+        "pending_bytes": None,
+        "transfer_bytes_per_second": None,
+        "worker_memory_bytes": None,
+        "worker_memory_limit_bytes": None,
+        "worker_memory_reserve_bytes": None,
+        "storage_box_used_bytes": None,
+        "storage_box_total_bytes": None,
+        "sampled_at": None,
+        "message": (
+            "Der Kopierdienst ist auf Production noch nicht mit der Administration verbunden."
+            if production
+            else "Kopieren wird erst nach dem Production-Rollout aktiviert."
+        ),
+    }
+
+
+@router.post("/archive/copy")
+def request_archive_copy(user: User = Depends(require_management_admin)):
+    """Fail closed until a Production-only worker bridge is installed."""
+    environment = settings.environment.strip().casefold()
+    if environment not in {"prod", "production"}:
+        raise HTTPException(
+            409,
+            "Manuelles Kopieren ist erst nach dem Production-Rollout verfügbar.",
+        )
+    try:
+        return archive_bridge("POST", "/copy")
+    except ArchiveBridgeUnavailable:
+        raise HTTPException(
+            503, "Kopierstart derzeit nicht verfügbar. Originale bleiben erhalten."
+        ) from None
 
 
 def view(user, grants, db):

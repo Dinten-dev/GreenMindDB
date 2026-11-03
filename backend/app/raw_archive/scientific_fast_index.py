@@ -55,7 +55,9 @@ def fast_prepare_index(
         raise ArchiveBlocked("Bounded offline checkpoint required")
     need(type(parent_mode) is bool, "Explicit parent native indexing mode required")
     if parent_mode:
-        need(target_part_bytes <= 16 * 1024**2, "Parent native part budget exceeds existing workset")
+        need(
+            target_part_bytes <= 16 * 1024**2, "Parent native part budget exceeds existing workset"
+        )
     if os.geteuid() != 0:
         raise ArchiveBlocked("Root-owned offline V3 index required")
     if (

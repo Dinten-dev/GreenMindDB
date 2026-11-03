@@ -35,9 +35,7 @@ def dispatch_email(to_email: str, subject: str, *, text: str = "", html: str = "
                 message.add_alternative(html, subtype="html")
             context = ssl.create_default_context()
             if settings.smtp_security == "starttls":
-                connection = smtplib.SMTP(
-                    settings.smtp_host, settings.smtp_port, timeout=10
-                )
+                connection = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10)
             else:
                 connection = smtplib.SMTP_SSL(
                     settings.smtp_host,

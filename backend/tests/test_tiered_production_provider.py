@@ -16,7 +16,9 @@ URL = "postgresql://greenmind_archive_reader_33fe395:synthetic@127.0.0.1:5432/gr
 
 @pytest.mark.parametrize("production", [False, True])
 @pytest.mark.parametrize("source", ["gateway", "direct"])
-def test_runtime_provider_requires_matching_reviewed_scope_before_worker(monkeypatch, production, source):
+def test_runtime_provider_requires_matching_reviewed_scope_before_worker(
+    monkeypatch, production, source
+):
     from app.tiered_archive import runtime
 
     value, _, _ = scope(source, production=production)

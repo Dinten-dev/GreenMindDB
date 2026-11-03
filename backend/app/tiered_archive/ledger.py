@@ -287,8 +287,13 @@ class Ledger:
             "SELECT snapshot_id,kind,operation_sha256,owner,state FROM managed_snapshot_pin WHERE id=?",
             (pin_id,),
         ).fetchone()
-        if (not row or row[1] != "raw_pilot" or row[2] != operation_sha256
-            or json.loads(row[3]) != owner or row[4] not in {"active", "uncertain"}):
+        if (
+            not row
+            or row[1] != "raw_pilot"
+            or row[2] != operation_sha256
+            or json.loads(row[3]) != owner
+            or row[4] not in {"active", "uncertain"}
+        ):
             raise ArchiveBlocked("Exact pending pilot pin required")
         raw = _private_read(operation_path, 1024 * 1024)
         if hashlib.sha256(raw).hexdigest() != operation_sha256:
@@ -297,9 +302,14 @@ class Ledger:
             operation = json.loads(raw)
         except ValueError:
             raise ArchiveBlocked("Snapshot operation journal is invalid") from None
-        if (type(operation) is not dict or operation.get("pin_id") != pin_id
-            or operation.get("snapshot_id") != row[0] or operation.get("kind") != "raw_pilot"
-            or operation.get("consumer_entrypoint") != "raw-pilot" or operation.get("owner") != owner):
+        if (
+            type(operation) is not dict
+            or operation.get("pin_id") != pin_id
+            or operation.get("snapshot_id") != row[0]
+            or operation.get("kind") != "raw_pilot"
+            or operation.get("consumer_entrypoint") != "raw-pilot"
+            or operation.get("owner") != owner
+        ):
             raise ArchiveBlocked("Pilot operation journal binding differs")
         evidence = replay_guard(pin_id, operation, None)
         if not _sha(evidence):
@@ -400,7 +410,8 @@ class Ledger:
             or manifest["local_runtime_sha256"] != runtime_sha256()
             or not (
                 manifest["local_executor"] == "app.tiered_archive.database_restore.restore_backup"
-                or manifest["local_executor"] == {
+                or manifest["local_executor"]
+                == {
                     "raw-restore": "app.raw_archive.recovery.restore_bundle",
                     "wav-catalog": "app.raw_archive.wav_catalog.restore_bundle",
                 }.get(operation.get("consumer_entrypoint"), "")

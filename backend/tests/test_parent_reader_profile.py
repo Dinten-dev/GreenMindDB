@@ -91,6 +91,8 @@ def test_replacement_with_same_content_rejected(root_profile, monkeypatch):
             os.replace(replacement, path)
             return value
 
-    monkeypatch.setattr(source.os, "fdopen", lambda fd, mode: ReplacedAfterRead(actual_fdopen(fd, mode)))
+    monkeypatch.setattr(
+        source.os, "fdopen", lambda fd, mode: ReplacedAfterRead(actual_fdopen(fd, mode))
+    )
     with pytest.raises(ArchiveBlocked):
         source._reader_profile_bytes(path, digest)

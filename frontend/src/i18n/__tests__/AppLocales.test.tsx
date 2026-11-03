@@ -208,6 +208,10 @@ it('formats every application message in all four languages without missing keys
       expect(
         translate(key as keyof typeof de.App, {
           count: 2,
+          amount: 'fixture',
+          time: '12:00',
+          used: '1 GB',
+          total: '2 GB',
           value0: 'fixture',
           value1: 'fixture',
           value2: 'fixture',

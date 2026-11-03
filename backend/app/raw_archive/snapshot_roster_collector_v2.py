@@ -646,7 +646,9 @@ def collect(plan, plan_sha):
     need(discover_journals(plan["dependency_roots"]) == dependency_matches)
     for journal in listed:
         need(file_info(journal["path"])["sha256"] == journal["sha256"])
-    for item, previous in zip((x for x in plan["units"] if x["name"] in before), units, strict=True):
+    for item, previous in zip(
+        (x for x in plan["units"] if x["name"] in before), units, strict=True
+    ):
         need(inventory_unit(item, plan["scope_epoch"]) == previous)
     value = {
         "format": ROSTER_FORMAT,

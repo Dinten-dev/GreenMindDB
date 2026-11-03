@@ -498,7 +498,18 @@ def inspect_dump(path, scope, role, master_names, env, *, checkpoint):
     return validate_toc(target.read_bytes(), scope, role, master_names)
 
 
-def capture(database_url, source, output, key, scope, *, checkpoint, schema_capture=None, audit_capture=None, parent_capture=None):
+def capture(
+    database_url,
+    source,
+    output,
+    key,
+    scope,
+    *,
+    checkpoint,
+    schema_capture=None,
+    audit_capture=None,
+    parent_capture=None,
+):
     """Root-only new Gateway5/Direct4 capture using the existing dump/encryption pipeline."""
     from datetime import timedelta
 
@@ -524,14 +535,22 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
     if audit_capture is not None:
         from .sql_audit_v3_backup import AuditSnapshotCapture
 
-        need(type(audit_capture) is AuditSnapshotCapture and audit_capture.output == output
-             and audit_capture.key == key and source == "gateway",
-             "Exact Gateway V3 audit capture and Archive key required")
+        need(
+            type(audit_capture) is AuditSnapshotCapture
+            and audit_capture.output == output
+            and audit_capture.key == key
+            and source == "gateway",
+            "Exact Gateway V3 audit capture and Archive key required",
+        )
     if parent_capture is not None:
         from .parent_snapshot import ParentSnapshotCapture
 
-        need(type(parent_capture) is ParentSnapshotCapture and parent_capture.output == output
-             and parent_capture.source == source, "Exact provider-bound parent capture required")
+        need(
+            type(parent_capture) is ParentSnapshotCapture
+            and parent_capture.output == output
+            and parent_capture.source == source,
+            "Exact provider-bound parent capture required",
+        )
     dumped = backup.dump(
         database_url,
         source,
@@ -591,7 +610,10 @@ def capture(database_url, source, output, key, scope, *, checkpoint, schema_capt
         plain.unlink(missing_ok=True)
     if audit_ref is not None:
         audit_file = output / "sql-audit-v3.bin"
-        need(audit_file.is_file() and checksum(audit_file) == audit_ref["file"]["sha256"], "Sealed V3 audit artifact differs")
+        need(
+            audit_file.is_file() and checksum(audit_file) == audit_ref["file"]["sha256"],
+            "Sealed V3 audit artifact differs",
+        )
         files.append((audit_file, audit_ref["file"]))
     body = {
         "backup_format": AUDIT_V3_FORMAT if audit_ref is not None else FORMAT,

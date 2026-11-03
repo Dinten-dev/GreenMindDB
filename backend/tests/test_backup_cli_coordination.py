@@ -9,10 +9,15 @@ from app.tiered_archive import execution
 
 
 @pytest.mark.parametrize("source", ["gateway", "direct"])
-@pytest.mark.parametrize("backup_format", [
-    "schema-master-v2", "postgres-full-v1", "schema-master-provider-v1",
-    "schema-master-provider-sql-audit-v3",
-])
+@pytest.mark.parametrize(
+    "backup_format",
+    [
+        "schema-master-v2",
+        "postgres-full-v1",
+        "schema-master-provider-v1",
+        "schema-master-provider-sql-audit-v3",
+    ],
+)
 def test_backup_cli_orders_matching_catalog_and_source_lease(
     tmp_path, monkeypatch, capsys, source, backup_format
 ):
@@ -35,8 +40,9 @@ def test_backup_cli_orders_matching_catalog_and_source_lease(
         events.append(backup_format)
         return {"backup": "test-result"}
 
-    monkeypatch.setattr(sys, "argv", ["tiered-archive", "backup", "--source", source,
-                                      "--format", backup_format])
+    monkeypatch.setattr(
+        sys, "argv", ["tiered-archive", "backup", "--source", source, "--format", backup_format]
+    )
     monkeypatch.setattr(cli.runtime, "state_root", lambda: tmp_path)
     monkeypatch.setattr(execution, "bounded_job", lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(cli, "with_source_catalogue_lease", leased)

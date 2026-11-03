@@ -28,9 +28,16 @@ def initialize_managed(db):
 
 
 def backup(ledger, store, *, checkpoint):
-    if ledger.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='science_registry_import_intent'").fetchone():
-        if (ledger.db.execute("SELECT count(*) FROM science_registry_import_intent").fetchone()[0] > 1
-            or ledger.db.execute("SELECT 1 FROM science_registry_import_intent WHERE state IS NULL OR state NOT IN ('applied','complete') OR (state='complete' AND backup_reference IS NULL) LIMIT 1").fetchone()):
+    if ledger.db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='science_registry_import_intent'"
+    ).fetchone():
+        if (
+            ledger.db.execute("SELECT count(*) FROM science_registry_import_intent").fetchone()[0]
+            > 1
+            or ledger.db.execute(
+                "SELECT 1 FROM science_registry_import_intent WHERE state IS NULL OR state NOT IN ('applied','complete') OR (state='complete' AND backup_reference IS NULL) LIMIT 1"
+            ).fetchone()
+        ):
             raise ArchiveBlocked("Incomplete science registry import blocks backup")
     for transition in ("science_v3_reconcile", "sql_deletion_transition"):
         if ledger.db.execute(
@@ -343,8 +350,19 @@ def restore(reference, ledger, store, *, checkpoint, expected_environment):
                 or extension["version"] != 1
                 or type(extension["managed_pin_coverage"]) is not bool
                 or type(extension["tables"]) is not dict
-                or not (set(registry_v5.TABLES) - {"sql_deletion_epoch", "science_v3_import_provenance", "sql_audit_v3_backup", "sql_audit_v3_backup_history", "sql_audit_v3_scope", "sql_audit_v3_scope_proof"}
-                        <= set(extension["tables"]) <= set(registry_v5.TABLES))
+                or not (
+                    set(registry_v5.TABLES)
+                    - {
+                        "sql_deletion_epoch",
+                        "science_v3_import_provenance",
+                        "sql_audit_v3_backup",
+                        "sql_audit_v3_backup_history",
+                        "sql_audit_v3_scope",
+                        "sql_audit_v3_scope_proof",
+                    }
+                    <= set(extension["tables"])
+                    <= set(registry_v5.TABLES)
+                )
             ):
                 raise ArchiveBlocked("Exact V5 journal coverage required")
             # Older V5 indexes predate SQL scope provenance. Missing provenance

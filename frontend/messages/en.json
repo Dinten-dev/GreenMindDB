@@ -1015,7 +1015,13 @@
     "m0874": "Find older measurements and original recordings under Export.",
     "m0875": "Clipping is a measurement problem and does not indicate plant stress.",
     "m0876": "Rail measurement through: {value0}",
-    "m0877": "This gateway does not provide rail percentages or Live markers. Fast preview is available on compatible Direct sensors."
+    "m0877": "This gateway does not provide rail percentages or Live markers. Fast preview is available on compatible Direct sensors.",
+    "m0878": "{amount} safety reserve",
+    "m0879": "As of {time}",
+    "m0880": "{used} of {total} used",
+    "m0881": "Copying becomes available after the production rollout.",
+    "m0882": "The production copy service is not connected to administration yet.",
+    "m0883": "Service connected."
   },
   "Public": {
     "p0001": "About us",

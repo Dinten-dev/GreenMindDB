@@ -31,8 +31,11 @@ def ddl_plan(writer_role, epoch, genesis_sha256):
     """
     need(type(writer_role) is str and NAME.fullmatch(writer_role), "Exact writer role required")
     need(type(epoch) is str and HEX32.fullmatch(epoch), "Exact SQL audit epoch required")
-    need(type(genesis_sha256) is str and HEX64.fullmatch(genesis_sha256), "Pinned SQL audit genesis required")
-    ddl = f'''BEGIN;
+    need(
+        type(genesis_sha256) is str and HEX64.fullmatch(genesis_sha256),
+        "Pinned SQL audit genesis required",
+    )
+    ddl = f"""BEGIN;
 SET LOCAL lock_timeout='150ms';
 SET LOCAL statement_timeout='8s';
 CREATE TABLE public.gm_sql_v3_generation (
@@ -135,7 +138,7 @@ CREATE CONSTRAINT TRIGGER gm_v3_complete AFTER INSERT ON public.gm_sql_v3_event
  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.gm_sql_v3_complete();
 CREATE TRIGGER gm_v3_capture AFTER DELETE ON public.ingest_log FOR EACH ROW EXECUTE FUNCTION public.gm_sql_v3_capture();
 ALTER TABLE public.ingest_log ENABLE ALWAYS TRIGGER gm_v3_capture;
-'''
+"""
     for table in ("generation", "approval", "event", "row", "unknown"):
         name = "gm_sql_v3_" + table
         ddl += f'''CREATE TRIGGER gm_v3_immutable BEFORE UPDATE OR DELETE ON public.{name} FOR EACH ROW EXECUTE FUNCTION public.gm_sql_v3_immutable();
@@ -166,7 +169,14 @@ def schema_sha256(db):
 
     from . import codec, restore_fence
 
-    tables = ("gm_sql_v3_generation", "gm_sql_v3_approval", "gm_sql_v3_event", "gm_sql_v3_row", "gm_sql_v3_unknown", "ingest_log")
+    tables = (
+        "gm_sql_v3_generation",
+        "gm_sql_v3_approval",
+        "gm_sql_v3_event",
+        "gm_sql_v3_row",
+        "gm_sql_v3_unknown",
+        "ingest_log",
+    )
     functions = db.execute(
         text("""SELECT p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid),
           pg_catalog.pg_get_functiondef(p.oid),p.proowner::bigint,p.proacl::text
@@ -176,50 +186,100 @@ def schema_sha256(db):
            'gm_sql_v3_immutable','gm_sql_v3_validate_approval') ORDER BY p.proname""")
     ).all()
     need(len(functions) == 5, "V3 audit function roster differs")
-    return codec.digest({
-        "relations": {name: restore_fence._relation_pin(db, name) for name in tables},
-        "functions": [list(row) for row in functions],
-    })
-
+    return codec.digest(
+        {
+            "relations": {name: restore_fence._relation_pin(db, name) for name in tables},
+            "functions": [list(row) for row in functions],
+        }
+    )
 
 
 def inspect_writer(db, writer_role, writer_oid):
     """Read actual Source role and table privileges; a pin alone is not authority."""
     from sqlalchemy import text
 
-    role = db.execute(text("""SELECT oid::bigint,rolsuper,rolbypassrls,rolreplication,
-        rolcreaterole,rolcreatedb,rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=:name"""), {"name": writer_role}).one_or_none()
-    need(role is not None and tuple(role) == (writer_oid, False, False, False, False, False, True), "V3 writer role privileges differ")
+    role = db.execute(
+        text("""SELECT oid::bigint,rolsuper,rolbypassrls,rolreplication,
+        rolcreaterole,rolcreatedb,rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=:name"""),
+        {"name": writer_role},
+    ).one_or_none()
+    need(
+        role is not None and tuple(role) == (writer_oid, False, False, False, False, False, True),
+        "V3 writer role privileges differ",
+    )
     for table in ("generation", "approval", "event", "row", "unknown"):
         name = "public.gm_sql_v3_" + table
-        privileges = db.execute(text("""SELECT
+        privileges = db.execute(
+            text("""SELECT
             pg_catalog.has_table_privilege(:role, c.oid, 'SELECT'),
             pg_catalog.has_table_privilege(:role, c.oid, 'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER'),
             pg_catalog.pg_has_role(:role, c.relowner, 'MEMBER')
-            FROM pg_catalog.pg_class c WHERE c.oid=pg_catalog.to_regclass(:name)"""), {"role": writer_role, "name": name}).one_or_none()
-        need(privileges is not None and tuple(privileges) == (True, False, False), "V3 writer table privileges differ")
-    can_arm = db.execute(text("SELECT pg_catalog.has_function_privilege(:role,'public.gm_sql_v3_arm(smallint,text)','EXECUTE')"), {"role": writer_role}).scalar_one()
+            FROM pg_catalog.pg_class c WHERE c.oid=pg_catalog.to_regclass(:name)"""),
+            {"role": writer_role, "name": name},
+        ).one_or_none()
+        need(
+            privileges is not None and tuple(privileges) == (True, False, False),
+            "V3 writer table privileges differ",
+        )
+    can_arm = db.execute(
+        text(
+            "SELECT pg_catalog.has_function_privilege(:role,'public.gm_sql_v3_arm(smallint,text)','EXECUTE')"
+        ),
+        {"role": writer_role},
+    ).scalar_one()
     need(can_arm is True, "V3 writer factory privilege missing")
 
 
 def validate_operation_body(raw, candidate_sha, permit_sha):
     """DBA approval contains the exact public V3 pilot authorization binding."""
-    need(type(raw) is str and len(raw.encode()) <= 1024 and all(ord(c) >= 32 for c in raw), "Bounded V3 audit body required")
+    need(
+        type(raw) is str and len(raw.encode()) <= 1024 and all(ord(c) >= 32 for c in raw),
+        "Bounded V3 audit body required",
+    )
     try:
         value = json.loads(raw)
     except (TypeError, ValueError) as exc:
         raise ArchiveBlocked("V3 audit operation encoding differs") from exc
-    fields = {"format", "pilot_id", "candidate", "authorization_sha256", "runtime_sha256", "bindings_sha256", "proof_contract_sha256", "fence_contract_sha256"}
-    need(type(value) is dict and set(value) == fields and value["format"] == "greenmind.sql-audit-operation.v3" and type(value["pilot_id"]) is str and HEX32.fullmatch(value["pilot_id"]) and value["candidate"] == candidate_sha and value["authorization_sha256"] == permit_sha and all(type(value[k]) is str and HEX64.fullmatch(value[k]) for k in fields - {"format", "pilot_id"}) and json.dumps(value, sort_keys=True, separators=(",", ":")) == raw, "V3 audit operation scope differs")
+    fields = {
+        "format",
+        "pilot_id",
+        "candidate",
+        "authorization_sha256",
+        "runtime_sha256",
+        "bindings_sha256",
+        "proof_contract_sha256",
+        "fence_contract_sha256",
+    }
+    need(
+        type(value) is dict
+        and set(value) == fields
+        and value["format"] == "greenmind.sql-audit-operation.v3"
+        and type(value["pilot_id"]) is str
+        and HEX32.fullmatch(value["pilot_id"])
+        and value["candidate"] == candidate_sha
+        and value["authorization_sha256"] == permit_sha
+        and all(
+            type(value[k]) is str and HEX64.fullmatch(value[k])
+            for k in fields - {"format", "pilot_id"}
+        )
+        and json.dumps(value, sort_keys=True, separators=(",", ":")) == raw,
+        "V3 audit operation scope differs",
+    )
     return value
 
 
 def check_lease_expiry(expires, now, remaining):
-    need(type(remaining) in (int, float) and remaining > 0
-         and 0 < (expires - now).total_seconds() <= remaining,
-         "V3 permit outlives Source lease")
+    need(
+        type(remaining) in (int, float)
+        and remaining > 0
+        and 0 < (expires - now).total_seconds() <= remaining,
+        "V3 permit outlives Source lease",
+    )
 
-def provision(engine, *, permit_path, permit_sha256, binding_path, binding_sha256, lease_session, checkpoint):
+
+def provision(
+    engine, *, permit_path, permit_sha256, binding_path, binding_sha256, lease_session, checkpoint
+):
     """Source-root DBA provisioner; caller must own the authenticated Archive handoff.
 
     This is deliberately not exposed as an automatic CLI, nor does it install
@@ -241,27 +301,99 @@ def provision(engine, *, permit_path, permit_sha256, binding_path, binding_sha25
     need(os.geteuid() == 0 and callable(checkpoint), "Source root execution required")
     permit = control._private_json(permit_path, permit_sha256, limit=16384)
     binding = control._private_json(binding_path, binding_sha256, limit=16384)
-    fields = {"format", "lease_session", "producer_sha256", "source_identity", "schema_sha256", "writer_role", "writer_oid", "epoch", "slot", "candidate_sha", "tenant_sha", "pk_sha", "permit_sha", "body", "expected", "start_at", "expires_at"}
-    need(set(permit) == fields and permit["format"] == "greenmind.sql-audit-v3-source-permit.v1", "Exact V3 root permit required")
-    need(type(lease_session) is str and HEX32.fullmatch(lease_session) and permit["lease_session"] == lease_session, "Source lease nonce differs")
-    need(permit["producer_sha256"] == hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "V3 provisioner code pin differs")
-    need(type(permit["source_identity"]) is dict and HEX64.fullmatch(permit["schema_sha256"] or ""), "Native Source pins required")
-    need(type(permit["writer_role"]) is str and NAME.fullmatch(permit["writer_role"]) and type(permit["writer_oid"]) is int and permit["writer_oid"] > 0, "Exact writer role pin required")
-    need(type(permit["epoch"]) is str and HEX32.fullmatch(permit["epoch"]) and type(permit["slot"]) is int and 1 <= permit["slot"] <= MAX_OPERATIONS, "V3 epoch or capacity differs")
-    need(all(type(permit[k]) is str and HEX64.fullmatch(permit[k]) for k in ("candidate_sha", "tenant_sha", "pk_sha", "permit_sha")), "Exact V3 scope hashes required")
+    fields = {
+        "format",
+        "lease_session",
+        "producer_sha256",
+        "source_identity",
+        "schema_sha256",
+        "writer_role",
+        "writer_oid",
+        "epoch",
+        "slot",
+        "candidate_sha",
+        "tenant_sha",
+        "pk_sha",
+        "permit_sha",
+        "body",
+        "expected",
+        "start_at",
+        "expires_at",
+    }
+    need(
+        set(permit) == fields and permit["format"] == "greenmind.sql-audit-v3-source-permit.v1",
+        "Exact V3 root permit required",
+    )
+    need(
+        type(lease_session) is str
+        and HEX32.fullmatch(lease_session)
+        and permit["lease_session"] == lease_session,
+        "Source lease nonce differs",
+    )
+    need(
+        permit["producer_sha256"] == hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "V3 provisioner code pin differs",
+    )
+    need(
+        type(permit["source_identity"]) is dict and HEX64.fullmatch(permit["schema_sha256"] or ""),
+        "Native Source pins required",
+    )
+    need(
+        type(permit["writer_role"]) is str
+        and NAME.fullmatch(permit["writer_role"])
+        and type(permit["writer_oid"]) is int
+        and permit["writer_oid"] > 0,
+        "Exact writer role pin required",
+    )
+    need(
+        type(permit["epoch"]) is str
+        and HEX32.fullmatch(permit["epoch"])
+        and type(permit["slot"]) is int
+        and 1 <= permit["slot"] <= MAX_OPERATIONS,
+        "V3 epoch or capacity differs",
+    )
+    need(
+        all(
+            type(permit[k]) is str and HEX64.fullmatch(permit[k])
+            for k in ("candidate_sha", "tenant_sha", "pk_sha", "permit_sha")
+        ),
+        "Exact V3 scope hashes required",
+    )
     validate_operation_body(permit["body"], permit["candidate_sha"], permit["permit_sha"])
     expected = permit["expected"]
-    need(type(expected) is list and 1 <= len(expected) <= MAX_ROWS and all(type(x) is str and HEX64.fullmatch(x) for x in expected) and expected == sorted(set(expected)), "Exact unique V3 native row hashes required")
+    need(
+        type(expected) is list
+        and 1 <= len(expected) <= MAX_ROWS
+        and all(type(x) is str and HEX64.fullmatch(x) for x in expected)
+        and expected == sorted(set(expected)),
+        "Exact unique V3 native row hashes required",
+    )
     try:
         start = datetime.fromisoformat(permit["start_at"])
         expires = datetime.fromisoformat(permit["expires_at"])
         now = datetime.now(UTC)
-        valid = start.utcoffset() is not None and expires.utcoffset() is not None and start <= now < expires and 0 < (expires - start).total_seconds() <= 110
+        valid = (
+            start.utcoffset() is not None
+            and expires.utcoffset() is not None
+            and start <= now < expires
+            and 0 < (expires - start).total_seconds() <= 110
+        )
     except (TypeError, ValueError):
         valid = False
     need(valid, "V3 Source permit time differs")
     locked = control._source_lock(full=True)
-    need(locked["device"] == binding.get("lock_device") and locked["inode"] == binding.get("lock_inode") and locked["uid"] == binding.get("lease_uid") and locked["command_sha256"] == binding.get("lease_command_sha256") and locked["executable_sha256"] == binding.get("lease_executable_sha256") and socket.gethostname() == binding.get("hostname") and hashlib.sha256(Path("/etc/machine-id").read_bytes()).hexdigest() == binding.get("machine_sha256") and Path("/proc/sys/kernel/random/boot_id").read_text().strip() == binding.get("boot_id"), "Source lease binding differs")
+    need(
+        locked["device"] == binding.get("lock_device")
+        and locked["inode"] == binding.get("lock_inode")
+        and locked["uid"] == binding.get("lease_uid")
+        and locked["command_sha256"] == binding.get("lease_command_sha256")
+        and locked["executable_sha256"] == binding.get("lease_executable_sha256")
+        and socket.gethostname() == binding.get("hostname")
+        and hashlib.sha256(Path("/etc/machine-id").read_bytes()).hexdigest()
+        == binding.get("machine_sha256")
+        and Path("/proc/sys/kernel/random/boot_id").read_text().strip() == binding.get("boot_id"),
+        "Source lease binding differs",
+    )
     ticks = os.sysconf("SC_CLK_TCK")
     need(type(ticks) is int and ticks > 0, "Source clock unavailable")
     deadline = min(time.monotonic() + 95, locked["start_ticks"] / ticks + 110)
@@ -272,21 +404,57 @@ def provision(engine, *, permit_path, permit_sha256, binding_path, binding_sha25
     def check():
         checkpoint()
         scientific_capture._cgroup_limits()
-        need(time.monotonic() < deadline and control._source_lock(full=False) == holder, "Source lease expired or changed")
+        need(
+            time.monotonic() < deadline and control._source_lock(full=False) == holder,
+            "Source lease expired or changed",
+        )
         need(datetime.now(UTC) < expires, "Source permit expired")
 
     check()
     with engine.begin() as db:
-        need(db.dialect.name == "postgresql" and _identity(db) == permit["source_identity"], "Source DBA identity differs")
+        need(
+            db.dialect.name == "postgresql" and _identity(db) == permit["source_identity"],
+            "Source DBA identity differs",
+        )
         need(schema_sha256(db) == permit["schema_sha256"], "Source V3 schema differs")
-        writer_oid = db.execute(text("SELECT oid::bigint FROM pg_catalog.pg_roles WHERE rolname=:name"), {"name": permit["writer_role"]}).scalar_one()
+        writer_oid = db.execute(
+            text("SELECT oid::bigint FROM pg_catalog.pg_roles WHERE rolname=:name"),
+            {"name": permit["writer_role"]},
+        ).scalar_one()
         need(writer_oid == permit["writer_oid"], "Source writer role OID differs")
         inspect_writer(db, permit["writer_role"], writer_oid)
         db.execute(text("SET LOCAL lock_timeout='150ms'"))
         db.execute(text("SET LOCAL statement_timeout='8s'"))
         check()
-        db.execute(text("""INSERT INTO public.gm_sql_v3_approval(slot,epoch,writer_oid,candidate_sha,tenant_sha,pk_sha,permit_sha,body,expected,start_at,expires_at)
-            VALUES(:slot,:epoch,:writer_oid,:candidate_sha,:tenant_sha,:pk_sha,:permit_sha,:body,CAST(:expected AS text[]),:start_at,:expires_at)"""), {k: permit[k] for k in ("slot", "epoch", "writer_oid", "candidate_sha", "tenant_sha", "pk_sha", "permit_sha", "body", "expected", "start_at", "expires_at")})
-        need(schema_sha256(db) == permit["schema_sha256"] and _identity(db) == permit["source_identity"], "Source V3 schema or DBA changed during provision")
+        db.execute(
+            text("""INSERT INTO public.gm_sql_v3_approval(slot,epoch,writer_oid,candidate_sha,tenant_sha,pk_sha,permit_sha,body,expected,start_at,expires_at)
+            VALUES(:slot,:epoch,:writer_oid,:candidate_sha,:tenant_sha,:pk_sha,:permit_sha,:body,CAST(:expected AS text[]),:start_at,:expires_at)"""),
+            {
+                k: permit[k]
+                for k in (
+                    "slot",
+                    "epoch",
+                    "writer_oid",
+                    "candidate_sha",
+                    "tenant_sha",
+                    "pk_sha",
+                    "permit_sha",
+                    "body",
+                    "expected",
+                    "start_at",
+                    "expires_at",
+                )
+            },
+        )
+        need(
+            schema_sha256(db) == permit["schema_sha256"]
+            and _identity(db) == permit["source_identity"],
+            "Source V3 schema or DBA changed during provision",
+        )
         check()
-    return {"format": "greenmind.sql-audit-v3-provision-result.v1", "permit_sha256": permit_sha256, "slot": permit["slot"], "epoch": permit["epoch"]}
+    return {
+        "format": "greenmind.sql-audit-v3-provision-result.v1",
+        "permit_sha256": permit_sha256,
+        "slot": permit["slot"],
+        "epoch": permit["epoch"],
+    }
