@@ -1,0 +1,115 @@
+--- a/isolated-test/source_supervisor.py
++++ b/isolated-test/source_supervisor.py
+@@ -62,11 +62,11 @@
+     }
+ 
+ 
+-def health():
++def health(*, check_control=True):
+     global HEALTH_SAMPLE, SUPERVISOR_SAMPLE
+     if CONTROL is None:
+         need(time.monotonic() - START < 95, "source_prototype_deadline")
+-    else:
++    elif check_control:
+         CONTROL.checkpoint()
+     HEALTH_SAMPLE = sample_health()
+     need(
+@@ -96,6 +96,31 @@
+     usage = shutil.disk_usage(ROOT)
+     need(usage.free >= max(2 * 1024**3, (usage.total + 19) // 20), "source_disk_floor")
+     return available
++
++
++class RelayCheckpoint:
++    """Check control every loop and resource health at most 250ms apart nominally."""
++
++    def __init__(self, control, full_check, heartbeat, *, monotonic=time.monotonic):
++        self.control = control
++        self.full_check = full_check
++        self.heartbeat = heartbeat
++        self.monotonic = monotonic
++        self.last_check = None
++        self.metrics = None
++
++    def __call__(self):
++        self.control.checkpoint()
++        now = self.monotonic()
++        if self.last_check is None or now - self.last_check >= 0.25:
++            self.metrics = self.full_check()
++            self.last_check = now
++        self.heartbeat(self.metrics)
++
++    def next_wait(self):
++        if self.last_check is None:
++            return 0.0
++        return max(0.0, min(0.1, self.last_check + 0.25 - self.monotonic()))
+ 
+ 
+ def sync_and_advise_pgdata(root, pin, health_callback, *, max_files=3000,
+@@ -742,25 +767,32 @@
+         )
+         ready["target_expires_unix"] = SCOPE["target_expires_unix"]
+         ready["image"] = IMAGE
+-        CONTROL.snapshot = lambda: {
+-            "source_machine_sha256": SOURCE_MACHINE,
+-            "image": IMAGE,
+-            "container_id": CID,
+-            "pg_generation": check_pg(),
+-            "source_health_sample": HEALTH_SAMPLE,
+-            "supervisor_sample": SUPERVISOR_SAMPLE,
+-            "server_ca_sha256": ready["server_ca_sha256"],
+-        }
++        def target_snapshot():
++            health(check_control=False)
++            return {
++                "source_machine_sha256": SOURCE_MACHINE,
++                "image": IMAGE,
++                "container_id": CID,
++                "pg_generation": check_pg(),
++                "source_health_sample": HEALTH_SAMPLE,
++                "supervisor_sample": SUPERVISOR_SAMPLE,
++                "server_ca_sha256": ready["server_ca_sha256"],
++            }
++
++        CONTROL.snapshot = target_snapshot
+         CONTROL.ready(ready)
+         ready["target_base_sha256"] = CONTROL.base_sha256
+         save(ROOT / "Ready.json", ready)
+         peak = [0]
+ 
+-        def checkpoint():
+-            global LAST_HEARTBEAT
+-            health()
++        def full_check():
++            health(check_control=False)
+             metrics = check_pg()
+             peak[0] = max(peak[0], metrics["memory_peak"])
++            return metrics
++
++        def heartbeat(metrics):
++            global LAST_HEARTBEAT
+             if time.monotonic() - LAST_HEARTBEAT >= 1:
+                 status = {
+                     "run": RUN,
+@@ -783,6 +815,8 @@
+                     stream.flush()
+                     os.fsync(stream.fileno())
+                 LAST_HEARTBEAT = time.monotonic()
++
++        checkpoint = RelayCheckpoint(CONTROL, full_check, heartbeat)
+ 
+         def stopped():
+             path = ROOT / "STOP"
+--- a/isolated-test/opaque_relay.py
++++ b/isolated-test/opaque_relay.py
+@@ -41,7 +41,9 @@
+                 s for s in pairs if s not in eof and len(queues[pairs[s]]) < queue_bound
+             ]
+             writes = [s for s in pairs if queues[s]]
+-            readable, writable, _ = select.select(reads, writes, [], 0.1)
++            next_wait = getattr(checkpoint, "next_wait", None)
++            timeout = min(0.1, max(0.0, next_wait())) if next_wait else 0.1
++            readable, writable, _ = select.select(reads, writes, [], timeout)
+             for current in readable:
+                 if current is listener:
+                     incoming, _ = listener.accept()
