@@ -965,7 +965,7 @@ def test_private_history_broker_reads_only_evicted_tenant_scope(bundle, tmp_path
     ledger.save(candidate, "evicted", receipt)
     import tempfile
 
-    short = tempfile.TemporaryDirectory(prefix="gm-sock-", dir="/private/tmp")
+    short = tempfile.TemporaryDirectory(prefix="gm-sock-", dir="/tmp")
     path = Path(short.name) / "history.sock"
     monkeypatch.setenv("TIERED_ARCHIVE_STATE_DIR", str(ledger.root))
     monkeypatch.setenv("TIERED_ARCHIVE_ENVIRONMENT", "staging")
