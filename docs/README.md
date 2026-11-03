@@ -8,6 +8,7 @@
 | Configure accounts, roles and environments | [Development and administration reference](development.md) and [administration](ADMINISTRATION.md) |
 | Understand Direct contracts | [Direct protocol and implementation](direct-to-cloud.md) |
 | Review ingestion and completeness changes | [10 October runbook](runbooks/peter-feedback-2026-10-10.md) |
+| Review Step 13 acceptance and pending introduction | [Acceptance matrix](ACCEPTANCE-20261103.md) |
 | Prepare a release safely | [Release procedure](../deploy/release/README.md) |
 | Run tests | [Testing](testing.md) and [strategy](testing-strategy.md) |
 | Understand architecture | [Decisions](architecture-decisions.md) and [software construction](softwarekonstruktion.md) |

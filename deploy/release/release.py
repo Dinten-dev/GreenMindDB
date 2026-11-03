@@ -781,24 +781,56 @@ def operate(args):
 
 
 def main():
-    os.umask(0o077)
-
-    def interrupted(signum, frame):
-        raise InterruptedError("Release interrupted; restoring proxy if necessary")
-
-    signal.signal(signal.SIGTERM, interrupted)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=("prepare", "start", "workers", "verify", "activate", "rollback"),
+        choices=(
+            "prepare",
+            "start",
+            "workers",
+            "verify",
+            "activate",
+            "rollback",
+            "check-acceptance",
+        ),
     )
-    parser.add_argument("--directory", type=Path, required=True)
+    parser.add_argument("--directory", type=Path)
     parser.add_argument("--environment", choices=CONFIG)
     parser.add_argument("--revision")
     parser.add_argument("--backend-image")
     parser.add_argument("--frontend-image")
     parser.add_argument("--acceptance", type=Path)
     args = parser.parse_args()
+    if args.action == "check-acceptance":
+        if not (
+            args.acceptance
+            and re.fullmatch(r"[0-9a-f]{40}", args.revision or "")
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", args.backend_image or "")
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", args.frontend_image or "")
+        ):
+            parser.error(
+                "check-acceptance requires evidence, full revision and both image config IDs"
+            )
+        manifest = {
+            "revision": args.revision,
+            "backend_image": args.backend_image,
+            "frontend_image": args.frontend_image,
+        }
+        try:
+            acceptance(args.acceptance, manifest)
+        except (RuntimeError, OSError, ValueError, TypeError, AttributeError):
+            # Do not print evidence contents or paths from operator files.
+            parser.exit(1, "Staging acceptance incomplete or invalid; no release authorized.\n")
+        print(json.dumps({"acceptance_valid": True, "release_authorized": False, **manifest}))
+        return
+    if args.directory is None:
+        parser.error("--directory is required for release operations")
+    os.umask(0o077)
+
+    def interrupted(signum, frame):
+        raise InterruptedError("Release interrupted; restoring proxy if necessary")
+
+    signal.signal(signal.SIGTERM, interrupted)
     if args.action == "prepare":
         require(
             all(
