@@ -375,19 +375,20 @@ class ExportStore:
     def reap(self, db, *, now=None):
         now = time.time() if now is None else now
         deleted = 0
-        rows = {row["id"]: row for row in db.execute("SELECT id,created,status,parts FROM jobs")}
-        identities = set(rows)
-        for record in db.execute(
-            "SELECT job_id FROM export_files UNION SELECT job_id FROM export_dirs"
-        ):
-            identities.add(record[0])
-        for identity in sorted(identities):
+        # Stream lightweight metadata; old item JSON and an unbounded Python
+        # job dictionary must not exhaust the bounded worker during cleanup.
+        rows = db.execute("""SELECT id,created,status,parts FROM jobs
+          UNION ALL SELECT p.job_id,NULL,NULL,NULL FROM
+          (SELECT job_id FROM export_files UNION SELECT job_id FROM export_dirs) p
+          WHERE NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id=p.job_id)""")
+        for candidate in rows:
+            identity = candidate["id"]
             safe_job(identity)
             lock = self.acquire_job(identity)
             if lock is None:
                 continue  # Active worker or streaming download; no age override.
             try:
-                row = rows.get(identity)
+                row = candidate if candidate["created"] is not None else None
                 expired = row is not None and row["created"] + EXPIRES <= now
                 if row is None or expired or row["status"] in {"failed", "cancelled", "expired"}:
                     deleted += self.clean_job(row or {"id": identity}, db)
