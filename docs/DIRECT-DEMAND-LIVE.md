@@ -79,6 +79,8 @@ Der Socket-Ordner gehört der Dienstkennung und hat Modus 0700. Ein exklusiver
 Prozess-Lock wird vor dem Binden des Sockets erworben; ein zweiter Eigentümer
 darf den laufenden Socket nicht entfernen. Der Dienst hat kein Netzwerk.
 Der optionale Compose-Overlay begrenzt ihn auf 128 MiB und eine halbe CPU.
+Ein sekündlicher Aufräumer entfernt abgelaufene Einträge auch ohne weitere
+Geräte- oder Zuschaueranfragen. Abgelaufene Markierungen werden niemals angezeigt.
 Der Namensraum umfasst Umgebung, Dashboard-Origin und Organisation.
 Eine gleichlautende Geräte-ID in anderem Namensraum teilt keine Live-Daten.
 
