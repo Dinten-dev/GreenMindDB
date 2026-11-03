@@ -74,8 +74,10 @@ def available(kind, bucket, keys):
         connection.close()
 
 
-def restore(resources, *, kind, bucket, key, scratch):
-    connection, response = request("/read", dict(kind=kind, bucket=bucket, key=key))
+def restore(resources, *, kind, bucket, key, scratch, export=False):
+    connection, response = request(
+        "/read-export" if export else "/read", dict(kind=kind, bucket=bucket, key=key)
+    )
     try:
         size = int(response.getheader("Content-Length", "0"))
         digest = response.getheader("X-Content-SHA256", "")

@@ -120,6 +120,8 @@
 - Laufende Downloads und aktive Aufträge durch Sperren schützen.
 - Speicherquoten berücksichtigen sämtliche zurückbehaltenen Exportdateien.
 - Bereinigung ausschliesslich auf erzeugte Exportkopien begrenzen.
+- Umsetzung im aktuellen Receiver: [EXPORT-COPY-CLEANUP.md](EXPORT-COPY-CLEANUP.md).
+- Keine Produktionsbereinigung oder Aktivierung der Original-Retention enthalten.
 
 ### 6. Web-Login reparieren
 

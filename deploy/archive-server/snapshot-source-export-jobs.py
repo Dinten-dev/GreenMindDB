@@ -1,4 +1,5 @@
 """Consistent private export-job checkpoint, retaining all original files."""
+import fcntl
 import hashlib
 import json
 import os
@@ -19,6 +20,7 @@ def main():
     if memory<688 or os.getloadavg()[0]>2.4:raise SystemExit(75)
     sys.path.insert(0,'/opt/greenmind/archive-preparation/20261010-v48/backend')
     from app.raw_archive.observation import protected
+    from app.raw_archive.export_checkpoint import checkpoint_candidates
     from app.raw_archive.source_probe import gateway_ports
     from urllib.request import urlopen
     for port in (*gateway_ports(),8003,8000):
@@ -41,25 +43,30 @@ def main():
     subprocess.run(['systemctl','stop','greenmind-archive-export.timer','greenmind-archive-export.service'],check=True,timeout=25)
     for u in ('greenmind-archive-export.timer','greenmind-archive-export.service'):
         assert subprocess.check_output(['systemctl','show',u,'-p','ActiveState','--value'],timeout=5).strip() in (b'inactive',b'failed')
-    stamp=datetime.now(UTC).strftime('%Y%m%dT%H%M%S%f')
-    target=BASE/('export-jobs-'+stamp);target.mkdir(mode=0o700)
-    with sqlite3.connect('file:'+str(SOURCE/'jobs.sqlite3')+'?mode=ro',uri=True,timeout=3) as source,sqlite3.connect(target/'jobs.sqlite3') as restored:
-        source.backup(restored)
-        assert restored.execute('PRAGMA integrity_check').fetchone()==('ok',)
-        counts=restored.execute('SELECT count(*) FROM jobs').fetchone()[0]
-        names=set(n for row in restored.execute('SELECT parts FROM jobs') for n in json.loads(row[0]))
-        assert all(Path(n).name==n and n.endswith('.zip') for n in names)
-    files=[p for p in SOURCE.iterdir() if p.name!='jobs.sqlite3' and not p.name.startswith('jobs.sqlite3-')]
-    assert sum(p.stat().st_size for p in files)<=32*1024**2
-    assert names<={p.name for p in files}
-    for p in files:
-        assert p.is_file() and not p.is_symlink() and p.name.endswith(('.zip','.part','.raw-part'))
-        shutil.copyfile(p,target/p.name)
-    manifest={p.name:{'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in target.iterdir()}
-    for p in target.iterdir():p.chmod(0o600)
-    proof={'schema':1,'complete':True,'created_at':datetime.now(UTC).isoformat(),
-           'jobs':counts,'files':manifest,'source':str(SOURCE),'originals_retained':True,'deleted_files':0}
-    path=target/'manifest.json';path.write_text(json.dumps(proof,sort_keys=True));path.chmod(0o600)
+    descriptor=os.open(SOURCE,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    fcntl.flock(descriptor,fcntl.LOCK_EX)
+    try:
+        stamp=datetime.now(UTC).strftime('%Y%m%dT%H%M%S%f')
+        target=BASE/('export-jobs-'+stamp);target.mkdir(mode=0o700)
+        with sqlite3.connect('file:'+str(SOURCE/'jobs.sqlite3')+'?mode=ro',uri=True,timeout=3) as source,sqlite3.connect(target/'jobs.sqlite3') as restored:
+            source.backup(restored)
+            assert restored.execute('PRAGMA integrity_check').fetchone()==('ok',)
+            counts=restored.execute('SELECT count(*) FROM jobs').fetchone()[0]
+            names=set(n for row in restored.execute('SELECT parts FROM jobs') for n in json.loads(row[0]))
+            assert all(Path(n).name==n and n.endswith('.zip') for n in names)
+        files=checkpoint_candidates(SOURCE)
+        assert sum(p.stat().st_size for p in files)<=32*1024**2
+        assert names<={p.name for p in files}
+        for p in files:
+            assert p.is_file() and not p.is_symlink() and p.name.endswith(('.zip','.part','.raw-part'))
+            shutil.copyfile(p,target/p.name)
+        manifest={p.name:{'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in target.iterdir()}
+        for p in target.iterdir():p.chmod(0o600)
+        proof={'schema':1,'complete':True,'created_at':datetime.now(UTC).isoformat(),
+               'jobs':counts,'files':manifest,'source':str(SOURCE),'originals_retained':True,'deleted_files':0}
+        path=target/'manifest.json';path.write_text(json.dumps(proof,sort_keys=True));path.chmod(0o600)
+    finally:
+        os.close(descriptor)
     assert Path('/etc/nginx/sites-available/greenmind-prod').read_bytes()==original
     assert protected()==receivers
     subprocess.run(['setfacl','-m','u:traver:--x',str(target)],check=True,timeout=5)

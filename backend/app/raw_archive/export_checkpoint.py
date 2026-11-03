@@ -24,6 +24,28 @@ def digest(path):
     return value.hexdigest()
 
 
+def checkpoint_candidates(existing):
+    """Ephemeral locks/scratch are not durable checkpoint contents.
+
+    Callers quiesce writers or hold the export-directory lock. Never delete or
+    copy these coordination files into a different inode/lock namespace.
+    """
+    result = []
+    for path in existing.iterdir():
+        if path.name in {".locks", ".scratch"}:
+            if path.is_symlink() or not path.is_dir():
+                raise ArchiveBlocked("Unsafe export coordination directory")
+            continue
+        if (
+            path.name in {"restoration.json", "merge-restoration.json"}
+            or path.name == "jobs.sqlite3"
+            or path.name.startswith("jobs.sqlite3-")
+        ):
+            continue
+        result.append(path)
+    return result
+
+
 def verify(source, manifest_sha256):
     if source.is_symlink() or not source.is_dir():
         raise ArchiveBlocked("Private checkpoint directory required")
@@ -83,6 +105,34 @@ def verify(source, manifest_sha256):
     return proof, rows
 
 
+def rebind_export_provenance(authority, output, names):
+    """Verified copying changes inode identities; never keep source inode proofs."""
+    with closing(sqlite3.connect(authority.as_uri() + "?mode=ro", uri=True)) as source:
+        if not source.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='export_files'"
+        ).fetchone():
+            return
+        rows = source.execute("SELECT name,job_id FROM export_files").fetchall()
+    with closing(sqlite3.connect(output / "jobs.sqlite3")) as target:
+        target.execute(
+            "CREATE TABLE IF NOT EXISTS export_files(name TEXT PRIMARY KEY,job_id TEXT NOT NULL,device INTEGER NOT NULL,inode INTEGER NOT NULL)"
+        )
+        for name, identity in rows:
+            if name not in names:
+                continue
+            info = (output / name).stat(follow_symlinks=False)
+            target.execute(
+                "INSERT OR REPLACE INTO export_files VALUES (?,?,?,?)",
+                (name, identity, info.st_dev, info.st_ino),
+            )
+        if target.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='export_dirs'"
+        ).fetchone():
+            # Ephemeral scratch is intentionally absent from a checkpoint.
+            target.execute("DELETE FROM export_dirs")
+        target.commit()
+
+
 def restore(source, output, manifest_sha256):
     proof, rows = verify(source, manifest_sha256)
     if output.exists() or output.is_symlink():
@@ -112,6 +162,7 @@ def restore(source, output, manifest_sha256):
             os.fsync(new.fileno())
         if digest(output / name) != value["sha256"]:
             raise ArchiveBlocked("Restored spool differs")
+    rebind_export_provenance(source / "jobs.sqlite3", output, set(proof["files"]))
     result = {
         "schema": 1,
         "source_manifest_sha256": manifest_sha256,
@@ -172,13 +223,7 @@ def merge_into_new(source, existing, output, manifest_sha256):
             if new.execute("SELECT * FROM jobs WHERE id=?", (row[identity],)).fetchone() != row:
                 raise ArchiveBlocked("Existing ownership or progress changed")
         names = {n for row in original for n in json.loads(row[parts_column])}
-        candidates = [
-            p
-            for p in existing.iterdir()
-            if p.name != "jobs.sqlite3"
-            and not p.name.startswith("jobs.sqlite3-")
-            and p.name != "restoration.json"
-        ]
+        candidates = checkpoint_candidates(existing)
         if (
             not names <= {p.name for p in candidates}
             or sum(p.stat().st_size for p in candidates) > MAX_BYTES
@@ -203,6 +248,7 @@ def merge_into_new(source, existing, output, manifest_sha256):
                     os.fsync(copy.fileno())
                 if digest(target) != digest(oldfile):
                     raise ArchiveBlocked("Existing spool copy differs")
+        rebind_export_provenance(dbpath, output, {p.name for p in candidates})
         if sum(p.stat().st_size for p in output.iterdir() if p.is_file()) > MAX_BYTES:
             raise ArchiveBlocked("Combined private store exceeds byte bound")
         if new.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:

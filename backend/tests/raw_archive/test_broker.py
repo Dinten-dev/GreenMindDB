@@ -131,3 +131,35 @@ def test_direct_client_preserves_broker_concurrency_bound(broker):
             read_archive(settings, record.key)
     finally:
         server.read_slot.release()
+
+
+def test_export_restore_uses_managed_broker_and_client_scratch(broker, tmp_path):
+    record, payload, destination, server = broker
+    from app.visualization.archive_export_storage import ExportStore
+    from app.visualization.archive_jobs import connect
+
+    state = tmp_path / "exports"
+    state.mkdir(mode=0o700)
+    with ExportStore(state) as store, connect(state) as db, store.locked():
+        import uuid
+
+        identity = str(uuid.uuid4())
+        folder = store.scratch_path(identity, db)
+    original = destination.download
+    witnessed = []
+
+    def download(key, path, limit):
+        assert path.is_relative_to(server.scratch / "export-copies")
+        witnessed.append(path)
+        return original(key, path, limit)
+
+    destination.download = download
+    try:
+        with reader.export_scratch(folder):
+            result = reader.restore_object(kind=record.kind, bucket=record.bucket, key=record.key)
+        with result["Body"] as body:
+            assert body.read() == payload
+        assert witnessed and not witnessed[0].exists()
+        assert not list((server.scratch / "export-copies").glob("**/verified.wav"))
+    finally:
+        destination.download = original
