@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-resource-acceptance-status.v2",
-  "updated_utc": "2026-11-05T09:29:01.816111+00:00",
+  "updated_utc": "2026-11-05T09:58:29.220063+00:00",
   "accepted": false,
   "existing_production_limits_raised": false,
   "diagnostic_job_limits_raised": false,
@@ -18,5 +18,11 @@
   "latest_metadata_checks_completed_with_existing_limits": true,
   "latest_capacity_model_checks_reported_passed": 11,
   "latest_full_restore_started": false,
-  "latest_reserve_restore_summary": "reserve-restore-20261105.json"
+  "latest_reserve_restore_summary": "reserve-restore-20261105.json",
+  "latest_restore_footprint_summary": "restore-footprint-20261105.json",
+  "actual_full_restore_disk_peak_measured": false,
+  "smaller_reserve_approved": false,
+  "existing_limits_changed": false,
+  "metadata_reader_local_tests_reported_passed": 10,
+  "latest_owned_probe_cleanup_scope": "Process, container, relay and transient-secret cleanup; retained private PGDATA workspaces were subsequently measured. This does not prove workspace-file absence."
 }
