@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from app.direct.auth import authenticate
 from app.direct.config import DirectSettings
 from app.direct.database import make_engine, transaction
+from app.direct.http_transport import verified_tls_context
 from app.direct.ingest import accept_chunk
 from app.direct.models import Budget, Chunk, Heartbeat, Revision, Segment
 from app.direct.protocol import DirectError, parse_metadata
@@ -27,6 +28,9 @@ PREFIX = "/api/v1/direct-ingest"
 
 def create_app(settings=None, engine=None, store=None):
     cfg = settings or DirectSettings()
+    if cfg.ingest_enabled:
+        # Do this once before readiness, not on each timed Live round trip.
+        verified_tls_context()
     app = FastAPI(title="GreenMind Direct ingest", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = cfg
     app.state.engine = engine or (make_engine(cfg) if cfg.ingest_enabled else None)

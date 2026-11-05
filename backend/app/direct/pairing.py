@@ -47,7 +47,11 @@ async def dashboard_identity(request, cfg, zone_id=None):
     else:
         raise DirectError(401, "dashboard_login_required")
     try:
-        async with httpx.AsyncClient(timeout=5, follow_redirects=False, trust_env=False) as client:
+        from app.direct.http_transport import verified_tls_context
+
+        async with httpx.AsyncClient(
+            verify=verified_tls_context(), timeout=5, follow_redirects=False, trust_env=False
+        ) as client:
             result = await client.get(cfg.dashboard_api_url + "/auth/me", headers=headers)
             if result.status_code != 200:
                 raise DirectError(401, "dashboard_login_required")

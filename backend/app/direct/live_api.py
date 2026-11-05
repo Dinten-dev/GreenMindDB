@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.direct import pairing
 from app.direct.auth import authenticate
 from app.direct.database import transaction
+from app.direct.http_transport import verified_tls_context
 from app.direct.live_protocol import RAW_PROFILE, CaptureSpec, MarkRequest, PreviewPacket
 from app.direct.models import Device, Session
 from app.direct.protocol import DirectError
@@ -72,7 +73,9 @@ def install_live_routes(app):
             return await override(data)
         try:
             async with httpx.AsyncClient(
-                transport=httpx.AsyncHTTPTransport(uds=str(cfg.live_socket)),
+                transport=httpx.AsyncHTTPTransport(
+                    uds=str(cfg.live_socket), verify=verified_tls_context(), trust_env=False
+                ),
                 base_url="http://direct-live",
                 timeout=0.25,
                 trust_env=False,
