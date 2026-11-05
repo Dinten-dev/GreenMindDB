@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-resource-acceptance-status.v2",
-  "updated_utc": "2026-11-05T09:58:29.220063+00:00",
+  "updated_utc": "2026-11-05T11:29:36.985879+00:00",
   "accepted": false,
   "existing_production_limits_raised": false,
   "diagnostic_job_limits_raised": false,
@@ -24,5 +24,13 @@
   "smaller_reserve_approved": false,
   "existing_limits_changed": false,
   "metadata_reader_local_tests_reported_passed": 10,
-  "latest_owned_probe_cleanup_scope": "Process, container, relay and transient-secret cleanup; retained private PGDATA workspaces were subsequently measured. This does not prove workspace-file absence."
+  "latest_owned_probe_cleanup_scope": "Process, container, relay and transient-secret cleanup; retained private PGDATA workspaces were subsequently measured. This does not prove workspace-file absence.",
+  "latest_archive_space_restore_summary": "archive-space-restore-20261105.json",
+  "latest_derived_cleanup_completed_with_existing_limits": true,
+  "latest_derived_cleanup_pressure_events_zero": true,
+  "replacement_verifier_tests_passed_per_fixed_layout": 35,
+  "reclaimer_safety_tests_passed_per_fixed_layout": 50,
+  "fixed_reclaim_layouts_checked": 2,
+  "latest_full_restore_input_gate_passed": false,
+  "private_latest_space_restore_result_sha256": "92adb9d680672f3f5ead51a5d47667fab7ec6a1fd4e782bfc0d58c1d6790ad40"
 }
