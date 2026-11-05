@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-acceptance-summary.v2",
-  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
+  "updated_utc": "2026-11-05T09:29:01.816111+00:00",
   "steps": {
     "1": {
       "status": "inventory_complete"
@@ -26,6 +26,9 @@
   "website_incident_summary": "website-incident-20261105.json",
   "website_restored": true,
   "frontend_local_to_production_host": true,
-  "private_latest_step3_evidence_manifest_sha256": "6261beaf05a518feeda1523f094936c4bcb38fbef0eba4e11156a82e31a02be2",
-  "production_ready_scope": "Archive and deletion acceptance; website recovery is separately verified."
+  "private_latest_step3_evidence_manifest_sha256": "6ecbfe020841b7e84c602e35e9c0f67bf8fc108899104188c88c0c875da1ee0f",
+  "production_ready_scope": "Archive and deletion acceptance; website recovery is separately verified.",
+  "latest_reserve_restore_summary": "reserve-restore-20261105.json",
+  "latest_full_restore_started": false,
+  "latest_restore_start_capacity_gate_passed": false
 }
