@@ -4,10 +4,13 @@ The production website was restored on 5 November 2026 and now uses a local fron
 
 Steps 1 and 2 are documented. Step 3 remains PARTIAL: complete native transfer/restore acceptance and capacity reserve gates remain open. The latest private candidate passed 164 local checks; its complete native transfer was not accepted within the fixed test limits. Owned probe cleanup was verified, and the affected processors are running. No source originals were deleted and no new deletion automation was enabled.
 
+The latest read-only reserve/restore inspection confirmed the source quota contract and completed the version-metadata pagination. Local archive working-space gates remain unmet, so no full production restore was started. All 46 historical science receipts matched their local digests; one final typed-verification record remains missing. Later same-snapshot parent joins and indexes are present, while complete science/parent closure and full restore acceptance remain open.
+
 The user selected publication of summaries and checksums only. Detailed inventories, capacity measurements, implementation and operational controllers remain private; detailed publication approval is not pending.
 
 - [Latest acceptance status](status.json)
 - [Website recovery summary and checksums](website-incident-20261105.json)
+- [Latest reserve and restore checks](reserve-restore-20261105.json)
 - [Maintenance summary](maintenance-step3.json)
 - [Dated aggregate inventory snapshots](service-inventory.json)
 - [Capacity acceptance status](capacity.json)
