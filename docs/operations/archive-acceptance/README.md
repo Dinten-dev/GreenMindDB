@@ -6,6 +6,8 @@ Steps 1 and 2 are documented. Step 3 remains PARTIAL: complete native transfer/r
 
 The latest read-only reserve/restore inspection confirmed the source quota contract and completed the version-metadata pagination. Local archive working-space gates remain unmet, so no full production restore was started. All 46 historical science receipts matched their local digests; one final typed-verification record remains missing. Later same-snapshot parent joins and indexes are present, while complete science/parent closure and full restore acceptance remain open.
 
+The latest footprint measurement distinguishes current source-relation storage and retained synthetic test-workspace storage from a full restore peak. Those existing footprints were measured live, including separate logical/allocation and WAL/current-temp accounting. The earlier single reserve number was not a universal restore requirement: different verification, restore and snapshot paths have separate checks. The additional fixed margin has no documented empirical derivation in the reviewed history. No smaller reserve is approved, no limits changed, and a complete peak-measuring restore remains blocked by existing start gates. See the [footprint summary](restore-footprint-20261105.json); raw measurements and implementation remain private.
+
 The user selected publication of summaries and checksums only. Detailed inventories, capacity measurements, implementation and operational controllers remain private; detailed publication approval is not pending.
 
 - [Latest acceptance status](status.json)
