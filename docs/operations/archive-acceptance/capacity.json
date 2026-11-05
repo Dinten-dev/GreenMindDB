@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-capacity-status.v2",
-  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
+  "updated_utc": "2026-11-05T09:29:01.816111+00:00",
   "accepted": false,
   "step3_status": "PARTIAL",
   "direct_quota_gib": 12,
@@ -8,8 +8,12 @@
   "net_backlog_drain_accepted": false,
   "complete_restore_feasibility_accepted": false,
   "detailed_capacity_growth_filesystem_and_restore_metrics_publication": "private_per_user_selection",
-  "private_capacity_model_sha256": "1fa6a8372a42733ac8e8f998500e45e8f0f4d4624c14fcb7326b5a7273d755d4",
+  "private_capacity_model_sha256": "eacffb1c515060d59600377c52ac1fc11f0c660412eefca3a6b7115f318116b6",
   "maintenance_summary": "maintenance-step3.json",
   "latest_capacity_reserve_gate_passed": false,
-  "latest_private_capacity_observation_sha256": "5402a51e611e7d8b23f53712087efbb5f6cc0be9ac7b395ff1649cbd4ccfea9b"
+  "latest_private_capacity_observation_sha256": "8acffce142a78c317b51f82e07009cb033e3b237d19ae4cb92be134b23a7e57c",
+  "latest_source_minimum_gate_passed": true,
+  "latest_archive_staging_gate_passed": false,
+  "latest_archive_restore_working_gate_passed": false,
+  "latest_reserve_restore_summary": "reserve-restore-20261105.json"
 }
