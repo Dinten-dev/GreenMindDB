@@ -1,0 +1,43 @@
+{
+  "format": "greenmind.public.reserve-restore-summary.v1",
+  "updated_utc": "2026-11-05T09:29:01.816111+00:00",
+  "step3_status": "PARTIAL",
+  "accepted": false,
+  "checks": {
+    "source_quota_contract_confirmed": true,
+    "source_filesystem_minimum_gate_met": true,
+    "archive_staging_reserve_met": false,
+    "archive_restore_working_reserve_met": false,
+    "provider_capacity_and_snapshot_metadata_read": true,
+    "provider_statistics_collection_time_known": false,
+    "existing_provider_snapshots_preserved": true,
+    "direct_version_metadata_pagination_complete": true,
+    "direct_version_metadata_is_atomic": false,
+    "seven_day_reserve_accepted": false,
+    "net_backlog_drain_accepted": false,
+    "full_restore_started_in_this_run": false,
+    "full_production_restore_accepted": false,
+    "global_science_parent_closure_proven": false
+  },
+  "historical_science_receipt_audit": {
+    "parts": 46,
+    "receipt_hashes_verified": 46,
+    "typed_final_verification_records": 45,
+    "missing_typed_final_record_count": 1,
+    "fresh_provider_content_readback_performed_in_this_run": false,
+    "same_snapshot_parent_capture_joins_and_later_indexes_present": true,
+    "does_not_prove_full_restore": true
+  },
+  "capacity_model_local_tests_reported_passed": 11,
+  "source_originals_deleted": 0,
+  "new_deletion_enabled": false,
+  "worker_processing_running_at_readback": true,
+  "public_website_http_checks_passed": true,
+  "public_scope": "Aggregate summaries and checksums only; implementation and detailed operational measurements remain private.",
+  "digests": {
+    "private_run_evidence_manifest_sha256": "6ecbfe020841b7e84c602e35e9c0f67bf8fc108899104188c88c0c875da1ee0f",
+    "private_capacity_model_sha256": "eacffb1c515060d59600377c52ac1fc11f0c660412eefca3a6b7115f318116b6",
+    "private_local_restore_evidence_audit_sha256": "da95b0303aac520288caba5d45b4b39149fbc808b7292b6f077d47285af4c511"
+  },
+  "existing_production_service_mutations_performed": 0
+}
