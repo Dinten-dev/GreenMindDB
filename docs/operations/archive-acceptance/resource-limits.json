@@ -6,7 +6,6 @@
   "diagnostic_job_limits_raised": false,
   "isolated_test_candidate_only": true,
   "local_checks_passed": 164,
-  "candidate_sha256": "2c8e2ccfc2af9f5327bbcc0d661affdbfa1c820e5ca707215bd605d8e670d10f",
   "native_cache_optimization_accepted": false,
   "detailed_operational_limits_publication": "private_per_user_selection",
   "private_limits_inventory_sha256": "cf05a4dc4b8b822def1f2105d13263c1c848cf0fd1eab30a3168837070a3275b",
@@ -14,5 +13,6 @@
   "latest_owned_probe_cleanup_proven": true,
   "private_candidate_evidence_manifest_sha256": "6261beaf05a518feeda1523f094936c4bcb38fbef0eba4e11156a82e31a02be2",
   "local_test_log_sha256": "7bef5e166504092ec2f877ddf4a10253cb3aba042bd9c85e6ae7cac104a94b7f",
-  "note": "Local candidate checks passed; the complete native transfer and restore remain unaccepted. The tested candidate is retained privately."
+  "note": "The latest private candidate passed the local checks recorded here; its evidence manifest is identified separately from the earlier diagnostic candidate. Complete native transfer and restore remain unaccepted.",
+  "earlier_diagnostic_candidate_sha256": "2c8e2ccfc2af9f5327bbcc0d661affdbfa1c820e5ca707215bd605d8e670d10f"
 }
