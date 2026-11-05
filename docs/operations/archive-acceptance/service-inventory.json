@@ -1,7 +1,7 @@
 {
   "format": "greenmind.public-service-summary.v2",
-  "updated_utc": "2026-11-03T20:01:49.896451+00:00",
-  "scope": "Aggregated service counts only; detailed current inventories retained privately pending specific publication authorization.",
+  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
+  "scope": "Historical aggregate inventory snapshots retain their own observation dates. Current detailed inventories remain private per user selection.",
   "hosts": {
     "source": {
       "observed_utc": "2026-11-03T19:50:26.764161+00:00",
@@ -16,5 +16,7 @@
   },
   "permanently_stopped_services": 5,
   "workers_resumed_healthy": 2,
-  "maintenance_record": "maintenance-step3.json"
+  "maintenance_record": "maintenance-step3.json",
+  "latest_website_summary": "website-incident-20261105.json",
+  "latest_affected_workers_running": true
 }
