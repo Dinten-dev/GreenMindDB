@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-resource-acceptance-status.v2",
-  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
+  "updated_utc": "2026-11-05T09:29:01.816111+00:00",
   "accepted": false,
   "existing_production_limits_raised": false,
   "diagnostic_job_limits_raised": false,
@@ -14,5 +14,9 @@
   "private_candidate_evidence_manifest_sha256": "6261beaf05a518feeda1523f094936c4bcb38fbef0eba4e11156a82e31a02be2",
   "local_test_log_sha256": "7bef5e166504092ec2f877ddf4a10253cb3aba042bd9c85e6ae7cac104a94b7f",
   "note": "The latest private candidate passed the local checks recorded here; its evidence manifest is identified separately from the earlier diagnostic candidate. Complete native transfer and restore remain unaccepted.",
-  "earlier_diagnostic_candidate_sha256": "2c8e2ccfc2af9f5327bbcc0d661affdbfa1c820e5ca707215bd605d8e670d10f"
+  "earlier_diagnostic_candidate_sha256": "2c8e2ccfc2af9f5327bbcc0d661affdbfa1c820e5ca707215bd605d8e670d10f",
+  "latest_metadata_checks_completed_with_existing_limits": true,
+  "latest_capacity_model_checks_reported_passed": 11,
+  "latest_full_restore_started": false,
+  "latest_reserve_restore_summary": "reserve-restore-20261105.json"
 }
