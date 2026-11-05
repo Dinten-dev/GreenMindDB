@@ -1,0 +1,27 @@
+{
+  "actual_full_restore_peak_measured": false,
+  "existing_limits_changed": false,
+  "format": "greenmind.public-space-and-restore-prerequisites.v1",
+  "full_restore_input_gate_passed": false,
+  "full_restore_started": false,
+  "historical_science_inventory_present": true,
+  "latest_archive_working_space_gate_passed": true,
+  "manual_snapshots_preserved": true,
+  "matching_schema_master_backups_present": true,
+  "new_deletion_automation_enabled": false,
+  "originals_preserved": true,
+  "private_evidence_manifest_sha256": "67c2e2feb9907f95f259679cee8017df9ea0da2da1f1f7d8be8e14ea5c3cd299",
+  "private_reclaim_plan_sha256": [
+    "f4b6fa6d80cc06d6d2b5f332bb87e97eae010c14354c3ec7211169fcdb618eaf",
+    "b182ae1cabb74b71e298144ca3f14584cb1f4de05223b987135fcc040d582f58"
+  ],
+  "private_result_sha256": "92adb9d680672f3f5ead51a5d47667fab7ec6a1fd4e782bfc0d58c1d6790ad40",
+  "production_ready": false,
+  "public_scope": "Aggregate outcomes and digests only; detailed inventory, metrics, implementation and controllers remain private.",
+  "reserve_reduction_supported_by_full_measurement": false,
+  "restore_status": "blocked_required_parent_companion_references_not_journalled",
+  "source_processors_running_unchanged": true,
+  "step3_accepted": false,
+  "updated_utc": "2026-11-05T11:29:36.985879+00:00",
+  "verified_derived_intermediates_reclaimed": true
+}
