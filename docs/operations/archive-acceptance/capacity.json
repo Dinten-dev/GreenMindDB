@@ -1,13 +1,15 @@
 {
   "format": "greenmind.public-capacity-status.v2",
-  "updated_utc": "2026-11-03T20:03:27.181993+00:00",
+  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
   "accepted": false,
   "step3_status": "PARTIAL",
   "direct_quota_gib": 12,
   "seven_day_reserve_accepted": false,
   "net_backlog_drain_accepted": false,
   "complete_restore_feasibility_accepted": false,
-  "detailed_capacity_growth_filesystem_and_restore_metrics_publication": "pending_specific_authorization",
+  "detailed_capacity_growth_filesystem_and_restore_metrics_publication": "private_per_user_selection",
   "private_capacity_model_sha256": "1fa6a8372a42733ac8e8f998500e45e8f0f4d4624c14fcb7326b5a7273d755d4",
-  "maintenance_summary": "maintenance-step3.json"
+  "maintenance_summary": "maintenance-step3.json",
+  "latest_capacity_reserve_gate_passed": false,
+  "latest_private_capacity_observation_sha256": "5402a51e611e7d8b23f53712087efbb5f6cc0be9ac7b395ff1649cbd4ccfea9b"
 }
