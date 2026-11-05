@@ -1,5 +1,6 @@
 """Exercise the real dashboard authorization bridge and Direct ownership writes."""
 
+import ssl
 import uuid
 
 import httpx
@@ -8,6 +9,7 @@ import pytest
 from app.direct import pairing
 from app.direct.auth import issue_token
 from app.direct.database import transaction
+from app.direct.http_transport import verified_tls_context
 from app.direct.models import Device, Pairing
 
 PREFIX = "/api/v1/direct-ingest"
@@ -57,7 +59,14 @@ def dashboard(pipeline, monkeypatch):
     client = httpx.AsyncClient
 
     def backend_client(**kwargs):
-        assert kwargs == {"timeout": 5, "follow_redirects": False, "trust_env": False}
+        assert kwargs == {
+            "timeout": 5,
+            "follow_redirects": False,
+            "trust_env": False,
+            "verify": verified_tls_context(),
+        }
+        assert kwargs["verify"].verify_mode == ssl.CERT_REQUIRED
+        assert kwargs["verify"].check_hostname is True
         return client(transport=httpx.MockTransport(respond), **kwargs)
 
     monkeypatch.setattr(pairing.httpx, "AsyncClient", backend_client)
