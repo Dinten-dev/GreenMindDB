@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-acceptance-summary.v2",
-  "updated_utc": "2026-11-05T09:58:29.220063+00:00",
+  "updated_utc": "2026-11-05T11:29:36.985879+00:00",
   "steps": {
     "1": {
       "status": "inventory_complete"
@@ -26,13 +26,18 @@
   "website_incident_summary": "website-incident-20261105.json",
   "website_restored": true,
   "frontend_local_to_production_host": true,
-  "private_latest_step3_evidence_manifest_sha256": "dea4b6374f3344e3c1a445c50f333f42ab7d02b77884b474c0b5e8cce057d72c",
+  "private_latest_step3_evidence_manifest_sha256": "67c2e2feb9907f95f259679cee8017df9ea0da2da1f1f7d8be8e14ea5c3cd299",
   "production_ready_scope": "Archive and deletion acceptance; website recovery is separately verified.",
   "latest_reserve_restore_summary": "reserve-restore-20261105.json",
   "latest_full_restore_started": false,
-  "latest_restore_start_capacity_gate_passed": false,
+  "latest_restore_start_capacity_gate_passed": true,
   "latest_restore_footprint_summary": "restore-footprint-20261105.json",
   "actual_full_restore_disk_peak_measured": false,
   "smaller_reserve_approved": false,
-  "existing_limits_changed": false
+  "existing_limits_changed": false,
+  "latest_archive_space_restore_summary": "archive-space-restore-20261105.json",
+  "latest_restore_start_capacity_gate_scope": "Current archive working-space check only; complete restore inputs are separately blocked.",
+  "latest_full_restore_input_gate_passed": false,
+  "verified_derived_cleanup_complete": true,
+  "originals_and_manual_snapshots_preserved": true
 }
