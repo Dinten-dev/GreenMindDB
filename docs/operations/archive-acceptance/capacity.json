@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-capacity-status.v2",
-  "updated_utc": "2026-11-05T09:29:01.816111+00:00",
+  "updated_utc": "2026-11-05T09:58:29.220063+00:00",
   "accepted": false,
   "step3_status": "PARTIAL",
   "direct_quota_gib": 12,
@@ -11,9 +11,15 @@
   "private_capacity_model_sha256": "eacffb1c515060d59600377c52ac1fc11f0c660412eefca3a6b7115f318116b6",
   "maintenance_summary": "maintenance-step3.json",
   "latest_capacity_reserve_gate_passed": false,
-  "latest_private_capacity_observation_sha256": "8acffce142a78c317b51f82e07009cb033e3b237d19ae4cb92be134b23a7e57c",
+  "latest_private_capacity_observation_sha256": "2ec7aa41d48334f6998153209f747df56bb9311f693b14ff00719d4fdc7230bf",
   "latest_source_minimum_gate_passed": true,
   "latest_archive_staging_gate_passed": false,
   "latest_archive_restore_working_gate_passed": false,
-  "latest_reserve_restore_summary": "reserve-restore-20261105.json"
+  "latest_reserve_restore_summary": "reserve-restore-20261105.json",
+  "latest_restore_footprint_summary": "restore-footprint-20261105.json",
+  "actual_full_restore_disk_peak_measured": false,
+  "smaller_reserve_approved": false,
+  "existing_limits_changed": false,
+  "latest_private_footprint_assessment_sha256": "6914867fa5f7e4ecf381dbd14bd267b43a58b2ecf0ff63a0e1ac476367aff809",
+  "specific_guard_budget_not_universal_restore_requirement": true
 }
