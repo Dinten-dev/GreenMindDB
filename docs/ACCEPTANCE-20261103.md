@@ -1,5 +1,11 @@
 # Gesamtabnahme und Einführungsvorbereitung — Schritt 13
 
+> Historischer Prüfstand vom 03.11.2026. Der aktuelle integrierte Stand und
+> die spätere Staging-Nutzung stehen im [develop-Leitfaden](DEVELOP-LIVE.md).
+> Der Benutzer bestätigte später die Live-Funktion und beendete die Tests.
+> Dadurch werden die hier dokumentierten offenen Dauer-/Signalprüfungen nicht
+> zu bestandenen Prüfungen. Frühere lokale Testziele sind keine heutige Geräteanweisung.
+
 Stand: 03.11.2026. Der Benutzer hat Schritt 13 als Gesamtabnahme und
 Einführungsvorbereitung bestätigt. Der ursprüngliche Plan hatte zwölf Schritte;
 dieses Dokument konkretisiert dessen anschliessenden Abschnitt „Abnahme und

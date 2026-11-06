@@ -1,5 +1,9 @@
 # Direct Live: request cost and Staging isolation
 
+This correction is included in `develop` and was activated for the affected
+Staging HTTP services. See [current integration and acceptance status](DEVELOP-LIVE.md).
+Other Staging service images need not be replaced for this HTTP-only correction.
+
 The verified HTTPX trust context is loaded once before receiver readiness.
 It keeps certificate and hostname verification enabled. Request-scoped clients
 still perform each dashboard identity/capability/zone check, carry only that
@@ -22,5 +26,7 @@ cache service or worker is required by this change.
 Acceptance uses the separate test device and its existing hotspot: real 400-Hz
 raw capture, two viewers, a visible browser, 30/60/180-second windows and volatile
 shared markers. Check frame continuity, freshness, raw/WAV byte identity and CPU
-throttling without filling in missing preview points. Test results belong beside
+throttling without filling in missing preview points. The user confirmed Live
+operation and stopped the hardware tests; this is not a completed endurance
+or physical-touch acceptance. Test results belong beside
 the exact source/binary identities; a synthetic pass alone is insufficient.

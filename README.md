@@ -3,12 +3,26 @@
 Research platform for bioelectrical plant signals: FastAPI APIs, a Next.js dashboard,
 PostgreSQL/TimescaleDB and MinIO object storage. Sensors upload directly over Wi-Fi or through Raspberry Pi Gateways.
 
+## Current develop source
+
+`develop` contains the integrated authenticated application, four-language
+measurement views and Direct raw400/on-demand Live support. New Direct views
+default to 24 hours; Live explicitly selects a 30/60/180-second preview with
+rail diagnostics and markers retained only in volatile memory for three minutes.
+The existing Gateway/DUAL 380-Hz contracts and history remain separate.
+
+The paired firmware is maintained on
+[GreenMindArdu develop](https://github.com/Dinten-dev/GreenMindArdu/tree/develop).
+Read the [develop and Staging guide](docs/DEVELOP-LIVE.md) for current source,
+server roles, firmware setup and acceptance boundaries. Published ZIPs and
+dated source archives below are separate from this development branch.
+
 ## Download and install
 
 
 | Component | Download | Installation guide |
 | --- | --- | --- |
-| Direct-to-Cloud sensor, Production v2.8 | [Firmware ZIP](https://github.com/Dinten-dev/GreenMindArdu/releases/download/manual-2026-10-10/direct-production-2.8.zip) | [Direct USB installation](https://github.com/Dinten-dev/GreenMindArdu/blob/main/docs/direct-to-cloud.md) |
+| Published Direct-to-Cloud sensor, v2.11-rc1 avg20ms / 380 Hz | [Firmware ZIP](https://github.com/Dinten-dev/GreenMindArdu/releases/download/direct-latest/direct-to-cloud-production.zip) | [Published-package USB installation](https://github.com/Dinten-dev/GreenMindArdu/blob/main/docs/direct-upgrade.md) |
 | Direct-to-Gateway sensor v1.2.0 | [Firmware ZIP](https://github.com/Dinten-dev/GreenMindArdu/releases/download/manual-2026-10-10/gateway-sensor-1.2.0.zip) | [Gateway sensor USB installation](https://github.com/Dinten-dev/GreenMindArdu/blob/main/docs/gateway-sensor.md) |
 | Raspberry Pi Gateway, manual maintenance candidate | [Installer-free maintenance ZIP](https://github.com/Dinten-dev/GreenMindRPIv1/releases/download/manual-2026-10-10/gateway-maintenance-2026-10-10.zip) | [Gateway installation and maintenance](https://github.com/Dinten-dev/GreenMindRPIv1/blob/main/docs/gateway-installation.md) |
 | Cloud backend and dashboard, reviewed source snapshot | [Source archive](https://github.com/Dinten-dev/GreenMindDB/releases/download/source-2026-10-10/GreenMindDB-source-2026-10-10.tar.gz) | [Cloud setup](https://github.com/Dinten-dev/GreenMindDB/blob/main/README.md#local-development) and [backend guide](https://github.com/Dinten-dev/GreenMindDB/blob/main/backend/README.md) |
@@ -93,8 +107,11 @@ Branch pushes run CI. Preparing a release package does not connect to Production
 
 ## Current implementation status
 
-The main source includes ingestion cost reductions and WAV completeness metadata from the
-[10 October runbook](docs/runbooks/peter-feedback-2026-10-10.md).
+The integrated source includes ingestion cost reductions and WAV completeness
+metadata, nominal raw400 reception, on-demand Live and the request-cost/Staging
+routing recovery. The [10 October runbook](docs/runbooks/peter-feedback-2026-10-10.md)
+and [Step 13 record](docs/ACCEPTANCE-20261103.md) retain their historical context;
+the [develop guide](docs/DEVELOP-LIVE.md) describes the current integration.
 Actual reception, dashboard activation and field hardware acceptance are separate operational checks.
 Archive offloading/deletion work is being validated separately and is not included in this source snapshot.
 Do not infer retention or deletion authorization from publishing these READMEs.

@@ -3,6 +3,10 @@
 Python 3.12 APIs and workers for Gateway and Direct data, tenant administration and authenticated visualization.
 The frontend is in `../frontend/`; firmware belongs to the separate sensor and Pi repositories.
 
+Current `develop` integration, paired firmware and Staging boundaries are
+documented in [the integration guide](../docs/DEVELOP-LIVE.md). A branch push
+is not a server rollout or a firmware assignment.
+
 ## Run locally
 
 The recommended complete stack is [the root Docker Compose setup](../README.md#local-development).
@@ -44,6 +48,7 @@ Do not apply migrations against a different service database or add ad-hoc schem
 | `app.main:app` | Gateway receiving and application API |
 | `app.direct.main:app` | Separate authenticated binary Direct receiver |
 | `python -m app.direct.worker` | Direct chunks to segments/WAVs and derived metadata |
+| `python -m app.direct.live_worker` | Optional single volatile Live owner on a private Unix socket |
 | `app.visualization.api:app` | Authenticated dashboard/read service |
 
 Consult [Direct contracts](../docs/direct-to-cloud.md) and the checked
@@ -59,7 +64,8 @@ The default API and Direct receiver are not interchangeable processes.
 | `/api/v1/ingest` | Authenticated Gateway batches with transactional acknowledgement |
 | `/api/v1/wav` | Gateway WAV upload and authorized reads |
 | `/api/v1/direct-ingest/chunks` | Direct binary ingestion on its separate receiver |
-| `/api/v1/ws` | Authorized live views |
+| `/api/v1/direct-ingest/devices/...` | Direct device control and authenticated Live management; see the [Live contract](../docs/DIRECT-DEMAND-LIVE.md) |
+| `/api/v1/ws` | Existing authorized WebSocket views; Direct Live uses its separate polling API |
 | `/api/v1/admin`, `/gateway`, `/firmware` | Existing operator/device-management APIs |
 
 Exact schemas live in routers and Pydantic types, with development OpenAPI as the generated reference.

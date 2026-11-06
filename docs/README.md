@@ -3,6 +3,9 @@
 | Task | Guide |
 | --- | --- |
 | Find current downloads | [Downloads and checksums](downloads.md) |
+| Use current develop with Direct Live | [Develop and Staging integration](DEVELOP-LIVE.md) |
+| Understand on-demand Live | [Live contract](DIRECT-DEMAND-LIVE.md) |
+| Review Staging request routing and TLS reuse | [Live recovery](DIRECT-LIVE-RECOVERY.md) |
 | Start local development | [Root README](../README.md#local-development) |
 | Work on the API or workers | [Backend README](../backend/README.md) |
 | Configure accounts, roles and environments | [Development and administration reference](development.md) and [administration](ADMINISTRATION.md) |
