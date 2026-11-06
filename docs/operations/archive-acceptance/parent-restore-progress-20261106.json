@@ -1,12 +1,12 @@
 {
   "format": "greenmind.public-parent-restore-progress.v1",
-  "updated_utc": "2026-11-06T12:27:56.781540+00:00",
+  "updated_utc": "2026-11-06T13:48:35.638778+00:00",
   "scope": "Aggregate progress and evidence digests only",
   "parents_required": 26,
-  "parents_published": 10,
-  "parents_independently_typed_verified": 10,
-  "parents_remaining_for_typed_verification": 16,
-  "full_restore_started": false,
+  "parents_published": 26,
+  "parents_independently_typed_verified": 26,
+  "parents_remaining_for_typed_verification": 0,
+  "full_restore_started": true,
   "full_restore_peak_measured": false,
   "step_3_accepted": false,
   "existing_limits_changed": false,
@@ -16,9 +16,10 @@
   "manual_snapshots_observed_before": 6,
   "workers_safely_stopped_with_bounded_autoresume": true,
   "maintenance_window_minutes": 12,
-  "readback_hold": "Remaining packages are being processed serially with bounded resource admission.",
+  "readback_hold": null,
   "microbenchmark_is_not_restore_measurement": true,
   "new_deletion_enabled": false,
-  "private_evidence_manifest_sha256": "ce7954a72e99cf960c58afa216dbe7adadd7394dc3402361a670e4cd2e01dd0f",
-  "checkpoint_microbenchmark_speedup_approx": 2.7
+  "private_evidence_manifest_sha256": "04bd0a1ed2f579ec21ab83bf9ece19ed61591ae61595aae7365f53276917bf8c",
+  "checkpoint_microbenchmark_speedup_approx": 2.7,
+  "full_restore_state": "Actual coherent restore measurement in progress; not yet completed."
 }
