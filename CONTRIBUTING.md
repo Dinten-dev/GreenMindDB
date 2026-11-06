@@ -19,7 +19,7 @@ Compose v2 is required for the canonical local stack and integration tests.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Dinten-dev/GreenMindDB.git && cd GreenMindDB
+git clone --branch develop https://github.com/Dinten-dev/GreenMindDB.git && cd GreenMindDB
 
 # 2. Copy environment config
 cp .env.example .env
@@ -32,7 +32,7 @@ make health
 ```
 
 There are no seeded demo accounts. A newly signed-up account must verify its email before login;
-see the [README](README.md#account-verification-and-platform-administration) for configuration
+see the [administration guide](docs/development.md#one-time-platform-admin-bootstrap) for configuration
 and the controlled one-time platform-admin bootstrap.
 
 See the [README](README.md) for detailed setup instructions.

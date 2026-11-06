@@ -103,7 +103,7 @@ GreenMindDB/
 ### Start the full local stack
 
 ```bash
-git clone https://github.com/Dinten-dev/GreenMindDB.git
+git clone --branch develop https://github.com/Dinten-dev/GreenMindDB.git
 cd GreenMindDB
 cp .env.example .env
 ```

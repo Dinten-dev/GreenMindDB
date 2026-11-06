@@ -59,7 +59,7 @@ Gateway sensor setup uses its local web form and a Gateway sensor code; Direct u
 Requirements: Docker with Compose v2 and Git. Native tools use Python 3.12 and Node.js 24.
 
 ```bash
-git clone https://github.com/Dinten-dev/GreenMindDB.git
+git clone --branch develop https://github.com/Dinten-dev/GreenMindDB.git
 cd GreenMindDB
 cp .env.example .env
 ```
