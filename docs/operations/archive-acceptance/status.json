@@ -1,6 +1,6 @@
 {
   "format": "greenmind.public-acceptance-summary.v2",
-  "updated_utc": "2026-11-05T11:29:36.985879+00:00",
+  "updated_utc": "2026-11-06T11:35:39.733773+00:00",
   "steps": {
     "1": {
       "status": "inventory_complete"
@@ -16,8 +16,8 @@
   "production_ready": false,
   "new_deletion_enabled": false,
   "source_originals_deleted": 0,
-  "maintenance_complete": true,
-  "affected_workers_resumed_healthy": true,
+  "maintenance_complete": false,
+  "affected_workers_resumed_healthy": false,
   "public_scope": "Aggregate outcomes and digests only.",
   "maintenance_summary": "maintenance-step3.json",
   "private_maintenance_evidence_sha256": "163f97957d769e9b1d2de436f88fb1a339f285b6e2b307df10fff038ee5bea1b",
@@ -26,7 +26,7 @@
   "website_incident_summary": "website-incident-20261105.json",
   "website_restored": true,
   "frontend_local_to_production_host": true,
-  "private_latest_step3_evidence_manifest_sha256": "67c2e2feb9907f95f259679cee8017df9ea0da2da1f1f7d8be8e14ea5c3cd299",
+  "private_latest_step3_evidence_manifest_sha256": "72cd5fec8c3f615f8abc57554835c377fc092b493226cc378b6abb466f01a644",
   "production_ready_scope": "Archive and deletion acceptance; website recovery is separately verified.",
   "latest_reserve_restore_summary": "reserve-restore-20261105.json",
   "latest_full_restore_started": false,
@@ -39,5 +39,10 @@
   "latest_restore_start_capacity_gate_scope": "Current archive working-space check only; complete restore inputs are separately blocked.",
   "latest_full_restore_input_gate_passed": false,
   "verified_derived_cleanup_complete": true,
-  "originals_and_manual_snapshots_preserved": true
+  "originals_and_manual_snapshots_preserved": true,
+  "latest_parent_evidence_summary": "parent-restore-progress-20261106.json",
+  "parents_required": 26,
+  "parents_independently_typed_verified": 2,
+  "bounded_worker_autoresume_configured": true,
+  "current_workers_health_verification_pending": true
 }
