@@ -1,0 +1,203 @@
+--- v5/source_supervisor.py
++++ v6/source_supervisor.py
+@@ -92,0 +93,62 @@
++
++
++def sync_and_advise_pgdata(root, pin, health_callback, *, max_files=3000,
++                           max_bytes=512 * 1024**2):
++    """Flush and evict only pinned, newly created PG files without reading them."""
++    expected_dev, expected_ino, expected_uid = pin
++    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
++    root_fd = os.open(root, flags)
++    total_files = total_bytes = entries = 0
++    try:
++        data_fd = os.open("pgdata", flags, dir_fd=root_fd)
++        try:
++            info = os.fstat(data_fd)
++            need((info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode))
++                 == (expected_dev, expected_ino, expected_uid, 0o700), "pgdata_pin")
++
++            def visit(dirfd):
++                nonlocal total_files, total_bytes, entries
++                health_callback()
++                for name in os.listdir(dirfd):
++                    entries += 1
++                    need(entries <= max_files * 2, "pgdata_entry_bound")
++                    if entries % 32 == 0:
++                        health_callback()
++                    before = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
++                    need(before.st_dev == expected_dev and before.st_uid == expected_uid,
++                         "pgdata_entry_identity")
++                    if stat.S_ISDIR(before.st_mode):
++                        fd = os.open(name, flags, dir_fd=dirfd)
++                        try:
++                            after = os.fstat(fd)
++                            need((after.st_dev, after.st_ino, after.st_uid) ==
++                                 (before.st_dev, before.st_ino, before.st_uid),
++                                 "pgdata_entry_race")
++                            visit(fd)
++                        finally:
++                            os.close(fd)
++                    else:
++                        need(stat.S_ISREG(before.st_mode) and before.st_nlink == 1,
++                             "pgdata_regular_only")
++                        total_files += 1
++                        total_bytes += before.st_size
++                        need(total_files <= max_files and total_bytes <= max_bytes,
++                             "pgdata_file_bound")
++                        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
++                                     dir_fd=dirfd)
++                        try:
++                            after = os.fstat(fd)
++                            need(stat.S_ISREG(after.st_mode) and after.st_nlink == 1 and
++                                 (after.st_dev, after.st_ino, after.st_uid, after.st_size) ==
++                                 (before.st_dev, before.st_ino, before.st_uid, before.st_size),
++                                 "pgdata_entry_race")
++                            os.fsync(fd)
++                            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
++                        finally:
++                            os.close(fd)
++            visit(data_fd)
++        finally:
++            os.close(data_fd)
++    finally:
++        os.close(root_fd)
++    return {"files": total_files, "logical_bytes": total_bytes}
+@@ -426,0 +489,5 @@
++        data_info = data.lstat()
++        need(stat.S_ISDIR(data_info.st_mode) and data_info.st_dev == 2064
++             and data_info.st_uid == 70 and stat.S_IMODE(data_info.st_mode) == 0o700,
++             "pgdata_initial_pin")
++        data_pin = (data_info.st_dev, data_info.st_ino, data_info.st_uid)
+@@ -449 +516 @@
+-                "shared_buffers=8MB",
++                "shared_buffers=4MB",
+@@ -578,0 +646,3 @@
++        PHASE = "source_pg_cache_advice"
++        pgdata_advice = sync_and_advise_pgdata(ROOT, data_pin, health)
++        check_pg()
+@@ -617,0 +688 @@
++            "pgdata_cache_advice": pgdata_advice,
+--- v5/main_controller.py
++++ v6/main_controller.py
+@@ -136 +136,6 @@
+-    output = getattr(child, "_prototype_pending_stdout", b"") + output
++    stdout_capture = "captured" if child.stdout is not None else "not_requested"
++    stderr_capture = "captured" if child.stderr is not None else "not_requested"
++    need(output is not None or child.stdout is None, "owned_stdout_missing")
++    need(error is not None or child.stderr is None, "owned_stderr_missing")
++    output = getattr(child, "_prototype_pending_stdout", b"") + (output if output is not None else b"")
++    error = error if error is not None else b""
+@@ -144,0 +150,2 @@
++            "stdout_capture": stdout_capture,
++            "stderr_capture": stderr_capture,
+--- v5/materialize.py
++++ v6/materialize.py
+@@ -31 +31 @@
+-        candidate["format"] == "greenmind.source-isolated-pg-prototype-candidate.v5"
++        candidate["format"] == "greenmind.source-isolated-pg-prototype-candidate.v6"
+@@ -59 +59 @@
+-            HERE.parent
++            HERE.parent.parent
+@@ -64 +64 @@
+-        "format": "greenmind.source-isolated-pg-prototype.v5",
++        "format": "greenmind.source-isolated-pg-prototype.v6",
+@@ -68 +68 @@
+-        "project_root": str(HERE.parent.parent),
++        "project_root": str(HERE.parents[2]),
+@@ -104 +104 @@
+-                "project_root": str(HERE.parent.parent),
++                "project_root": str(HERE.parents[2]),
+--- v5/test_prototype.py
++++ v6/test_prototype.py
+@@ -553,0 +554 @@
++        stdout = stderr = object()
+@@ -660,0 +662 @@
++            self.stdout = self.stderr = object()
+@@ -991 +993 @@
+-    old = HERE.parent / "greenmind-approved-source-isolated-restore-v4-20261102"
++    old = HERE.parent.parent / "greenmind-approved-source-isolated-restore-v4-20261102"
+@@ -993 +994,0 @@
+-        "source_supervisor.py",
+@@ -1016,0 +1018,81 @@
++
++
++def test_v6_devnull_owned_child_cleanup(tmp_path):
++    child = subprocess.Popen([sys.executable, "-c", "pass"], stdout=subprocess.DEVNULL,
++                             stderr=subprocess.DEVNULL)
++    out, err, timed_out = controller.owned_wait(child, 5, tmp_path, "Forward")
++    assert (out, err, timed_out) == (b"", b"", False)
++    terminal = json.loads((tmp_path / "Forward.Terminal.json").read_text())
++    assert terminal["stdout_capture"] == terminal["stderr_capture"] == "not_requested"
++    assert (tmp_path / "Forward.stdout").read_bytes() == b""
++
++
++def test_v6_pgdata_advice_no_content_read_and_rejects_unsafe_entries(tmp_path, monkeypatch):
++    import source_supervisor as source
++    data = tmp_path / "pgdata"
++    data.mkdir(mode=0o700)
++    file = data / "one"
++    file.write_bytes(b"private content")
++    info = data.stat()
++    pin = (info.st_dev, info.st_ino, info.st_uid)
++    calls = []
++    monkeypatch.setattr(source.os, "posix_fadvise", lambda fd, start, length, advice:
++                        calls.append((start, length, advice)), raising=False)
++    monkeypatch.setattr(source.os, "POSIX_FADV_DONTNEED", 4, raising=False)
++    monkeypatch.setattr(source.os, "read", lambda *args: pytest.fail("content read"))
++    checkpoints = []
++    result = source.sync_and_advise_pgdata(tmp_path, pin, lambda: checkpoints.append(1))
++    assert result == {"files": 1, "logical_bytes": 15}
++    assert calls == [(0, 0, 4)] and checkpoints
++    with pytest.raises(Exception):
++        source.sync_and_advise_pgdata(tmp_path, pin, lambda: None, max_bytes=14)
++    with pytest.raises(Exception):
++        source.sync_and_advise_pgdata(tmp_path, pin, lambda: None, max_files=0)
++    with pytest.raises(Exception):
++        source.sync_and_advise_pgdata(tmp_path, (pin[0] + 1, *pin[1:]), lambda: None)
++    with pytest.raises(Exception):
++        source.sync_and_advise_pgdata(tmp_path, (*pin[:2], pin[2] + 1), lambda: None)
++    file.unlink()
++    (data / "link").symlink_to(tmp_path)
++    with pytest.raises(Exception):
++        source.sync_and_advise_pgdata(tmp_path, pin, lambda: None)
++    (data / "link").unlink()
++    outside = tmp_path / "external"
++    outside.write_bytes(b"x")
++    os.link(outside, data / "hardlink")
++    with pytest.raises(Exception):
++        source.sync_and_advise_pgdata(tmp_path, pin, lambda: None)
++
++
++@pytest.mark.parametrize("field", ["device", "owner"])
++def test_v6_pgdata_rejects_foreign_entry(tmp_path, monkeypatch, field):
++    import source_supervisor as source
++    data = tmp_path / "pgdata"
++    data.mkdir(mode=0o700)
++    (data / "file").write_bytes(b"x")
++    info = data.stat()
++    actual_stat = os.stat
++    def foreign(path, *args, **kwargs):
++        result = actual_stat(path, *args, **kwargs)
++        if path == "file":
++            vals = list(result)
++            vals[2 if field == "device" else 4] += 1
++            return os.stat_result(vals)
++        return result
++    monkeypatch.setattr(source.os, "stat", foreign)
++    with pytest.raises(ValueError, match="pgdata_entry_identity"):
++        source.sync_and_advise_pgdata(tmp_path, (info.st_dev, info.st_ino, info.st_uid), lambda: None)
++
++
++def test_v6_pgdata_advice_failure_is_closed(tmp_path, monkeypatch):
++    import source_supervisor as source
++    data = tmp_path / "pgdata"
++    data.mkdir(mode=0o700)
++    (data / "file").write_bytes(b"x")
++    info = data.stat()
++    def fail(*args):
++        raise OSError("unavailable")
++    monkeypatch.setattr(source.os, "POSIX_FADV_DONTNEED", 4, raising=False)
++    monkeypatch.setattr(source.os, "posix_fadvise", fail, raising=False)
++    with pytest.raises(OSError):
++        source.sync_and_advise_pgdata(tmp_path, (info.st_dev, info.st_ino, info.st_uid), lambda: None)

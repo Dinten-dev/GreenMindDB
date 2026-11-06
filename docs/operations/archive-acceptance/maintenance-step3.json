@@ -1,0 +1,91 @@
+{
+  "format": "greenmind.public-maintenance-summary.v1",
+  "updated_utc": "2026-11-03T20:01:49.896451+00:00",
+  "permanently_stopped_services": 5,
+  "stopped_categories": {
+    "retired_application_backends": 3,
+    "disabled_retention_worker": 1,
+    "retired_staging_frontend": 1
+  },
+  "workers_safely_paused_and_resumed_healthy": 2,
+  "worker_code_unchanged_across_pause": true,
+  "watchdogs_inactive": true,
+  "running_containers": {
+    "source": 12,
+    "archive": 12
+  },
+  "source_available_ram_during_pause_bytes": 1201082368,
+  "source_available_ram_final_sample_bytes": 940830720,
+  "step3": {
+    "status": "PARTIAL",
+    "accepted": false,
+    "startup_ready_observed_v5": true,
+    "v5_metadata_ready_wait_seconds": 77.32660729100462,
+    "v5_failure": {
+      "reason": "own_pg_memory_event",
+      "pg_memory": {
+        "cpu_period_us": 100000,
+        "cpu_quota_us": 5000,
+        "memory_current_bytes": 117121024,
+        "memory_events": {
+          "high": 1,
+          "low": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0
+        },
+        "memory_high_bytes": 117440512,
+        "memory_max_bytes": 134217728,
+        "memory_peak_bytes": 117645312,
+        "memory_swap_max_bytes": 0,
+        "sample_unix": 1793734693.8327475
+      }
+    },
+    "v6_candidate_sha256": "2c8e2ccfc2af9f5327bbcc0d661affdbfa1c820e5ca707215bd605d8e670d10f",
+    "v6_local_checks_passed": 45,
+    "v6_native_failure": {
+      "reason": "source_health",
+      "sample": {
+        "admission_bytes": 939524096,
+        "admission_passed": true,
+        "available_bytes": 1143164928,
+        "floor_bytes": 738197504,
+        "floor_passed": true,
+        "load1": 2.001953125,
+        "load_passed": false,
+        "maximum_load1": 2.0,
+        "sample_unix": 1793735156.1137295
+      },
+      "pg_work_started": false
+    },
+    "direct_versions_fresh_complete": false,
+    "seven_day_reserve_accepted": false,
+    "backlog_drain_accepted": false,
+    "full_restore_accepted": false,
+    "remaining": [
+      "Stable Source admission with original RAM/load limits.",
+      "Native validation of isolated PG cache optimization and both full synthetic COPY roundtrips.",
+      "Complete current bucket/version/cache/spool coverage.",
+      "Full restore workset, sustainable net throughput/backlog drain and seven days plus snapshot-wait capacity."
+    ]
+  },
+  "local_maintenance_checks_passed": 6,
+  "source_originals_deleted": 0,
+  "production_schema_changes": 0,
+  "new_deletion_enabled": false,
+  "private_maintenance_evidence_sha256": "163f97957d769e9b1d2de436f88fb1a339f285b6e2b307df10fff038ee5bea1b",
+  "private_controller_sha256": "b9a7f7f70f6ba4c4627d71cc579c447f82d5f93fa03fb328e27f5778cee71b96",
+  "publication_pending_specific_authorization": [
+    "shutdown_restart_controller",
+    "detailed_production_service_inventory"
+  ],
+  "limitations": [
+    "HTTP 200/307 proves endpoint response, not full recording/export correctness.",
+    "Cgroup charges, swap and host MemAvailable are distinct; no exact controlled RAM-savings claim.",
+    "Maintenance and paused-worker observations do not constitute the unchanged-release 24-hour acceptance.",
+    "The original V5 collector failed on DEVNULL handling; independent process absence and native Source/Archive cleanup provide separate end evidence.",
+    "The first retention stop request and first resume wrapper did not complete cleanly; independent follow-up evidence establishes actual final states.",
+    "Own diagnostic directories are retained as audit artifacts; runtime cleanup does not claim all intermediate disk bytes were removed."
+  ]
+}

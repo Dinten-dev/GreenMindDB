@@ -1,0 +1,22 @@
+{
+  "format": "greenmind.public-service-summary.v2",
+  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
+  "scope": "Historical aggregate inventory snapshots retain their own observation dates. Current detailed inventories remain private per user selection.",
+  "hosts": {
+    "source": {
+      "observed_utc": "2026-11-03T19:50:26.764161+00:00",
+      "running_container_count": 12,
+      "private_inventory_sha256": "a35c1c6426d64ac4223415736120e0e2b6cd612fd183efe8d6cae80c1790e32c"
+    },
+    "archive": {
+      "observed_utc": "2026-11-03T19:51:38.306351+00:00",
+      "running_container_count": 12,
+      "private_inventory_sha256": "06ca5ed0b2ec303e9464aea8e1c05766f72470a1c817bcb492ecd2a11b7eb58e"
+    }
+  },
+  "permanently_stopped_services": 5,
+  "workers_resumed_healthy": 2,
+  "maintenance_record": "maintenance-step3.json",
+  "latest_website_summary": "website-incident-20261105.json",
+  "latest_affected_workers_running": true
+}

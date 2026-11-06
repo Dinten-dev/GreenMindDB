@@ -1,0 +1,35 @@
+{
+  "format": "greenmind.public.restore-footprint-summary.v1",
+  "updated_utc": "2026-11-05T09:58:29.220063+00:00",
+  "status": "PARTIAL_MEASUREMENT_FULL_RESTORE_PEAK_BLOCKED",
+  "step3_accepted": false,
+  "observations": {
+    "current_source_science_relation_footprint_measured": true,
+    "historical_isolated_test_pgdata_footprints_measured": true,
+    "historical_pgdata_samples": 5,
+    "logical_and_allocated_disk_bytes_separated": true,
+    "wal_and_current_temp_footprints_separated": true,
+    "test_samples_are_synthetic_postrun_not_full_restore": true,
+    "actual_full_restore_peak_measured": false,
+    "postrun_empty_temp_does_not_prove_no_earlier_spill": true,
+    "separate_archive_verification_and_restore_budget_checks_confirmed": true,
+    "previous_single_number_was_not_a_universal_restore_requirement": true,
+    "additional_fixed_reserve_margin_empirical_derivation_found": false,
+    "hypothetical_margin_reduction_still_leaves_a_start_gate_shortfall": true,
+    "filesystem_free_and_available_blocks_distinguished": true,
+    "full_restore_started_in_this_run": false,
+    "existing_limits_changed": false,
+    "smaller_reserve_approved": false,
+    "source_originals_deleted": 0,
+    "existing_production_services_changed": 0,
+    "final_website_and_selected_service_checks_passed": true
+  },
+  "metadata_reader_local_tests_reported_passed": 10,
+  "limitations": "Existing relation sizes and historical synthetic post-run footprints do not measure a full restore peak. Existing storage gates remain unmet; no reserve reduction is approved.",
+  "public_scope": "Aggregate summaries and checksums only; measurements, implementation and operational details remain private.",
+  "digests": {
+    "private_evidence_manifest_sha256": "dea4b6374f3344e3c1a445c50f333f42ab7d02b77884b474c0b5e8cce057d72c",
+    "private_assessment_sha256": "6914867fa5f7e4ecf381dbd14bd267b43a58b2ecf0ff63a0e1ac476367aff809",
+    "private_measurement_report_sha256": "99ee1a7237d18780d0ff98e07a6aeb01b7b4379dbfbee8dcfdf769eeb2069dd4"
+  }
+}

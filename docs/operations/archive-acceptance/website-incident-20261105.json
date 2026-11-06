@@ -1,0 +1,24 @@
+{
+  "format": "greenmind.public.incident-summary.v1",
+  "updated_utc": "2026-11-05T09:03:11.388483+00:00",
+  "website_restored": true,
+  "frontend_local_to_production_host": true,
+  "website_frontend_tunnel_dependency_removed": true,
+  "cause_summary": "The separate website frontend relay was unavailable. The archive API tunnel did not occupy the frontend port.",
+  "verification": {
+    "public_pages_http_200": true,
+    "static_assets_http_200": true,
+    "unchanged_page_content_sha256": true,
+    "backend_health_http_200": true,
+    "storage_readiness_http_200": true,
+    "affected_workers_running": true,
+    "only_frontend_routes_changed": true,
+    "automatic_container_restart_configured": true
+  },
+  "archive_acceptance_step3": "PARTIAL",
+  "new_deletion_enabled": false,
+  "source_originals_deleted": 0,
+  "publication_scope": "Aggregate summaries and checksums only; implementation and operational details remain private.",
+  "private_evidence_manifest_sha256": "606612061bafbb6674302784004208584040c0d55c4db2313f64c4b7ef8f8524",
+  "frontend_release_archive_sha256": "b987dbe363a54418440153eccf7e1a3b0b610b04754e9835bf495dd3f7490519"
+}

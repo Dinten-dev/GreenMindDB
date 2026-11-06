@@ -1,0 +1,18 @@
+{
+  "files": {
+    "Adapter-contract.txt": "563208575cc627bf49d652364836224667e27819f7f844023aef73ebb88d6bf4",
+    "archive_probe.py": "d0434b6a3453360b3988e5bc46a99e45471d267781885923f1c2da8d922ec15e",
+    "main_controller.py": "bf4d2fa866bfe725c8e7d853ee12529ff7169f85b53feb897dd6601a3952033e",
+    "materialize.py": "85dbf3d9cfcdf950cf7c37b99851fba813e42945f9a419091e27657a532a4111",
+    "opaque_relay.py": "ee5ce87a2e0968b490b22c8b7744e08caff72b0f506bb273bfde1be4d5272c98",
+    "prototype_common.py": "71150c5242213d80f518c74fe68bd6bdab80e7f4fa373c8556e446f175485ed0",
+    "root_wrappers.py": "73b74b20e96c4e8c72af1e1344be892461141efa56600ddfc9f7df677d5fe634",
+    "source_crypto_helper.py": "2fee59a7539de789cfddd6f84f28e7b1c952b520e5a6c234592e106de37cfd11",
+    "source_supervisor.py": "5c311fd2549ed59d14f766384bf341a61fa221c403e4dd615964b154450186ea",
+    "test_prototype.py": "bf4b9e56b1065dc3095c630914dec42f841752f17e5406afe800ca2175fd8d05"
+  },
+  "format": "greenmind.source-isolated-pg-prototype-candidate.v6",
+  "full_restore_proven": false,
+  "native_actions_by_agent": 0,
+  "production_database_connections": 0
+}

@@ -1,0 +1,227 @@
+--- a/isolated-test/source_supervisor.py
++++ b/isolated-test/source_supervisor.py
+@@ -780,6 +780,26 @@
+             }
+ 
+         CONTROL.snapshot = target_snapshot
++
++        def before_end(operation_id):
++            def cache_health():
++                need(CONTROL.active == operation_id and CONTROL.operation_started is not None,
++                     "source_cache_active_operation")
++                need(CONTROL.monotonic() - CONTROL.operation_started < 95,
++                     "target_active_work_deadline")
++                need(CONTROL.wall() < CONTROL.expires, "target_lifetime_expired")
++                health(check_control=False)
++
++            cache_health()
++            check_pg()
++            stats = sync_and_advise_pgdata(ROOT, data_pin, cache_health)
++            cache_health()
++            check_pg()
++            cache_health()
++            CONTROL.event("pgdata_cache_advice",
++                          {"operation_id": operation_id, "pgdata_cache_advice": stats})
++
++        CONTROL.before_end = before_end
+         CONTROL.ready(ready)
+         ready["target_base_sha256"] = CONTROL.base_sha256
+         save(ROOT / "Ready.json", ready)
+--- a/isolated-test/target_control.py
++++ b/isolated-test/target_control.py
+@@ -29,6 +29,7 @@
+         lock_fd,
+         *,
+         bootstrap_started=None,
++        before_end=None,
+         monotonic=time.monotonic,
+         wall=time.time,
+     ):
+@@ -53,6 +54,7 @@
+         self.event_number = 0
+         self.base_sha256 = None
+         self.snapshot = None
++        self.before_end = before_end
+         self.event("bootstrap", {})
+ 
+     def event(self, phase, extra):
+@@ -138,6 +140,11 @@
+                 action == "end" and self.active == value["operation_id"],
+                 "target_operation_end_binding",
+             )
++            if self.before_end is not None:
++                self.before_end(value["operation_id"])
++                need(self.wall() < self.expires, "target_lifetime_expired")
++                need(self.monotonic() - self.operation_started < 95,
++                     "target_active_work_deadline")
+             self.active = None
+             self.operation_started = None
+             fcntl.flock(self.fd, fcntl.LOCK_UN)
+--- a/isolated-test/archive_probe.py
++++ b/isolated-test/archive_probe.py
+@@ -2,9 +2,11 @@
+ 
+ import base64
+ import hashlib
++import hmac
+ import io
+ import json
+ import os
++import re
+ import secrets
+ import struct
+ import sys
+@@ -103,8 +105,49 @@
+     }
+ 
+ 
+-def main(action):
++def validate_ready(scope, ready, source):
++    need(
++        source in ("gateway", "direct")
++        and ready["probe_source"] == source
++        and isinstance(ready["probe_operation_id"], str)
++        and re.fullmatch(r"[0-9a-f]{32}", ready["probe_operation_id"]) is not None
++        and type(ready["probe_begin_sequence"]) is int
++        and 0 < ready["probe_begin_sequence"] <= 511
++        and ready["probe_begin_sequence"] % 2 == 1
++        and ready["run"] == scope["run"]
++        and ready["production_database_connections"] == 0
++        and ready["pg_password_or_private_key_in_response"] is False,
++        "source_ready_scope",
++    )
++    operation=ready['operation'];reply=operation['reply'];proof=ready['archive_begin_proof']
++    need(hashlib.sha256((json.dumps(reply,sort_keys=True)+'\n').encode()).hexdigest()==operation['reply_sha256'], 'archive_operation_reply_sha')
++    need(reply['run']==scope['run'] and reply['operation_id']==ready['probe_operation_id']
++         and type(reply['sequence']) is int and reply['sequence']==ready['probe_begin_sequence'] and reply['active'] is True
++         and reply['actual_source_jobs_locked'] is True
++         and reply['source_active_deadline_seconds']==95
++         and reply['target_base_sha256']==ready['target_base_sha256']
++         and -1<=time.time()-reply['issued_unix']<15
++         and reply['operation_expires_unix']==reply['issued_unix']+95
++         and reply['target_expires_unix']==ready['target_expires_unix']
++         and time.time()<reply['operation_expires_unix']
++         and reply['archive_owned_proof_sha256']==hashlib.sha256((json.dumps(proof,sort_keys=True)+'\n').encode()).hexdigest()
++         and proof['holder']==scope['archive_lock'] and proof['run']==scope['run']
++         and proof['probe_source']==source
++         and proof['archive_jobs_locked'] is True and proof['actual_worker_terminal'] is None
++         and proof['probe_cgroup_empty_or_absent'] is True
++         and -1<=time.time()-proof['observed_unix']<30,
++         'archive_actual_operation_binding')
++    snapshot=reply['actual_source_snapshot']
++    need(snapshot['container_id']==ready['container_id']
++         and snapshot['server_ca_sha256']==ready['server_ca_sha256']
++         and all(snapshot['pg_generation'][key]==ready['pg_generation'][key]
++                 for key in ('pid','start_ticks','netns_inode')), 'archive_actual_target_generation')
++
++
++def main(action, source=None):
+     global PHASE
++    need((action == "prepare" and source in (None, ""))
++         or (action == "probe" and source in ("gateway", "direct")), "archive_action")
+     scope = json.loads(root_bytes(ROOT / "Scope.json"))
+     need(
+         os.geteuid() == 0
+@@ -123,7 +166,7 @@
+             == scope["archive_files"][name],
+             "archive_worker_sha",
+         )
+-    unit = "gm-archive-pg-" + action + "-" + scope["run"][:12] + ".service"
++    unit = "gm-archive-pg-" + action + ("-" + source if action == "probe" else "") + "-" + scope["run"][:12] + ".service"
+     health(unit)
+     PHASE = "archive_runtime_verification"
+     archive_runtime()  # Every application file verified before any application import.
+@@ -145,38 +188,17 @@
+         print(json.dumps(public), flush=True)
+         return
+     need(action == "probe", "archive_action")
+-    ready = json.loads(root_bytes(ROOT / "SourceReady.json"))
+-    need(
+-        ready["run"] == scope["run"]
+-        and ready["production_database_connections"] == 0
+-        and ready["pg_password_or_private_key_in_response"] is False,
+-        "source_ready_scope",
+-    )
+-    operation=ready['operation'];reply=operation['reply'];proof=ready['archive_begin_proof']
+-    need(hashlib.sha256((json.dumps(reply,sort_keys=True)+'\n').encode()).hexdigest()==operation['reply_sha256'], 'archive_operation_reply_sha')
+-    need(reply['run']==scope['run'] and reply['operation_id']==scope['run']
+-         and reply['sequence']==1 and reply['active'] is True
+-         and reply['actual_source_jobs_locked'] is True
+-         and reply['source_active_deadline_seconds']==95
+-         and reply['target_base_sha256']==ready['target_base_sha256']
+-         and -1<=time.time()-reply['issued_unix']<15
+-         and reply['operation_expires_unix']==reply['issued_unix']+95
+-         and reply['target_expires_unix']==ready['target_expires_unix']
+-         and time.time()<reply['operation_expires_unix']
+-         and reply['archive_owned_proof_sha256']==hashlib.sha256((json.dumps(proof,sort_keys=True)+'\n').encode()).hexdigest()
+-         and proof['holder']==scope['archive_lock'] and proof['run']==scope['run']
+-         and proof['archive_jobs_locked'] is True and proof['actual_worker_terminal'] is None
+-         and proof['probe_cgroup_empty_or_absent'] is True
+-         and -1<=time.time()-proof['observed_unix']<30,
+-         'archive_actual_operation_binding')
+-    snapshot=reply['actual_source_snapshot']
+-    need(snapshot['container_id']==ready['container_id']
+-         and snapshot['server_ca_sha256']==ready['server_ca_sha256']
+-         and all(snapshot['pg_generation'][key]==ready['pg_generation'][key]
+-                 for key in ('pid','start_ticks','netns_inode')), 'archive_actual_target_generation')
++    ready = json.loads(root_bytes(ROOT / ("SourceReady-" + source + ".json")))
++    validate_ready(scope, ready, source)
+     ca = base64.b64decode(ready["server_ca_b64"], validate=True)
+     need(hashlib.sha256(ca).hexdigest() == ready["server_ca_sha256"], "source_ca_sha")
+-    save(ROOT / "server-ca.crt", ca)
++    try:
++        save(ROOT / "server-ca.crt", ca)
++    except FileExistsError:
++        existing = root_bytes(ROOT / "server-ca.crt")
++        need(hmac.compare_digest(existing, ca)
++             and hashlib.sha256(existing).hexdigest() == ready["server_ca_sha256"],
++             "source_ca_existing_mismatch")
+     import psycopg2
+     from psycopg2 import sql
+     from sqlalchemy import create_engine, text
+@@ -247,7 +269,7 @@
+             "control_mutual_tls",
+         )
+         q.execute("COMMENT ON DATABASE sql_audit_test IS %s", (marker,))
+-        role = "gm_probe_owner_" + scope["run"][:12]
++        role = "gm_probe_owner_" + scope["run"][:12] + "_" + source
+         password = secrets.token_urlsafe(32)
+         q.execute(
+             sql.SQL(
+@@ -258,7 +280,7 @@
+     results = {}
+     try:
+         PHASE = "archive_target_guards_and_native_copy"
+-        for source in ("gateway", "direct"):
++        for source in (source,):
+             health(unit)
+             name = "gm_native_restore_" + scope["run"] + "_" + source
+             with control.cursor() as q:
+@@ -388,16 +410,24 @@
+         "production_data_restore_proven": False,
+         "private_keys_or_passwords_returned": False,
+     }
+-    save(ROOT / "Result.json", result)
++    save(ROOT / ("Result-" + source + ".json"), result)
+     print(json.dumps(result), flush=True)
+ 
+ 
+ if __name__ == "__main__":
+     try:
+-        main(sys.argv[1])
++        if sys.argv[1:] in (["prepare"], ["prepare", ""]):
++            main("prepare")
++        elif len(sys.argv) == 3 and sys.argv[1] == "probe" and sys.argv[2] in ("gateway", "direct"):
++            main("probe", sys.argv[2])
++        else:
++            raise ValueError("archive_action")
+     except Exception as error:
+         from prototype_common import safe_failure
+ 
+         scope = json.loads(root_bytes(ROOT / "Scope.json"))
+-        save(ROOT / "Failure.json", safe_failure(error, scope, PHASE))
++        failure = ("Failure-" + sys.argv[2] + ".json"
++                   if len(sys.argv) == 3 and sys.argv[1] == "probe" and sys.argv[2] in ("gateway", "direct")
++                   else "Failure.json")
++        save(ROOT / failure, safe_failure(error, scope, PHASE))
+         raise SystemExit(2)

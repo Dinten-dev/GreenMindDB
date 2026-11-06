@@ -1,0 +1,455 @@
+{
+  "format": "greenmind.data-lifecycle-specification.v1",
+  "version": "2026-11-03-step2",
+  "scope": "specification only; not a production activation file",
+  "default_treatment": "PRESERVE",
+  "deletion_authority": false,
+  "production_policy_changed": false,
+  "time_contract": {
+    "clock": "timezone-aware UTC instants; seven days means 604800 elapsed seconds",
+    "local_age_anchor": "end of the exact candidate interval/revision; never filename/hash/arrival time as invented recording time",
+    "first_confirmation_anchor": "first independently complete matching snapshot confirmation of that exact revision and all dependencies",
+    "same_revision_reverification": "preserve first confirmation; refresh current evidence without resetting age",
+    "new_revision": "new matching evidence and a new confirmation reserve; never inherit prior revision approval",
+    "earliest_time_formula": "max(candidate_end + minimum_local_days, first_complete_snapshot_confirmation + 7 days, late_arrival_deadline, any_stricter_existing_local_retention_deadline)",
+    "existing_longer_retention": "additional applicable local retention requirements remain binding",
+    "first_confirmation_not_yet_accepted_for_full_scope": true,
+    "freshness_max_hours": 24,
+    "freshness_applies_to": [
+      "matching snapshot",
+      "independent readback",
+      "matching backup evidence"
+    ],
+    "time_conditions_alone_authorize_nothing": true
+  },
+  "deletion_blockers": [
+    "unknown_origin",
+    "unknown_or_changed_revision",
+    "active_processing",
+    "active_reader_or_export",
+    "quarantine",
+    "missing_or_unverified_features",
+    "missing_dashboard_projection",
+    "incomplete_parent_neighbor_or_reconstruction_dependencies",
+    "missing_or_stale_archive_snapshot_backup_or_restore_evidence",
+    "incomplete_tenant_assignment",
+    "source_fence_or_runtime_binding_mismatch",
+    "resource_or_ingest_failure",
+    "unreconciled_restored_deletion_state",
+    "unmet_stricter_existing_local_retention",
+    "missing_class_specific_production_acceptance"
+  ],
+  "sql_contract": {
+    "intended_tables": [
+      "direct_visual_point",
+      "gateway_state_report",
+      "ingest_log",
+      "visual_reading",
+      "visual_wave",
+      "wav_feature",
+      "wav_feature_version"
+    ],
+    "current_treatment": "HOLD",
+    "excluded_classes": [
+      "raw_readings",
+      "sensor_reading",
+      "direct_revision",
+      "direct_payload",
+      "source_wavs"
+    ],
+    "v3_pilot": {
+      "source": "gateway",
+      "table": "ingest_log",
+      "partitions": 1,
+      "maximum_rows": 32,
+      "status": "separate future production acceptance"
+    },
+    "automation": "separate versioned contract and per-table adapter acceptance; not enabled here",
+    "historical_v2_audit_installation": "excluded",
+    "all_other_current_tables": "PRESERVE"
+  },
+  "storage_contract": {
+    "production_root": "greenmind-raw",
+    "staging_root": "preserve the existing explicitly bound separate staging namespace",
+    "supported_isolated_staging_root": "greenmind-staging",
+    "existing_paths_and_keys_preserved": true,
+    "publisher_and_independent_reader_credentials_distinct": true,
+    "current_bindings_match_prior_pins": true,
+    "effective_provider_rights_retest": "not performed in step 2; remains a later native acceptance",
+    "private_encryption": {
+      "algorithm": "existing AES-256-GCM block format with authenticated EOF",
+      "private_components": [
+        "sensitive schema/master/provider backups",
+        "scientific native parts",
+        "private parent/original context"
+      ],
+      "existing_key_binding_preserved": true,
+      "new_keys_created": false,
+      "key_material_published": false
+    },
+    "wav_format": "preserve existing WAV/manifest format and exact archived bytes; no new application-layer encryption promise",
+    "sql_formats": "preserve existing Parquet/Zstandard, JSON manifests and encrypted private native/backup containers",
+    "permanent_archive_ttl": null,
+    "manual_snapshot_rotation": false
+  },
+  "data_categories": [
+    {
+      "id": "source_wavs",
+      "source": {
+        "gateway": "source MinIO / preserved Gateway bucket; wav_file.s3_key",
+        "direct": "source MinIO / greenmind-direct-production-hotspot; direct_revision.manifest.runs[].key"
+      },
+      "processing": [
+        "complete recording and exact object version",
+        "features and dashboard verification",
+        "all reconstruction, provenance and processing dependencies"
+      ],
+      "archive": {
+        "root": "greenmind-raw",
+        "key": "preserve exact published receipt key; production/date/stable-sensor/immutable-name.wav",
+        "rewriting_existing_keys": false
+      },
+      "treatment": "HOLD_PENDING_CLASS_ACCEPTANCE",
+      "minimum_local_days": 0,
+      "confirmation_reserve_days": 7,
+      "scope_exclusion": "excluded from SQL automation",
+      "deletion_enabled": false
+    },
+    {
+      "id": "feature_history",
+      "source": {
+        "tables": [
+          "wav_feature",
+          "wav_feature_version"
+        ]
+      },
+      "processing": [
+        "source hash, extractor/configuration/calibration revision and quality context",
+        "parent WAV and assignment dependencies"
+      ],
+      "archive": {
+        "target": "existing tiered/science catalogue and authenticated encrypted scientific parts",
+        "native_restore_accepted": false
+      },
+      "treatment": "HOLD_PENDING_CLASS_ACCEPTANCE",
+      "minimum_local_days": 90,
+      "confirmation_reserve_days": 7,
+      "scope_exclusion": null,
+      "deletion_enabled": false
+    },
+    {
+      "id": "dashboard_history",
+      "source": {
+        "tables": [
+          "visual_reading",
+          "visual_wave",
+          "direct_visual_point"
+        ]
+      },
+      "processing": [
+        "preserve n,total,total2,min,max,duration and gaps",
+        "source, revision, parent and tenant references"
+      ],
+      "archive": {
+        "target": "existing SQL tiered archive with catalogue/dependency context"
+      },
+      "treatment": "HOLD_PENDING_CLASS_ACCEPTANCE",
+      "minimum_local_days": 90,
+      "confirmation_reserve_days": 7,
+      "scope_exclusion": null,
+      "deletion_enabled": false
+    },
+    {
+      "id": "sql_logs",
+      "source": {
+        "tables": [
+          "ingest_log",
+          "gateway_state_report"
+        ]
+      },
+      "processing": [
+        "confirmed partition, primary keys and content",
+        "complete audit and foreign-key effects"
+      ],
+      "archive": {
+        "target": "existing versioned SQL archive and independent snapshot/restore"
+      },
+      "treatment": "HOLD_PENDING_CLASS_ACCEPTANCE",
+      "minimum_local_days": 30,
+      "confirmation_reserve_days": 7,
+      "scope_exclusion": null,
+      "deletion_enabled": false
+    },
+    {
+      "id": "other_logs",
+      "source": {
+        "tables": "all remaining audit, firmware and operational logs"
+      },
+      "processing": [
+        "preserve pending explicit classification"
+      ],
+      "archive": {
+        "target": "existing encrypted backup where covered; missing coverage remains HOLD"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": 30,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "no additional SQL adapter authorized",
+      "deletion_enabled": false
+    },
+    {
+      "id": "identity_security_and_assignments",
+      "source": {
+        "tables": "identities, ownership, access, auth, pairing and assignment references"
+      },
+      "processing": [
+        "authoritative exclusions and historical ownership anchors"
+      ],
+      "archive": {
+        "target": "same-snapshot schema/master backup; sensitive values encrypted under existing contract"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "outside new retention",
+      "deletion_enabled": false
+    },
+    {
+      "id": "parents_and_reconstruction_metadata",
+      "source": {
+        "tables": [
+          "wav_file",
+          "visual_wav",
+          "direct_segment",
+          "direct_visual_segment",
+          "direct_revision"
+        ]
+      },
+      "processing": [
+        "maintain source hashes, manifest revisions, session/configuration and neighboring dependencies"
+      ],
+      "archive": {
+        "target": "existing encrypted parent companions and dependency catalogue"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "outside new SQL deletion",
+      "deletion_enabled": false
+    },
+    {
+      "id": "direct_payload_and_chunk_context",
+      "source": {
+        "tables": [
+          "direct_chunk",
+          "direct_chunk_payload_ref",
+          "direct_piece",
+          "direct_session"
+        ]
+      },
+      "processing": [
+        "existing independent payload-offload contract only",
+        "preserve exact-byte reconstruction and immutable context"
+      ],
+      "archive": {
+        "target": "existing verified WAV/context references and encrypted original-context packages"
+      },
+      "treatment": "PRESERVE_UNDER_SEPARATE_CONTRACT",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "no new SQL or WAV deletion authority",
+      "deletion_enabled": false
+    },
+    {
+      "id": "raw_readings",
+      "source": {
+        "tables": [
+          "sensor_reading"
+        ],
+        "logical_class": "raw_readings"
+      },
+      "processing": [
+        "retain raw provenance"
+      ],
+      "archive": {
+        "target": "existing allowlisted backup only; no assumed completeness"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "explicitly excluded from new SQL scope",
+      "deletion_enabled": false
+    },
+    {
+      "id": "journal_catalog_and_import_state",
+      "source": {
+        "source": "source and archive catalogues, leases, verification/import/retry/deletion journals"
+      },
+      "processing": [
+        "preserve resumability, references, first confirmation and consumed budgets",
+        "restore requires explicit state reconciliation"
+      ],
+      "archive": {
+        "target": "versioned catalogue/registry backup; private fields follow existing encryption contract"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "no expiry or implicit reset",
+      "deletion_enabled": false
+    },
+    {
+      "id": "other_media_and_unclassified_data",
+      "source": {
+        "source": "photos, evaluations, bio aggregates and other unclassified stores"
+      },
+      "processing": [
+        "unknown origin or treatment blocks deletion"
+      ],
+      "archive": {
+        "target": "only explicitly supported existing backup; otherwise UNKNOWN"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "no inferred retention",
+      "deletion_enabled": false
+    },
+    {
+      "id": "permanent_storagebox_archives",
+      "source": {
+        "root": "greenmind-raw",
+        "contents": "published WAV, SQL, science, context, catalogue, schema/master and parent packages"
+      },
+      "processing": [
+        "retain all permanent originals"
+      ],
+      "archive": {
+        "target": "same existing StorageBox paths and accounts"
+      },
+      "treatment": "PRESERVE_PERMANENTLY",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": null,
+      "deletion_enabled": false
+    },
+    {
+      "id": "existing_manual_snapshots",
+      "source": {
+        "source": "all pre-existing manual snapshots"
+      },
+      "processing": [
+        "never adopt as agent-owned automatic snapshots"
+      ],
+      "archive": {
+        "target": "existing provider snapshots"
+      },
+      "treatment": "PRESERVE_PERMANENTLY",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "excluded from automated rotation",
+      "deletion_enabled": false
+    },
+    {
+      "id": "new_managed_snapshots",
+      "source": {
+        "source": "only future explicitly agent-owned snapshots"
+      },
+      "processing": [
+        "separate native snapshot/restore acceptance",
+        "keep two fully verified own snapshots and reserve third slot"
+      ],
+      "archive": {
+        "target": "existing provider and managed catalogue"
+      },
+      "treatment": "HOLD_UNTIL_SEPARATE_SNAPSHOT_ACCEPTANCE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "no rotation enabled by step 2",
+      "deletion_enabled": false
+    },
+    {
+      "id": "caches_scratch_and_generated_exports",
+      "source": {
+        "source": "derived caches and temporary copies, never archive/source originals"
+      },
+      "processing": [
+        "existing class-specific cleanup contract and active-use locks only"
+      ],
+      "archive": {
+        "target": "no permanent archive deletion implied"
+      },
+      "treatment": "PRESERVE_UNDER_SEPARATE_CONTRACT",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "no generic cleanup introduced",
+      "deletion_enabled": false
+    },
+    {
+      "id": "staging_and_restore_targets",
+      "source": {
+        "source": "separately inventoried staging and older restore-test databases"
+      },
+      "processing": [
+        "distinct physical/database identities",
+        "no promotion to production evidence"
+      ],
+      "archive": {
+        "target": "separate staging namespace"
+      },
+      "treatment": "PRESERVE",
+      "minimum_local_days": null,
+      "confirmation_reserve_days": null,
+      "scope_exclusion": "outside production retention scope",
+      "deletion_enabled": false
+    }
+  ],
+  "source_code_contracts": [
+    {
+      "module": "app/tiered_archive/policy.py",
+      "sha256": "c1f4033c7558339ccac99af1e4ada02c045cfbf17b4599ba3c898ce92ee32dbc",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/tiered_archive/sql_deletion.py",
+      "sha256": "a7865dc4e03c59bde18cd9ca26aaf0ba3509623e55cbeaa37bc5bcbb295c3093",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/tiered_archive/source.py",
+      "sha256": "f9f6164a6d7a9bed10cb6dccf80f126d71e1b32758e9abbd735d46f0868e27e3",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/raw_archive/policy.py",
+      "sha256": "5e269a696e2be95921d74487ede782cb2455cbc813171a68a2b20c21688fa612",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/raw_archive/runner.py",
+      "sha256": "94c2ac1aa45341d4f04ca6dd351a02748f4944ed532c9fe188aefd22ca784eec",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/raw_archive/read_only_box.py",
+      "sha256": "bf79072486d86a64e03e1c8c0789011923b669182681bfec24167e8a2f77f84f",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/tiered_archive/backup.py",
+      "sha256": "86d0c9960f3223f7193814355f9c068dd9d42f4c65bf6be67ac9cda60a74153f",
+      "status": "local reference candidate; no deployed-code claim"
+    },
+    {
+      "module": "app/tiered_archive/storage.py",
+      "sha256": "d11e5a9c50cff03951bff713e562b0de8494f9fd9f1598961b06f6720643da51",
+      "status": "local reference candidate; no deployed-code claim"
+    }
+  ],
+  "evidence": {
+    "step1_acceptance_sha256": "9fadccde18f896fe480d7e8e5e4f03ed66993c2e775309f90b149aa96238933a",
+    "current_table_map_sha256": "9982a5fc4fa849055e62aff805b2d1ab3cc964338757c5728b82df9f013ee2a5",
+    "current_schema_sha256": "9aa2ccc7d8d23d8028ed90dc221ab05122c47283017446446038654e72efde16",
+    "existing_storage_binding_sha256": "737a3579ec5a3fc482120accf400a8a2ed7e906c02ef15387285b0bf8ecd9ab8"
+  }
+}
