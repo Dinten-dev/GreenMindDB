@@ -29,10 +29,10 @@ export default function Impressum() {
             </p>
             <p className="mt-4">
               <a
-                href="mailto:info@galaxyadvisors.com"
+                href="mailto:info@green-mind.ch"
                 className="text-gm-green-600 hover:underline"
               >
-                info@galaxyadvisors.com
+                info@green-mind.ch
               </a>
             </p>
           </section>
@@ -41,7 +41,7 @@ export default function Impressum() {
             <h2 className="text-xl font-semibold text-apple-gray-800 mb-4">
               {tx('Vertretungsberechtigte Personen')}
             </h2>
-            <p>{tx('Verwaltungsrat / Geschäftsleitung der GreenMind GmbH')}</p>
+            <p>{tx('Geschäftsführung der GreenMind GmbH')}</p>
           </section>
 
           <section>

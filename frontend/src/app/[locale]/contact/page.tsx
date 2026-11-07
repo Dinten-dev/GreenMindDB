@@ -73,10 +73,10 @@ export default function ContactPage() {
                 </p>
                 <p className="text-sm text-apple-gray-500 mt-3">
                   <a
-                    href="mailto:info@galaxyadvisors.com"
+                    href="mailto:info@green-mind.ch"
                     className="text-gm-green-600 hover:underline"
                   >
-                    info@galaxyadvisors.com
+                    info@green-mind.ch
                   </a>
                 </p>
               </div>
