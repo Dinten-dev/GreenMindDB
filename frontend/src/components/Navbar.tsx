@@ -16,6 +16,7 @@ export default function Navbar() {
   const router = useRouter();
   const t = useTranslations('Navigation');
   const auth = useTranslations('Auth');
+  const landing = useTranslations('LandingPage');
   const locale = useLocale();
 
   // Close menu when route changes
@@ -60,21 +61,29 @@ export default function Navbar() {
   return (
     <>
       {/* ── Navbar ──────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-xl border-b border-apple-gray-200/50">
-        <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between gap-6">
-          {/* Logo */}
-          <Link href={`/${locale}`} className="flex shrink-0 items-center gap-2 relative z-[110]">
-            <BrandLogo size={40} />
-            <span className="font-semibold text-apple-gray-800 tracking-tight">GreenMind</span>
-          </Link>
+      <nav className="fixed top-0 left-0 right-0 z-[100] bg-mercury-bg/90 backdrop-blur-xl border-b border-mercury-line">
+        <div className="max-w-[1200px] mx-auto px-6 h-[68px] flex items-center justify-between gap-6">
+          {/* Logo + development status */}
+          <div className="flex shrink-0 items-center gap-3 relative z-[110]">
+            <Link href={`/${locale}`} className="flex items-center gap-2.5">
+              <BrandLogo size={36} />
+              <span className="text-[19px] font-semibold text-mercury-ink tracking-[-0.02em]">
+                GreenMind
+              </span>
+            </Link>
+            <span className="status-pill hidden sm:inline-flex bg-mercury-accent-soft text-mercury-accent">
+              {landing('hero.inDevelopment')}
+            </span>
+          </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden xl:flex items-center gap-6 whitespace-nowrap text-sm text-apple-gray-500">
+          <div className="hidden xl:flex items-center gap-7 whitespace-nowrap text-sm text-mercury-ink">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`transition-colors duration-200 ${pathname.includes(link.href) ? 'text-apple-gray-800 font-medium' : 'hover:text-apple-gray-800'}`}
+                aria-current={pathname.includes(link.href) ? 'page' : undefined}
+                className={`transition-colors duration-200 ${pathname.includes(link.href) ? 'font-semibold' : 'hover:text-mercury-accent'}`}
               >
                 {link.name}
               </Link>
@@ -87,7 +96,7 @@ export default function Navbar() {
               aria-label={t('language')}
               value={locale}
               onChange={(e) => switchLocale(e.target.value)}
-              className="bg-transparent text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
+              className="bg-transparent text-sm text-mercury-muted hover:text-mercury-ink transition-colors duration-200 cursor-pointer outline-none border-none appearance-none pr-4 relative"
               style={{
                 backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
                 backgroundRepeat: 'no-repeat',
@@ -111,7 +120,7 @@ export default function Navbar() {
             ) : user ? (
               <Link
                 href={`/${locale}/app/dashboard`}
-                className="flex items-center gap-2 text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 bg-mercury-accent text-white rounded-full font-medium hover:bg-mercury-accent-dark transition-colors duration-200"
               >
                 <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
                   {(user.name || user.email)[0].toUpperCase()}
@@ -122,13 +131,13 @@ export default function Navbar() {
               <>
                 <Link
                   href={`/${locale}/login`}
-                  className="text-sm text-apple-gray-500 hover:text-apple-gray-800 transition-colors duration-200 ml-2"
+                  className="text-sm text-mercury-ink px-4 py-2.5 rounded-full border border-mercury-field hover:border-mercury-muted transition-colors duration-200 ml-2"
                 >
                   {auth('signIn')}
                 </Link>
                 <Link
                   href={`/${locale}/early-access`}
-                  className="text-sm px-4 py-2 bg-gm-green-500 text-white rounded-full font-medium hover:bg-gm-green-600 transition-colors duration-200"
+                  className="text-sm px-[18px] py-2.5 bg-mercury-accent text-white rounded-full font-medium hover:bg-mercury-accent-dark transition-colors duration-200"
                 >
                   {auth('requestAccess')}
                 </Link>
@@ -164,7 +173,7 @@ export default function Navbar() {
         id="public-mobile-menu"
         inert={!isMenuOpen}
         aria-hidden={!isMenuOpen}
-        className={`fixed inset-0 bg-white z-[90] flex flex-col gap-6 overflow-y-auto pt-24 px-6 pb-8 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] xl:hidden ${isMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
+        className={`fixed inset-0 bg-mercury-bg z-[90] flex flex-col gap-6 overflow-y-auto pt-24 px-6 pb-8 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] xl:hidden ${isMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
       >
         <div className="flex flex-col gap-5 text-xl font-semibold tracking-tight text-apple-gray-800">
           {navLinks.map((link) => (
@@ -201,7 +210,7 @@ export default function Navbar() {
           ) : user ? (
             <Link
               href={`/${locale}/app/dashboard`}
-              className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
+              className="w-full py-4 text-center rounded-full bg-mercury-accent text-white font-medium text-lg"
             >
               {t('dashboard')} · {user.name || user.email.split('@')[0]}
             </Link>
@@ -209,13 +218,13 @@ export default function Navbar() {
             <>
               <Link
                 href={`/${locale}/login`}
-                className="w-full py-4 text-center rounded-xl bg-apple-gray-100 text-apple-gray-800 font-medium text-lg"
+                className="w-full py-4 text-center rounded-full border border-mercury-field text-mercury-ink font-medium text-lg"
               >
                 {auth('signIn')}
               </Link>
               <Link
                 href={`/${locale}/early-access`}
-                className="w-full py-4 text-center rounded-xl bg-gm-green-500 text-white font-medium text-lg shadow-lg shadow-gm-green-500/20"
+                className="w-full py-4 text-center rounded-full bg-mercury-accent text-white font-medium text-lg"
               >
                 {auth('requestAccess')}
               </Link>

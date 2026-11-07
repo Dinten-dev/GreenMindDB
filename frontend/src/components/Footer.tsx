@@ -14,21 +14,33 @@ export default function Footer() {
     return null;
 
   return (
-    <footer className="w-full border-t border-apple-gray-200/50 bg-white/50 backdrop-blur-md py-8 mt-auto">
-      <div className="max-w-[1280px] mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="text-sm text-apple-gray-500">
+    <footer className="w-full border-t border-mercury-line bg-mercury-bg mt-auto">
+      <div className="max-w-[1200px] mx-auto px-6 pt-9 pb-12 flex flex-col md:flex-row flex-wrap justify-between gap-5 text-[13px] text-mercury-muted">
+        <div>
           &copy; {currentYear} Galaxyadvisors AG. {t('rights')}
         </div>
-        <div className="flex gap-6 text-sm">
+        <div className="flex flex-wrap gap-6">
+          <a
+            href="mailto:info@green-mind.ch"
+            className="text-mercury-muted hover:text-mercury-accent transition-colors"
+          >
+            info@green-mind.ch
+          </a>
+          <Link
+            href={`/${locale}/about`}
+            className="text-mercury-muted hover:text-mercury-accent transition-colors"
+          >
+            {t('about')}
+          </Link>
           <Link
             href={`/${locale}/contact`}
-            className="text-apple-gray-500 hover:text-gm-green-600 transition-colors"
+            className="text-mercury-muted hover:text-mercury-accent transition-colors"
           >
             {t('contact')}
           </Link>
           <Link
             href={`/${locale}/impressum`}
-            className="text-apple-gray-500 hover:text-gm-green-600 transition-colors"
+            className="text-mercury-muted hover:text-mercury-accent transition-colors"
           >
             {t('impressum')}
           </Link>

@@ -6,7 +6,8 @@
       "titlePart2": "a voice.",
       "subtitle": "GreenMind analyzes plant bioelectrical signals to detect stress earlier and specifically improve cultivation strategies.",
       "requestAccess": "Request access",
-      "howItWorks": "How it works →"
+      "howItWorks": "How it works →",
+      "note": "GreenMind is under development. We are looking for partners for first field tests."
     },
     "problem": {
       "tag": "The Problem",
@@ -100,6 +101,34 @@
       "title2": "will be data-driven.",
       "description": "Do you operate a cultivation environment and want to become part of the project? We are looking for partners for field tests and joint development.",
       "button": "Request access"
+    },
+    "status": {
+      "tag": "Where we stand",
+      "title1": "Grounded in science.",
+      "title2": "Honest about progress.",
+      "description": "Developed with FHNW and built on peer-reviewed research in plant electrophysiology. Not everything is finished yet, and we say so openly.",
+      "items": {
+        "foundation": {
+          "badge": "Foundation",
+          "title": "Research with FHNW",
+          "description": "University of Applied Sciences Northwestern Switzerland, development site Aarau."
+        },
+        "prototype": {
+          "badge": "In progress",
+          "title": "Prototype & data capture",
+          "description": "Continuous measurement around the clock; analysis is being built."
+        },
+        "fieldTests": {
+          "badge": "Partners wanted",
+          "title": "Field tests",
+          "description": "We are looking for growers with cultivation areas for first tests in the field."
+        },
+        "later": {
+          "badge": "Later",
+          "title": "Everyday recommendations",
+          "description": "Concrete recommendations are the goal, but not available yet."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,7 +1050,8 @@
     "m0880": "{used} of {total} used",
     "m0881": "Copying becomes available after the production rollout.",
     "m0882": "The production copy service is not connected to administration yet.",
-    "m0883": "Service connected."
+    "m0883": "Service connected.",
+    "m0884": "Test phase: values are not yet validated"
   },
   "Public": {
     "p0001": "About us",

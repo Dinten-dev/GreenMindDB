@@ -46,28 +46,28 @@ function LoginForm() {
   const expired = !errorKey && (issue === 'expired' || query.get('reason') === 'expired');
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-24 bg-apple-gray-100">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+    <div className="min-h-screen flex items-center justify-center px-6 pt-32 pb-24 bg-mercury-bg text-mercury-ink">
+      <div className="w-full max-w-[420px]">
+        <div className="flex flex-col items-center text-center gap-3 mb-7">
           <Link
             href={`/${locale}`}
-            className="inline-flex items-center gap-2 mb-6"
+            className="inline-flex items-center mb-2"
             aria-label="GreenMind"
           >
             <BrandLogo size={40} />
           </Link>
-          <h1 className="text-2xl font-bold text-apple-gray-800">{t('title')}</h1>
-          <p className="text-sm text-apple-gray-400 mt-2">{t('intro')}</p>
+          <h1 className="landing-display m-0 text-[44px] leading-[1.05]">{t('title')}</h1>
+          <p className="m-0 text-base text-mercury-muted">{t('intro')}</p>
         </div>
-        <div className="bg-white rounded-apple-lg shadow-apple p-8">
-          <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+        <div className="bg-white rounded-[24px] p-8">
+          <form onSubmit={handleSubmit} className="space-y-[18px]" aria-busy={loading}>
             {errorKey && (
-              <div role="alert" className="px-4 py-3 rounded-apple bg-red-50 text-red-700 text-sm">
+              <div role="alert" className="px-4 py-3 rounded-[14px] bg-red-50 text-red-800 text-sm">
                 {t(`errors.${errorKey}`)}
               </div>
             )}
             {expired && (
-              <p role="status" className="text-sm text-apple-gray-600">
+              <p role="status" className="text-sm text-mercury-muted">
                 {t('errors.expired')}
               </p>
             )}
@@ -75,7 +75,7 @@ function LoginForm() {
               <button
                 type="button"
                 onClick={() => void refresh()}
-                className="text-sm text-gm-green-700 underline"
+                className="text-sm text-mercury-accent underline"
               >
                 {t('retry')}
               </button>
@@ -83,7 +83,7 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="login-email"
-                className="block text-sm font-medium text-apple-gray-600 mb-1.5"
+                className="block text-sm font-medium text-mercury-ink mb-2"
               >
                 {t('email')}
               </label>
@@ -96,13 +96,13 @@ function LoginForm() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 disabled={loading}
-                className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 text-sm"
+                className="w-full h-12 px-4 rounded-[14px] bg-mercury-bg border border-mercury-field text-mercury-ink focus:outline-none focus:ring-2 focus:ring-mercury-accent focus:ring-offset-2 text-[15px]"
               />
             </div>
             <div>
               <label
                 htmlFor="login-password"
-                className="block text-sm font-medium text-apple-gray-600 mb-1.5"
+                className="block text-sm font-medium text-mercury-ink mb-2"
               >
                 {t('password')}
               </label>
@@ -115,14 +115,14 @@ function LoginForm() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 disabled={loading}
-                className="w-full px-4 py-2.5 rounded-apple bg-apple-gray-100 border border-apple-gray-200 text-apple-gray-800 focus:outline-none focus:ring-2 focus:ring-gm-green-500 text-sm"
+                className="w-full h-12 px-4 rounded-[14px] bg-mercury-bg border border-mercury-field text-mercury-ink focus:outline-none focus:ring-2 focus:ring-mercury-accent focus:ring-offset-2 text-[15px]"
               />
               <button
                 type="button"
                 onClick={() => setVisible(!visible)}
                 aria-pressed={visible}
                 aria-controls="login-password"
-                className="mt-2 text-xs text-gm-green-700 underline"
+                className="mt-2 text-xs text-mercury-accent underline"
               >
                 {t(visible ? 'hidePassword' : 'showPassword')}
               </button>
@@ -130,17 +130,17 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-gm-green-500 text-white rounded-apple font-medium hover:bg-gm-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              className="w-full mt-1.5 py-[15px] bg-mercury-accent text-white rounded-full font-medium hover:bg-mercury-accent-dark disabled:opacity-50 disabled:cursor-not-allowed text-[15px]"
             >
               {t(loading ? 'signingIn' : 'signIn')}
             </button>
           </form>
         </div>
-        <p className="text-center text-sm text-apple-gray-400 mt-6">
+        <p className="text-center text-sm text-mercury-muted mt-7">
           {t('noAccount')}{' '}
           <Link
             href={localePath(locale, '/early-access')}
-            className="text-gm-green-600 font-medium"
+            className="text-mercury-accent font-medium hover:text-mercury-accent-dark"
           >
             {t('requestAccess')}
           </Link>

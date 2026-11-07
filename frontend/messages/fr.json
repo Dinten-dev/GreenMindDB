@@ -6,7 +6,8 @@
       "titlePart2": "aux plantes.",
       "subtitle": "GreenMind analyse les signaux bioélectriques des plantes pour détecter le stress plus tôt et améliorer spécifiquement les stratégies de culture.",
       "requestAccess": "Demander l'accès",
-      "howItWorks": "Comment ça marche →"
+      "howItWorks": "Comment ça marche →",
+      "note": "GreenMind est en cours de développement. Nous recherchons des partenaires pour de premiers essais sur le terrain."
     },
     "problem": {
       "tag": "Le Problème",
@@ -100,6 +101,34 @@
       "title2": "sera basé sur les données.",
       "description": "Vous exploitez un environnement de culture et souhaitez faire partie du projet ? Nous recherchons des partenaires pour des tests sur le terrain et un développement conjoint.",
       "button": "Demander l'accès"
+    },
+    "status": {
+      "tag": "Où nous en sommes",
+      "title1": "Fondé sur la science.",
+      "title2": "Transparent sur notre avancement.",
+      "description": "Développé avec la FHNW et fondé sur des recherches évaluées par des pairs en électrophysiologie végétale. Tout n'est pas encore terminé, et nous le disons ouvertement.",
+      "items": {
+        "foundation": {
+          "badge": "Fondement",
+          "title": "Recherche avec la FHNW",
+          "description": "Haute école spécialisée du Nord-Ouest de la Suisse, site de développement Aarau."
+        },
+        "prototype": {
+          "badge": "En cours",
+          "title": "Prototype et collecte de données",
+          "description": "Mesure continue 24 h/24 ; l'analyse est en cours de construction."
+        },
+        "fieldTests": {
+          "badge": "Partenaires recherchés",
+          "title": "Essais sur le terrain",
+          "description": "Nous recherchons des exploitations disposant de surfaces cultivées pour de premiers essais."
+        },
+        "later": {
+          "badge": "Plus tard",
+          "title": "Recommandations au quotidien",
+          "description": "Des recommandations concrètes sont l'objectif, mais ne sont pas encore disponibles."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,7 +1050,8 @@
     "m0880": "{used} utilisés sur {total}",
     "m0881": "La copie sera disponible après le déploiement en production.",
     "m0882": "Le service de copie en production n’est pas encore connecté à l’administration.",
-    "m0883": "Service connecté."
+    "m0883": "Service connecté.",
+    "m0884": "Phase de test : les valeurs ne sont pas encore validées"
   },
   "Public": {
     "p0001": "À propos",

@@ -211,25 +211,28 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="dashboard-welcome border border-gray-200/70 rounded-2xl p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
-            {tx('Dein Gewächshaus im Blick')}
-          </h1>
-          <p className="text-sm text-gray-500 mt-2">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+        <div className="flex flex-col gap-2">
+          <p className="text-[13px] text-gray-500">
             {user?.organization_name || tx('Deine Organisation')} {tx('– Überblick')}
           </p>
+          <h1 className="text-[32px] sm:text-[36px] leading-[1.1] font-light text-gray-800 tracking-[-0.035em]">
+            {tx('Dein Gewächshaus im Blick')}
+          </h1>
+          <span className="status-pill mt-1 bg-mercury-amber-soft text-mercury-amber">
+            {tx('Testphase: Werte sind noch nicht validiert')}
+          </span>
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
             href={`/${locale}/app/sensors`}
-            className="px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
+            className="px-5 py-3 rounded-full bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
           >
             {tx('Messungen ansehen')}
           </Link>
           <button
             onClick={() => setIsPairDialogOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 whitespace-nowrap"
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-gray-300 text-gray-800 text-sm font-medium rounded-full hover:border-gray-500 whitespace-nowrap"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -477,12 +480,12 @@ function StatCard({
   const tx = useAppText();
 
   return (
-    <div className={`glass-card min-w-0 p-4 sm:p-5 ${accent ? 'border-emerald-500/20' : ''}`}>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm text-gray-600 font-medium">{tx(label)}</span>
+    <div className={`glass-card min-w-0 p-5 sm:p-[22px] ${accent ? 'border-emerald-500/20' : ''}`}>
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="text-[13px] text-gray-500">{tx(label)}</span>
       </div>
       <p
-        className={`text-2xl font-bold tracking-tight ${accent ? 'text-emerald-600' : 'text-gray-800'}`}
+        className={`text-[34px] leading-none font-light tracking-[-0.03em] ${accent ? 'text-emerald-600' : 'text-gray-800'}`}
       >
         {value.toLocaleString(tx.locale)}
       </p>

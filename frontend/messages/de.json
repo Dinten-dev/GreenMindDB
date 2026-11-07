@@ -6,7 +6,8 @@
       "titlePart2": "Stimme geben.",
       "subtitle": "GreenMind analysiert bioelektrische Pflanzensignale, um Stress früher zu erkennen und Anbaustrategien gezielt zu verbessern.",
       "requestAccess": "Zugang anfragen",
-      "howItWorks": "So funktioniert's →"
+      "howItWorks": "So funktioniert's →",
+      "note": "GreenMind befindet sich in Entwicklung. Wir suchen Partner für erste Feldtests."
     },
     "problem": {
       "tag": "Das Problem",
@@ -100,6 +101,34 @@
       "title2": "wird datengetrieben.",
       "description": "Sie betreiben eine Anbauumgebung und möchten Teil des Projekts werden? Wir suchen Partner für Feldtests und gemeinsame Weiterentwicklung.",
       "button": "Zugang anfragen"
+    },
+    "status": {
+      "tag": "Wo wir stehen",
+      "title1": "Wissenschaftlich fundiert.",
+      "title2": "Ehrlich unterwegs.",
+      "description": "Entwickelt mit der FHNW und aufbauend auf peer-reviewter Forschung zur Pflanzenelektrophysiologie. Noch ist nicht alles fertig, und das sagen wir offen.",
+      "items": {
+        "foundation": {
+          "badge": "Grundlage",
+          "title": "Forschung mit der FHNW",
+          "description": "Fachhochschule Nordwestschweiz, Entwicklungsstandort Aarau."
+        },
+        "prototype": {
+          "badge": "In Arbeit",
+          "title": "Prototyp & Datenerfassung",
+          "description": "Kontinuierliche Messung rund um die Uhr, Auswertung wird aufgebaut."
+        },
+        "fieldTests": {
+          "badge": "Partner gesucht",
+          "title": "Feldtests",
+          "description": "Wir suchen Betriebe mit Anbauflächen für erste Tests im Feld."
+        },
+        "later": {
+          "badge": "Später",
+          "title": "Empfehlungen im Alltag",
+          "description": "Konkrete Handlungsempfehlungen sind das Ziel, aber noch nicht verfügbar."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,7 +1050,8 @@
     "m0880": "{used} von {total} belegt",
     "m0881": "Kopieren wird erst nach dem Production-Rollout aktiviert.",
     "m0882": "Der Kopierdienst ist auf Production noch nicht mit der Administration verbunden.",
-    "m0883": "Service verbunden."
+    "m0883": "Service verbunden.",
+    "m0884": "Testphase: Werte sind noch nicht validiert"
   },
   "Public": {
     "p0001": "Über uns",

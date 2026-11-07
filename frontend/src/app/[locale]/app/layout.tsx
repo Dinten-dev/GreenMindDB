@@ -12,12 +12,56 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { signInPath } from '@/lib/auth-routing';
 
+const ICONS = {
+  dashboard: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="2" />
+      <rect x="14" y="3" width="7" height="7" rx="2" />
+      <rect x="3" y="14" width="7" height="7" rx="2" />
+      <rect x="14" y="14" width="7" height="7" rx="2" />
+    </>
+  ),
+  plants: (
+    <>
+      <path d="M12 21v-9" />
+      <path d="M12 12c0-4 3-7 8-7 0 5-3 7-8 7z" />
+      <path d="M12 14c0-3-2.5-5-7-5 0 4 2.5 5 7 5z" />
+    </>
+  ),
+  sensors: <path d="M2 12h3l3-7 4 14 4-14 3 7h3" />,
+  manage: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />
+    </>
+  ),
+};
+
+function NavIcon({ name }: { name: keyof typeof ICONS }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      {ICONS[name]}
+    </svg>
+  );
+}
+
 const NAV_LINKS = [
-  { href: '/app/dashboard', label: 'Überblick', icon: '◉' },
-  { href: '/app/plants', label: 'Pflanzen', icon: '⍋' },
-  { href: '/app/sensors', label: 'Messungen', icon: '∿' },
-  { href: '/app/manage', label: 'Verwaltung', icon: '⚙' },
-];
+  { href: '/app/dashboard', label: 'Überblick', icon: 'dashboard' },
+  { href: '/app/plants', label: 'Pflanzen', icon: 'plants' },
+  { href: '/app/sensors', label: 'Messungen', icon: 'sensors' },
+  { href: '/app/manage', label: 'Verwaltung', icon: 'manage' },
+] as const;
 const managementPaths = [
   '/app/manage',
   '/app/gateways',
@@ -45,14 +89,14 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
   return (
     <>
       {/* Logo */}
-      <div className="px-5 h-20 flex items-center border-b border-black/[0.04]">
+      <div className="px-5 h-20 flex items-center">
         <Link
           href={`/${locale}/app/dashboard`}
           className="flex items-center gap-2.5"
           onClick={onNavigate}
         >
-          <BrandLogo size={40} />
-          <span className="font-semibold text-[15px] text-gray-800 tracking-tight">
+          <BrandLogo size={32} />
+          <span className="font-semibold text-[18px] text-gray-800 tracking-[-0.02em]">
             {tx('GreenMind')}
           </span>
         </Link>
@@ -60,7 +104,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 
       <nav
         aria-label={tx('Hauptnavigation')}
-        className="flex-1 overflow-y-auto px-3 py-5 space-y-1"
+        className="flex-1 overflow-y-auto px-3.5 py-3 space-y-0.5"
       >
         {NAV_LINKS.map((link) => {
           const isActive =
@@ -75,11 +119,9 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
               href={`/${locale}${link.href}`}
               onClick={onNavigate}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-colors ${isActive ? 'nav-active' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+              className={`flex items-center gap-3 px-3 py-[11px] rounded-xl text-sm transition-colors ${isActive ? 'nav-active' : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'}`}
             >
-              <span aria-hidden="true" className="w-5 text-center text-lg leading-none">
-                {link.icon}
-              </span>
+              <NavIcon name={link.icon} />
               <span>{tx(link.label)}</span>
             </Link>
           );
@@ -92,19 +134,19 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
       <Link
         href={`/${locale}/app/account`}
         onClick={onNavigate}
-        className="mx-6 mb-3 text-sm text-gray-600 hover:text-emerald-800"
+        className="mx-6 mb-3 text-sm text-gray-600 hover:text-emerald-700"
       >
         {tx('Mein Konto')}
       </Link>
       {/* User */}
-      <div className="px-3 py-4 border-t border-black/[0.04]">
+      <div className="px-3 py-4 border-t border-gray-200">
         <div className="px-3 py-2">
           <p className="text-sm font-medium text-gray-800 truncate">{user?.name || user?.email}</p>
           <p className="text-xs text-gray-400 truncate">{user?.email}</p>
         </div>
         <button
           onClick={handleLogout}
-          className="w-full mt-2 px-3 py-2 text-sm text-gray-400 hover:text-red-500 hover:bg-red-50/60 rounded-xl transition-all duration-200 text-left"
+          className="w-full mt-1 px-3 py-2 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-xl transition-colors duration-200 text-left"
         >
           {tx('Abmelden')}
         </button>
@@ -163,7 +205,7 @@ function MobileDrawer() {
         >
           <span aria-hidden="true">☰</span> {tx('Menü')}
         </button>
-        <span className="ml-auto text-sm font-semibold text-emerald-700">{tx('GreenMind')}</span>
+        <span className="ml-auto text-sm font-semibold text-gray-800">{tx('GreenMind')}</span>
       </div>
       <dialog
         ref={dialogRef}

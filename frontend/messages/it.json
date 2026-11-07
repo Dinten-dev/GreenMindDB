@@ -6,7 +6,8 @@
       "titlePart2": "una voce.",
       "subtitle": "GreenMind studia i segnali bioelettrici delle piante con l’obiettivo di riconoscere prima lo stress e migliorare le strategie di coltivazione.",
       "requestAccess": "Richiedi accesso",
-      "howItWorks": "Come funziona →"
+      "howItWorks": "Come funziona →",
+      "note": "GreenMind è in fase di sviluppo. Cerchiamo partner per i primi test sul campo."
     },
     "problem": {
       "tag": "Il problema",
@@ -100,6 +101,34 @@
       "title2": "sarà basato sui dati.",
       "description": "Gestisci un ambiente di coltivazione e vuoi partecipare? Cerchiamo partner per prove sul campo e sviluppo congiunto.",
       "button": "Richiedi accesso"
+    },
+    "status": {
+      "tag": "A che punto siamo",
+      "title1": "Basato sulla scienza.",
+      "title2": "Trasparenti sui progressi.",
+      "description": "Sviluppato con la FHNW e basato su ricerche sottoposte a revisione paritaria nell'elettrofisiologia vegetale. Non tutto è ancora pronto, e lo diciamo apertamente.",
+      "items": {
+        "foundation": {
+          "badge": "Fondamento",
+          "title": "Ricerca con la FHNW",
+          "description": "Scuola universitaria professionale della Svizzera nordoccidentale, sede di sviluppo Aarau."
+        },
+        "prototype": {
+          "badge": "In corso",
+          "title": "Prototipo e raccolta dati",
+          "description": "Misurazione continua 24 ore su 24; l'analisi è in fase di sviluppo."
+        },
+        "fieldTests": {
+          "badge": "Cerchiamo partner",
+          "title": "Test sul campo",
+          "description": "Cerchiamo aziende con superfici coltivate per i primi test sul campo."
+        },
+        "later": {
+          "badge": "In futuro",
+          "title": "Raccomandazioni quotidiane",
+          "description": "Le raccomandazioni concrete sono l'obiettivo, ma non sono ancora disponibili."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,7 +1050,8 @@
     "m0880": "{used} utilizzati su {total}",
     "m0881": "La copia sarà disponibile dopo il rilascio in produzione.",
     "m0882": "Il servizio di copia in produzione non è ancora connesso all’amministrazione.",
-    "m0883": "Servizio connesso."
+    "m0883": "Servizio connesso.",
+    "m0884": "Fase di test: i valori non sono ancora convalidati"
   },
   "Public": {
     "p0001": "Chi siamo",

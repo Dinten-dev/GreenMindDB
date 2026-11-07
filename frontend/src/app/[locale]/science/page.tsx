@@ -6,15 +6,11 @@ import { useState, useMemo } from 'react';
 import ScrollReveal from '@/components/ScrollReveal';
 import { RESEARCH_PAPERS, CATEGORY_OPTIONS, ResearchPaper } from '@/lib/research-data';
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  fundamentals: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200/60' },
-  'stress-detection': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200/60' },
-  hardware: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200/60' },
-  'predictive-analytics': {
-    bg: 'bg-violet-50',
-    text: 'text-violet-700',
-    border: 'border-violet-200/60',
-  },
+const CATEGORY_DOTS: Record<string, string> = {
+  fundamentals: 'bg-[#3E6A9E]',
+  'stress-detection': 'bg-[#B4621E]',
+  hardware: 'bg-[#8A7A3A]',
+  'predictive-analytics': 'bg-mercury-accent',
 };
 
 export default function SciencePage() {
@@ -38,77 +34,68 @@ export default function SciencePage() {
   }, [search, category, tx]);
 
   return (
-    <div className="min-h-screen">
-      <div className="pt-20 pb-16 md:pt-28 md:pb-24 px-6 max-w-[1280px] mx-auto">
+    <div className="min-h-screen bg-mercury-bg text-mercury-ink">
+      <div className="pt-32 md:pt-40 pb-16 px-6 max-w-[1200px] mx-auto">
         {/* Hero */}
         <ScrollReveal>
-          <p className="text-sm font-semibold text-gm-green-600 uppercase tracking-widest mb-4">
-            {tx('Science Center')}
-          </p>
-          <h1 className="text-4xl md:text-6xl font-bold text-apple-gray-800 mb-6 tracking-tight">
-            {tx('Die Forschung hinter')}
-            <br />
-            <span className="bg-gradient-to-r from-gm-green-600 to-gm-green-400 bg-clip-text text-transparent">
-              GreenMind.
-            </span>
-          </h1>
-        </ScrollReveal>
-        <ScrollReveal delay={200}>
-          <p className="text-xl text-apple-gray-500 max-w-2xl mb-10 md:mb-16 leading-relaxed">
-            {tx(
-              'Unsere Technologie basiert auf peer-reviewed Forschung in der Pflanzenelektrophysiologie. Hier finden Sie die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu datengestützter Stressklassifizierung.'
-            )}
-          </p>
+          <div className="flex flex-col gap-5 pb-10 md:pb-14">
+            <span className="landing-eyebrow">{tx('Science Center')}</span>
+            <h1 className="landing-display m-0 text-[clamp(40px,6vw,76px)] leading-[1.03]">
+              {tx('Die Forschung hinter')} GreenMind.
+            </h1>
+            <p className="m-0 max-w-[640px] text-lg leading-relaxed text-mercury-muted">
+              {tx(
+                'Unsere Technologie basiert auf peer-reviewed Forschung in der Pflanzenelektrophysiologie. Hier finden Sie die wissenschaftlichen Grundlagen — von bioelektrischen Signalen bis zu datengestützter Stressklassifizierung.'
+              )}
+            </p>
+          </div>
         </ScrollReveal>
 
         {/* Filters */}
-        <ScrollReveal delay={350}>
-          <div className="flex flex-col sm:flex-row gap-4 mb-8">
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-md">
-              <svg
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-apple-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+        <ScrollReveal delay={200}>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+            <div className="flex-1 max-w-[420px]">
+              <label htmlFor="paper-search" className="sr-only">
+                {tx('Paper durchsuchen…')}
+              </label>
               <input
-                type="text"
+                id="paper-search"
+                type="search"
                 placeholder={tx('Paper durchsuchen…')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-apple bg-apple-gray-50 border border-apple-gray-200 text-apple-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-gm-green-500 focus:bg-white transition-all shadow-sm"
+                className="w-full h-[46px] px-[18px] rounded-full bg-white border border-mercury-field text-mercury-ink text-[15px] placeholder:text-mercury-muted focus:outline-none focus:ring-2 focus:ring-mercury-accent focus:ring-offset-2 focus:ring-offset-mercury-bg"
               />
             </div>
 
-            {/* Category Chips */}
-            <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-              {CATEGORY_OPTIONS.map((cat) => (
-                <button
-                  key={cat.value}
-                  onClick={() => setCategory(cat.value)}
-                  className={`px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
-                    category === cat.value
-                      ? 'bg-gm-green-500 text-white shadow-sm shadow-gm-green-500/20'
-                      : 'bg-apple-gray-100 text-apple-gray-500 hover:bg-apple-gray-200'
-                  }`}
-                >
-                  {tx(cat.label)}
-                </button>
-              ))}
+            <div
+              role="group"
+              className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 lg:flex-wrap"
+            >
+              {CATEGORY_OPTIONS.map((cat) => {
+                const active = category === cat.value;
+                return (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setCategory(cat.value)}
+                    className={`h-[46px] px-[18px] rounded-full text-sm whitespace-nowrap border transition-colors duration-150 ${
+                      active
+                        ? 'bg-mercury-accent border-mercury-accent text-white'
+                        : 'bg-white border-mercury-field text-mercury-ink hover:border-mercury-muted'
+                    }`}
+                  >
+                    {tx(cat.label)}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </ScrollReveal>
 
         {/* Results Count */}
-        <p className="text-sm text-apple-gray-500 mb-6">
+        <p className="text-sm text-mercury-muted mb-5" role="status">
           {tx(
             '{count, plural, one {# Veröffentlichung gefunden} other {# Veröffentlichungen gefunden}}',
             { count: filtered.length }
@@ -117,92 +104,87 @@ export default function SciencePage() {
 
         {/* Paper Grid */}
         {filtered.length === 0 ? (
-          <ScrollReveal>
-            <div className="bg-apple-gray-100 rounded-apple-lg p-16 text-center">
-              <div className="text-5xl mb-4">🔬</div>
-              <h3 className="text-xl font-semibold text-apple-gray-800 mb-2">
-                {tx('Keine Ergebnisse')}
-              </h3>
-              <p className="text-apple-gray-500">
-                {tx('Passe deine Suche oder Kategorie an, um Paper zu finden.')}
-              </p>
-            </div>
-          </ScrollReveal>
+          <div className="bg-white rounded-[24px] px-6 py-16 text-center flex flex-col gap-2">
+            <h3 className="m-0 text-xl font-medium">{tx('Keine Ergebnisse')}</h3>
+            <p className="m-0 text-[15px] text-mercury-muted">
+              {tx('Passe deine Suche oder Kategorie an, um Paper zu finden.')}
+            </p>
+          </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             {filtered.map((paper: ResearchPaper, i: number) => {
-              const colors = CATEGORY_COLORS[paper.category];
               const isExpanded = expandedId === paper.id;
 
               return (
                 <ScrollReveal key={paper.id} delay={i * 80}>
-                  <div className="card-hover bg-white rounded-apple-lg shadow-apple-card p-5 md:p-8 flex flex-col h-full">
-                    {/* Category + Year */}
-                    <div className="flex items-center justify-between mb-4">
-                      <span
-                        className={`inline-flex px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider ${colors.bg} ${colors.text} border ${colors.border}`}
-                      >
+                  <article className="bg-white rounded-[24px] p-6 md:p-[30px] flex flex-col gap-3.5 h-full">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-2 text-xs font-medium text-mercury-ink/80 bg-mercury-soft rounded-full px-3 py-[5px]">
+                        <span
+                          aria-hidden="true"
+                          className={`w-[7px] h-[7px] rounded-full ${CATEGORY_DOTS[paper.category]}`}
+                        />
                         {tx(paper.categoryLabel)}
                       </span>
-                      <span className="text-sm text-apple-gray-500 font-mono">{paper.year}</span>
+                      <span className="text-[13px] text-mercury-muted tabular-nums">
+                        {paper.year}
+                      </span>
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-base font-semibold text-apple-gray-800 leading-snug mb-3">
+                    <h3 className="mt-1 mb-0 text-[19px] leading-snug font-medium tracking-[-0.01em]">
                       {paper.title}
                     </h3>
 
-                    {/* Authors + Journal */}
-                    <p className="text-sm text-apple-gray-500 mb-1 line-clamp-1">{paper.authors}</p>
-                    <p className="text-sm text-gm-green-600 font-medium mb-4">{paper.journal}</p>
+                    <p className="m-0 text-sm text-mercury-muted">
+                      <span className="line-clamp-1">{paper.authors}</span>
+                      <span className="text-mercury-accent font-medium">{paper.journal}</span>
+                    </p>
 
-                    {/* GreenMind Relevanz */}
-                    <div className="bg-gm-green-50/60 rounded-apple p-4 border border-gm-green-100/50 mb-4 flex-1">
-                      <p className="text-[11px] font-semibold text-gm-green-700 uppercase tracking-wider mb-1.5">
-                        {tx('🌱 GreenMind Relevanz')}
-                      </p>
+                    <div className="bg-mercury-soft rounded-2xl px-[18px] py-4 flex flex-col gap-1.5 flex-1">
+                      <span className="text-xs font-semibold text-mercury-accent">
+                        {tx('🌱 GreenMind Relevanz').replace(/^\p{Extended_Pictographic}\s*/u, '')}
+                      </span>
                       <p
-                        className={`text-sm text-apple-gray-600 leading-relaxed ${!isExpanded ? 'line-clamp-3' : ''}`}
+                        className={`m-0 text-sm leading-relaxed text-mercury-ink/80 ${!isExpanded ? 'line-clamp-3' : ''}`}
                       >
                         {tx(paper.greenmindLink)}
                       </p>
                     </div>
 
-                    {/* Expandable Abstract */}
                     {isExpanded && (
-                      <div className="bg-apple-gray-50 rounded-apple p-4 border border-apple-gray-200/50 mb-4">
-                        <p className="text-[11px] font-semibold text-apple-gray-500 uppercase tracking-wider mb-1.5">
+                      <div className="border border-mercury-line rounded-2xl px-[18px] py-4 flex flex-col gap-1.5">
+                        <span className="text-xs font-semibold text-mercury-muted">
                           {tx('Abstract')}
-                        </p>
-                        <p className="text-sm text-apple-gray-600 leading-relaxed">
+                        </span>
+                        <p className="m-0 text-sm leading-relaxed text-mercury-ink/80">
                           {tx(paper.abstract)}
                         </p>
                       </div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-3 mt-auto pt-3">
+                    <div className="flex items-center gap-2.5 mt-auto pt-1">
                       <a
                         href={paper.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 text-center px-4 py-2.5 bg-gm-green-500 text-white rounded-full text-sm font-medium hover:bg-gm-green-600 transition-colors duration-200 shadow-sm shadow-gm-green-500/20"
+                        className="flex-1 text-center px-[18px] py-3 bg-mercury-accent text-white rounded-full text-sm font-medium hover:bg-mercury-accent-dark transition-colors duration-150"
                       >
                         {tx('Paper lesen →')}
                       </a>
                       <button
+                        type="button"
+                        aria-expanded={isExpanded}
                         onClick={() => setExpandedId(isExpanded ? null : paper.id)}
-                        className="px-4 py-2.5 bg-apple-gray-100 text-apple-gray-600 rounded-full text-sm font-medium hover:bg-apple-gray-200 transition-colors"
+                        className="px-5 py-3 bg-white border border-mercury-field text-mercury-ink rounded-full text-sm hover:border-mercury-muted transition-colors"
                       >
                         {isExpanded ? tx('Weniger') : tx('Details')}
                       </button>
                     </div>
 
-                    {/* DOI */}
-                    <p className="text-[11px] text-apple-gray-400 mt-3 font-mono truncate">
+                    <p className="m-0 text-xs text-mercury-muted font-mono truncate">
                       {tx('DOI:')} {paper.doi}
                     </p>
-                  </div>
+                  </article>
                 </ScrollReveal>
               );
             })}
@@ -210,18 +192,16 @@ export default function SciencePage() {
         )}
 
         {/* Footer Note */}
-        <ScrollReveal>
-          <div className="text-center py-16 mt-8">
-            <p className="text-sm text-apple-gray-500">
-              {tx(
-                'Wissenschaftliche Veröffentlichungen und gekennzeichnete Preprints; nach Möglichkeit frei zugänglich.'
-              )}
-            </p>
-            <p className="text-sm text-apple-gray-400 mt-1">
-              {tx('Letzte Aktualisierung: Mai 2026')}
-            </p>
-          </div>
-        </ScrollReveal>
+        <div className="text-center pt-16 pb-12">
+          <p className="m-0 text-sm text-mercury-muted">
+            {tx(
+              'Wissenschaftliche Veröffentlichungen und gekennzeichnete Preprints; nach Möglichkeit frei zugänglich.'
+            )}
+          </p>
+          <p className="mt-1 mb-0 text-sm text-mercury-muted">
+            {tx('Letzte Aktualisierung: Mai 2026')}
+          </p>
+        </div>
       </div>
     </div>
   );
