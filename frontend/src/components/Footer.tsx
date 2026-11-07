@@ -17,7 +17,7 @@ export default function Footer() {
     <footer className="w-full border-t border-mercury-line bg-mercury-bg mt-auto">
       <div className="max-w-[1200px] mx-auto px-6 pt-9 pb-12 flex flex-col md:flex-row flex-wrap justify-between gap-5 text-[13px] text-mercury-muted">
         <div>
-          &copy; {currentYear} Galaxyadvisors AG. {t('rights')}
+          &copy; {currentYear} GreenMind GmbH. {t('rights')}
         </div>
         <div className="flex flex-wrap gap-6">
           <a

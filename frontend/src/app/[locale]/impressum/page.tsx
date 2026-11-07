@@ -21,7 +21,7 @@ export default function Impressum() {
               {tx('Kontaktadresse')}
             </h2>
             <p>
-              Galaxyadvisors AG
+              GreenMind GmbH
               <br />
               Laurenzenvorstadt 69
               <br />
@@ -41,7 +41,7 @@ export default function Impressum() {
             <h2 className="text-xl font-semibold text-apple-gray-800 mb-4">
               {tx('Vertretungsberechtigte Personen')}
             </h2>
-            <p>{tx('Verwaltungsrat / Geschäftsleitung der Galaxyadvisors AG')}</p>
+            <p>{tx('Verwaltungsrat / Geschäftsleitung der GreenMind GmbH')}</p>
           </section>
 
           <section>
@@ -72,7 +72,7 @@ export default function Impressum() {
             </h2>
             <p>
               {tx(
-                'Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien auf der Website gehören ausschliesslich der Galaxyadvisors AG oder den speziell genannten Rechtsinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche Zustimmung der Urheberrechtsträger im Voraus einzuholen.'
+                'Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien auf der Website gehören ausschliesslich der GreenMind GmbH oder den speziell genannten Rechtsinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche Zustimmung der Urheberrechtsträger im Voraus einzuholen.'
               )}
             </p>
           </section>

@@ -24,7 +24,7 @@ describe('Footer', () => {
 
     // Grenzwert: Jahreszahl muss dynamisch sein, kein Hardcode
     const copyright = screen.getByText(
-      (content) => content.includes(currentYear) && content.includes('Galaxyadvisors AG')
+      (content) => content.includes(currentYear) && content.includes('GreenMind GmbH')
     );
     expect(copyright).toBeInTheDocument();
   });
