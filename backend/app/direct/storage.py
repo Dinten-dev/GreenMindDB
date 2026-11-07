@@ -15,7 +15,7 @@ from app.raw_archive.worklease import shared_wav_lease
 
 KEY_RE = re.compile(
     r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/(?:"
-    r"[0-9a-f]{64}|[0-9]{8}T[0-9]{9}Z_e[0-9]+_b[0-9]+_q[0-9]+_f[0-9]+_[0-9a-f]{64})\.wav$"
+    r"[0-9a-f]{64}|[0-9]{8}T[0-9]{9}Z_e[0-9]+(?:_b[0-9]+)?_q[0-9]+_f[0-9]+_[0-9a-f]{64})\.wav$"
 )
 
 
@@ -73,8 +73,9 @@ class ArtifactStore:
         filename = object_id
         if self.settings.timestamp_object_keys_enabled and naming is not None:
             stamp, epoch_ms = utc_stamp(naming["started_at_us"])
+            boot = f"_b{naming['boot_counter']}" if "boot_counter" in naming else ""
             filename = (
-                f"{stamp}_e{epoch_ms}_b{naming['boot_counter']}"
+                f"{stamp}_e{epoch_ms}{boot}"
                 f"_q{naming['sequence']}_f{naming['first_frame']}_{object_id}"
             )
         key = f"direct/{device_id}/{session_id}/{filename}.wav"

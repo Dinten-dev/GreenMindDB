@@ -74,6 +74,32 @@ which does not reset the sensor or reopen a disconnected port automatically.
 
 ## Validation and release boundaries
 
+### Timestamped WAV names for existing protocol-1 devices
+
+The assembler supplies the first sample's UTC time, original chunk sequence and
+first frame for both protocol versions. When `DIRECT_TIMESTAMP_OBJECT_KEYS_ENABLED=true`
+is enabled on a compatible writing worker, protocol-1 names use
+`<UTC-milliseconds>_e<epoch-ms>_q<sequence>_f<first-frame>_<hash>.wav`.
+Protocol 2 retains its additional `_b<boot-counter>` field. Protocol 1 has no
+reported boot counter; the writer does not fabricate one. Session IDs remain
+part of the object path. WAV bytes, sample rates and manifest versions do not change.
+
+This switch is disabled by default. Existing hash-only objects remain readable
+and are not renamed or rewritten by enabling it. Deploy compatible readers,
+archive/restore tooling and the writing worker before enabling new names;
+an application/Live rollout alone does not update the WAV assembler. The
+2026-11-06 Production application/Live rollout deliberately preserved the older
+receiving, assembly and archive services. A read-only inspection on 2026-11-07
+confirmed that its existing writing worker still lacks timestamp-name support.
+No sensor firmware change is required for this protocol-1 correction.
+
+Software coverage includes legacy hash reads, protocol-1 gaps and retries,
+ten-minute boundaries, exact PCM/sample rates, archive manifest validation and
+the existing protocol-2 naming/provenance cases. This is not a sensor test or a
+claim that new names are already enabled on Production.
+
+### Existing runtime qualification
+
 Automated software checks passed for the integrated runtime corrections.
 Live was exercised on separate Staging hardware; the user confirmed operation
 and requested tests to stop. Confirmed network unavailability affected parts

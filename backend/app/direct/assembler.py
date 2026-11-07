@@ -51,13 +51,14 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
     runs = []
     gaps = []
     run_start = None
+    run_sequence = None
     run_payload = bytearray()
     run_chunks = []
     cursor = segment.first_frame
     reader = WavReader(store.get)
 
     def finish_run():
-        nonlocal run_payload, run_start, run_chunks
+        nonlocal run_payload, run_start, run_sequence, run_chunks
         if run_start is None:
             return
         pcm = bytes(run_payload)
@@ -68,23 +69,20 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
             wav.setframerate(config["sample_rate"])
             wav.writeframes(pcm)
         started_at_us = config["session_start_us"] + run_start * 1_000_000 // config["sample_rate"]
-        naming = {}
+        naming = {
+            "started_at_us": started_at_us,
+            "sequence": run_sequence,
+            "first_frame": run_start,
+        }
         if config["protocol_version"] == 2:
-            naming = {
-                "naming": {
-                    "started_at_us": started_at_us,
-                    "boot_counter": config["boot_counter"],
-                    "sequence": run_chunks[0]["sequence"],
-                    "first_frame": run_start,
-                }
-            }
+            naming["boot_counter"] = config["boot_counter"]
         key, sha = store.put(
             segment.device_id,
             segment.session_id,
             output.getvalue(),
             identity=f"{segment.bucket}:{run_start}",
             **({"capture_assignment": capture} if capture is not None else {}),
-            **naming,
+            naming=naming,
         )
         runs.append(
             {
@@ -98,6 +96,7 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
             }
         )
         run_start = None
+        run_sequence = None
         run_payload = bytearray()
         run_chunks = []
 
@@ -111,6 +110,7 @@ def _build_snapshot_manifest(segment, config, mode, rows, references, capture, s
             gaps.append([cursor, start])
         if run_start is None:
             run_start = start
+            run_sequence = chunk.sequence
         offset = piece.payload_offset * frame_bytes
         data = payload[offset : offset + piece.frame_count * frame_bytes]
         if len(data) != piece.frame_count * frame_bytes:
