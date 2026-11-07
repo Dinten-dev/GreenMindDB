@@ -1,0 +1,19 @@
+--- a/app/direct/storage.py
++++ b/app/direct/storage.py
+@@ -6,0 +7 @@
++from datetime import UTC, datetime
+@@ -14 +15 @@
+-KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
++KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/(?:[0-9a-f]{64}|[0-9]{8}T[0-9]{9}Z_e[0-9]+(?:_b[0-9]+)?_q[0-9]+_f[0-9]+_[0-9a-f]{64})\.wav$")
+@@ -46 +47 @@
+-    def put(self, device_id, session_id, payload, *, identity):
++    def put(self, device_id, session_id, payload, *, identity, naming=None):
+@@ -49 +50,7 @@
+-        key = f"direct/{device_id}/{session_id}/{object_id}.wav"
++        filename = object_id
++        if naming is not None and getattr(self.settings, "timestamp_object_keys_enabled", False):
++            epoch_ms = naming["started_at_us"] // 1000
++            seconds, ms = divmod(epoch_ms, 1000)
++            stamp = datetime.fromtimestamp(seconds, UTC).strftime("%Y%m%dT%H%M%S") + f"{ms:03d}Z"
++            filename = f"{stamp}_e{epoch_ms}_q{naming['sequence']}_f{naming['first_frame']}_{object_id}"
++        key = f"direct/{device_id}/{session_id}/{filename}.wav"

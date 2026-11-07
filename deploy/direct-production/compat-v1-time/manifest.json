@@ -1,0 +1,49 @@
+{
+  "canonical_fix_revision": "7412f67d99fdcbbab0f11b84e933dd063fba6614",
+  "patches": {
+    "legacy-writer.patch": [
+      {
+        "file": "app/direct/assembler.py",
+        "base_git_blob": "3c4ec0f7521eaf85e3a49f8e5d91303cb23e1120",
+        "base_sha256": "d02df52682ad70f896ddf1fa73dce90e189df7ae5be99f40baa5f49ec8a2b130",
+        "result_sha256": "5b55ff4a98bf30992ff65fe0c684d97be8bb534a15d5ec6e597c1094651b3c1f"
+      },
+      {
+        "file": "app/direct/config.py",
+        "base_git_blob": "e3503b06e7bf6aa7ebc604cb0580d5bcf079efd9",
+        "base_sha256": "213bdaa106c628014c8a9dd2e97de3b92347cad58d4c0fdb4f9306d25d143d6e",
+        "result_sha256": "574d226950a6507147d0b658ec71346fcfc9ecfc2663ab2170644a0043b17758"
+      },
+      {
+        "file": "app/direct/storage.py",
+        "base_git_blob": "5444dff1ec3e40e216828a0c547205110d17c699",
+        "base_sha256": "4727aa6646b8bddb58734974882797bf5ea3fbd8c14c3658b8412175472a7b63",
+        "result_sha256": "ab113ba2ee706d3a52d048884e4a89f0ec2263f1764ee5ea4cbf7a870c4a0991"
+      }
+    ],
+    "legacy-projection-reader.patch": [
+      {
+        "file": "app/direct/storage.py",
+        "base_git_blob": "b4c68514af2ccc84672c95abbac03b71337f8999",
+        "base_sha256": "b90571e8c32d1b5cc6319d07b6e850e06605f8103eaa25ccef7e23172849e629",
+        "result_sha256": "2dc4df7bddcd9bcb299e773d03375fceddf4b326765d9d60188a5bd6445046bf"
+      }
+    ],
+    "legacy-archive-reader.patch": [
+      {
+        "file": "app/direct/storage.py",
+        "base_git_blob": "7da46c595a0e54573c8ea2bcb404ead869f0d1f1",
+        "base_sha256": "a524fe10ad6981c3be1d23171681fcf35a33fbdbd045a9fd7fab6ddc60616c88",
+        "result_sha256": "0b7ed8bfb7b60089d5fe93eb2fd8179852c2e12df46738187a4b591b69af96b2"
+      }
+    ],
+    "legacy-recovery-reader.patch": [
+      {
+        "file": "app/direct/storage.py",
+        "base_git_blob": "5444dff1ec3e40e216828a0c547205110d17c699",
+        "base_sha256": "4727aa6646b8bddb58734974882797bf5ea3fbd8c14c3658b8412175472a7b63",
+        "result_sha256": "4994ec6b049369dc8a280bd0923f3d2d0c7917537fb3ebf48fd37bbd66c149f0"
+      }
+    ]
+  }
+}

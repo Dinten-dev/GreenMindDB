@@ -1,0 +1,5 @@
+--- a/app/direct/storage.py
++++ b/app/direct/storage.py
+@@ -13 +13 @@
+-KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f]{64}\.wav$")
++KEY_RE = re.compile(r"^direct/[0-9a-f-]{36}/[0-9a-f-]{36}/(?:[0-9a-f]{64}|[0-9]{8}T[0-9]{9}Z_e[0-9]+(?:_b[0-9]+)?_q[0-9]+_f[0-9]+_[0-9a-f]{64})\.wav$")
