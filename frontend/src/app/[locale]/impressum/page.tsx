@@ -28,10 +28,7 @@ export default function Impressum() {
               5000 Aarau
             </p>
             <p className="mt-4">
-              <a
-                href="mailto:info@green-mind.ch"
-                className="text-gm-green-600 hover:underline"
-              >
+              <a href="mailto:info@green-mind.ch" className="text-gm-green-600 hover:underline">
                 info@green-mind.ch
               </a>
             </p>

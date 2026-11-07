@@ -72,10 +72,7 @@ export default function ContactPage() {
                   5000 Aarau
                 </p>
                 <p className="text-sm text-apple-gray-500 mt-3">
-                  <a
-                    href="mailto:info@green-mind.ch"
-                    className="text-gm-green-600 hover:underline"
-                  >
+                  <a href="mailto:info@green-mind.ch" className="text-gm-green-600 hover:underline">
                     info@green-mind.ch
                   </a>
                 </p>
