@@ -21,18 +21,15 @@ export default function Impressum() {
               {tx('Kontaktadresse')}
             </h2>
             <p>
-              Galaxyadvisors AG
+              GreenMind GmbH
               <br />
               Laurenzenvorstadt 69
               <br />
               5000 Aarau
             </p>
             <p className="mt-4">
-              <a
-                href="mailto:info@galaxyadvisors.com"
-                className="text-gm-green-600 hover:underline"
-              >
-                info@galaxyadvisors.com
+              <a href="mailto:info@green-mind.ch" className="text-gm-green-600 hover:underline">
+                info@green-mind.ch
               </a>
             </p>
           </section>
@@ -41,7 +38,7 @@ export default function Impressum() {
             <h2 className="text-xl font-semibold text-apple-gray-800 mb-4">
               {tx('Vertretungsberechtigte Personen')}
             </h2>
-            <p>{tx('Verwaltungsrat / Geschäftsleitung der Galaxyadvisors AG')}</p>
+            <p>{tx('Geschäftsführung der GreenMind GmbH')}</p>
           </section>
 
           <section>
@@ -72,7 +69,7 @@ export default function Impressum() {
             </h2>
             <p>
               {tx(
-                'Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien auf der Website gehören ausschliesslich der Galaxyadvisors AG oder den speziell genannten Rechtsinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche Zustimmung der Urheberrechtsträger im Voraus einzuholen.'
+                'Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien auf der Website gehören ausschliesslich der GreenMind GmbH oder den speziell genannten Rechtsinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche Zustimmung der Urheberrechtsträger im Voraus einzuholen.'
               )}
             </p>
           </section>

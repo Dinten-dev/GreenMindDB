@@ -222,7 +222,7 @@ test('guards public JSX, attributes and literal messages against untranslated ad
   );
   const invariant = (value: string) =>
     !/[A-Za-zÀ-ž]/.test(value) ||
-    /^(GreenMind\.?|GreenMind GmbH|Galaxyadvisors AG|Laurenzenvorstadt 69|5000 Aarau|info@galaxyadvisors\.com|DOI:)$/.test(
+    /^(GreenMind\.?|GreenMind GmbH|Galaxyadvisors AG|Laurenzenvorstadt 69|5000 Aarau|info@green-mind\.ch|DOI:)$/.test(
       value
     );
   for (const file of sources) {

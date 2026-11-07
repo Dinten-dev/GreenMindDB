@@ -4,19 +4,21 @@
 
 :root {
   /* Existing GreenMind palette */
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f5f5f7;
-  --color-bg-tertiary: #fbfbfd;
-  --color-text-primary: #1d1d1f;
-  --color-text-secondary: #6e6e73;
-  --color-text-tertiary: #86868b;
-  --color-border: #d2d2d7;
-  --color-border-light: #e8e8ed;
+  /* Light, calm GreenMind palette (Mercury-style redesign) */
+  --color-bg: #f6f6f1;
+  --color-bg-secondary: #f0f2ec;
+  --color-bg-tertiary: #ffffff;
+  --color-text-primary: #171a16;
+  --color-text-secondary: #5b6158;
+  --color-text-tertiary: #757c72;
+  --color-border: #d3d6cc;
+  --color-border-light: #e3e4dd;
 
-  --color-green: #34c759;
-  --color-green-dark: #248a3d;
-  --color-green-light: #30d158;
-  --color-green-bg: #f0fdf4;
+  --color-green: #2e5e3e;
+  --color-green-dark: #1f4a33;
+  --color-green-light: #3f6b4f;
+  --color-green-bg: #e3eadf;
+  --color-tint: #e8ece3;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -39,7 +41,13 @@
 
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial,
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Text',
+    'SF Pro Display',
+    'Helvetica Neue',
+    Arial,
     sans-serif;
   color: var(--color-text-primary);
   background-color: var(--color-bg);
@@ -85,92 +93,66 @@ html {
   background: var(--color-bg);
 }
 
-.landing-hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  min-height: 700px;
-  padding-top: 136px;
-  padding-bottom: 96px;
-}
-.landing-hero-image,
-.landing-hero-shade {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
-.landing-hero-image {
-  background: url('/hero-greenhouse.jpg') center 38% / cover no-repeat;
-  opacity: 0.32;
-}
-.landing-hero-shade {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.3) 0%,
-    rgba(255, 255, 255, 0.58) 45%,
-    rgba(255, 255, 255, 0.2) 75%,
-    var(--color-bg) 100%
-  );
-}
-.landing-hero-content {
-  width: 100%;
-  max-width: 960px;
-}
-.landing-title {
-  font-family: inherit;
-  font-size: clamp(40px, 6.5vw, 84px);
-  font-weight: 700;
-  line-height: 1.08;
+/* ── Landing & public pages (Mercury-style) ──────────────── */
+.landing-display {
+  font-weight: 300;
+  line-height: 1.02;
   letter-spacing: -0.045em;
 }
-.landing-page h2 {
+.landing-h2 {
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 300;
+  line-height: 1.08;
   letter-spacing: -0.035em;
+}
+.landing-eyebrow {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-green);
 }
 .landing-primary,
 .landing-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 52px;
-  padding: 14px 28px;
+  min-height: 48px;
+  padding: 14px 26px;
   border-radius: 999px;
+  font-size: 15px;
   font-weight: 500;
-  transition: background 150ms ease;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
 }
 .landing-primary {
-  background: var(--color-green-dark);
-  color: var(--color-bg);
+  background: var(--color-green);
+  color: #ffffff;
 }
 .landing-primary:hover {
-  background: #166534;
+  background: var(--color-green-dark);
+  color: #ffffff;
 }
 .landing-secondary {
-  background: rgba(255, 255, 255, 0.82);
+  background: transparent;
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
 }
 .landing-secondary:hover {
-  background: var(--color-bg);
+  border-color: var(--color-text-tertiary);
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 .landing-feature-grid > .scroll-reveal {
   height: 100%;
   min-width: 0;
-}
-@media (max-width: 767px) {
-  .landing-hero {
-    min-height: 620px;
-    padding-top: 104px;
-    padding-bottom: 64px;
-  }
-  .landing-title {
-    font-size: clamp(36px, 8.2vw, 60px);
-  }
-  .landing-hero-image {
-    background-position: center top;
-  }
 }
 
 /* ── Mobile Swipe Utilities ──────────────── */
@@ -184,7 +166,7 @@ html {
 
 /* Stable, opaque surfaces; no decorative lift or glow on data. */
 .card-hover {
-  border: 1px solid var(--color-border-light);
+  border: 1px solid transparent;
   transition: border-color 150ms ease;
 }
 .card-hover:hover {
@@ -215,17 +197,17 @@ html {
 
 /* ── Dashboard Variables ──────────────── */
 :root {
-  --dash-bg: #f5f5f7;
+  --dash-bg: #f6f6f1;
   --dash-surface: #ffffff;
   --dash-surface-hover: #ffffff;
-  --dash-border: rgba(0, 0, 0, 0.06);
-  --dash-border-accent: rgba(16, 185, 129, 0.2);
-  --dash-text: #1d1d1f;
-  --dash-text-muted: #6e6e73;
-  --dash-text-dim: #86868b;
-  --dash-accent: #10b981;
-  --dash-accent-light: #34d399;
-  --dash-accent-glow: rgba(16, 185, 129, 0.15);
+  --dash-border: #e3e4dd;
+  --dash-border-accent: rgba(46, 94, 62, 0.2);
+  --dash-text: #171a16;
+  --dash-text-muted: #5b6158;
+  --dash-text-dim: #757c72;
+  --dash-accent: #2e5e3e;
+  --dash-accent-light: #3f6b4f;
+  --dash-accent-glow: rgba(46, 94, 62, 0.12);
   --dash-glass-blur: 16px;
   --dash-glass-border: 1px solid rgba(255, 255, 255, 0.3);
 }
@@ -234,8 +216,8 @@ html {
 .glass-card {
   background: var(--dash-surface);
   border: 1px solid var(--dash-border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
+  border-radius: 20px;
+  box-shadow: none;
 }
 .glass-sidebar {
   background: var(--dash-surface);
@@ -244,22 +226,21 @@ html {
 .glass-table {
   background: var(--dash-surface);
   border: 1px solid var(--dash-border);
-  border-radius: 12px;
+  border-radius: 20px;
   overflow: hidden;
 }
 
 /* ── Nav Active Indicator ──────────────── */
 .nav-active {
   background: var(--color-green-bg);
-  color: #059669;
+  color: var(--color-green-dark);
   font-weight: 500;
-  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.15);
 }
 
 /* ── Export Progress Bar ──────────────── */
 .export-progress {
   height: 3px;
-  background: rgba(16, 185, 129, 0.15);
+  background: var(--dash-accent-glow);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -317,13 +298,11 @@ html {
   background: rgb(0 0 0 / 30%);
 }
 .app-workspace :is(button, a, input, select):focus-visible {
-  outline: 2px solid #248a3d;
+  outline: 2px solid var(--color-green);
   outline-offset: 3px;
 }
 .dashboard-welcome {
-  background:
-    linear-gradient(90deg, #fff 30%, rgb(255 255 255 / 82%)),
-    url('/hero-greenhouse.jpg') right center / cover;
+  background: #ffffff;
 }
 
 /* ══════════════════════════════════════════════════════

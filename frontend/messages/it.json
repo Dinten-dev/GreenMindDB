@@ -6,7 +6,8 @@
       "titlePart2": "una voce.",
       "subtitle": "GreenMind studia i segnali bioelettrici delle piante con l’obiettivo di riconoscere prima lo stress e migliorare le strategie di coltivazione.",
       "requestAccess": "Richiedi accesso",
-      "howItWorks": "Come funziona →"
+      "howItWorks": "Come funziona →",
+      "note": "GreenMind è in fase di sviluppo. Cerchiamo partner per i primi test sul campo."
     },
     "problem": {
       "tag": "Il problema",
@@ -100,6 +101,34 @@
       "title2": "sarà basato sui dati.",
       "description": "Gestisci un ambiente di coltivazione e vuoi partecipare? Cerchiamo partner per prove sul campo e sviluppo congiunto.",
       "button": "Richiedi accesso"
+    },
+    "status": {
+      "tag": "A che punto siamo",
+      "title1": "Basato sulla scienza.",
+      "title2": "Trasparenti sui progressi.",
+      "description": "Sviluppato con la FHNW e basato su ricerche sottoposte a revisione paritaria nell'elettrofisiologia vegetale. Non tutto è ancora pronto, e lo diciamo apertamente.",
+      "items": {
+        "foundation": {
+          "badge": "Fondamento",
+          "title": "Ricerca con la FHNW",
+          "description": "Scuola universitaria professionale della Svizzera nordoccidentale, sede di sviluppo Aarau."
+        },
+        "prototype": {
+          "badge": "In corso",
+          "title": "Prototipo e raccolta dati",
+          "description": "Misurazione continua 24 ore su 24; l'analisi è in fase di sviluppo."
+        },
+        "fieldTests": {
+          "badge": "Cerchiamo partner",
+          "title": "Test sul campo",
+          "description": "Cerchiamo aziende con superfici coltivate per i primi test sul campo."
+        },
+        "later": {
+          "badge": "In futuro",
+          "title": "Raccomandazioni quotidiane",
+          "description": "Le raccomandazioni concrete sono l'obiettivo, ma non sono ancora disponibili."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,14 +1050,15 @@
     "m0880": "{used} utilizzati su {total}",
     "m0881": "La copia sarà disponibile dopo il rilascio in produzione.",
     "m0882": "Il servizio di copia in produzione non è ancora connesso all’amministrazione.",
-    "m0883": "Servizio connesso."
+    "m0883": "Servizio connesso.",
+    "m0884": "Fase di test: i valori non sono ancora convalidati"
   },
   "Public": {
     "p0001": "Chi siamo",
     "p0002": "Informazioni su GreenMind.",
     "p0003": "Comprendere i segnali bioelettrici delle piante per migliorare la coltivazione.",
     "p0004": "La nostra missione",
-    "p0005": "Oggi l’agricoltura monitora temperatura, luce e umidità del suolo, ma non le condizioni della pianta stessa. GreenMind vuole cambiare questa situazione. Stiamo sviluppando un sistema che registra i segnali bioelettrici delle piante per supportare migliori decisioni di coltivazione. Un progetto di Galaxyadvisors AG in collaborazione con la FHNW.",
+    "p0005": "Oggi l’agricoltura monitora temperatura, luce e umidità del suolo, ma non le condizioni della pianta stessa. GreenMind vuole cambiare questa situazione. Stiamo sviluppando un sistema che registra i segnali bioelettrici delle piante per supportare migliori decisioni di coltivazione. Un progetto di GreenMind GmbH in collaborazione con la FHNW.",
     "p0006": "Perché è importante",
     "p0007": "La domanda alimentare mondiale cresce. Acqua e terreni coltivabili sono sotto pressione. Le variazioni climatiche rendono meno prevedibili i metodi di coltivazione convenzionali. Le piante emettono continuamente segnali elettrici che possono indicare stress, spesso prima che compaiano danni visibili. GreenMind studia se questi segnali possano supportare migliori decisioni di coltivazione.",
     "p0008": "Il team",
@@ -1067,13 +1097,13 @@
     "p0041": "Note legali",
     "p0042": "Indirizzo di contatto",
     "p0043": "Persone autorizzate a rappresentare la società",
-    "p0044": "Consiglio di amministrazione / direzione di Galaxyadvisors AG",
+    "p0044": "Direzione di GreenMind GmbH",
     "p0045": "Esclusione di responsabilità",
     "p0046": "L’autore non fornisce alcuna garanzia sulla correttezza, precisione, attualità, affidabilità o completezza delle informazioni. Sono escluse pretese nei confronti dell’autore per danni materiali o immateriali derivanti dall’accesso alle informazioni pubblicate, dal loro utilizzo o mancato utilizzo, dall’abuso della connessione o da guasti tecnici.",
     "p0047": "Responsabilità per i collegamenti",
     "p0048": "I riferimenti e i collegamenti a siti di terzi non rientrano nella nostra responsabilità. Si declina ogni responsabilità per tali siti. L’accesso e l’utilizzo avvengono a rischio dell’utente.",
     "p0049": "Diritti d’autore",
-    "p0050": "I diritti d’autore e tutti gli altri diritti su contenuti, immagini, fotografie o altri file del sito appartengono esclusivamente a Galaxyadvisors AG o ai titolari espressamente indicati. La riproduzione di qualsiasi elemento richiede il consenso scritto preventivo del titolare dei diritti.",
+    "p0050": "I diritti d’autore e tutti gli altri diritti su contenuti, immagini, fotografie o altri file del sito appartengono esclusivamente a GreenMind GmbH o ai titolari espressamente indicati. La riproduzione di qualsiasi elemento richiede il consenso scritto preventivo del titolare dei diritti.",
     "p0051": "Piattaforma",
     "p0052": "Che cosa può fare GreenMind.",
     "p0053": "Dall’acquisizione dei dati sul campo all’analisi nel pannello: gli ambiti su cui lavoriamo.",
@@ -1231,7 +1261,7 @@
   },
   "Metadata": {
     "title": "GreenMind — Piattaforma di ricerca sui segnali bioelettrici vegetali",
-    "description": "Piattaforma di ricerca e sviluppo di Galaxyadvisors AG per l’analisi dei segnali bioelettrici delle piante basata sui dati.",
+    "description": "Piattaforma di ricerca e sviluppo di GreenMind GmbH per l’analisi dei segnali bioelettrici delle piante basata sui dati.",
     "shortTitle": "GreenMind — Piattaforma di ricerca",
     "shortDescription": "Analisi dei segnali bioelettrici delle piante basata sui dati in Svizzera."
   },

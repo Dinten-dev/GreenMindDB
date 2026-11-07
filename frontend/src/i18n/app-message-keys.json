@@ -897,5 +897,6 @@
   "{used} von {total} belegt": "m0880",
   "Kopieren wird erst nach dem Production-Rollout aktiviert.": "m0881",
   "Der Kopierdienst ist auf Production noch nicht mit der Administration verbunden.": "m0882",
-  "Service verbunden.": "m0883"
+  "Service verbunden.": "m0883",
+  "Testphase: Werte sind noch nicht validiert": "m0884"
 }

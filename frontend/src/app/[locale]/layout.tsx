@@ -34,7 +34,7 @@ export async function generateMetadata({
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'LocalBusiness',
-  name: 'Galaxyadvisors AG',
+  name: 'GreenMind GmbH',
   url: 'https://green-mind.ch',
   address: {
     '@type': 'PostalAddress',

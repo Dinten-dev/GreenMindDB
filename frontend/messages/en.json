@@ -6,7 +6,8 @@
       "titlePart2": "a voice.",
       "subtitle": "GreenMind analyzes plant bioelectrical signals to detect stress earlier and specifically improve cultivation strategies.",
       "requestAccess": "Request access",
-      "howItWorks": "How it works →"
+      "howItWorks": "How it works →",
+      "note": "GreenMind is under development. We are looking for partners for first field tests."
     },
     "problem": {
       "tag": "The Problem",
@@ -100,6 +101,34 @@
       "title2": "will be data-driven.",
       "description": "Do you operate a cultivation environment and want to become part of the project? We are looking for partners for field tests and joint development.",
       "button": "Request access"
+    },
+    "status": {
+      "tag": "Where we stand",
+      "title1": "Grounded in science.",
+      "title2": "Honest about progress.",
+      "description": "Developed with FHNW and built on peer-reviewed research in plant electrophysiology. Not everything is finished yet, and we say so openly.",
+      "items": {
+        "foundation": {
+          "badge": "Foundation",
+          "title": "Research with FHNW",
+          "description": "University of Applied Sciences Northwestern Switzerland, development site Aarau."
+        },
+        "prototype": {
+          "badge": "In progress",
+          "title": "Prototype & data capture",
+          "description": "Continuous measurement around the clock; analysis is being built."
+        },
+        "fieldTests": {
+          "badge": "Partners wanted",
+          "title": "Field tests",
+          "description": "We are looking for growers with cultivation areas for first tests in the field."
+        },
+        "later": {
+          "badge": "Later",
+          "title": "Everyday recommendations",
+          "description": "Concrete recommendations are the goal, but not available yet."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,14 +1050,15 @@
     "m0880": "{used} of {total} used",
     "m0881": "Copying becomes available after the production rollout.",
     "m0882": "The production copy service is not connected to administration yet.",
-    "m0883": "Service connected."
+    "m0883": "Service connected.",
+    "m0884": "Test phase: values are not yet validated"
   },
   "Public": {
     "p0001": "About us",
     "p0002": "About GreenMind.",
     "p0003": "Understanding plant bioelectrical signals to improve cultivation.",
     "p0004": "Our mission",
-    "p0005": "Agriculture currently monitors temperature, light and soil moisture, but not the condition of the plant itself. GreenMind aims to change this. We are developing a system that records plant bioelectrical signals and makes them useful for better cultivation decisions. A Galaxyadvisors AG project in collaboration with FHNW.",
+    "p0005": "Agriculture currently monitors temperature, light and soil moisture, but not the condition of the plant itself. GreenMind aims to change this. We are developing a system that records plant bioelectrical signals and makes them useful for better cultivation decisions. A GreenMind GmbH project in collaboration with FHNW.",
     "p0006": "Why it matters",
     "p0007": "Global food demand is rising. Water and farmland are under pressure. Climate variability makes conventional cultivation less predictable. Plants continuously emit electrical signals that can indicate stress, often before visible damage appears. GreenMind investigates whether these signals can inform better cultivation decisions.",
     "p0008": "The team",
@@ -1067,13 +1097,13 @@
     "p0041": "Legal notice",
     "p0042": "Contact address",
     "p0043": "Authorised representatives",
-    "p0044": "Board of directors / executive management of Galaxyadvisors AG",
+    "p0044": "Management of GreenMind GmbH",
     "p0045": "Disclaimer",
     "p0046": "The author gives no warranty as to the correctness, accuracy, timeliness, reliability or completeness of the information. Claims against the author for material or non-material damage arising from access to, use or non-use of the published information, misuse of the connection or technical faults are excluded.",
     "p0047": "Liability for links",
     "p0048": "References and links to third-party websites are outside our area of responsibility. We accept no responsibility for such websites. Users access and use these websites at their own risk.",
     "p0049": "Copyright",
-    "p0050": "Copyright and all other rights to content, images, photographs or other files on this website belong exclusively to Galaxyadvisors AG or the specifically named rights holders. Reproduction of any element requires prior written consent from the copyright holder.",
+    "p0050": "Copyright and all other rights to content, images, photographs or other files on this website belong exclusively to GreenMind GmbH or the specifically named rights holders. Reproduction of any element requires prior written consent from the copyright holder.",
     "p0051": "Platform",
     "p0052": "What GreenMind can do.",
     "p0053": "From field data acquisition to dashboard analysis: the areas we are working on.",
@@ -1231,7 +1261,7 @@
   },
   "Metadata": {
     "title": "GreenMind — Research platform for plant bioelectrical sensing",
-    "description": "Galaxyadvisors AG’s research and development platform for data-driven analysis of plant bioelectrical signals.",
+    "description": "GreenMind GmbH’s research and development platform for data-driven analysis of plant bioelectrical signals.",
     "shortTitle": "GreenMind — Research platform",
     "shortDescription": "Data-driven analysis of plant bioelectrical signals in Switzerland."
   },

@@ -6,7 +6,8 @@
       "titlePart2": "Stimme geben.",
       "subtitle": "GreenMind analysiert bioelektrische Pflanzensignale, um Stress früher zu erkennen und Anbaustrategien gezielt zu verbessern.",
       "requestAccess": "Zugang anfragen",
-      "howItWorks": "So funktioniert's →"
+      "howItWorks": "So funktioniert's →",
+      "note": "GreenMind befindet sich in Entwicklung. Wir suchen Partner für erste Feldtests."
     },
     "problem": {
       "tag": "Das Problem",
@@ -100,6 +101,34 @@
       "title2": "wird datengetrieben.",
       "description": "Sie betreiben eine Anbauumgebung und möchten Teil des Projekts werden? Wir suchen Partner für Feldtests und gemeinsame Weiterentwicklung.",
       "button": "Zugang anfragen"
+    },
+    "status": {
+      "tag": "Wo wir stehen",
+      "title1": "Wissenschaftlich fundiert.",
+      "title2": "Ehrlich unterwegs.",
+      "description": "Entwickelt mit der FHNW und aufbauend auf peer-reviewter Forschung zur Pflanzenelektrophysiologie. Noch ist nicht alles fertig, und das sagen wir offen.",
+      "items": {
+        "foundation": {
+          "badge": "Grundlage",
+          "title": "Forschung mit der FHNW",
+          "description": "Fachhochschule Nordwestschweiz, Entwicklungsstandort Aarau."
+        },
+        "prototype": {
+          "badge": "In Arbeit",
+          "title": "Prototyp & Datenerfassung",
+          "description": "Kontinuierliche Messung rund um die Uhr, Auswertung wird aufgebaut."
+        },
+        "fieldTests": {
+          "badge": "Partner gesucht",
+          "title": "Feldtests",
+          "description": "Wir suchen Betriebe mit Anbauflächen für erste Tests im Feld."
+        },
+        "later": {
+          "badge": "Später",
+          "title": "Empfehlungen im Alltag",
+          "description": "Konkrete Handlungsempfehlungen sind das Ziel, aber noch nicht verfügbar."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,14 +1050,15 @@
     "m0880": "{used} von {total} belegt",
     "m0881": "Kopieren wird erst nach dem Production-Rollout aktiviert.",
     "m0882": "Der Kopierdienst ist auf Production noch nicht mit der Administration verbunden.",
-    "m0883": "Service verbunden."
+    "m0883": "Service verbunden.",
+    "m0884": "Testphase: Werte sind noch nicht validiert"
   },
   "Public": {
     "p0001": "Über uns",
     "p0002": "Über GreenMind.",
     "p0003": "Bioelektrische Pflanzensignale verstehen, um den Anbau gezielt zu verbessern.",
     "p0004": "Unsere Mission",
-    "p0005": "Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein System, das bioelektrische Pflanzensignale erfasst und für bessere Anbauentscheidungen nutzbar macht. Ein Projekt der Galaxyadvisors AG in Zusammenarbeit mit der FHNW.",
+    "p0005": "Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein System, das bioelektrische Pflanzensignale erfasst und für bessere Anbauentscheidungen nutzbar macht. Ein Projekt der GreenMind GmbH in Zusammenarbeit mit der FHNW.",
     "p0006": "Warum es wichtig ist",
     "p0007": "Der weltweite Nahrungsmittelbedarf steigt. Wasser und Anbauflächen stehen unter Druck. Klimatische Schwankungen machen konventionelle Anbaumethoden weniger vorhersehbar. Pflanzen senden dabei ständig elektrische Signale, die auf Stress hinweisen — oft bevor äussere Schäden sichtbar werden. GreenMind untersucht, ob diese Signale als Grundlage für bessere Entscheidungen im Anbau dienen können.",
     "p0008": "Das Team",
@@ -1067,13 +1097,13 @@
     "p0041": "Impressum",
     "p0042": "Kontaktadresse",
     "p0043": "Vertretungsberechtigte Personen",
-    "p0044": "Verwaltungsrat / Geschäftsleitung der Galaxyadvisors AG",
+    "p0044": "Geschäftsführung der GreenMind GmbH",
     "p0045": "Haftungsausschluss",
     "p0046": "Der Autor übernimmt keinerlei Gewähr hinsichtlich der inhaltlichen Richtigkeit, Genauigkeit, Aktualität, Zuverlässigkeit und Vollständigkeit der Informationen. Haftungsansprüche gegen den Autor wegen Schäden materieller oder immaterieller Art, welche aus dem Zugriff oder der Nutzung bzw. Nichtnutzung der veröffentlichten Informationen, durch Missbrauch der Verbindung oder durch technische Störungen entstanden sind, werden ausgeschlossen.",
     "p0047": "Haftung für Links",
     "p0048": "Verweise und Links auf Webseiten Dritter liegen ausserhalb unseres Verantwortungsbereichs. Es wird jegliche Verantwortung für solche Webseiten abgelehnt. Der Zugriff und die Nutzung solcher Webseiten erfolgen auf eigene Gefahr des Nutzers oder der Nutzerin.",
     "p0049": "Urheberrechte",
-    "p0050": "Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien auf der Website gehören ausschliesslich der Galaxyadvisors AG oder den speziell genannten Rechtsinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche Zustimmung der Urheberrechtsträger im Voraus einzuholen.",
+    "p0050": "Die Urheber- und alle anderen Rechte an Inhalten, Bildern, Fotos oder anderen Dateien auf der Website gehören ausschliesslich der GreenMind GmbH oder den speziell genannten Rechtsinhabern. Für die Reproduktion jeglicher Elemente ist die schriftliche Zustimmung der Urheberrechtsträger im Voraus einzuholen.",
     "p0051": "Plattform",
     "p0052": "Was GreenMind kann.",
     "p0053": "Von der Datenerfassung im Feld bis zur Analyse im Dashboard — die Bereiche, an denen wir arbeiten.",
@@ -1231,7 +1261,7 @@
   },
   "Metadata": {
     "title": "GreenMind — Forschungsplattform für bioelektrische Phytosensorik",
-    "description": "Forschungs- und Entwicklungsplattform der Galaxyadvisors AG für die datenbasierte Analyse bioelektrischer Pflanzensignale.",
+    "description": "Forschungs- und Entwicklungsplattform der GreenMind GmbH für die datenbasierte Analyse bioelektrischer Pflanzensignale.",
     "shortTitle": "GreenMind — Forschungsplattform",
     "shortDescription": "Datenbasierte Analyse bioelektrischer Pflanzensignale in der Schweiz."
   },

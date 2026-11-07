@@ -59,7 +59,7 @@ export default function AboutPage() {
               </h2>
               <p className="text-apple-gray-500 leading-relaxed">
                 {tx(
-                  'Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein System, das bioelektrische Pflanzensignale erfasst und für bessere Anbauentscheidungen nutzbar macht. Ein Projekt der Galaxyadvisors AG in Zusammenarbeit mit der FHNW.'
+                  'Die Landwirtschaft überwacht heute Temperatur, Licht und Bodenfeuchtigkeit — aber nicht den Zustand der Pflanze selbst. GreenMind will das ändern. Wir entwickeln ein System, das bioelektrische Pflanzensignale erfasst und für bessere Anbauentscheidungen nutzbar macht. Ein Projekt der GreenMind GmbH in Zusammenarbeit mit der FHNW.'
                 )}
               </p>
             </section>

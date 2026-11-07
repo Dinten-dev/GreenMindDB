@@ -6,7 +6,8 @@
       "titlePart2": "aux plantes.",
       "subtitle": "GreenMind analyse les signaux bioélectriques des plantes pour détecter le stress plus tôt et améliorer spécifiquement les stratégies de culture.",
       "requestAccess": "Demander l'accès",
-      "howItWorks": "Comment ça marche →"
+      "howItWorks": "Comment ça marche →",
+      "note": "GreenMind est en cours de développement. Nous recherchons des partenaires pour de premiers essais sur le terrain."
     },
     "problem": {
       "tag": "Le Problème",
@@ -100,6 +101,34 @@
       "title2": "sera basé sur les données.",
       "description": "Vous exploitez un environnement de culture et souhaitez faire partie du projet ? Nous recherchons des partenaires pour des tests sur le terrain et un développement conjoint.",
       "button": "Demander l'accès"
+    },
+    "status": {
+      "tag": "Où nous en sommes",
+      "title1": "Fondé sur la science.",
+      "title2": "Transparent sur notre avancement.",
+      "description": "Développé avec la FHNW et fondé sur des recherches évaluées par des pairs en électrophysiologie végétale. Tout n'est pas encore terminé, et nous le disons ouvertement.",
+      "items": {
+        "foundation": {
+          "badge": "Fondement",
+          "title": "Recherche avec la FHNW",
+          "description": "Haute école spécialisée du Nord-Ouest de la Suisse, site de développement Aarau."
+        },
+        "prototype": {
+          "badge": "En cours",
+          "title": "Prototype et collecte de données",
+          "description": "Mesure continue 24 h/24 ; l'analyse est en cours de construction."
+        },
+        "fieldTests": {
+          "badge": "Partenaires recherchés",
+          "title": "Essais sur le terrain",
+          "description": "Nous recherchons des exploitations disposant de surfaces cultivées pour de premiers essais."
+        },
+        "later": {
+          "badge": "Plus tard",
+          "title": "Recommandations au quotidien",
+          "description": "Des recommandations concrètes sont l'objectif, mais ne sont pas encore disponibles."
+        }
+      }
     }
   },
   "Navigation": {
@@ -1021,14 +1050,15 @@
     "m0880": "{used} utilisés sur {total}",
     "m0881": "La copie sera disponible après le déploiement en production.",
     "m0882": "Le service de copie en production n’est pas encore connecté à l’administration.",
-    "m0883": "Service connecté."
+    "m0883": "Service connecté.",
+    "m0884": "Phase de test : les valeurs ne sont pas encore validées"
   },
   "Public": {
     "p0001": "À propos",
     "p0002": "À propos de GreenMind.",
     "p0003": "Comprendre les signaux bioélectriques des plantes pour améliorer les cultures.",
     "p0004": "Notre mission",
-    "p0005": "L’agriculture surveille aujourd’hui la température, la lumière et l’humidité du sol, mais pas l’état de la plante elle-même. GreenMind veut changer cela. Nous développons un système qui enregistre les signaux bioélectriques des plantes pour éclairer les décisions de culture. Un projet de Galaxyadvisors AG en collaboration avec la FHNW.",
+    "p0005": "L’agriculture surveille aujourd’hui la température, la lumière et l’humidité du sol, mais pas l’état de la plante elle-même. GreenMind veut changer cela. Nous développons un système qui enregistre les signaux bioélectriques des plantes pour éclairer les décisions de culture. Un projet de GreenMind GmbH en collaboration avec la FHNW.",
     "p0006": "Pourquoi c’est important",
     "p0007": "La demande alimentaire mondiale augmente. L’eau et les terres cultivables sont sous pression. Les variations climatiques rendent les méthodes conventionnelles moins prévisibles. Les plantes émettent continuellement des signaux électriques pouvant indiquer un stress, souvent avant l’apparition de dégâts visibles. GreenMind étudie si ces signaux peuvent éclairer les décisions de culture.",
     "p0008": "L’équipe",
@@ -1067,13 +1097,13 @@
     "p0041": "Mentions légales",
     "p0042": "Adresse de contact",
     "p0043": "Personnes habilitées à représenter la société",
-    "p0044": "Conseil d’administration / direction de Galaxyadvisors AG",
+    "p0044": "Direction de GreenMind GmbH",
     "p0045": "Exclusion de responsabilité",
     "p0046": "L’auteur ne garantit ni l’exactitude du contenu, ni sa précision, son actualité, sa fiabilité ou son exhaustivité. Toute prétention à l’encontre de l’auteur pour des dommages matériels ou immatériels résultant de l’accès aux informations publiées, de leur utilisation ou non-utilisation, d’un usage abusif de la connexion ou de perturbations techniques est exclue.",
     "p0047": "Responsabilité relative aux liens",
     "p0048": "Les références et liens vers des sites tiers ne relèvent pas de notre responsabilité. Nous déclinons toute responsabilité pour ces sites. Leur accès et leur utilisation se font aux risques de l’utilisateur ou de l’utilisatrice.",
     "p0049": "Droits d’auteur",
-    "p0050": "Les droits d’auteur et tous les autres droits sur les contenus, images, photographies ou autres fichiers du site appartiennent exclusivement à Galaxyadvisors AG ou aux ayants droit expressément mentionnés. La reproduction de tout élément nécessite l’accord écrit préalable du titulaire des droits.",
+    "p0050": "Les droits d’auteur et tous les autres droits sur les contenus, images, photographies ou autres fichiers du site appartiennent exclusivement à GreenMind GmbH ou aux ayants droit expressément mentionnés. La reproduction de tout élément nécessite l’accord écrit préalable du titulaire des droits.",
     "p0051": "Plateforme",
     "p0052": "Ce que GreenMind permet.",
     "p0053": "De l’acquisition des données sur le terrain à leur analyse dans le tableau de bord : nos axes de travail.",
@@ -1231,7 +1261,7 @@
   },
   "Metadata": {
     "title": "GreenMind — Plateforme de recherche en détection bioélectrique végétale",
-    "description": "Plateforme de recherche et développement de Galaxyadvisors AG pour l’analyse des signaux bioélectriques des plantes fondée sur les données.",
+    "description": "Plateforme de recherche et développement de GreenMind GmbH pour l’analyse des signaux bioélectriques des plantes fondée sur les données.",
     "shortTitle": "GreenMind — Plateforme de recherche",
     "shortDescription": "Analyse des signaux bioélectriques des plantes fondée sur les données en Suisse."
   },
